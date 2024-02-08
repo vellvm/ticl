@@ -174,7 +174,16 @@ Section BasicLemmas.
         next; left.
         now apply ctl_now.
   Qed.
-  
+
+  Lemma af_br: forall n (k: fin' n -> ctree E X) w φ b,
+    (forall (i: fin' n), <( {k i}, w |= AF now φ )>) ->
+      <( {Br b n k}, w |= AF now φ )>.
+  Proof.
+    destruct b; intros.
+    - now apply af_brS.
+    - now apply af_brD.
+  Qed.
+
   Lemma af_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ,
       (φ w \/ (not_done w /\ forall (x: encode e),
                  <( {k x}, {Obs e x} |= AF now φ )>)) ->
@@ -228,17 +237,14 @@ Section AfDoneIndLemma.
       AFDoneInd t Pure
   | AFDoneIndObs: forall t (e: E) (v: encode e) (x: X),
       observe t = RetF x ->
-      φ x (Obs e v) ->
-      AFDoneInd t (Obs e v)
-  | AFDoneIndBrD: forall n t (k: fin' n -> _) w,
-      observe t = BrF false n k ->
-      (forall i, can_step (k i) w -> AFDoneInd (k i) w) ->
-      AFDoneInd t w
-  | AFDoneIndBrS: forall n t (k: fin' n -> _) w,
-      observe t = BrF true n k ->
-      (forall i, AFDoneInd (k i) w) ->
-      AFDoneInd t w
-  |AFDoneIndVis: forall (t: ctree E X) w e k (_: encode e),
+      φ (Finish e v x) ->
+      AFNowInd φ t (Obs e v)
+  | AFNowIndBr: forall t w b n (k: fin' n -> ctree E X),
+      observe t = BrF b n k ->
+      not_done w ->
+      (forall (i: fin' n), (* can_step (k i) w ->*) AFNowInd φ (k i) w) ->
+      AFNowInd φ t w
+  | AFNowIndVis: forall (t: ctree E X) w e k (_: encode e),
       observe t = VisF e k ->
       not_done w ->
       (forall (v: encode e), AFDoneInd (k v) (Obs e v)) ->
@@ -274,8 +280,14 @@ Section AfDoneIndLemma.
         apply H1 with i, H2.
       + unfold equ; step in H3; cbn in H3; rewrite H in H3.
         dependent destruction H3.
-        eapply AFDoneIndVis with e k2; eauto.
-        intros v. apply H2, H3.
+        eapply AFNowIndBr with b n k2; auto.
+        intros i.
+        apply H2 with i, H3.
+      + step in H3; cbn in H3; rewrite H in H3.
+        dependent destruction H3.
+        eapply AFNowIndVis with e k2; auto.
+        intros.
+        apply H2, H3.
     - generalize dependent x.
       induction Hind; intros.
       + apply AFDoneIndPure with x; auto.
@@ -301,241 +313,228 @@ Section AfDoneIndLemma.
         apply H1 with i, H2.
       + unfold equ; step in H3; cbn in H3; rewrite H in H3.
         dependent destruction H3.
-        eapply AFDoneIndVis with e k1; eauto.
-        intros v. apply H2, H3.
-  Qed.
-  
-  Lemma reorder_forall{A B C} P: 
-    (forall (a: A) (b : B) (c : C),
-      P a b c) <->
-    (forall c a b, P a b c).
-  Proof.
-    intros; split; eauto.
-  Qed.
-  
-  Lemma afdone_ind {HP: Productive E}: forall (t: ctree E X) w,
-      <( t, w |= AF AX done φ )> ->
-      AFDoneInd t w.
-  Proof.
-    intros; induction H.
-    - (* Match *)
-      apply axdone_ind in H; auto.
-      rewrite ctree_eta.
-      remember (observe t) as T.
-      clear HeqT t.
-      induction H.
-      + apply AFDoneIndPure with x; auto.
-      + apply AFDoneIndObs with x; auto.
-      + apply AFDoneIndBrD with n k; auto.
-        intros i Hs.
-        rewrite ctree_eta.
-        apply H0.
-    - (* Step *)      
-      destruct H0, H1.
-      clear H H1.
-      cbn in H2, H3.
-      rewrite ctree_eta in H0.
-      rewrite ctree_eta.
-      desobs t; [| destruct b |].
-      + destruct H0 as (t' & w' & TR).
-        specialize (H2 _ _ TR).
-        specialize (H3 _ _ TR).
-        inv TR; observe_equ H0;
-          rewrite <- Eqt, H4 in H2.
-        * pose proof (af_stuck (Done x) (X:=X) <( AX done φ )>) as Hstuck.          
-          unfold entailsF in Hstuck.
-          rewrite Hstuck in H2.
-          inv H2; now apply can_step_stuck in H.
-        * pose proof (af_stuck (Finish e v x) (X:=X) <( AX done φ )>) as Hstuck.          
-          unfold entailsF in Hstuck.
-          rewrite Hstuck in H2.
-          inv H2; now apply can_step_stuck in H.
-      + apply AFDoneIndBrS with n k; auto.
+        eapply AFNowIndBr with b n k1; auto.
         intros i.
-        apply H3; apply ktrans_brS.
-        exists i; intuition.
-        apply can_step_not_done with (BrS n k);
-          auto with ctl.
-      + (* BrD *)
-        clear Heqt t.
-        apply can_step_brD in H0.
-        setoid_rewrite ktrans_brD in H2.
-        setoid_rewrite ktrans_brD in H3.
-        rewrite pull2_iff in H2, H3.
-        apply AFDoneIndBrD with n k; auto.
-        admit.
-      + apply AFDoneIndVis with e k; auto.
-        apply can_step_not_done with (Vis e k);
-          auto with ctl.
-        intro v.
-        apply H3; apply ktrans_vis.
-        exists v; intuition.
-        apply can_step_not_done with (Vis e k); auto.
+        eapply H2 with i, H3. 
+      + step in H3; cbn in H3; rewrite H in H3.
+        dependent destruction H3.
+        eapply AFNowIndVis with e k1; auto.
+        intros.
+        apply H2, H3.
+  Qed.
+
+  Lemma afind_brD_aux: forall n (k: fin' n -> ctree E X) w φ,
+      (forall i, AFNowInd φ (k i) w) ->
+      φ w \/ (forall i, can_step (k i) w /\
+                    (forall t' w', [k i, w] ↦ [t', w'] ->
+                              AFNowInd φ t' w')).
+  Proof.
+    induction n; intros.
+    - specialize (H Fin.F1).
+      dependent induction H.
+      + (* AFIndNow *) now left.
+      + (* AFIndDone *)
+        right; intros.
+        dependent destruction i; try solve [inv i].
+        split; unfold can_step; cbn; rewrite H.
+        * exists Ctree.stuck, (Done x).
+          now econstructor.
+        * intros * TR.
+          dependent destruction TR.
+          now apply AFNowIndBase.
+      + (* AFIndFinish *)
+        right; intros.
+        dependent destruction i; try solve [inv i].
+        split; unfold can_step; cbn; rewrite H.
+        * exists Ctree.stuck, (Finish e v x).
+          now econstructor.
+        * intros * TR.
+          dependent destruction TR.
+          now apply AFNowIndBase.
+      + (* AFIndBr *) destruct b.
+        * (* BrS *) right.
+          intro i.
+          dependent destruction i; try solve [inv i].
+          unfold can_step; cbn; setoid_rewrite H.
+          split; intros.
+          -- exists (k0 Fin.F1), w; try econstructor; auto.
+          -- admit. 
+        * (* BrD *)
+          induction n.
+          -- edestruct H2.
   Admitted.
 
-End AfDoneIndLemma.
+  Lemma pull1_iff: forall {A B} (P : A -> Prop) (R : A -> B -> Prop),
+      (forall a, (exists b, R a b)-> P a) <-> (forall a b, R a b -> P a).
+    split; intros; eauto.
+    destruct H0.
+    now apply H with x.
+  Qed.
+
+  Lemma pull2_iff: forall {A B C} (P : A -> B -> Prop) (R : A -> B -> C -> Prop),
+      (forall a b, (exists c, R a b c)-> P a b) <-> (forall a b c, R a b c -> P a b).
+    split; intros; eauto.
+    destruct H0.
+    now apply H with x.
+  Qed.
+
+  Lemma af_afind_aux: forall (t: ctree E X) w φ,
+    (can_step t w /\
+             (forall t' w',
+                 [t, w] ↦ [t', w'] ->
+                 AFNowInd φ t' w')) ->
+    AFNowInd φ t w.
+  Proof.
+    intros.
+    destruct H as ((t' & w' & TR) & ?).
+    pose proof (H _ _ TR).
+    generalize dependent t.
+    revert w.
+    induction H0; intros.
+    + admit.
+  Admitted.
+  
+  (* This is a super useful lemma, it allows us to do
+     induction on [AFInd] instead of two inductions on
+     [cau] and [trans] *)
+  Opaque Ctree.stuck.
+  Lemma af_afind : forall (t: ctree E X) (w: World E) φ,
+       <( t, w |= AF now φ )> -> AFNowInd φ t w.
+  Proof.    
+    intros; cbn in H.
+    induction H.
+    - now apply AFNowIndBase.
+    - destruct H0, H1; clear H H1.
+      destruct H0 as (t' & w' & TR).
+      apply af_afind_aux.
+      split.
+      + now (exists t', w').
+      + intros.
+        now apply H3.
+  Qed.
+  
+End AfIndLemma.
 
 Section CtlAfBind.
   Context {E: Type} {HE: Encode E}.
-  
-  Opaque Ctree.stuck.
-  Typeclasses Transparent equ.
-  Theorem af_bind_pure{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w,
-      <( t, w |= AF pure )> ->
-      <( {x <- t ;; k x}, w |= AF pure )>.
+
+  (* LEF: This lemma is not provable with [can_step]
+     in AFNowBr *)
+  Lemma af_stuck{X}: forall φ w,
+      φ w <->
+      <( {Ctree.stuck: ctree E X}, w |= AF now φ )>.
   Proof.
-    intros * Haf.
-    revert X k.
-    induction Haf; intros; subst.
-    - (* MatchA *)
-      next; left; cbn.
-      now apply ctl_pure in H. 
-    - (* StepA *)
-      destruct H0, H1; clear H H0.      
-      next; right; next; split.
-      + (* can_step *)
-        destruct H1 as (t' & w' & TR').
-        eapply can_step_bind_l with t' w'; auto.
-        eapply not_done_pure_af with (t:=t').
-        now apply H2.
-      + (* AX AF *)
-        intros t_ w_ TR_.
-        apply ktrans_bind_inv in TR_.
-        destruct TR_ as [(t' & TR' & Hd & ->) | (x & w' & TR' & Hr & TRk)].
-        * now apply H3.
-        * specialize (H2 _ _ TR').
-          inv H2.
-          apply ctl_pure in H; subst.
-          -- inv Hr.
-          -- destruct H0.
-             now apply can_step_stuck in H0.
+    split; intros.
+    - next; left; auto.
+    - remember Ctree.stuck as S. 
+      apply af_afind in H.
+      Transparent Ctree.stuck.
+      induction H; subst; auto; cbn in *;
+        dependent destruction H. 
+      apply H2; auto.
+      exact Fin.F1.
   Qed.
-  
+
+  Typeclasses Transparent equ.
   Theorem af_bind_vis{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) φ w,
       <( t, w |= AF vis φ )> ->
       <( {x <- t ;; k x}, w |= AF vis φ )>.
   Proof.
     intros * Haf.
-    revert X k.
-    induction Haf; intros; subst.
-    - (* MatchA *)
-      next; left; cbn.
-      apply ctl_vis in H as (e_ & x_ & ? & ?).
-      subst.
-      now (exists e_, x_).
-    - (* StepA *)
-      destruct H0, H1; clear H H0.      
-      next; right; next; split.
-      + (* can_step *)
-        destruct H1 as (t' & w' & TR').
-        eapply can_step_bind_l with t' w'; auto.
-        eapply not_done_vis_af with (t:=t').
-        now apply H2.
-      + (* AX AF *)
-        intros t_ w_ TR_.
-        apply ktrans_bind_inv in TR_ as
-            [(t' & TR' & Hd & ->) |
-              (x & w' & TR' & Hr & TRk)].
-        * now apply H3.
-        * specialize (H2 _ _ TR').
-          inv H2.
-          apply ctl_vis in H as (? & ? & -> & ?).
-          -- inv Hr.
-          -- destruct H0.
-             now apply can_step_stuck in H0.
+    apply af_afind in Haf.
+    revert X k.    
+    induction Haf; intros; subst. 
+    - (* Base *)
+      next; left; cbn; apply H.
+    - (* Done *)
+      destruct H0 as (? & ? & ? & ?).
+      inv H0.
+    - (* Finish *)
+      destruct H0 as (? & ? & ? & ?).
+      inv H0.
+    - (* Tau *)
+      observe_equ H.
+      rewrite Eqt, bind_br.
+      apply af_br; eauto.
+    - (* Vis *)
+      observe_equ H.
+      rewrite Eqt, bind_vis.
+      apply af_vis; eauto.
   Qed.
 
-  Theorem af_bind_r{X Y} {HP: Productive E}: forall (t: ctree E Y)
-                            (k: Y -> ctree E X) w φ R,
+  Theorem af_bind_pure{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w,
+      <( t, w |= AF pure )> ->
+      <( {x <- t ;; k x}, w |= AF pure )>.
+  Proof.
+    intros * Haf.
+    apply af_afind in Haf.
+    revert X k.    
+    induction Haf; intros; subst. 
+    - (* Base *)
+      next; left; now cbn. 
+    - (* Done *)
+      inv H0.
+    - (* Finish *)
+      inv H0.
+    - (* Tau *)
+      observe_equ H.
+      rewrite Eqt, bind_br.
+      apply af_br; eauto.
+    - (* Vis *)
+      observe_equ H.
+      rewrite Eqt, bind_vis.
+      apply af_vis; eauto.
+  Qed.
+  
+  Lemma can_step_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w R,      
+      <( t, w |= AF AX done R )> ->
+      (forall y w, R y w -> can_step (k y) w) ->
+      can_step (x <- t ;; k x) w.
+  Proof.    
+    intros.
+    apply af_afind in H.
+    generalize dependent k.
+    induction H; intros; observe_equ H; rewrite Eqt.
+    - (* Done x *)
+      rewrite bind_ret_l.
+      now apply H1.
+    - (* Finish *)
+      rewrite bind_ret_l.
+      now apply H1.
+    - (* Tau *)
+      rewrite bind_tau.
+      apply can_step_tau; eauto.
+    - (* Vis *)
+      rewrite bind_vis.
+      apply can_step_vis; auto.
+  Qed.
+  Hint Resolve can_step_bind_r: ctl.
+
+  Theorem af_bind_r{X Y}: forall (t: itree E Y)
+                            (k: Y -> itree E X) w φ R,
       <( t, w |= AF AX done R )> ->
       (forall (y: Y) w, R y w -> not_done w ->
                    <( {k y}, w |= AF now φ )>) ->
       <( {x <- t ;; k x}, w |= AF now φ )>.
   Proof.
-    intros * Haf Hk.
-    induction Haf; intros; subst.
-    - (* MatchA *)      
-      apply axdone_ind in H; auto.
-      rewrite (ctree_eta t) in *.
-      remember (observe t) as T.
-      clear HeqT t.
-      induction H. 
-      + rewrite bind_ret_l; eauto with ctl.
-      + rewrite bind_ret_l; eauto with ctl.
-      + rewrite bind_br.
-        apply af_brD; intros.
-        setoid_rewrite <- ctree_eta in H0.
-        apply H0.
-    - (* StepA *)
-      destruct H0, H1; clear H H0.      
-      rewrite (ctree_eta t) in *.
-      cbn in H2, H3.
-      desobs t; [| destruct b |].
-      + destruct H1 as (t' & w' & TR).
-        specialize (H2 _ _ TR).
-        specialize (H3 _ _ TR).
-        inv TR; observe_equ H0;
-          rewrite <- Eqt, H4 in H2.
-        * pose proof (af_stuck (Done x) (X:=Y) <( AX done R )>) as Hstuck.          
-          unfold entailsF in Hstuck.
-          apply Hstuck in H2.
-          inv H2; now apply can_step_stuck in H.
-        * pose proof (af_stuck (Finish e v x) (X:=Y) <( AX done R )>) as Hstuck.          
-          unfold entailsF in Hstuck.
-          rewrite Hstuck in H2.
-          inv H2; now apply can_step_stuck in H.
-      + rewrite bind_br.
-        apply af_brS.
-        intro i.
-        apply H3.
-        apply ktrans_brS.
-        exists i; intuition.
-        destruct H1 as (t' & w' & TR).
-        now apply ktrans_not_done with (BrS n k0) t' w'.
-      + (* BrD *)
-        rewrite bind_br.
-        apply can_step_brD in H1.
-        setoid_rewrite ktrans_brD in H3.
-        setoid_rewrite ktrans_brD in H2.
-        rewrite pull2_iff in H2, H3.
-        clear Heqt t.        
-        apply af_brD.
-        intros i Hs.
-        apply can_step_bind in Hs as [(t' & w' & TR & Hd) | (? & ? & ? & ?)].
-        * next; right. next; split.
-          -- now apply can_step_bind_l with t' w'.
-          -- intros t_ w_ TR_.
-             apply ktrans_bind_inv in TR_ as 
-                 [(t1 & TR1 & Hd_ & ->) |
-                   (x & w1 & TR1 & Hr & TRk)].
-             ++ now apply H3 with i.
-             ++ specialize (H2 _ _ _ TR1).
-                apply (af_stuck (X:=Y) w1 (<( AX done R )>)) in H2.
-                apply ax_stuck in H2.                
-                inv H2; dependent destruction Hr.
-                ** specialize (H3 _ _ _ TR1).
-                   inv H3.
-                apply Hst in H2.
-             apply H3.
-        apply can_step_brD in H1.
-        setoid_rewrite ktrans_brD in H3.
-        setoid_rewrite ktrans_brD in H2.
-        rewrite pull2_iff in H2, H3.
+    intros.
+    apply afdone_ind in H.
+    revert H0.
+    generalize dependent φ.
+    generalize dependent k.
+    induction H; intros; observe_equ H; rewrite Eqt.
+    - (* Done *)
+      rewrite bind_ret_l; eauto with ctl.
+    - (* Finish *)
+      rewrite bind_ret_l; eauto with ctl.
+    - (* Tau *)
+      rewrite bind_tau.
+      apply af_tau; eauto with ctl.
+    - (* Vis *)
+      rewrite bind_vis.
+      apply af_vis; eauto with ctl.
+  Qed.
 
-        
-        admit.
-      + rewrite bind_vis.
-        apply af_vis.
-        apply HP.
-        right; split.
-        now apply can_step_not_done with (Vis e k0).
-        intro x.
-        apply H3.
-        apply ktrans_vis.
-        exists x; intuition.
-        now apply can_step_not_done with (Vis e k0).
-  Admitted.
-  Qed. 
 End CtlAfBind.
 
 Section CtlAfIter.
@@ -545,16 +544,16 @@ Section CtlAfIter.
   (* [Ri: I -> World E -> Prop] loop invariant (left).
      [Rr: X -> World E -> Prop] loop postcondition (right).
      [Rv: (I * World E) -> (I * World E) -> Prop)] loop variant (left). *)
-  Lemma af_iter{X I} Ri Rr (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E (I + X)):
+  Lemma af_iter{X I} Ri Rr (Rv: relation (I * World E)) (i: I) w (k: I -> itree E (I + X)):
       (forall (i: I) w, Ri i w ->
                    <( {k i}, w |= AF AX done {fun (x: I + X) w' =>
-                                                match x with
-                                                | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
-                                                | inr r' => Rr r' w'
-                                                end})>) ->
+                                             match x with
+                                             | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
+                                             | inr r' => Rr r' w'
+                                             end})>) ->
       well_founded Rv ->
       Ri i w ->
-      <( {Ctree.iter k i}, w |= AF done Rr )>.
+      <( {Itree.iter k i}, w |= AF done Rr )>.
   Proof.      
     intros H WfR Hi.
     generalize dependent k.
@@ -569,16 +568,14 @@ Section CtlAfIter.
     rename H into HindWf.
     intros.
     rewrite unfold_iter.
-    eapply af_bind_r
-      with (R:=fun (x : I + X) (w' : World E) =>
-                 match x with
-                 | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
-                 | inr r' => Rr r' w'
-                 end); auto.
+    eapply af_bind_r with (R:=fun (x : I + X) (w' : World E) =>
+                                match x with
+                                | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
+                                | inr r' => Rr r' w'
+                                end); auto.
     intros [i' | r] w'.
     - intros (Hi' & Hv) Hd.
-      apply af_brD.
-      intros _.
+      apply af_tau.
       remember (i', w') as y.
       replace i' with (fst y) by now subst.
       replace w' with (snd y) by now subst.      
@@ -588,7 +585,7 @@ Section CtlAfIter.
       + now apply can_step_ret.
       + intros t_ w_ TR_.
         inv Hd.
-        * apply ktrans_done in TR_ as (-> & ->).
+        * apply ktrans_pure in TR_ as (-> & ->).
           next; left.
           rewrite ctl_done.
           now constructor.
