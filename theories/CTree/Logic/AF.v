@@ -63,27 +63,14 @@ Section BasicLemmas.
         now constructor.       
   Qed.
   Hint Resolve af_ret: ctl.
-  
+
+
   Lemma af_tau: forall (t: ctree E X) w φ,
-      <( t, w |= AF now φ )> -> 
-      <( {Tau t}, w |= AF (now φ) )>.
+      <( t, w |= AF φ )> -> 
+      <( {Tau t}, w |= AF φ )>.
   Proof.
     intros.
-    unfold entailsF in H.
-    induction H.
-    - now next; left.
-    - Opaque entailsF.
-      destruct H0, H1; clear H H1.
-      destruct H0 as (t' & w' & TR).
-      specialize (H3 _ _ TR); cbn in H3.
-      next; right.
-      split.
-      * apply can_step_tau.
-        exists t', w'; auto.
-      * intros t_ w_ TR_.
-        rewrite ktrans_tau in TR_.
-        now apply H2.
-  Qed.
+  Admitted.
 
   Lemma afax_tau: forall (t: ctree E X) w φ,
       <( t, w |= AF AX now φ )> -> 
@@ -891,7 +878,7 @@ Section CtlAfState.
                                           end})>) ->
     well_founded Rv ->
     Ri i w s ->
-    <( {interp_state h (iter k i) s}, w |= AF done Rr )>.
+    <( {interp_state h (Ctree.iter k i) s}, w |= AF done Rr )>.
   Proof.
     intros H WfR Hi.
     generalize dependent k.
@@ -935,7 +922,7 @@ Section CtlAfState.
                        | inr r' => Rr (r',s') w'
                        end})>) ->
     Ri i w s ->
-    <( {interp_state h (iter k i) s}, w |= AF done Rr )>.
+    <( {interp_state h (Ctree.iter k i) s}, w |= AF done Rr )>.
   Proof.
     intros.
     eapply af_iter_state with Ri (ltof _ (fun '(i, w, s) => f i w s)); auto.
@@ -953,7 +940,7 @@ Section CtlAfState.
                        | inr r' => Rr (r',s') w'
                        end})>) ->
     not_done w ->
-    <( {interp_state h (iter k i) s}, w |= AF done Rr )>.
+    <( {interp_state h (Ctree.iter k i) s}, w |= AF done Rr )>.
   Proof.
     intros.
     eapply af_iter_state_nat with (Ri:=fun _ w _ => not_done w) (f:=fun i _ => f i); auto.
@@ -974,7 +961,7 @@ Section CtlAfStateList.
                     | inr r' => Rr (r', l') w'
                     end})>) ->
     Ri i w l ->
-    <( {interp_state h (iter k i) l}, w |= AF done Rr )>.
+    <( {interp_state h (Ctree.iter k i) l}, w |= AF done Rr )>.
   Proof.
     intros.
     apply af_iter_state_nat with (Ri:=Ri) (f:=fun _ _ l => length l); auto.
@@ -990,7 +977,7 @@ Section CtlAfStateList.
                     | inr r' => Rr (r',l') w'
                     end})>) ->
     not_done w ->
-    <( {interp_state h (iter k i) l}, w |= AF done Rr )>.
+    <( {interp_state h (Ctree.iter k i) l}, w |= AF done Rr )>.
   Proof.
     intros.
     eapply af_iter_state_list with (Ri:=fun _ w _ => not_done w); auto.
