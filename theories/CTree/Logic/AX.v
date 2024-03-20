@@ -37,6 +37,16 @@ Section BasicLemmas.
     inv Hret; inv H.
   Qed.
 
+  Lemma ax_not_done: forall (t: ctree E X) φ w,      
+      <( t, w |= AX φ )> ->
+      not_done w.
+  Proof.
+    intros.
+    inv H.
+    destruct H0 as (t' & w' & TR).
+    now apply ktrans_not_done with t t' w'.
+  Qed.
+
   (* This lemma forces us to have finite branches.
      Alternatively, a classical [φ] would also allow
      us to work without induction on branch arity. *)
@@ -95,33 +105,6 @@ Section BasicLemmas.
         dependent destruction TR.
         apply ctl_done; now constructor.
   Qed.
-
-  Lemma ax_brD_inv: forall n (k: fin' n -> ctree E X) w φ,
-      <( {BrD n k}, w |= AX φ )> ->
-      (forall (i: fin' n), can_step (k i) w -> <( {k i}, w |= AX φ )>).
-  Proof.
-    intros.
-    next in H; destruct H.
-    setoid_rewrite ktrans_brD in H1.
-    rewrite pull2_iff in H1.
-    apply can_step_brD in H as (j & t' & w' & TR).
-    generalize dependent w.
-    revert i k.
-    induction n; intros.
-    + dependent destruction i; try solve [inv i];
-        dependent destruction j; try solve [inv j].
-      next; split.
-      * now (exists t', w').
-      * intros.
-        now apply H1 with Fin.F1.
-    + dependent destruction i; try solve [inv i];
-        dependent destruction j; try solve [inv j].
-      * next; split.
-        -- now (exists t', w').
-        -- intros.
-           now apply H1 with Fin.F1.
-      * edestruct IHn with (k:= fun i => k (Fin.FS i)) (i:=@Fin.F1 n); eauto.
-  Admitted.
 
   Lemma ax_stuck: forall w φ,
       <( {Ctree.stuck: ctree E X}, w |= AX φ )> ->
@@ -296,25 +279,46 @@ Section SyntacticLemmas.
     (forall i, AXDoneInd (observe (k i)) w) ->
     AXDoneInd (BrF false n k) w.
 
-  Check Productive.
   Lemma axdone_ind {HP: Productive E}: forall t w,
       <( t, w |= AX done R )> -> AXDoneInd (observe t) w.
   Proof.
     intros.
-    rewrite ctree_eta in H.
-    desobs t.
-    - apply ax_done in H as (? & ?).
-      inv H; now constructor.
-    - destruct b.
-      + apply ax_brS in H as (? & ?).
-        specialize (H0 Fin.F1).
-        inv H0; inv H.
-      + constructor.
-        intros i.
-        admit.
-    - apply ax_vis in H as (? & ?).
-      + specialize (H0 (HP e)).
-        inv H0.
-      + exact (HP e).
+    destruct H.
+    destruct H as (t' & w' & TR).
+    cbn in *.
+    remember (observe t) as T.
+    remember (observe t') as T'.
+    clear HeqT t HeqT' t'.
+    induction TR; try econstructor.
+    - setoid_rewrite ktrans_brD in H0.
+      rewrite pull2_iff in H0.
+      generalize dependent w.
+      revert t' w' k i.
+      induction n; intros.
+      + dependent destruction i; try solve [inv i].
+        dependent destruction i0; try solve [inv i0].
+        intros.
+        apply IHTR; eauto.
+        intros.
+        now pose proof (H0 _ _ Fin.F1 H).
+      + dependent destruction i0;
+          dependent destruction i.
+        * apply IHTR; intros.
+          now pose proof (H0 _ _ Fin.F1 H).
+        * admit.
+        * admit.
+        * admit.
+    - assert (TR: ktrans_ (BrF true n k) w (observe t) w).
+      { apply ktrans_brS; exists i; auto. }
+      destruct (H0 _ _ TR); inv H.
+    - assert (TR: ktrans_ (VisF e k) w (observe t) (Obs e v)).
+      { apply ktrans_vis; exists v; intuition. }      
+      pose proof (H0 _ _ TR); inv H2.
+    - assert (TR: ktrans_ (RetF x) Pure (observe Ctree.stuck) (Done x)).
+      { apply ktrans_done; auto. }
+      pose proof (H0 _ _ TR); now dependent destruction H1.
+    - assert (TR: ktrans_ (RetF x) (Obs e v) (observe Ctree.stuck) (Finish e v x)).
+      { apply ktrans_finish; auto. }
+      pose proof (H0 _ _ TR); now dependent destruction H1.
   Admitted.
 End SyntacticLemmas.
