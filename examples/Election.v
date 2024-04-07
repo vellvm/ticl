@@ -2,21 +2,26 @@ From CTree Require Import
   CTree.Core
   Logic.Ctl
   Utils.Vectors
+  Events.WriterE
+  CTree.Logic.Trans
+  CTree.Logic.AF
+  CTree.Equ
+  CTree.Events.Writer
   CTree.Events.Net.
 
 From Coq Require Import
   Fin
   Vector
+  List
   Classes.SetoidClass.
 
 Set Implicit Arguments.
 
-Import VectorNotations CTreeNotations CtlNotations MessageOrderScheduler.
+Import ListNotations CTreeNotations CtlNotations MessageOrderScheduler.
 Local Close Scope list_scope.
 Local Open Scope ctree_scope.
 Local Open Scope fin_vector_scope.
 Local Open Scope ctl_scope.
-Local Open Scope vector_scope.
 
 Section Election.
   Context {n: nat}.
@@ -49,7 +54,7 @@ Section Election.
     If scheduled fairly, either 1, 2 should always eventually happen.
     Should be WG provable.
   *)
-  Definition proc(id: fin' n): ctree netE unit :=
+  Definition proc(id: fin' n): ctree netE (fin' n) :=
     let right := cycle id in
     send right (Candidate id) ;;
     Ctree.iter
@@ -62,34 +67,31 @@ Section Election.
              | Gt => send right (Candidate candidate) ;; continue
              (* [left] neighbor proposed a candidate, do not support her. *)
              | Lt => continue
-             (* I am the leader, but only I know. Tell my [right]. *)
-             | Eq => send right (Elected id) ;; stop
+             (* I am the leader, but only I know. Tell my [right] and return. *)
+             | Eq => send right (Elected id) ;; Ret (inr id)
              end
          | Some (Elected leader) =>
              (* I am a follower and know the [leader] *)
-             send right (Elected leader) ;; stop
+             send right (Elected leader) ;; Ret (inr leader)
          | None => continue (* Recv loop *)
          end) tt.
 
-  (* Should be AG provable because each process will spin after completion. *)
-  Definition proc_stuck(id: fin' n): ctree netE void :=
-    proc id ;; Ctree.stuck.
+  (* TODO: Instrumentation of [send] *)
+  Definition instr(i: fin' n)(mail: message) : option (fin' n) := Some i.
+  
 
-  (* Should be AG provable because each process will spin after completion. *)
-  Definition proc_spin(id: fin' n): ctree netE void :=
-    proc id ;; Ctree.spin.
+  Definition election_interp : ctree (writerE (fin' n)) void :=
+    schedule instr (Vector.map proc (fin_all_v n)).
 
-  (* Should be AG provable because every process restarts infinitely often *)
-  Definition proc_forever(id: fin' n): ctree netE void :=    
-    Ctree.forever void (fun _ => proc id) tt.
-
-  (* TODO: Schedule using [cycle] from [Utils.Vector] *)
-  (* Prove AG lemmas *)
-
-  (* Dummy observation; record [is_send] *)
-  Definition election_obs(is_send: bool)(i: fin' n)(mail: option message) : option unit :=
-    if is_send then Some tt else None.
+  Lemma election_fair: forall (i: fin' n),
+      <( election_interp, Pure |= AF visW \j, i = j )>.
+  Proof.
+    intros.
+    unfold election_interp, schedule.
+    unfold Ctree.branch.
+    rewrite bind_br.
+    apply af_br.
+    intro j. (* First pick *)
+    rewrite bind_ret_l.
+    
 End Election.
-
-Definition election_s (n: nat) : (sys n message) :=
-  Vector.map (fun i => task_new (proc_stuck i)) (fin_all_v n).

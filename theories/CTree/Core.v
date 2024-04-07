@@ -151,7 +151,7 @@ Module Ctree.
                       else
                         Ret (inl tt))) tt.
   
-  (* Continue sampling until non-deterministic choice satisfies [~ P] *)
+  (* Continue sampling until non-deterministic choice satisfies [Q] *)
   Definition unless `{HE: Encode E} {n P Q} (f: forall (i: fin' n), {P i} + {Q i}): ctree E (fin' n) :=
     iter (fun _  => bind (branch n)
                    (fun i =>

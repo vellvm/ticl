@@ -5,8 +5,7 @@ From CTree Require Import
 From CTree Require Export
   CTree.Core
   Events.Core
-  Events.WriterE
-  Events.NetE.
+  Events.WriterE.
 
 From Equations Require Import Equations.
 
@@ -14,91 +13,143 @@ Import CTreeNotations.
 Local Open Scope ctree_scope.
 Local Open Scope fin_vector_scope.
 
-Definition send {n T}: fin' n -> T -> ctree (netE n T) unit :=
-  fun i p => Ctree.trigger (Send i p).
+(*| Message passing in unidirectional ring |*)
+Variant netE(T: Type): Type :=
+  | Recv
+  | Send (msg: T).
 
-Definition recv {n T}: ctree (netE n T) (option T) :=
-  Ctree.trigger (@Recv n T).
+Arguments Recv {T}.
+Arguments Send {T}.
 
-Module MessageOrderScheduler.
-  (* Round-robbin Scheduler for infinite ctrees, based on message passing.
+#[global] Instance encode_netE{T}: Encode (netE T) :=
+  fun e => match e with
+        | Recv => option T
+        | Send _ => unit
+        end.
+
+Arguments encode_netE {T} /.
+
+Definition send {T}: T -> ctree (netE T) unit :=
+  fun p => Ctree.trigger (Send p).
+
+Definition recv {T}: ctree (netE T) (option T) :=
+  Ctree.trigger (@Recv T).
+
+Definition option_dec{A}(o: option A): {o = None} + {exists v, o = Some v} :=
+  match o with
+  | Some x => right (ex_intro (fun v : A => Some x = Some v) x eq_refl)
+  | None => left eq_refl
+  end.
+                                         
+(* Round-robbin scheduler for ctrees, based on message passing.
    1. Pick non-deterministically an [i: fin n], schedule process [i].
    2. When [i] sends a message to [j], deliver message and schedule [j] next.
    3. Repeat (2).
-   *)
-  Record Task (n: nat) (T: Type) :=
-    {
-      prog: ctree (netE n T) void;
-      mail: option T
+ *)
+
+
+(* n: Number of processes
+     T: Message payload type
+     X: Return type of processes
+     W: Observation domain *)
+Section ScheduleMsg.
+  Context {n: nat} {T X W: Type} (fobs: fin' n -> T -> option W).
+  Notation logE := (writerE W).
+
+  Record System := {
+      id: fin' n;
+      mail: option T;
+      processes: vec' n (ctree (netE T) X);
+      complete: vec' n (option X)
     }.
-  Arguments prog {n} {T}.
-  Arguments mail {n} {T}.
 
-  Definition task_new {n T}(p: ctree (netE n T) void) :=
-    {| prog := p; mail := None |}.
-  
-  Definition uprog{n T}(p: ctree (netE n T) void)(t: Task n T) :=
-    {| prog := p; mail := t.(mail) |}.
+  Equations schedule_one' (sys: System): ctree logE (System + vec' n X) :=            
+    schedule_one' sys with observe (sys.(processes) $ sys.(id)) => {
+        (** A non-deterministic choice, traverse it *)
+        schedule_one' _ (BrF n' k) :=
+          Br n' (fun i => Ret (inl
+                              {|
+                                id := sys.(id);
+                                mail := sys.(mail);
+                                processes := sys.(processes) @ sys.(id) := k i;
+                                complete := sys.(complete)
+                              |}));
+        
+        (** A guard, traverse it *)
+        schedule_one' _ (GuardF t') :=
+          Guard (Ret (inl
+                        {|
+                          id := sys.(id);
+                          mail := sys.(mail);
+                          processes := sys.(processes) @ sys.(id) := t';
+                          complete := sys.(complete)
+                        |}));
 
-  Definition umail{n T}(mail: option T) (t: Task n T) :=
-    {| prog := t.(prog); mail := mail |}.
-
-  Notation sys n T := (vec' n (Task n T)).
-
-  (* n: Number of processes
-   T: Message payload type
-   W: Observation domain *)
-  Section ScheduleMsg.
-    Context {n: nat} {T W: Type} (fobs: bool -> fin' n -> option T -> option W).
-    Notation logE := (writerE W).
-
-    Equations schedule_one' (R: fin' n -> sys n T -> ctree logE void)
-      (r: fin' n) (system: sys n T) : ctree logE void :=
-      
-      schedule_one' R r system with observe (prog (system $ r)) => {
-          (** A non-deterministic choice, traverse it *)
-          schedule_one' _ _ _ (BrF n' k) :=
-            Br n' (fun i => R r (system @ r do uprog (k i)));
-
-          (** A guard, traverse it *)
-          schedule_one' _ _ _ (GuardF t') :=
-            Guard (R r (system @ r do uprog t'));
+        
+        (** A network `send` effect, interpet it and context-switch right*)
+        schedule_one' _ (VisF (Send m) k) with (fobs sys.(id) m) => {
           
-          (** A network `send` effect, interpet it and context switch *)
-          schedule_one' _ _ _ (VisF (Send to m) k) :=
-            match fobs true to (Some m) with
-            | Some obs =>      
-                Vis (Log obs) (fun _: unit =>
-                                 R to (system
-                                         @ r do (uprog (k tt))
-                                                  @ to do (umail (Some m))))
-            | None => R to (system
-                             @ r do (uprog (k tt))
-                                      @ to do (umail (Some m)))
-            end;
+          (** Instrument with [obs] *)
+          schedule_one' _ _ (Some obs) := 
+            Vis (Log obs) (fun _ =>
+                             Ret (inl
+                                    {|
+                                      id := cycle sys.(id);
+                                      mail := Some m;
+                                      processes := sys.(processes) @ sys.(id) := k tt;
+                                      complete := sys.(complete)
+                                    |}));
           
-          (** Receive a message *)
-          schedule_one' _ _ _ (VisF Recv k) :=
-            let m := mail (system $ r) in
-            match fobs false r m with
-            | Some obs =>          
-                Vis (Log obs) (fun _: unit =>
-                                 R r (system @ r do (fun t => umail None (uprog (k m) t))))
-            | None => R r
-                       (system @ r do (fun t => umail None (uprog (k m) t)))
-            end;
-          schedule_one' _ _ _ (RetF x) :=
-            i <- Ctree.unless (Fin.eq_dec r) ;; (* Pick any other [i] *)
-            R i system
-        }.    
+          (** No instrumentation *)
+          schedule_one' _ _ None :=
+            Ret (inl
+                   {|
+                     id := cycle sys.(id);
+                     mail := Some m;
+                     processes := sys.(processes) @ sys.(id) := k tt;
+                     complete := sys.(complete)
+                   |});
+        };
+        
+        (** Receive a message, empty mailbox *)
+        schedule_one' _ (VisF Recv k) :=
+          Ret (inl
+                 {|
+                   id := sys.(id);
+                   mail := None;
+                   processes := sys.(processes) @ sys.(id) := k sys.(mail);
+                   complete := sys.(complete)
+                 |});
 
-    CoFixpoint schedule_one(r: fin' n)(system: sys n T) :=
-      Guard (schedule_one' schedule_one r system).
+        (** A process returns, mark it as complete *)
+        schedule_one' _ (RetF x) :=
+          let complete' := sys.(complete) @ sys.(id) := Some x in            
+          match seq_opt complete' with
+          | None =>
+              (** Pick any [i] not complete and switch to it. *)
+              i <- Ctree.when (fun r => option_dec (complete' $ r)) ;; 
+              Ret (inl
+                     {|
+                       id := i;
+                       mail := None;
+                       processes := sys.(processes) @ sys.(id) := Ctree.stuck;
+                       complete := complete'
+                     |})
+          | Some v =>
+              (** All processes [complete] *)
+              Ret (inr v)
+          end
+      }.
 
-    (* Nondeterministic pick which process to start first *)
-    Definition schedule(system: sys n T) :=
-      r <- Ctree.branch n ;;
-      schedule_one r system.
+  (* Nondeterministic pick which process to start first *)
+  Definition schedule (mail: option T) (prs: vec' n (ctree (netE T) X)): ctree logE (vec' n X) :=
+    r <- Ctree.branch n;;
+    Ctree.iter schedule_one'
+               {|
+                 id := r;
+                 mail := mail;
+                 processes := prs;
+                 complete := vector_repeat n None;
+               |}.
 
-  End ScheduleMsg.
-End MessageOrderScheduler.
+End ScheduleMsg.
