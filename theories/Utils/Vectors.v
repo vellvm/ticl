@@ -92,6 +92,7 @@ Equations nth_map{A n}(v: vec n A)(i: fin n)(f: A -> A): vec n A by wf n lt :=
 Notation "v '$' i" := (nth v i) (at level 80): fin_vector_scope.
 Notation "v '--' i" := (vector_remove v i) (at level 80): fin_vector_scope.
 Notation "v '@' i 'do' f" := (nth_map v i f) (at level 80): fin_vector_scope.
+Notation "v '@' i := x" := (replace v i x) (at level 80): fin_vector_scope.
 
 (** Vector utils *)
 Equations forallb {A}{m: nat}(f: A -> bool)(a: vec m A): bool :=
@@ -116,6 +117,16 @@ Proof.
         apply andb_true_intro; split; assumption.
 Defined.
 
+Equations seq_opt{n X}(v: vec' n (option X)) : option (vec' n X) by wf n lt :=
+  seq_opt (Some x :: []) => Some [x];
+  seq_opt (Some x :: ts) => option_map (fun ts => x :: ts) (seq_opt ts);
+  seq_opt (None :: ts) => None.
+
+Fixpoint vector_repeat{A}(n: nat)(a: A): vec' n A :=
+  match n with
+  | 0 => [a]
+  | S m => a :: vector_repeat m a
+  end.
 
 Fixpoint fin_all (n : nat) : list (fin n) :=
   match n as n return list (fin n) with

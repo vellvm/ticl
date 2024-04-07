@@ -206,6 +206,15 @@ Module CtlNotations.
   Notation "'done=' r w" := (CBase (done_with (fun r' w' => r = r' /\ w = w')))
                               (in custom ctl at level 74): ctl_scope.
 
+  Notation "'visW' \ v , y " :=
+    (CBase (vis_with (fun pat : writerE _ =>
+                           let 'Log v as x := pat
+                  return (encode x -> Prop) in
+                  fun 'tt => y)))
+      (in custom ctl at level 75,
+          v binder,
+          y constr, left associativity): ctl_scope.
+
   Notation "'finishW' \ v s , y " :=
     (CBase (finish_with (fun pat : writerE _ =>
                            let 'Log v as x := pat
