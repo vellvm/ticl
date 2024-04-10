@@ -94,7 +94,7 @@ Section BasicLemmas.
         apply H0.
   Qed.
 
-  Lemma ax_done: forall (x: X) φ w,
+  Lemma ax_done_ret: forall (x: X) φ w,
       <( {Ret x}, w |= AX done φ )> <-> not_done w /\ φ x w. 
   Proof.
     split; intros.
@@ -119,7 +119,39 @@ Section BasicLemmas.
           apply ctl_done.
           now constructor.
   Qed.
-
+  
+  Lemma ax_done: forall (t: ctree E X) φ w,
+      <( t, w |= AX done φ )> <-> not_done w /\ (exists (x: X), t ~ Ret x /\ φ x w).
+  Proof.
+    split; intros.
+    - next in H; destruct H as ((t' & w' & TR) & ?).
+      cbn in *.
+      setoid_rewrite (ctree_eta t).
+      remember (observe t) as T.
+      specialize (H _ _ TR).
+      remember (observe t') as T'.
+      clear HeqT t HeqT' t'.
+      dependent induction TR; intros.
+      + setoid_rewrite <- (ctree_eta t) in IHTR.
+        split.
+        * now apply ktrans_not_done with t t' w'.
+        * destruct (IHTR H).
+          destruct H1 as (x & ? & ?).
+          exists x; split; auto.
+          now apply sb_guard_l.
+      + inv H1; inv H.
+      + inv H1.
+      + split; auto with ctl.
+        exists x; intuition.
+        now ddestruction H0.
+      + split; auto with ctl.
+        exists x; intuition.
+        now ddestruction H0.
+    - destruct H as (Hw & x & Heq & H).
+      rewrite Heq.
+      apply ax_done_ret; intuition.
+  Qed.
+  
 End BasicLemmas.
 
 Section BindLemmas.

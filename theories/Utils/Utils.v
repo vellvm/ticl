@@ -19,6 +19,8 @@ Tactic Notation "cbn*" := unfold bt; cbn.
 
 Notation rel X Y := (X -> Y -> Prop).
 
+Ltac ddestruction H := cbn in H; dependent destruction H.
+
 (*|
 Heterogeneous [pair], todo move to coinduction library
 |*)

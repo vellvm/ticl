@@ -12,6 +12,7 @@ From CTree Require Import
   CTree.SBisim
   CTree.Logic.Trans
   CTree.Logic.CanStep
+  Logic.Setoid
   CTree.Logic.AX
   Logic.Ctl
   Logic.Kripke.
@@ -155,15 +156,62 @@ Section BindLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
   
   Lemma ag_bind_l{Y}: forall (t: ctree E X) w (k: X -> ctree E Y) φ,
-      <( t, w |= AG now φ )> -> (* Ignore [k] here, [t] will loop forever *)
+      <( t, w |= AG now φ )> -> (* [t] will loop forever. *)
       <( {x <- t ;; k x} , w |= AG now φ )>.
-  Proof.
-  Admitted.
+  Proof.    
+    intros.
+    generalize dependent t.
+    revert k w.
+    coinduction R CIH; intros; apply RStepA;
+      step in H; cbn in H; destruct H; intuition.
+    destruct H0 as ((t' & w' & TR) & ?).
+    split.
+    - apply can_step_bind.
+      left.      
+      exists t', w'; intuition.
+      specialize (H0 t' w' TR).
+      step in H0; ddestruction H0; intuition.
+      destruct H1.
+      now apply can_step_not_done with t0.
+    - intros k_ w_ TR_.
+      apply ktrans_bind_inv in TR_ as
+          [(t_ & TRt & Hd & ->) |
+            (x & wx & TR' & Hr & TRk)].
+      + apply CIH; auto.
+      + specialize (H0 _ _ TR').
+        step in H0; ddestruction H0; intuition.
+        destruct H1.
+        now apply can_step_stuck in H1.
+  Qed.
 
+  Typeclasses Transparent sbisim.
   Lemma ag_bind_r{Y}: forall (t: ctree E Y) w (k: Y -> ctree E X) φ R,
       <( t, w |= φ AU (AX done R) )> ->
       (forall w (y: Y), R y w -> <( {k y}, w |= AG φ )>) ->
       <( {x <- t ;; k x} , w |= AG φ )>.
   Proof.
+    coinduction R CIH.
+    intros.
+    generalize dependent k.
+    induction H.
+    - apply ax_done in H as (Hw & x & Heq & H).
+      intros.
+      assert (x <- t ;; k x ~ y <- Ret x;; k y).  
+      { __upto_bind_sbisim. apply Heq. reflexivity. }.
+      apply RStepA.
+      + rewrite H1.
+        rewrite bind_ret_l.
+        fold (@entailsF (ctree E) E HE ctree_kripke X φ (k x) w) in *.
+        fold (@entailsF (ctree E) E HE ctree_kripke Y <(AF φ)> _ w) in *.
+        clear H1.
+        
+        specialize (H0 _ _ H).
+        step in H0.
+        apply H0.
+      +
+      apply H0.      
+    - ddestruction H.
+
+      
   Admitted.
 End BindLemmas.
