@@ -43,14 +43,23 @@ Ltac cdestruct H0 :=
 #[global] Tactic Notation "left" := (cleft || left).
 #[local] Tactic Notation "destruct" ident(H) := (cdestruct H || destruct H).
 
-#[local] Ltac __coinduction_g R H :=  
-  unfold entailsF; coinduction R H;
-  try match goal with
-  | [KMS: Kripke ?M ?W ?HE |- context[?M ?X] ] =>
-      fold (@entailsF M W HE KMS X) in *
+#[local] Ltac __coinduction_g R H :=
+  unfold entailsF; coinduction R CIH;
+  match type of R with
+  | (rel (?M ?X) (World ?W)) ->
+    (rel (?M ?X) (World ?W)) ->
+    (rel (?M ?X) (World ?W)) =>
+      match goal with
+      | [φ : World ?W -> Prop |- _ ] =>
+          fold (@entailsF M W _ _ X (CBase φ)) in *
+      | [φ: ctlf ?W |- _ ] =>
+          fold (@entailsF M W _ _ X φ) in *
+      end            
   end.
 
-#[global] Tactic Notation "coinduction" simple_intropattern(R) simple_intropattern(H) :=
+#[global] Tactic Notation "coinduction"
+  simple_intropattern(R)
+  simple_intropattern(H) :=
   __coinduction_g R H || coinduction R H.
 
 (* TODO: Does not work... 

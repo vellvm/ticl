@@ -17,7 +17,7 @@ From CTree Require Import
   CTree.Logic.Trans
   CTree.Logic.CanStep
   Logic.Ctl
-  Logic.AX
+  Logic.EX
   Logic.Kripke
   Logic.Setoid.
 
@@ -165,9 +165,9 @@ Section CtlEfBind.
   Context {E: Type} {HE: Encode E}.
 
   Typeclasses Transparent equ.
-  Theorem af_bind_vis{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) φ w,
-      <( t, w |= AF vis φ )> ->
-      <( {x <- t ;; k x}, w |= AF vis φ )>.
+  Theorem ef_bind_vis{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) φ w,
+      <( t, w |= EF vis φ )> ->
+      <( {x <- t ;; k x}, w |= EF vis φ )>.
   Proof.
     intros * Haf.
     revert X k.
@@ -176,98 +176,63 @@ Section CtlEfBind.
       next; left; cbn.
       apply ctl_vis in H; inv H; now constructor.
     - (* StepA *)
-      destruct H0, H1; clear H H0.      
-      next; right; next; split.
-      + (* can_step *)
-        destruct H1 as (t' & w' & TR').
-        eapply can_step_bind_l with t' w'; auto.
-        eapply not_done_vis_af with (t:=t').
-        now apply H2.
-      + (* AX AF *)
-        intros t_ w_ TR_.
-        apply ktrans_bind_inv in TR_ as
-            [(t' & TR' & Hd & ->) |
-              (x & w' & TR' & Hr & TRk)].
-        * now apply H3.
-        * specialize (H2 _ _ TR').
-          inv H2.
-          apply ctl_vis in H; inv H. 
-          -- inv Hr.
-          -- destruct H0.
-             now apply can_step_stuck in H0.
+      destruct H0 as (t' & w' & TR' & H0).
+      destruct H1 as (t_ & w_ & TR_ & H1).
+      clear H.
+      next; right; next. 
+      exists (x <- t_;; k x), w_.
+      split.
+      + apply ktrans_bind_l; auto.          
+        eapply not_done_vis_ef with (t:=x <- t_ ;; k x).
+        now apply H1.
+      + apply H1.
   Qed.
 
-  Theorem af_bind_pure{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w,
-      <( t, w |= AF pure )> ->
-      <( {x <- t ;; k x}, w |= AF pure )>.
+  Theorem ef_bind_pure{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w,
+      <( t, w |= EF pure )> ->
+      <( {x <- t ;; k x}, w |= EF pure )>.
   Proof.
     intros * Haf.
     revert X k.
     induction Haf; intros; subst.
     - (* MatchA *)
       next; left; cbn.
-      now apply ctl_pure in H. 
+      apply ctl_pure in H; inv H; now constructor.
     - (* StepA *)
-      destruct H0, H1; clear H H0.      
-      next; right; next; split.
-      + (* can_step *)
-        destruct H1 as (t' & w' & TR').
-        eapply can_step_bind_l with t' w'; auto.
-        eapply not_done_pure_af with (t:=t').
-        now apply H2.
-      + (* AX AF *)
-        intros t_ w_ TR_.
-        apply ktrans_bind_inv in TR_.
-        destruct TR_ as [(t' & TR' & Hd & ->) | (x & w' & TR' & Hr & TRk)].
-        * now apply H3.
-        * specialize (H2 _ _ TR').
-          inv H2.
-          apply ctl_pure in H; subst.
-          -- inv Hr.
-          -- destruct H0.
-             now apply can_step_stuck in H0.
+      destruct H0 as (t' & w' & TR' & H0).
+      destruct H1 as (t_ & w_ & TR_ & H1).
+      clear H.
+      next; right; next. 
+      exists (x <- t_;; k x), w_.
+      split.
+      + apply ktrans_bind_l; auto.          
+        eapply not_done_pure_ef with (t:=x <- t_ ;; k x).
+        now apply H1.
+      + apply H1.
   Qed.
 
-  Theorem af_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ R,
-      <( t, w |= AF AX done R )> ->
-      (forall (y: Y) w, R y w -> not_done w ->
-                   <( {k y}, w |= AF now φ )>) ->
-      <( {x <- t ;; k x}, w |= AF now φ )>.
+  Theorem ef_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ r,
+      <( t, w |= EF EX done= r w' )> ->
+      not_done w' ->
+      <( {k r}, w' |= EF now φ )> ->
+      <( {x <- t ;; k x}, w |= EF now φ )>.
   Proof.
     intros.
-    apply afdone_ind in H.
-    revert H0.
-    generalize dependent φ.
-    generalize dependent k.
-    induction H; intros; observe_equ H; rewrite Eqt.
-    - (* Done *)
-      rewrite bind_ret_l; eauto with ctl.
-    - (* Finish *)
-      rewrite bind_ret_l; eauto with ctl.
-    - (* Tau *)
-      rewrite bind_guard.
-      apply af_guard; eauto with ctl.
-    - (* Vis *)
-      rewrite bind_vis.
-      apply af_vis; eauto with ctl.
-    - (* Br *)
-      rewrite bind_br.
-      apply af_br; eauto with ctl.
-  Qed.
+    revert H0 H1.
+    induction H; intros.
+    - apply ex_done in H as (Hd & y & Heqy & -> & ->).
+      assert (Hk: x <- t ;; k x ~  x <- Ret y ;; k x) by (__upto_bind_sbisim; auto).
+      rewrite Hk, bind_ret_l.
+      apply H1.
+    - destruct H0 as (t0 & w0 & TR0 & H0).
+      destruct H1 as (t1 & w1 & TR1 & H1).
+      specialize (H1 H2 H3).
+      clear H.
+      next; right; next.
+      (* Here, whatever I chose is wrong :( *)
+  Admitted.
 
-  Lemma af_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ r w',
-      <( t, w |= AF AX done= r w' )> ->
-      <( {k r}, w' |= AF now φ )> ->
-      <( {x <- t ;; k x}, w |= AF now φ )>.
-  Proof.
-    intros.
-    eapply af_bind_r.
-    + apply H.
-    + intros.
-      now destruct H1 as (-> & ->). 
-  Qed.
-  
-End CtlAfBind.
+End CtlEfBind.
 
 Section CtlAfIter.
   Context {E: Type} {HE: Encode E}.

@@ -86,7 +86,7 @@ Section BasicLemmas.
       exists v...
   Qed.
 
-  Lemma ex_done: forall (x: X) φ w,
+  Lemma ex_done_ret: forall (x: X) φ w,
       <( {Ret x}, w |= EX done φ )> <->
         not_done w /\ φ x w. 
   Proof with eauto with ctl.
@@ -102,6 +102,33 @@ Section BasicLemmas.
       + exists (Finish e v x); split.
         * apply ktrans_finish...
         * now constructor.
+  Qed.
+
+  Lemma ex_done: forall (t: ctree E X) φ w,
+      <( t, w |= EX done φ )> <-> not_done w /\ (exists (x: X), t ~ Ret x /\ φ x w).
+  Proof.
+    split; intros.
+    - next in H; destruct H as (t' & w' & TR & ?).
+      split; [now apply ktrans_not_done with t t' w'|].
+      cbn in *.
+      setoid_rewrite (ctree_eta t).
+      remember (observe t) as T.
+      remember (observe t') as T'.
+      clear HeqT t HeqT' t'.
+      dependent induction TR; intros.
+      + setoid_rewrite <- (ctree_eta t) in IHTR.
+        destruct (IHTR H) as (x & Heq & Hφ).
+        exists x; split; auto.
+        now apply sb_guard_l.
+      + inv H1; inv H.
+      + inv H1.
+      + exists x; intuition.
+        now ddestruction H0.
+      + exists x; intuition.
+        now ddestruction H0.
+    - destruct H as (Hw & x & Heq & H).
+      rewrite Heq.
+      apply ex_done_ret; intuition.
   Qed.
 End BasicLemmas.
 
@@ -156,4 +183,3 @@ Section BindLemmas.
       rewrite bind_ret_l...
   Qed.
 End BindLemmas.
-

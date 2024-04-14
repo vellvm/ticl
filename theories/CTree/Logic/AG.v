@@ -153,9 +153,9 @@ Section BindCtxUnary.
 End BindCtxUnary.
 
 Section BindLemmas.
-  Context {E: Type} {HE: Encode E} {X: Type}.
+  Context {E: Type} {HE: Encode E}.
   
-  Lemma ag_bind_l{Y}: forall (t: ctree E X) w (k: X -> ctree E Y) φ,
+  Lemma ag_bind_l{X Y}: forall (t: ctree E X) w (k: X -> ctree E Y) φ,
       <( t, w |= AG now φ )> -> (* [t] will loop forever. *)
       <( {x <- t ;; k x} , w |= AG now φ )>.
   Proof.    
@@ -185,33 +185,79 @@ Section BindLemmas.
   Qed.
 
   Typeclasses Transparent sbisim.
-  Lemma ag_bind_r{Y}: forall (t: ctree E Y) w (k: Y -> ctree E X) φ R,
-      <( t, w |= φ AU (AX done R) )> ->
-      (forall w (y: Y), R y w -> <( {k y}, w |= AG φ )>) ->
-      <( {x <- t ;; k x} , w |= AG φ )>.
+  Typeclasses Transparent equ.
+  Lemma ag_bind_r{X Y}: forall (t: ctree E X)
+                          w (k: X -> ctree E Y) φ R,
+      <( t, w |= (vis φ) AU (AX done R) )> ->
+      (forall w (x: X), R x w -> <( {k x}, w |= AG vis φ )>) ->
+      <( {x <- t ;; k x} , w |= AG vis φ )>.
   Proof.
-    coinduction R CIH.
-    intros.
-    generalize dependent k.
-    induction H.
-    - apply ax_done in H as (Hw & x & Heq & H).
+    intros.    
+    hinduction H before H.
+    - (* AX done R *)
+      apply ax_done in H as (Hw & x & Heq & H).
       intros.
-      assert (x <- t ;; k x ~ y <- Ret x;; k y).  
-      { __upto_bind_sbisim. apply Heq. reflexivity. }.
-      apply RStepA.
-      + rewrite H1.
+      rewrite Heq, bind_ret_l.
+      specialize (H0 _ _ H);
+        step in H0; remember (k x) as K; destruct H0;
+        try contradiction.
+      destruct H1; subst.
+      next; split; auto; next; split; auto.
+    - destruct H1, H2; clear H2.
+      destruct H1 as (t' & w' & TR).
+      cbn in TR, H3, H4.
+      rewrite (ctree_eta t) in H. 
+      rewrite (ctree_eta t).
+      remember (observe t) as T.
+      remember (observe t') as T'.
+      clear HeqT t HeqT' t'.
+      induction TR.
+      + rewrite bind_guard.
+        apply ag_guard.
+        rewrite (ctree_eta t).
+        apply IHTR; eauto.
+        * intros t_ w_ TR_.
+          setoid_rewrite ktrans_guard in H3.
+          setoid_rewrite ktrans_guard in H4.
+          now apply H3.
+        * intros t_ w_ TR_.
+          setoid_rewrite ktrans_guard in H3.
+          setoid_rewrite ktrans_guard in H4.
+          now apply H4.
+      + rewrite bind_br.
+        rewrite <- ag_br.
+        split; [auto|intro j].
+        apply H4.
+        apply ktrans_br.
+        exists j; intuition.
+      + rewrite bind_vis.
+        rewrite <- ag_vis.
+        split; auto.
+        intro x.
+        apply H4.
+        apply ktrans_vis.
+        exists x; intuition.
+        exact v.
+      + inv H.
+      + ddestruction H.
         rewrite bind_ret_l.
-        fold (@entailsF (ctree E) E HE ctree_kripke X φ (k x) w) in *.
-        fold (@entailsF (ctree E) E HE ctree_kripke Y <(AF φ)> _ w) in *.
-        clear H1.
-        
-        specialize (H0 _ _ H).
-        step in H0.
-        apply H0.
-      +
-      apply H0.      
-    - ddestruction H.
-
-      
+        assert(TR_:[Ret x, Obs e v] ↦ [stuck, Finish e v x])
+          by now apply ktrans_finish.
+        specialize (H4 Ctree.stuck (Finish e v x) TR_).
+        specialize (H3 Ctree.stuck (Finish e v x) TR_).
+        inv H3; inv H.
+        now apply can_step_stuck in H2.
+      + exact (equ eq).
+  Qed.
+  
+  Lemma ag_iter{X I}: forall (k: I -> ctree E (I + X)) w x φ R,
+      R x w ->
+      (forall w x, R x w -> <( {k x}, w |= φ AU (AX done R) )>) ->      
+      <( {iter k x}, w |= AG φ )>.
+  Proof.
+    intros.
+    rewrite sb_unfold_iter.
+    specialize (H0 w x H).
   Admitted.
+  
 End BindLemmas.

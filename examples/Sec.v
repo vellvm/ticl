@@ -81,7 +81,7 @@ Section SecurityEx.
   
   Global Instance encode_secE: Encode secE :=
     fun e => match e with
-          | Read l addr => nat
+          | Read l addr => option nat
           | Write l addr v => unit
           end.
 
@@ -93,23 +93,28 @@ Section SecurityEx.
                    match lookup addr st with
                    | Some (l_a, v) =>
                        if sec_lte_dec l_a l_r then
-                         Ret (v, st)
+                         Ret (Some v, st)
                        else
-                         Ctree.stuck
-                   | None => Ret (0%nat, st)
+                         Ret (None, st)
+                   | None => Ret (None, st)
                    end
                | Write l_w addr v =>
                    match lookup addr st with
                    | Some (l_a, _) =>
-                       if sec_lt_dec l_w l_a then
-                         Ctree.stuck
-                       else
+                       if sec_lt_dec l_a l_w then
                          Ret (tt, add addr (l_w, v) st)
+                       else
+                         Ret (tt, st)
                    | None =>
                        Ret (tt, add addr (l_w, v) st)
                    end
                end).
 
+  (* Ghost state, instrument every read with
+     [m: memory address it targets]
+     [ml: Security-level of the instruction]
+     [al: Security-level of the address cell previously written]
+   *)
   Record readG :=
     {
       m : Addr;
@@ -117,12 +122,12 @@ Section SecurityEx.
       al: Sec;
     }.
                
-  (* Instrumented semantics, simply log every read with [readG] *)
+  (* Instrumented semantics, simply log every successful read with [readG] *)
   Definition h_secE_instr: secE ~> stateT St (ctreeW readG) :=
     h_writerA
       h_secE
-      (fun (e: secE) (v: encode e) (σ: St) =>
-         match e return option readG with
+      (fun (e: secE) (_: encode e) (σ: St) =>
+         match e with
          | Read al addr =>
              match lookup addr σ with
              | Some (ml, _) => Some {| m:= addr; ml := ml; al := al |}
@@ -132,7 +137,7 @@ Section SecurityEx.
          end).
 
   (* Trigger instructions *)
-  Definition read: Sec -> Addr -> ctree secE nat :=
+  Definition read: Sec -> Addr -> ctree secE (option nat) :=
     fun (l: Sec) (addr: Addr) => @Ctree.trigger secE secE _ _ (ReSum_refl) (ReSumRet_refl) (Read l addr).
   
   Definition write: Sec -> Addr -> nat -> ctree secE unit :=
@@ -141,17 +146,22 @@ Section SecurityEx.
   (* Alice (H) writes [secret] to odd addresses *)
   Definition sec_alice1(secret: nat)(i: Addr): ctree secE unit :=
     if Nat.Even_Odd_dec i then
+      (* [i] even, write to [i+1] *)
       write H (i+1) secret
     else
+      (* [i] odd, write to [i] *)
       write H i secret.
  
   (* Bob (L) reads from even addresses *)
   Definition sec_bob1(i: Addr): ctree secE unit :=
     if Nat.Even_Odd_dec i then
+      (* [i] even, read [i] *)
       read L i;; Ret tt
     else
+      (* [i] odd, read [i+1] *)
       read L (i+1) ;; Ret tt.
 
+  (* The unfair composition of Alice/Bob *)
   Definition sec_system(secret: nat): ctree secE void :=
     Ctree.forever void
       (fun (i: nat) =>
@@ -164,7 +174,7 @@ Section SecurityEx.
   (* Safety property: there does not exist a memory label ml ≺ al, or there does
      not exist a low intruction that reads from high-security memory *)
   Theorem ag_safety_sec: forall (secret: nat) (σ: St),
-      <( {interp_state h_secE_instr (sec_system secret) σ}, Pure |= AG visW \s, s.(al) ≺ s.(al) )>.
+      <( {interp_state h_secE_instr (sec_system secret) σ}, Pure |= AG visW \s, s.(ml) ⪯ s.(al) )>.
   Proof.
     intros.
     unfold sec_system, forever.
