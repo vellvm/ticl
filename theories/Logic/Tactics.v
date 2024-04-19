@@ -43,19 +43,22 @@ Ltac cdestruct H0 :=
 #[global] Tactic Notation "left" := (cleft || left).
 #[local] Tactic Notation "destruct" ident(H) := (cdestruct H || destruct H).
 
-#[local] Ltac __coinduction_g R H :=
-  unfold entailsF; coinduction R CIH;
-  match type of R with
-  | (rel (?M ?X) (World ?W)) ->
-    (rel (?M ?X) (World ?W)) ->
-    (rel (?M ?X) (World ?W)) =>
-      match goal with
-      | [φ : World ?W -> Prop |- _ ] =>
-          fold (@entailsF M W _ _ X (CBase φ)) in *
-      | [φ: ctlf ?W |- _ ] =>
-          fold (@entailsF M W _ _ X φ) in *
-      end            
-  end.
+#[local] Ltac __coinduction_g R CIH :=
+  let R' := fresh R in 
+  unfold entailsF; coinduction R' CIH;
+    match type of R' with
+      | (rel (?M ?X) (World ?W)) ->
+        (rel (?M ?X) (World ?W)) ->
+        (rel (?M ?X) (World ?W)) =>
+          repeat lazymatch goal with
+          | [φ : World ?W -> Prop |- _ ] =>
+              fold (@entailsF M W _ _ X (CBase φ)) in *
+          | [φ: ctlf ?W |- _ ] =>
+              fold (@entailsF M W _ _ X φ) in *
+          | [H: vis_with ?φ ?w |- _ ] =>
+              fold (@entailsF M W _ _ X (CBase (vis_with φ))) in *
+            end            
+    end.
 
 #[global] Tactic Notation "coinduction"
   simple_intropattern(R)

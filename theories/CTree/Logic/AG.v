@@ -23,11 +23,12 @@ Import Ctree CTreeNotations CtlNotations.
 Local Open Scope ctl_scope.
 Local Open Scope ctree_scope.
 
+(* Lemmas on the structure of ctree [t] and AG proofs *)
 Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
   Lemma ag_vis: forall e (k: encode e -> ctree E X)
-                  (_ : encode e) w φ,
+                  (v : encode e) w φ,
       (vis_with φ w /\
          forall v, <( {k v}, {Obs e v} |= AG vis φ )>) <->
         <( {Vis e k}, w |= AG vis φ )>.
@@ -47,7 +48,7 @@ Section BasicLemmas.
       destruct H0.
       apply can_step_not_done in H0. 
       split...
-      intro v.
+      intro v'.
       apply H1, ktrans_vis...
   Qed.
   
@@ -112,51 +113,12 @@ Section BasicLemmas.
   Qed.
 End BasicLemmas.
 
-Section BindCtxUnary.
-  Context {E: Type} {HE: Encode E} {X Y: Type}.
-  Notation MP X := (ctree E X * World E -> Prop).
-  
-  Definition bind_ctx_unary
-    (R: ctree E X -> Prop) (S: (X -> ctree E Y) -> Prop):
-    ctree E Y -> Prop :=
-    fun t => sup R
-      (fun x => sup S
-               (fun k => t = bind x k)).
-  
-  Lemma leq_bind_ctx_unary:
-    forall R S S', bind_ctx_unary R S <= S' <->
-                (forall x, R x -> forall k, S k -> S' (bind x k)).
-  Proof.
-    intros.
-    unfold bind_ctx_unary.
-    split; intros; repeat red in H; repeat red.
-    - apply H.
-      exists x; auto.
-      exists k; auto.
-    - intro t.
-      intros [x Hs].
-      destruct H0; subst.
-      apply H; auto.
-  Qed.
-
-  Lemma in_bind_ctx_unary (R S : _ -> Prop) x y:
-    R x -> S y -> bind_ctx_unary R S (bind x y).
-  Proof. intros. apply ->leq_bind_ctx_unary; eauto. Qed.
-  #[global] Opaque bind_ctx_unary.
-
-  (* 
-  Program Definition bind_clos_ar: mon (MP X -> MP X -> MP X) :=
-    {| body R '(t, w) :=
-        bind_ctx_unary (fun t => R (t, w)) 
-          (fun k => _) (bind t |}.
-   *)
-End BindCtxUnary.
-
 Section BindLemmas.
   Context {E: Type} {HE: Encode E}.
-  
+
+  (* [t] will loop forever. *)
   Lemma ag_bind_l{X Y}: forall (t: ctree E X) w (k: X -> ctree E Y) φ,
-      <( t, w |= AG now φ )> -> (* [t] will loop forever. *)
+      <( t, w |= AG now φ )> ->
       <( {x <- t ;; k x} , w |= AG now φ )>.
   Proof.    
     intros.
@@ -186,14 +148,16 @@ Section BindLemmas.
 
   Typeclasses Transparent sbisim.
   Typeclasses Transparent equ.
+  (* [t] satisfies [φ] until it terminates with post-condition [R],
+     then forall x w, R x w -> k x, w satisfies [φ] forever. *)
   Lemma ag_bind_r{X Y}: forall (t: ctree E X)
                           w (k: X -> ctree E Y) φ R,
       <( t, w |= (vis φ) AU (AX done R) )> ->
-      (forall w (x: X), R x w -> <( {k x}, w |= AG vis φ )>) ->
+      (forall (x: X) w, R x w -> <( {k x}, w |= AG vis φ )>) ->
       <( {x <- t ;; k x} , w |= AG vis φ )>.
   Proof.
-    intros.    
-    hinduction H before H.
+    intros.
+    induction H.
     - (* AX done R *)
       apply ax_done in H as (Hw & x & Heq & H).
       intros.
@@ -206,7 +170,7 @@ Section BindLemmas.
     - destruct H1, H2; clear H2.
       destruct H1 as (t' & w' & TR).
       cbn in TR, H3, H4.
-      rewrite (ctree_eta t) in H. 
+      cbn in H.
       rewrite (ctree_eta t).
       remember (observe t) as T.
       remember (observe t') as T'.
@@ -231,13 +195,12 @@ Section BindLemmas.
         apply ktrans_br.
         exists j; intuition.
       + rewrite bind_vis.
-        rewrite <- ag_vis.
-        split; auto.
+        rewrite <- ag_vis with (v:=v).
+        split; auto. 
         intro x.
         apply H4.
         apply ktrans_vis.
         exists x; intuition.
-        exact v.
       + inv H.
       + ddestruction H.
         rewrite bind_ret_l.
@@ -245,19 +208,35 @@ Section BindLemmas.
           by now apply ktrans_finish.
         specialize (H4 Ctree.stuck (Finish e v x) TR_).
         specialize (H3 Ctree.stuck (Finish e v x) TR_).
+        clear TR_.
         inv H3; inv H.
         now apply can_step_stuck in H2.
-      + exact (equ eq).
   Qed.
-  
-  Lemma ag_iter{X I}: forall (k: I -> ctree E (I + X)) w x φ R,
-      R x w ->
-      (forall w x, R x w -> <( {k x}, w |= φ AU (AX done R) )>) ->      
-      <( {iter k x}, w |= AG φ )>.
+
+  (* [iter k x, w] *)
+  (* [k] will terminate with postcondition [RR] and invariant [φ] *)
+  (* [x: I] *)
+  (* AG <--> AF *)
+  (* vis φ <--> done Rr *)
+  Lemma ag_iter{X I}: forall (k: I -> ctree E (I + X)) w (x: I) φ R,
+      vis_with φ w -> (* Worlds invariant [w = Obs e v /\ φ e v] *)
+      R x ->          (* Iterator [x] in [R] *)
+      (forall (i: I) w,
+          R i ->
+          vis_with φ w ->
+          <( {k i}, w |= (vis φ) AU (AX done
+               {fun (lr: I+X) _ => exists i', lr = inl i' /\ R i'}) )>) ->
+      <( {iter k x}, w |= AG vis φ )>.
   Proof.
     intros.
-    rewrite sb_unfold_iter.
-    specialize (H0 w x H).
+    rewrite unfold_iter.
+    apply ag_bind_r with (R:=fun (lr : I + X) (_ : World E) =>
+                               exists i' : I, lr = inl i' /\ R i'); auto.
+    pose proof (H1 _ _ H0 H) as H1'.
+    remember (k x) as K.
+    hinduction H1' before k; intros; destruct x0 as [l | r]; subst.
+    - destruct H3 as (i' & Hinv & ?); inv Hinv.
+        
   Admitted.
-  
+
 End BindLemmas.

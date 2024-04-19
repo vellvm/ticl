@@ -230,4 +230,5 @@ Section CanStepCtrees.
            apply can_step_not_done in H5; inv H5.
   Qed.
   Hint Resolve can_step_bind_r: ctl.
+
 End CanStepCtrees.
