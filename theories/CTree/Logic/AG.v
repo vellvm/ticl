@@ -236,7 +236,7 @@ Section BindLemmas.
     remember (k x) as K.
     hinduction H1' before k; intros; destruct x0 as [l | r]; subst.
     - destruct H3 as (i' & Hinv & ?); inv Hinv.
-        
+      apply ax_done in H as (Hd & ? & Heqk & (j & -> & ?)).
   Admitted.
 
 End BindLemmas.
