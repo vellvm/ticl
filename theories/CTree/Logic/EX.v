@@ -94,7 +94,7 @@ Section BasicLemmas.
     - next in H; destruct H as (t' & w' & TR & H).
       split.
       + now apply ktrans_not_done with (Ret x) t' w'.
-      + now inv TR; cbn in H; dependent destruction H.
+      + inv TR; rewrite unfold_entailsF in H; now ddestruction H. 
     - destruct H as ([] & ?); exists (Ctree.stuck).
       + exists (Done x); split.
         * apply ktrans_done...
@@ -112,6 +112,7 @@ Section BasicLemmas.
       split; [now apply ktrans_not_done with t t' w'|].
       cbn in *.
       setoid_rewrite (ctree_eta t).
+      setoid_rewrite (ctree_eta t') in H.
       remember (observe t) as T.
       remember (observe t') as T'.
       clear HeqT t HeqT' t'.
@@ -123,8 +124,10 @@ Section BasicLemmas.
       + inv H1; inv H.
       + inv H1.
       + exists x; intuition.
+        rewrite unfold_entailsF in H0.
         now ddestruction H0.
       + exists x; intuition.
+        rewrite unfold_entailsF in H0.
         now ddestruction H0.
     - destruct H as (Hw & x & Heq & H).
       rewrite Heq.
@@ -154,7 +157,6 @@ Section BindLemmas.
     destruct H as (t' & w' & TR' & H).
     exists (x <- t';; k x), w'; split...
     apply ktrans_bind_l...
-    inv H; constructor.
   Qed.
 
   Opaque Ctree.stuck.
@@ -168,18 +170,19 @@ Section BindLemmas.
     next in H; destruct H as (t' & w' & TR & H).
     cbn in H, TR.
     rewrite (ctree_eta t).
+    rewrite (ctree_eta t') in H; [|exact (equ eq)].
     remember (observe t) as T; clear t HeqT.
     remember (observe t') as T'; clear t' HeqT'.
     hinduction TR before Y; intros; subst.
-    - setoid_rewrite <- ctree_eta in IHTR.
-      rewrite bind_guard.
-      apply ex_guard...
+    - rewrite bind_guard.
+      apply ex_guard.
+      eapply IHTR with R...
     - rewrite bind_br.
       inv H; inv H1.
     - inv H1.
-    - dependent destruction H0.
+    - rewrite unfold_entailsF in H0; ddestruction H0. 
       rewrite bind_ret_l...
-    - dependent destruction H0.
-      rewrite bind_ret_l...
+    - rewrite bind_ret_l.
+      rewrite unfold_entailsF in H0; ddestruction H0; auto.
   Qed.
 End BindLemmas.

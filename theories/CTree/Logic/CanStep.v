@@ -191,7 +191,7 @@ Section CanStepCtrees.
         -- apply ktrans_finish in TR' as (? & _).
            dependent destruction H3.
            right. exists x, (Finish e v x); split... 
-    - destruct H1, H2; clear H2.
+    - destruct H1, H2; clear H H2.
       destruct H1 as (t' & w' & TR').
       cbn in *.
       remember (observe t) as T.
@@ -203,10 +203,10 @@ Section CanStepCtrees.
         -- intros t_ w_ TR_...
         -- setoid_rewrite ktrans_guard.
            left.
-           destruct H1 as (? & ? & ? & ?).
+           destruct H as (? & ? & ? & ?).
            exists x, x0; split...
         -- right.
-           destruct H1 as (? & ? & ? & ? & ?).
+           destruct H as (? & ? & ? & ? & ?).
            exists x, x0; split... 
       * left. exists (k0 i), w...
       * left. exists (k0 v), (Obs e v)... 
@@ -214,20 +214,20 @@ Section CanStepCtrees.
           by now apply ktrans_done.
         destruct (H3 _ _ TR').
         -- apply ktrans_done in TR' as (-> & _).
-           destruct H2.
-           apply can_step_not_done in H2; inv H2.
-        -- destruct H5.
+           destruct H1.
+           apply can_step_not_done in H1; inv H1.
+        -- destruct H2.
            apply ktrans_done in TR' as (-> & ?).
-           apply can_step_not_done in H5; inv H5.
+           apply can_step_not_done in H2; inv H2.
       * assert (TR': [Ret x, Obs e v] ↦ [Ctree.stuck, Finish e v x])
           by now apply ktrans_finish.
         destruct (H3 _ _ TR').
         -- apply ktrans_finish in TR' as (-> & _).
-           destruct H2.
-           apply can_step_not_done in H2; inv H2.
-        -- destruct H5.
+           destruct H1.
+           apply can_step_not_done in H1; inv H1.
+        -- destruct H2.
            apply ktrans_finish in TR' as (-> & ?).
-           apply can_step_not_done in H5; inv H5.
+           apply can_step_not_done in H2; inv H2.
   Qed.
   Hint Resolve can_step_bind_r: ctl.
 

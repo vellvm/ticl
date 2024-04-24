@@ -43,9 +43,8 @@ Section BasicLemmas.
       <( {Ctree.stuck: ctree E X}, w |= φ )>.
   Proof.
     intros.
-    cbn in H; dependent induction H; auto.
-    apply can_step_stuck in H.
-    contradiction.
+    cdestruct H.
+    now apply can_step_stuck in Hs.
   Qed.
 
   Lemma ax_guard: forall (t: ctree E X) w φ,
@@ -129,6 +128,7 @@ Section BasicLemmas.
       setoid_rewrite (ctree_eta t).
       remember (observe t) as T.
       specialize (H _ _ TR).
+      rewrite (ctree_eta t') in H.
       remember (observe t') as T'.
       clear HeqT t HeqT' t'.
       dependent induction TR; intros.
@@ -143,9 +143,11 @@ Section BasicLemmas.
       + inv H1.
       + split; auto with ctl.
         exists x; intuition.
+        rewrite unfold_entailsF in H0.
         now ddestruction H0.
       + split; auto with ctl.
         exists x; intuition.
+        rewrite unfold_entailsF in H0.
         now ddestruction H0.
     - destruct H as (Hw & x & Heq & H).
       rewrite Heq.
@@ -173,7 +175,8 @@ Section BindLemmas.
       apply ktrans_bind_inv in TR_ as
           [(t' & TR' & Hd & Ht_) |
             (x & w' & TR' & Hr & TRk)].
-      * now eapply (Hs t').
+      * specialize (Hs _ _ TR').
+        now rewrite !unfold_entailsF in *. 
       * dependent destruction Hr;
         specialize (Hs _ _ TR');
         apply ctl_vis in Hs; inv Hs. 
@@ -195,7 +198,8 @@ Section BindLemmas.
       apply ktrans_bind_inv in TR_ as
           [(t' & TR' & Hd & Ht_) |
             (x & w' & TR' & Hr & TRk)].
-      * now eapply (Hs t').
+      * specialize (Hs _ _ TR').
+        now rewrite !unfold_entailsF in *. 
       * dependent destruction Hr;
         specialize (Hs _ _ TR');
         apply ctl_pure in Hs; inv Hs. 

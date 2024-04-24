@@ -11,73 +11,92 @@ Local Open Scope ctl_scope.
 
 Generalizable All Variables.
 
-Ltac csplit :=
-  match goal with
-  | |- <( ?t, ?w |= ?φ /\ ?ψ )> => cut (<( t, w |= φ )> /\ <( t, w |= ψ )>); [auto | split]
+#[global] Tactic Notation "step" "in" ident(H) :=
+  (lazymatch type of H with
+   | @entailsF ?M ?W ?HE ?KMS ?X (CAR ?φ ?ψ) ?t ?w =>
+       rewrite unfold_entailsF in H; step_in H
+   | @entailsF ?M ?W ?HE ?KMS ?X (CER ?φ ?ψ) ?t ?w =>
+       rewrite unfold_entailsF in H; step_in H
+   end || step_in H).
+
+#[global] Ltac step :=
+  first [
+      lazymatch goal with
+      | |- @entailsF ?M ?W ?HE ?KMS ?X (CAR ?φ ?ψ) ?t ?w =>
+          rewrite unfold_entailsF; red; step_
+      | |- @entailsF ?M ?W ?HE ?KMS ?X (CER ?φ ?ψ) ?t ?w =>
+          rewrite unfold_entailsF; red; step_
+      end | red; step_ ].
+
+#[global] Ltac csplit :=
+  lazymatch goal with
+  | |- <( ?t, ?w |= ?φ /\ ?ψ )> => rewrite unfold_entailsF; split
+  | |- <( ?t, ?w |= AX ?φ )> => rewrite unfold_ax; split
+  | |- <( ?t, ?w |= AX ?φ )> => rewrite unfold_ex                                      
   end.
 
-Ltac cright :=
+#[global] Ltac cright :=
   match goal with
-  | |- <( ?t, ?w |= ?φ \/ ?ψ )> => cut (<( t, w |= ψ )> ); [intros; right; auto|]
+  | |- <( ?t, ?w |= ?φ \/ ?ψ )> => rewrite unfold_entailsF; right
+  | |- <( ?t, ?w |= ?φ AU ?ψ )> => rewrite unfold_entailsF; apply StepA
+  | |- <( ?t, ?w |= ?φ EU ?ψ )> => rewrite unfold_entailsF; apply StepE
+  | |- <( ?t, ?w |= ?φ AR ?ψ )> => step; cbn; apply RStepA
+  | |- <( ?t, ?w |= ?φ ER ?ψ )> => step; cbn; apply RStepE
   end.
 
-Ltac cleft :=
+#[global] Ltac cleft :=
   match goal with
-  | |- <( ?t, ?w |= ?φ \/ ?ψ )> => cut (<( t, w |= φ )> ); [intros; left; auto|]
+  | |- <( ?t, ?w |= ?φ \/ ?ψ )> => rewrite unfold_entailsF; left
+  | |- <( ?t, ?w |= ?φ AU ?ψ )> => rewrite unfold_entailsF; apply MatchA
+  | |- <( ?t, ?w |= ?φ EU ?ψ )> => rewrite unfold_entailsF; apply MatchE
+  | |- <( ?t, ?w |= ?φ AR ?ψ )> => step; cbn; apply RMatchA
+  | |- <( ?t, ?w |= ?φ ER ?ψ )> => step; cbn; apply RMatchE                                                  
   end.
 
-Ltac cdestruct H0 :=
+#[global] Ltac cdestruct H0 :=
   match type of H0 with
   | @entailsF ?M ?W ?HE ?KMS ?X (CAnd ?φ ?ψ) ?t ?w =>
-      replace (@entailsF M W HE KMS X (CAnd φ ψ) t w)
-      with (<( t, w |= φ)> /\ <( t, w |= ψ )>) in H0
-        by reflexivity; destruct H0
+      rewrite unfold_entailsF in H0; destruct H0      
   | @entailsF ?M ?W ?HE ?KMS ?X (COr ?φ ?ψ) ?t ?w =>
-      replace (@entailsF M W HE KMS X (COr φ ψ) t w)
-      with (<( t, w |= φ)> \/ <( t, w |= ψ )>) in H0
-        by reflexivity; destruct H0              
+      rewrite unfold_entailsF in H0; destruct H0
+  | @entailsF ?M ?W ?HE ?KMS ?X (CAX ?φ) ?t ?w =>
+      let Hs' := fresh "Hs" in
+      rewrite unfold_ax in H0; destruct H0 as (Hs & H0)
+  | @entailsF ?M ?W ?HE ?KMS ?X (CEX ?φ) ?t ?w =>
+      let t' := fresh t in
+      let w' := fresh w in
+      let TR' := fresh "TR" in
+      rewrite unfold_ax in H0; destruct H0 as (t' & w' & TR' & H0)
+  | @entailsF ?M ?W ?HE ?KMS ?X (CAU ?φ ?ψ) ?t ?w =>
+      rewrite unfold_entailsF in H0; destruct H0
+  | @entailsF ?M ?W ?HE ?KMS ?X (CEU ?φ ?ψ) ?t ?w =>
+      rewrite unfold_entailsF in H0; destruct H0
+  | @entailsF ?M ?W ?HE ?KMS ?X (CAR ?φ ?ψ) ?t ?w =>
+      rewrite unfold_entailsF in H0; step in H0; cbn in H0; destruct H0
+  | @entailsF ?M ?W ?HE ?KMS ?X (CER ?φ ?ψ) ?t ?w =>
+      rewrite unfold_entailsF in H0; step in H0; cbn in H0; destruct H0
   end.
 
-#[global] Tactic Notation "split" := (csplit || split).
-#[global] Tactic Notation "right" := (cright || right).
+#[global] Ltac cinduction H0 :=
+  match type of H0 with
+  | @entailsF ?M ?W ?HE ?KMS ?X (CAU ?φ ?ψ) ?t ?w =>
+      rewrite unfold_entailsF in H0; induction H0
+  | @entailsF ?M ?W ?HE ?KMS ?X (CEU ?φ ?ψ) ?t ?w =>
+      rewrite unfold_entailsF in H0; induction H0
+  end.
+
+#[local] Ltac coinduction_g R CIH :=
+  let R' := fresh R in
+  try change (<( ?t, ?w |= ?p AR ?q )>) with (car (entailsF p) (entailsF q) t w);
+  try change (<( ?t, ?w |= ?p ER ?q )>) with (cer (entailsF p) (entailsF q) t w);
+  coinduction R' CIH;
+  try change (car (entailsF ?p) (entailsF ?q) ?t ?w) with <( t, w |= p AR q )> in *.
+
+#[global] Tactic Notation "destruct" ident_list(H) :=
+  (cdestruct H || destruct H).
+
 #[global] Tactic Notation "left" := (cleft || left).
-#[local] Tactic Notation "destruct" ident(H) := (cdestruct H || destruct H).
-
-#[local] Ltac __coinduction_g R CIH :=
-  let R' := fresh R in 
-  unfold entailsF; coinduction R' CIH;
-    match type of R' with
-      | (rel (?M ?X) (World ?W)) ->
-        (rel (?M ?X) (World ?W)) ->
-        (rel (?M ?X) (World ?W)) =>
-          repeat lazymatch goal with
-          | [φ : World ?W -> Prop |- _ ] =>
-              fold (@entailsF M W _ _ X (CBase φ)) in *
-          | [φ: ctlf ?W |- _ ] =>
-              fold (@entailsF M W _ _ X φ) in *
-          | [H: vis_with ?φ ?w |- _ ] =>
-              fold (@entailsF M W _ _ X (CBase (vis_with φ))) in *
-            end            
-    end.
-
-#[global] Tactic Notation "coinduction"
-  simple_intropattern(R)
-  simple_intropattern(H) :=
-  __coinduction_g R H || coinduction R H.
-
-(* TODO: Does not work... 
-   From [TS -> Prop] to [CtlFormula] *)
-Ltac reify' typ :=
-  try match typ with
-    | car ?p ?q => constr:(CAR ltac:(reify' p) ltac:(reify' q))
-    | cer ?p ?q => constr:(CER ltac:(reify' p) ltac:(reify' q))
-    | cau ?p ?q => constr:(CAU ltac:(reify' p) ltac:(reify' q))
-    | ceu ?p ?q => constr:(CEU ltac:(reify' p) ltac:(reify' q))
-    | (fun _ => False) => constr:(CBase (fun _ => False))
-    | (fun _ => True) => constr:(CBase (fun _ => True))
-    | (fun m => ?p m) => constr:(ltac:(reify' p))
-    | ?p /\ ?q => constr:(CAnd ltac:(reify' p) ltac:(reify' q))
-    | ?p \/ ?q => constr:(COr ltac:(reify' p) ltac:(reify' q))
-    | ?p -> ?q => constr:(CImpl ltac:(reify' p) ltac:(reify' q))
-    | entailsF ?p => idtac "ENTAILSF failed"; p
-    end.
+#[global] Tactic Notation "right" := (cright || right).
+#[global] Tactic Notation "split" := (csplit || split).
+#[global] Tactic Notation "coinduction" simple_intropattern(R) simple_intropattern(H) :=
+  (coinduction_g R H || coinduction R H).

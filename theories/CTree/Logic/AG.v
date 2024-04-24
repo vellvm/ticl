@@ -43,12 +43,11 @@ Section BasicLemmas.
         * intros.
           apply ktrans_vis in H0 as (i & -> & <- & ?)...
     - next in H.
-      destruct H.      
-      next in H0.
-      destruct H0.
+      destruct H, H0.    
       apply can_step_not_done in H0. 
       split...
       intro v'.
+      rewrite unfold_entailsF.
       apply H1, ktrans_vis...
   Qed.
   
@@ -70,12 +69,11 @@ Section BasicLemmas.
           apply ktrans_br in H0 as (i & ? & <- & ?).        
           now rewrite H0.
     - next in H.
-      destruct H.      
-      next in H0.
-      destruct H0.
+      destruct H, H0.     
       apply can_step_not_done in H0.
       split; auto.
       intro i.
+      rewrite unfold_entailsF.
       apply H1.
       apply ktrans_br.
       exists i; auto.
@@ -86,7 +84,7 @@ Section BasicLemmas.
   Proof.
     intros. 
     next in H.
-    destruct H.
+    cdestruct H.
     next in H0; destruct H0.
     destruct H0 as (t' & w' & TR).
     cbn in TR, H1.
@@ -100,8 +98,7 @@ Section BasicLemmas.
       <( {stuck: ctree E X}, w |= AG now φ )> -> False.
   Proof.
     intros.
-    next in H; destruct H.
-    next in H0; destruct H0.
+    next in H; destruct H, H0.
     now apply can_step_stuck in H0.
   Qed.
 
@@ -139,7 +136,9 @@ Section BindLemmas.
       apply ktrans_bind_inv in TR_ as
           [(t_ & TRt & Hd & ->) |
             (x & wx & TR' & Hr & TRk)].
-      + apply CIH; auto.
+      + apply CIH.
+        rewrite unfold_entailsF.
+        now apply H0.
       + specialize (H0 _ _ TR').
         step in H0; ddestruction H0; intuition.
         destruct H1.
@@ -157,7 +156,7 @@ Section BindLemmas.
       <( {x <- t ;; k x} , w |= AG vis φ )>.
   Proof.
     intros.
-    induction H.
+    cinduction H.
     - (* AX done R *)
       apply ax_done in H as (Hw & x & Heq & H).
       intros.
@@ -171,9 +170,10 @@ Section BindLemmas.
       destruct H1 as (t' & w' & TR).
       cbn in TR, H3, H4.
       cbn in H.
-      rewrite (ctree_eta t).
+      rewrite (ctree_eta t).      
       remember (observe t) as T.
       remember (observe t') as T'.
+      rewrite ctl_vis in H.
       clear HeqT t HeqT' t'.
       induction TR.
       + rewrite bind_guard.
@@ -213,30 +213,63 @@ Section BindLemmas.
         now apply can_step_stuck in H2.
   Qed.
 
+  Lemma ag_iter_l{X I}: forall (k: I -> ctree E (I + X)) i w (x: I) φ,
+      <( {k i}, w |= AG now φ )> ->
+      <( {iter k i}, w |= AG now φ )>.
+  Proof.
+    intros.
+    rewrite sb_unfold_iter.
+    now apply ag_bind_l.
+  Qed.
+  
   (* [iter k x, w] *)
   (* [k] will terminate with postcondition [RR] and invariant [φ] *)
   (* [x: I] *)
   (* AG <--> AF *)
   (* vis φ <--> done Rr *)
   Lemma ag_iter{X I}: forall (k: I -> ctree E (I + X)) w (x: I) φ R,
-      vis_with φ w -> (* Worlds invariant [w = Obs e v /\ φ e v] *)
-      R x ->          (* Iterator [x] in [R] *)
+      vis_with φ w -> (* Worlds invariant: [w = Obs e v /\ φ e v] *)
+      R x ->          (* Iterator invariant: [x] in [R] *)
       (forall (i: I) w,
           R i ->
           vis_with φ w ->
           <( {k i}, w |= (vis φ) AU (AX done
-               {fun (lr: I+X) _ => exists i', lr = inl i' /\ R i'}) )>) ->
+               {fun (lr: I+X) w => exists i', lr = inl i' /\ vis_with φ w /\ R i'}) )>) ->
       <( {iter k x}, w |= AG vis φ )>.
   Proof.
     intros.
-    rewrite unfold_iter.
-    apply ag_bind_r with (R:=fun (lr : I + X) (_ : World E) =>
-                               exists i' : I, lr = inl i' /\ R i'); auto.
-    pose proof (H1 _ _ H0 H) as H1'.
-    remember (k x) as K.
-    hinduction H1' before k; intros; destruct x0 as [l | r]; subst.
-    - destruct H3 as (i' & Hinv & ?); inv Hinv.
-      apply ax_done in H as (Hd & ? & Heqk & (j & -> & ?)).
+    rewrite sb_unfold_iter.
+    apply ag_bind_r with (R:=fun (lr : I + X) (w : World E) =>
+                               exists i' : I, lr = inl i' /\ vis_with φ w /\ R i'); auto.
+    intros [? | r] w' (l & Hinv & ? & ?); inv Hinv.    
+    pose proof (H1 _ _ H3 H2) as H1'.
+    remember (k l) as K.
+    cinduction H1'; intros; subst.
+    - apply ax_done in H4 as (Hd & ? & Heqk & (j & -> & ? & ?)).
+      rewrite sb_unfold_iter.
+      rewrite Heqk, bind_ret_l.
+      rewrite sb_unfold_iter.
+      apply ag_bind_r with (R:=fun (lr : I + X) (w : World E) =>
+                                 exists i' : I, lr = inl i' /\ vis_with φ w /\ R i'); auto.
+      intros [? | r] w' (l' & Hinv & ? & ?); inv Hinv.    
+  Abort.
+
+  Lemma ag_iter{X I}: forall (k: I -> ctree E (I + X)) w (x: I) φ R,
+      vis_with φ w -> (* Worlds invariant: [w = Obs e v /\ φ e v] *)
+      R x ->          (* Iterator invariant: [x] in [R] *)
+      (forall (i: I) w,
+          R i ->
+          vis_with φ w ->
+          <( {k i}, w |= (vis φ) AU (AX done
+               {fun (lr: I+X) w => exists i', lr = inl i' /\ vis_with φ w /\ R i'}) )>) ->
+      <( {iter k x}, w |= AG vis φ )>.
+  Proof.
+    (* Coinduction steps *)
+    coinduction RR CIH.
+    intros.
+    apply RStepA; auto.
+    split.
+    - (* Not true, counter-example [k = fun x => Ret (inl x)] *)
   Admitted.
 
 End BindLemmas.

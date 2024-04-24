@@ -91,9 +91,7 @@ Section EquivSetoid.
   
   Global Add Parametric Morphism p : <( |- {CBase p} )>
         with signature meq ==> eq ==> iff as now_proper_equ.
-  Proof.
-    unfold entailsF; intros; eapply fun_proper_now; eauto.
-  Qed.
+  Proof. intros; now rewrite unfold_entailsF. Qed.
 
   Context {P: MP} {HP: Proper (meq ==> eq ==> iff) P}.
   Global Add Parametric Morphism: (cax P)
@@ -284,13 +282,13 @@ Proof.
     + now rewrite <- (IHφ2 _ _ Heq).
     + now rewrite (IHφ1 _ _ Heq).
     + now rewrite (IHφ2 _ _ Heq).
-  - (* \/ *) split; intros [H' | H']. 
-    + now left; rewrite <- (IHφ1 _ _ Heq).
-    + now right; rewrite <- (IHφ2 _ _ Heq).
-    + now left; rewrite (IHφ1 _ _ Heq).
-    + now right; rewrite (IHφ2 _ _ Heq).
+  - (* \/ *) split; intros; cdestruct H.
+    + left; now rewrite <- (IHφ1 _ _ Heq).
+    + right; now rewrite <- (IHφ2 _ _ Heq).
+    + left; now rewrite (IHφ1 _ _ Heq).
+    + right; now rewrite (IHφ2 _ _ Heq).
   - (* -> *)
-    split; intros; cbn; intro HI;
+    split; intros * H; rewrite unfold_entailsF in H |- *; intro HI;
       apply (IHφ1 _ _ Heq) in HI;
       apply (IHφ2 _ _ Heq); auto.
   - (* ax *)

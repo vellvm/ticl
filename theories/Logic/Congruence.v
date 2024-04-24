@@ -110,8 +110,8 @@ Section EquivCtlFormulas.
          with signature equiv_ctl ==> equiv_ctl ==> equiv_ctl
            as equiv_ctl_equiv_impl.
   Proof.
-    intros p q EQpq p' q' EQpq'; split;
-      intros EQpp'; intro HH; apply EQpq'; apply EQpq in HH;
+    intros p q EQpq p' q' EQpq'; split; rewrite unfold_entailsF;
+      intros EQpp'; rewrite unfold_entailsF; intro HH; apply EQpq'; apply EQpq in HH;
       now apply EQpp'.
   Qed.
 
@@ -119,7 +119,8 @@ Section EquivCtlFormulas.
   Global Add Parametric Morphism: CAX
       with signature equiv_ctl ==> equiv_ctl as equiv_ctl_equiv_ax.
   Proof.
-    intros p q EQpq; split; intros [Hdone TR]; split; auto; intros.
+    intros p q EQpq; split; intros; rewrite unfold_ax in *;
+      destruct H; split; auto; intros.
     - rewrite <- EQpq; auto.
     - rewrite EQpq; auto.
   Qed.
@@ -128,8 +129,8 @@ Section EquivCtlFormulas.
   Global Add Parametric Morphism: CEX
       with signature equiv_ctl ==> equiv_ctl as equiv_ctl_equiv_ex.
   Proof.
-    intros p q EQpq; split; intros (t' & w' & TR & Hdone);
-      cbn; exists t', w'; split; auto.
+    intros p q EQpq; split; intros; rewrite unfold_ex in *;
+      destruct H as (t' & w' & TR & Hdone); exists t', w'; split; auto.
     - now rewrite <- EQpq.
     - now rewrite EQpq. 
   Qed.
@@ -140,11 +141,11 @@ Section EquivCtlFormulas.
            as equiv_ctl_equiv_au.
   Proof.
     intros p q EQpq p' q' EQpq'.
-    split; intros Hau; induction Hau.
-    - apply MatchA; now rewrite <- EQpq'.
-    - apply StepA; auto; now rewrite <- EQpq.
-    - apply MatchA; now rewrite EQpq'.
-    - apply StepA; auto; now rewrite EQpq.
+    split; intros Hau; cinduction Hau.
+    - cleft; now rewrite <- EQpq'.
+    - cright; auto; now rewrite <- EQpq.
+    - cleft; now rewrite EQpq'.
+    - cright; auto; now rewrite EQpq.
   Qed.
 
   Arguments CEU {W} {HW}.
@@ -153,13 +154,13 @@ Section EquivCtlFormulas.
            as equiv_ctl_equiv_eu.
   Proof.
     intros p q EQpq p' q' EQpq'.
-    split; intros Heu; induction Heu.
-    - apply MatchE; now rewrite <- EQpq'.
-    - apply StepE; destruct H0 as (m' & TR & Heu).
+    split; intros Heu; cinduction Heu.
+    - cleft; now rewrite <- EQpq'.
+    - cright; destruct H0 as (m' & TR & Heu).
       + now rewrite <- EQpq.
       + exact H1. 
-    - apply MatchE; now rewrite EQpq'.
-    - apply StepE; destruct H0 as (m' & TR & Heu).
+    - cleft; now rewrite EQpq'.
+    - cright; destruct H0 as (m' & TR & Heu).
       + now rewrite EQpq.
       + exact H1.
   Qed.
@@ -205,8 +206,9 @@ Section EquivCtlFormulas.
          (equiv_ctl ==> equiv_ctl ==> equiv_ctl) as proper_equivctl_AR.
   Proof.
     intros.
-    unfold equiv_ctl, entailsF.
+    unfold equiv_ctl.
     intros t w.
+    change (<( ?t, ?w |= ?x AR ?y )>) with (car (entailsF x) (entailsF y) t w).
     apply proper_equivctl_ar; auto.
   Qed.
   
@@ -252,8 +254,9 @@ Section EquivCtlFormulas.
            as proper_equivctl_ER.
   Proof.
     intros.
-    unfold equiv_ctl, entailsF.
+    unfold equiv_ctl.
     intros t w.
+    change (<( ?t, ?w |= ?x ER ?y )>) with (cer (entailsF x) (entailsF y) t w).
     apply proper_equivctl_er; auto.
   Qed.
 End EquivCtlFormulas.
@@ -263,39 +266,35 @@ Section CtlEquations.
   Context `{KMS: Kripke M W} {X: Type}.
   Notation MP := (M X * World W -> Prop).  
   Infix "⩸" := (equiv_ctl (K:=KMS) (X:=X)) (at level 58, left associativity).
-
+  
   Lemma ctl_au_ax: forall p q,
       <( p AU q )> ⩸ <( q \/ (p /\ AX (p AU q)) )>.
   Proof.
     intros p q; split; intro Hind.
-    - unfold entailsF in Hind; induction Hind.
-      + now left.
+    - cinduction Hind. 
+      + now cleft.
       + destruct H1 as ([? ?] & ?).
-        right; split; auto.
-    - destruct Hind.
-      + now apply MatchA.
-      + destruct H.
-        rewrite ctl_ax in H0.
-        destruct H0 as (? & ?).
-        destruct H0 as (? & ? & ?).
-        apply StepA; auto.
+        cright; split; auto.
+    - cdestruct Hind.
+      + now cleft. 
+      + cdestruct H.
+        cdestruct H0.
+        cright; auto.
         split; auto.
-        exists x, x0; auto.
   Qed.
 
   Lemma ctl_eu_ex: forall p q,
       <( p EU q )> ⩸ <( q \/ (p /\ EX (p EU q)) )>.
   Proof.
     intros p q; split; intro Hind.
-    - unfold entailsF in Hind; induction Hind.
-      + now left.
-      + destruct H1 as (? & [? ?]).
-        right; split; auto.
-    - destruct Hind.
-      + now apply MatchE.
-      + destruct H as (? & ? & ? & ? & ?). 
-        apply StepE; auto.
-        exists x, x0; auto.
+    - cinduction Hind. 
+      + now cleft.
+      + destruct H1 as (t' & w' & TR & ?).
+        cright; csplit; auto.
+    - cdestruct Hind.
+      + now cleft. 
+      + cdestruct H.
+        now cright.
   Qed.
   
   Lemma ctl_and_idL: forall (p: ctlf W),
@@ -352,12 +351,12 @@ Section CtlEquations.
       <( p AR q )> ⩸ <( p /\ (q \/ AX (p AR q)) )>.
    Proof. 
      split; intros * Hp.
-     - split; step in Hp; inv Hp.
+     - step in Hp; inv Hp; csplit.
        + assumption.
-       + assumption.
-       + now left. 
-       + now right.
-     - destruct Hp.
+       + now cleft. 
+       + assumption. 
+       + now cright.
+     - cdestruct Hp.
        destruct H0; step; now constructor.
    Qed.
 
@@ -391,23 +390,23 @@ Section CtlEquations.
    Qed.
 
    (* LEF: The opposite direction does not seem provable at this level
-      of abstraction, I think it requires induction on arity of branches *)
+      of abstraction. *)
    Lemma ctl_afax_axaf: forall (p: ctlf W) (t: M X) w,
        <( t, w |= AF AX p )> -> <( t, w |= AX AF p )>.
    Proof.
      intros * H.
-     induction H.
-     + destruct H. 
-       apply ctl_ax; split; auto.
+     cinduction H.
+     + cdestruct H.
+       split; auto.
        intros t' w' TR.
        apply ctl_af_ax.
        left.
-       now apply H0.
+       now apply H.
      + destruct H0, H1; clear H H1.
-       apply ctl_ax; split; auto.
+       split; auto.
        intros t' w' TR.       
        pose proof (H3 _ _ TR).
-       destruct H as [Hd Hs].
+       cdestruct H. 
        apply ctl_af_ax.
        right.
        now apply H3.
@@ -429,7 +428,7 @@ Section CtlEquations.
    Lemma ctl_ef_involutive: forall (p: ctlf W),
        <( EF p )> ⩸ <( EF (EF p) )>.
    Proof.
-     split; intros; induction H.
+     split; intros; cinduction H.
      - apply ctl_ef_ex; left.
        now apply ctl_ef_ex; left.
      - destruct H1 as (t1 & w1 & TR1 & H1). 
@@ -445,25 +444,18 @@ Section CtlEquations.
        <( AG p )> ⩸ <( AG (AG p) )>.
    Proof.
      split; intros;
-       revert H; revert t w; coinduction R CIH;
-       intros t' w' Hag.     
-     - apply RStepA; auto;
-         apply ctl_ag_ax in Hag as (? & ?).
-       inv H0; split; auto. 
-       intros.
-       apply CIH.
-       now apply H2.
-     - assert(Hag': <( t', w' |= AG AG p )>) by apply Hag.
-       clear Hag.
-       rewrite ctl_ag_ax in Hag'.       
-       destruct Hag'.
-       inv H0.
+       revert H; revert t w; coinduction R CIH; intros t' w' Hag.     
+     - apply RStepA; auto.
+       apply ctl_ag_ax in Hag; cdestruct Hag.
+       cdestruct H0.
+       split; auto. 
+     - rewrite ctl_ag_ax in Hag.      
+       cdestruct Hag.
+       cdestruct H0.
        rewrite ctl_ag_ax in H.
-       destruct H.
+       cdestruct H.
        apply RStepA; auto.
        split; auto; intros.       
-       apply CIH.
-       now apply H2.
    Qed.
    
 End CtlEquations.
@@ -474,8 +466,8 @@ End CtlEquations.
   lazymatch goal with
   | |- context[@entailsF ?M ?W ?HE ?KMS ?X ?φ ?t ?w] =>
       lazymatch φ with
-      | CAX ?p => apply (@ctl_ax M W HE KMS X)
-      | CEX ?p => apply (@ctl_ex M W HE KMS X)
+      | CAX ?p => apply (@unfold_ax M W HE KMS X)
+      | CEX ?p => apply (@unfold_ex M W HE KMS X)
       | CAU ?p ?q => lazymatch eval cbv in p with
                     | CBase (fun _ => True) =>
                         apply (@ctl_af_ax M W HE KMS X)
@@ -504,8 +496,8 @@ End CtlEquations.
   lazymatch type of H with
   | context[@entailsF ?M ?W ?HE ?KMS ?X ?φ ?t ?w] =>
       lazymatch φ with
-      | CAX ?p => rewrite (@ctl_ax M W HE KMS X) in H
-      | CEX ?p => rewrite (@ctl_ex M W HE KMS X) in H
+      | CAX ?p => rewrite (@unfold_ax M W HE KMS X) in H
+      | CEX ?p => rewrite (@unfold_ex M W HE KMS X) in H
       | context[CAU ?p ?q] => lazymatch eval cbv in p with
                              | CBase (fun _ => True) =>
                                  rewrite (@ctl_af_ax M W HE KMS X q) in H

@@ -26,8 +26,8 @@ From CTree Require Export
 Set Implicit Arguments.
 Generalizable All Variables.
 
-(*| CTL logic based on kripke semantics |*)
-Section Ctl.
+(*| CTL logic shallow embedding, based on kripke semantics |*)
+Section Shallow.
   Context `{KMS: Kripke M W} {X: Type}.
   Notation MP := (M X -> World W -> Prop).
   Local Open Scope ctl_scope.
@@ -149,7 +149,7 @@ Section Ctl.
       exists t', w'; auto.
   Qed.      
 
-End Ctl.
+End Shallow.
 
 Inductive ctlf (W: Type) `{HW: Encode W} : Type :=
   | CBase (p : World W -> Prop): ctlf
@@ -168,43 +168,41 @@ Arguments ctlf W {HW}.
 Notation car := (gfp car_).
 Notation cer := (gfp cer_).
 
-(* Entailment inductively on formulas *)
-Definition entailsF `{KMS: Kripke M W} {X}(φ: ctlf W) :=
-  (fix entailsF
-     (M : Type -> Type) (W : Type) 
-     (HE : Encode W) (KMS : Kripke M W) 
-     (X : Type) (φ : ctlf W): rel (M X) (World W) :=
-        match φ with
-        | CBase p => fun _ : M X => p
-        | CAnd φ  ψ =>
-            fun (t : M X) (w : World W) =>
-              entailsF M W HE KMS X φ t w /\
-                entailsF M W HE KMS X ψ t w
-        | COr φ ψ =>
-            fun (t : M X) (w : World W) =>
-              entailsF M W HE KMS X φ t w \/
-                entailsF M W HE KMS X ψ t w
-        | CImpl φ ψ =>
-            fun (t : M X) (w : World W) =>
-              entailsF M W HE KMS X φ t w ->
-              entailsF M W HE KMS X ψ t w
-        | CAX φ =>
-            cax (entailsF M W HE KMS X φ)
-        | CEX φ =>
-            cex (entailsF M W HE KMS X φ)
-        | CAU φ ψ =>
-            cau (entailsF M W HE KMS X φ)
-              (entailsF M W HE KMS X ψ)
-        | CEU φ ψ =>
-            ceu (entailsF M W HE KMS X φ)
-              (entailsF M W HE KMS X ψ)
-        | CAR φ ψ =>
-            car (entailsF M W HE KMS X φ)
-              (entailsF M W HE KMS X ψ)
-        | CER φ ψ =>
-            cer (entailsF M W HE KMS X φ)
-              (entailsF M W HE KMS X ψ)
-        end) M W HE KMS X φ.
+Section Entailment.
+  Context `{KMS: Kripke M W} {X: Type}.
+
+  (* Entailment inductively on formulas *)
+  Definition entailsF: ctlf W -> M X -> World W -> Prop :=
+    fix entailsF φ :=
+      match φ with
+      | CBase p => fun _ => p
+      | CAnd φ ψ => fun t w => entailsF φ t w /\ entailsF ψ t w
+      | COr φ ψ => fun t w => entailsF φ t w \/ entailsF ψ t w
+      | CImpl φ ψ => fun t w => entailsF φ t w -> entailsF ψ t w
+      | CAX φ => cax (entailsF φ)
+      | CEX φ => cex (entailsF φ)
+      | CAU φ ψ => cau (entailsF φ) (entailsF ψ)
+      | CEU φ ψ => ceu (entailsF φ) (entailsF ψ)
+      | CAR φ ψ => car (entailsF φ) (entailsF ψ)
+      | CER φ ψ => cer (entailsF φ) (entailsF ψ)
+  end.
+
+  Lemma unfold_entailsF: forall φ,
+      entailsF φ = match φ with
+                   | CBase p => fun _ => p
+                   | CAnd φ ψ => fun t w => entailsF φ t w /\ entailsF ψ t w
+                   | COr φ ψ => fun t w => entailsF φ t w \/ entailsF ψ t w
+                   | CImpl φ ψ => fun t w => entailsF φ t w-> entailsF ψ t w
+                   | CAX φ => cax (entailsF φ)
+                   | CEX φ => cex (entailsF φ)
+                   | CAU φ ψ => cau (entailsF φ) (entailsF ψ)
+                   | CEU φ ψ => ceu (entailsF φ) (entailsF ψ)
+                   | CAR φ ψ => car (entailsF φ) (entailsF ψ)
+                   | CER φ ψ => cer (entailsF φ) (entailsF ψ)
+                   end.
+  Proof. destruct φ; reflexivity. Qed.
+  Global Opaque entailsF.
+End Entailment.
 
 Module CtlNotations.
 
@@ -310,68 +308,59 @@ Local Open Scope ctl_scope.
 Lemma ctl_now `{KMS: Kripke M W} X:
   forall (t: M X) (w: World W) (φ: World W -> Prop),
     <( t, w |= now φ )> <-> φ w.
-Proof. unfold entailsF; now cbn. Qed.
+Proof. intros; now rewrite unfold_entailsF. Qed.
 Global Hint Resolve ctl_now: ctl.
 
 Lemma ctl_pure `{KMS: Kripke M W} X:
   forall (t: M X) (w: World W),
     <( t, w |= pure )> <-> w = Pure.
-Proof. unfold entailsF; now cbn. Qed.
+Proof. intros; now rewrite unfold_entailsF. Qed.
 Global Hint Resolve ctl_pure: ctl.
 
 Lemma ctl_vis `{KMS: Kripke M W} X:
   forall (t: M X) (w: World W) φ,
     <( t, w |= vis φ )> <-> vis_with φ w. 
-Proof. unfold entailsF; now cbn. Qed.
+Proof. intros; now rewrite unfold_entailsF. Qed.
 Global Hint Resolve ctl_vis: ctl.
 
 Lemma ctl_done `{KMS: Kripke M W} X:
   forall (t: M X) (w: World W) (φ: X -> World W -> Prop),
     <( t, w |= done φ )> <-> done_with φ w.
-Proof. unfold entailsF; now cbn. Qed.
+Proof. intros; now rewrite unfold_entailsF. Qed.
 Global Hint Resolve ctl_done: ctl.
 
 Lemma ctl_done_eq `{KMS: Kripke M W} X:
   forall (t: M X) (w: World W) (r:X),
     <( t, w |= done= r w )> <-> done_with (fun r' w' => r=r' /\ w=w') w.
-Proof. unfold entailsF; now cbn. Qed.
+Proof. intros; now rewrite unfold_entailsF. Qed.
 Global Hint Resolve ctl_done_eq: ctl.
 
 Lemma ctl_finish `{KMS: Kripke M W} X:
   forall (t: M X) (w: World W) φ,
     <( t, w |= finish φ )> <-> @finish_with W _ X φ w.
-Proof. unfold entailsF; now cbn. Qed.
+Proof. intros; now rewrite unfold_entailsF. Qed.
 Global Hint Resolve ctl_finish: ctl.
 
 (*| AX, WX, EX unfold |*)
-Lemma ctl_ax `{KMS: Kripke M W} X:
+Lemma unfold_ax `{KMS: Kripke M W} X:
   forall (t: M X) (w: World W) p,
     <( t, w |= AX p )> <-> can_step t w /\ forall t' w', [t, w] ↦ [t',w'] -> <( t',w' |= p )>.
-Proof.
-  intros; split; intro H'; repeat destruct H'.
-  - split; eauto with ctl.
-  - unfold entailsF, cax; split; eauto with ctl.
-Qed.
+Proof. intros; now rewrite unfold_entailsF. Qed.
 
-Lemma ctl_ex `{KMS: Kripke M W} X:
+Lemma unfold_ex `{KMS: Kripke M W} X:
   forall (t: M X) (w: World W) p,
     <( t,w |= EX p )> <-> exists t' w', [t,w] ↦ [t',w'] /\ <( t',w' |= p )>.
-Proof.
-  intros; split; intro H; repeat destruct H.
-  - now exists x, x0.
-  - unfold entailsF, cex; exists x, x0; split; auto.
-Qed.
-Global Hint Resolve ctl_ax ctl_ex: ctl.
+Proof. intros; now rewrite unfold_entailsF. Qed.
+Global Hint Resolve unfold_ax unfold_ex: ctl.
 
 (* [AX φ] is stronger than [EX φ] *)
 Lemma ctl_ax_ex `{KMS: Kripke M W} X:
   forall (t: M X) (w: World W) p,
     <( t, w |= AX p )> -> <( t, w |= EX p )>.
 Proof.
-  unfold cex, cax; intros * H.
-  rewrite ctl_ax in H.
-  destruct H.
-  destruct H as (m' & w' & TR).
+  intros.
+  rewrite unfold_ax, unfold_ex in *.
+  destruct H as ((m' & w' & TR) & ?).
   exists m', w'; auto.
 Qed.
 
@@ -380,14 +369,14 @@ Lemma ctl_af_ef `{KMS: Kripke M W} X:
   forall (t: M X) (w: World W) p,
     <( t, w |= AF p )> -> <( t, w |= EF p )>.
 Proof.
-  intros. 
-  unfold entailsF in H; induction H.
+  intros.
+  rewrite unfold_entailsF in *.
+  induction H.
   - now apply MatchE. 
   - destruct H0 as ((m' & ? & ?) & ?).
     destruct H1 as ((? & ? & ?) &  ?).
     apply StepE; auto.
     exists x0, x1; split; auto.
-    now apply H3.
 Qed.
 
 (*| Bot is false |*)
@@ -398,7 +387,7 @@ Proof. intros * []. Qed.
 (*| Ex-falso |*)
 Lemma ctl_ex_falso `{KMS: Kripke M W} X: forall (t: M X) (w: World W) p,
     <( t, w |= ⊥ -> p )>.
-Proof. intros; unfold entailsF; intro CONTRA; contradiction. Qed.
+Proof. intros; rewrite unfold_entailsF; intro CONTRA; contradiction. Qed.
 
 (*| Top is True |*)
 Lemma ctl_top `{KMS: Kripke M W} X: forall (t: M X) (w: World W),
@@ -410,11 +399,10 @@ Lemma ctl_sound_ef `{KMS: Kripke M W} X: forall (t: M X) (w: World W),
     ~ <( t, w |= EF ⊥ )>.
 Proof.
   intros * Contra.
-  unfold entailsF in Contra.
+  rewrite unfold_entailsF in Contra.
   induction Contra.
   - contradiction.
-  - destruct H1 as (? & ? & ? & ?).
-    contradiction.
+  - now destruct H1 as (? & ? & ? & ?).
 Qed.
 
 (*| Cannot have all paths such that eventually always Bot |*)
@@ -428,14 +416,13 @@ Proof.
 Qed.
 
 (*| Semantic equivalence of formulas |*)
-Definition equiv_ctl {M} `{HE: Encode W} {K: Kripke M W}{X}: relation (ctlf W)
-  := fun p q => forall (t: M X) (w: World W), entailsF p t w <-> entailsF q t w.
+Definition equiv_ctl {M} `{HE: Encode W} {K: Kripke M W}{X}: relation (ctlf W) :=
+  fun p q => forall (t: M X) (w: World W), entailsF p t w <-> entailsF q t w.
 
 Infix "⩸" := equiv_ctl (at level 58, left associativity): ctl_scope.
 
 Section EquivCtlEquivalence.
-  Context {M: Type -> Type} `{HE: Encode W} {K: Kripke M W}
-    {X: Type}.
+  Context {M: Type -> Type} `{HE: Encode W} {K: Kripke M W} {X: Type}.
   Notation equiv_ctl := (@equiv_ctl M W HE K X).
 
   Global Instance Equivalence_equiv_ctl:

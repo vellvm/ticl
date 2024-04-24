@@ -38,11 +38,10 @@ Section BasicLemmas.
       φ w.
   Proof.
     intros * Hret Hcontra.
-    inv Hcontra.
-    - now rewrite ctl_now in H.
-    - destruct H0 as ((? & ? & ?) & ?).
-      exfalso.
-      eapply done_not_ktrans with (t:=t); eauto.
+    inv Hcontra; auto.
+    destruct H0 as ((? & ? & ?) & ?).
+    exfalso.
+    eapply done_not_ktrans with (t:=t); eauto.
   Qed.
 
   Lemma af_stuck: forall w φ,
@@ -50,10 +49,10 @@ Section BasicLemmas.
       <( {Ctree.stuck: ctree E X}, w |= φ )>.
   Proof.
     split; intros.
-    - cbn in H; dependent induction H; auto.
-      destruct H0, H1.
-      apply can_step_stuck in H1.
-      contradiction.
+    - remember (Ctree.stuck) as S.
+      cinduction H; subst; auto.
+      destruct H0, H1; clear H H0.
+      now apply can_step_stuck in H1.
     - now next; left.
   Qed.
 
@@ -83,7 +82,7 @@ Section BasicLemmas.
   Proof with eauto with ctl.
     intros * Hf.
     next in Hf ; destruct Hf.
-    - rewrite ctl_vis in H; inv H...
+    - inv H... 
     - destruct H.
       now apply can_step_not_done with t.
   Qed.
@@ -94,7 +93,7 @@ Section BasicLemmas.
   Proof with eauto with ctl.
     intros * Hf.
     next in Hf ; destruct Hf.
-    - rewrite ctl_pure in H; subst...
+    - subst; constructor. 
     - destruct H.
       now apply can_step_not_done with t.
   Qed.
@@ -116,6 +115,7 @@ Section BasicLemmas.
       + next; left.
         now rewrite ctl_now in *.
       + destruct H.
+        rewrite unfold_entailsF.
         apply H0.
         apply ktrans_br.
         apply can_step_not_done in H.
@@ -152,23 +152,19 @@ Section BasicLemmas.
       R x w.
   Proof.
     intros.
-    next in H; destruct H.
-    - destruct H.
-      destruct H as (tstuck & w' & TR).
-      specialize (H0 _ _ TR).
-      inv TR; cbn in H0; now dependent destruction H0.
-    - next in H; destruct H.
-      destruct H as (tstuck & w' & TR).
-      specialize (H0 _ _ TR).
-      inv TR; observe_equ H1; rewrite <- Eqt, H3 in H0.
-      + rewrite af_stuck in H0.
-        apply ax_stuck in H0.
-        rewrite ctl_done in H0.
-        now dependent destruction H0.
-      + rewrite af_stuck in H0.
-        apply ax_stuck in H0.
-        cbn in H0.
-        now dependent destruction H0.
+    next in H; cdestruct H.
+    - cdestruct H.
+      destruct Hs as (tstuck & w' & TR).
+      specialize (H _ _ TR).
+      inv TR; rewrite unfold_entailsF in H; now ddestruction H. 
+    - cdestruct H.
+      destruct Hs as (tstuck & w' & TR).
+      specialize (H _ _ TR).
+      inv TR; observe_equ H1; rewrite <- Eqt, H3 in H.
+      all: rewrite af_stuck in H;
+        apply ax_stuck in H;
+        rewrite ctl_done in H;
+        now ddestruction H.
   Qed.
 
 End BasicLemmas.
@@ -266,7 +262,7 @@ Section AfDoneIndLemma.
       <( t, w |= AF AX done φ )> ->
       AFDoneInd t w.
   Proof with eauto with ctl.
-    intros; induction H.
+    intros; cinduction H.
     - next in H.
       destruct H as [(t' & w' & TR) H].
       cbn in TR.
@@ -355,7 +351,8 @@ Section CtlAfBind.
     induction Haf; intros; subst.
     - (* MatchA *)
       next; left; cbn.
-      apply ctl_vis in H; inv H; now constructor.
+      ddestruction H.
+      apply ctl_vis; now constructor.
     - (* StepA *)
       destruct H0, H1; clear H H0.      
       next; right; next; split.
@@ -363,6 +360,7 @@ Section CtlAfBind.
         destruct H1 as (t' & w' & TR').
         eapply can_step_bind_l with t' w'; auto.
         eapply not_done_vis_af with (t:=t').
+        rewrite !unfold_entailsF.        
         now apply H2.
       + (* AX AF *)
         intros t_ w_ TR_.
@@ -372,7 +370,7 @@ Section CtlAfBind.
         * now apply H3.
         * specialize (H2 _ _ TR').
           inv H2.
-          apply ctl_vis in H; inv H. 
+          ddestruction H.
           -- inv Hr.
           -- destruct H0.
              now apply can_step_stuck in H0.
@@ -384,7 +382,7 @@ Section CtlAfBind.
   Proof.
     intros * Haf.
     revert X k.
-    induction Haf; intros; subst.
+    cinduction Haf; intros; subst.
     - (* MatchA *)
       next; left; cbn.
       now apply ctl_pure in H. 
@@ -395,6 +393,7 @@ Section CtlAfBind.
         destruct H1 as (t' & w' & TR').
         eapply can_step_bind_l with t' w'; auto.
         eapply not_done_pure_af with (t:=t').
+        rewrite unfold_entailsF.
         now apply H2.
       + (* AX AF *)
         intros t_ w_ TR_.
