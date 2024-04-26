@@ -235,7 +235,7 @@ Section BindLemmas.
     now intros [l | r] w_ (Hinv & ->); inv Hinv.
   Qed.
 
-  (*| [meq] closure enchancing function |*)
+  (** Enchancing functions based on lemma above *)
   Variant ag_iter_clos_body{X I} φ (k: I -> ctree E (I+X)) (R : rel I (World E)): rel I (World E) :=
     | ag_iter_ctor : forall (x x': I) w w'
                          (Hk : <( {k x}, w |= vis φ AU AX done {fun (lr: I+X) w => lr = inl x' /\ w = w'} )>)
