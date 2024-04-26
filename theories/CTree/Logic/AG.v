@@ -221,6 +221,40 @@ Section BindLemmas.
     rewrite sb_unfold_iter.
     now apply ag_bind_l.
   Qed.
+
+  (* vis φ <--> done Rr *)
+  Lemma ag_iter_step{X I}: forall (k: I -> ctree E (I + X)) w w' (x x': I) φ,
+      <( {k x}, w |= vis φ AU AX done
+                  {fun (lr: I+X) w => lr = inl x' /\ w = w'} )> ->
+      <( {iter k x'}, w' |= AG vis φ )> ->
+      <( {iter k x}, w |= AG vis φ )>.
+  Proof.
+    intros.
+    rewrite sb_unfold_iter.
+    apply ag_bind_r with (R:=fun (lr : I + X) (w : World E) => lr = inl x' /\ w = w'); auto.
+    now intros [l | r] w_ (Hinv & ->); inv Hinv.
+  Qed.
+
+  (*| [meq] closure enchancing function |*)
+  Variant ag_iter_clos_body{X I} φ (k: I -> ctree E (I+X)) (R : rel I (World E)): rel I (World E) :=
+    | ag_iter_ctor : forall (x x': I) w w'
+                         (Hk : <( {k x}, w |= vis φ AU AX done {fun (lr: I+X) w => lr = inl x' /\ w = w'} )>)
+                         (Heqw : R x' w'),
+        ag_iter_clos_body φ k R x w.
+  Hint Constructors ag_iter_clos_body: core.
+
+  Arguments impl /.
+  Program Definition ag_iter_clos{X I} φ k: mon (rel I (World E)) :=
+    {| body := ag_iter_clos_body φ k (X:=X) |}.
+  Next Obligation. repeat red; intros; destruct H0; subst; eauto. Qed.
+
+  Program Definition ag_iter_goal_clos{X I} φ (k: I -> ctree E (I+X)): mon (rel I (World E)) :=
+    {| body R x w := <( {iter k x}, w |= AG vis φ )> |}.
+  
+  Lemma mequ_clos_car{X I} φ (k: I -> ctree E (I+X)):
+    ag_iter_clos φ k <= ag_iter_goal_clos φ k.
+  Proof.
+  Admitted.
   
   (* [iter k x, w] *)
   (* [k] will terminate with postcondition [RR] and invariant [φ] *)
