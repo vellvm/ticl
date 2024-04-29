@@ -274,7 +274,7 @@ Section is_simple_theory.
     exists x. now left.
   Qed.
 
-  Lemma is_simple_brD : forall {Y} (c: (B01 +' C) X) (k : X -> ctree E (B01 +' C) Y) x,
+  Lemma is_simple_brD_inv : forall {Y} (c: (B01 +' C) X) (k : X -> ctree E (B01 +' C) Y) x,
       is_simple (BrD c k) -> is_simple (k x).
   Proof.
     intros. destruct H.

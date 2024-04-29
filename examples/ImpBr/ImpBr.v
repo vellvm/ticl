@@ -26,6 +26,7 @@ From Coinduction Require Import
 From CTree Require Import
      CTree
      Eq
+     Misc.Pure
      Interp.Fold
      Interp.FoldCTree
      Interp.FoldStateT.
@@ -71,7 +72,7 @@ Variant MemE : Type -> Type :=
 
 Section Semantics.
 
-  Notation computation := (ctree MemE B02).
+  Notation computation := (ctree MemE (B01 +' B2)).
 
   Fixpoint denote_expr (e : expr) : computation value :=
     match e with
@@ -112,14 +113,14 @@ Section Semantics.
   (* list of key value pairs *)
   Definition env := alist var value.
 
-  Definition handle_imp : MemE ~> Monads.stateT env (ctree void1 B02) :=
+  Definition handle_imp : MemE ~> Monads.stateT env (ctree void1 (B01 +' B2)) :=
     fun _ e s =>
       match e with
       | rd x => Ret (s, lookup_default x 0 s)
       | wr x v => Ret (Maps.add x v s, tt)
       end.
 
-  Definition interp_imp (t : computation _) : Monads.stateT env (ctree void1 B02) unit :=
+  Definition interp_imp (t : computation _) : Monads.stateT env (ctree void1 (B01 +' B2)) unit :=
     interp_state handle_imp t.
 
 End Semantics.
@@ -180,17 +181,16 @@ Section Theory.
   For instance here transporting [branch_block_r].
 |*)
 
-  Lemma handle_imp_is_simple :
-    forall (X : Type) (e : MemE X) (s : env), vsimple (E := void1) (handle_imp _ e s).
+  #[global] Instance handle_imp_is_simple :
+    forall (X : Type) (e : MemE X) (s : env), is_simple (E := void1) (handle_imp _ e s).
   Proof.
-    unfold handle_imp, h_state, vsimple. intros. destruct e; eauto.
+    unfold handle_imp, h_state. intros. destruct e; typeclasses eauto.
   Qed.
 
   Lemma branch_block_r_interp : forall (a : stmt) s,
     ℑ (Branch a Block) s ~
     ℑ a s.
   Proof.
-    epose proof interp_state_sbisim (X := unit) handle_imp handle_imp_is_simple.
     intros.
     unfold interp_imp.
     rewrite branch_block_r. reflexivity.

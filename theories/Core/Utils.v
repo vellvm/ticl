@@ -141,4 +141,3 @@ Definition sum_rel {A1 A2 B1 B2} Ra Rb : rel (A1 + B1) (A2 + B2) :=
     | inr b, inr b' => Rb b b'
     | _, _ => False
     end.
-

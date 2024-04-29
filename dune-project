@@ -1,5 +1,5 @@
-(lang dune 2.9)
-(using coq 0.3)
+(lang dune 3.8)
+(using coq 0.7)
 (name coq-ctree)
 
 (license "MIT")

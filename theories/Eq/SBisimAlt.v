@@ -341,6 +341,24 @@ Section sbisim'_homogenous_theory.
 
 End sbisim'_homogenous_theory.
 
+Lemma split_st' : forall {E B X R L} `{SL: Symmetric _ L} `{HasB0: B0 -< B} (t u : ctree E B X),
+  (forall side, st' L R side t u) <->
+  st' L R true t u /\ st' L R true u t.
+Proof.
+  intros. split; intros.
+  - split; auto.
+    apply st'_flip. apply H.
+  - destruct side; [apply H |].
+    now apply st'_flip.
+Qed.
+
+Lemma split_st'_eq : forall {E B X R} `{HasB0: B0 -< B} (t u : ctree E B X),
+  (forall side, st' eq R side t u) <->
+  st' eq R true t u /\ st' eq R true u t.
+Proof.
+  intros. apply split_st'.
+Qed.
+
 Lemma split_sbt' : forall {E B X R L} `{SL: Symmetric _ L} `{HasB0: B0 -< B} (t u : ctree E B X),
   (forall side, sbt' L R side t u) <->
   sbt' L R true t u /\ sbt' L R true u t.
