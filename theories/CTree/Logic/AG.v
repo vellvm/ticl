@@ -3,7 +3,7 @@ From Coq Require Import
   Classes.Morphisms.
 
 From Coinduction Require Import
-  coinduction rel tactics.
+  coinduction lattice tactics.
 
 From CTree Require Import
   Events.Core
@@ -235,27 +235,138 @@ Section BindLemmas.
     now intros [l | r] w_ (Hinv & ->); inv Hinv.
   Qed.
 
-  (** Enchancing functions based on lemma above *)
-  Variant ag_iter_clos_body{X I} φ (k: I -> ctree E (I+X)) (R : rel I (World E)): rel I (World E) :=
-    | ag_iter_ctor : forall (x x': I) w w'
-                         (Hk : <( {k x}, w |= vis φ AU AX done {fun (lr: I+X) w => lr = inl x' /\ w = w'} )>)
-                         (Heqw : R x' w'),
-        ag_iter_clos_body φ k R x w.
-  Hint Constructors ag_iter_clos_body: core.
-
-  Arguments impl /.
-  Program Definition ag_iter_clos{X I} φ k: mon (rel I (World E)) :=
-    {| body := ag_iter_clos_body φ k (X:=X) |}.
-  Next Obligation. repeat red; intros; destruct H0; subst; eauto. Qed.
-
-  Program Definition ag_iter_goal_clos{X I} φ (k: I -> ctree E (I+X)): mon (rel I (World E)) :=
-    {| body R x w := <( {iter k x}, w |= AG vis φ )> |}.
+  Notation MP X := (rel (ctree E X) (World E)).
   
-  Lemma mequ_clos_car{X I} φ (k: I -> ctree E (I+X)):
-    ag_iter_clos φ k <= ag_iter_goal_clos φ k.
+  Program Definition ag_bind_clos{X Y} φ Post : mon (rel (ctree E Y) (World E)) :=
+    {| body R t w :=
+        bind_ctx1
+          (fun (t: ctree E X) => <( t, w |= vis φ AU (AX done Post) )>)
+          (fun (k: X -> ctree E Y) => forall (x: X) w, Post x w -> R (k x) w)
+          t
+    |}.
+  Next Obligation.
+    revert H0.
+    apply leq_bind_ctx1; intros. 
+    apply in_bind_ctx1; eauto.
+  Qed.
+
+  (* Here, I have to define a different monotone relation than [car_]
+     to specialize the formulas to [p, q]. Very annoying. *)
+  Program Definition car_'{X} p q : mon (rel (ctree E X) (World E)) :=
+    {| body R := carF R p q |}.
+  Next Obligation.
+    inv H0.
+    - apply RMatchA; auto.
+    - destruct H2.
+      apply RStepA; auto.
+      split; auto.
+  Qed.
+
+  Notation cart' p q := (t (car_' p q)).
+
+  Lemma ag_bind_ag{X Y} φ Post:
+      ag_bind_clos (X:=X) (Y:=Y) φ Post <= cart' <( |- vis φ )> <( |- ⊥ )>.
   Proof.
-  Admitted.
-  
+    apply Coinduction.
+    intros R t w; cbn.
+    apply (leq_bind_ctx1 _ _
+             (fun t => carF (T (car_' (entailsF <( vis {φ} )>) (entailsF <( ⊥ )>)) (ag_bind_clos φ Post) R)
+    (entailsF <( vis {φ} )>) (entailsF <( ⊥ )>) t w)). 
+    intros x Hx k Hk.
+    cinduction Hx.
+    - (* AX done R *)
+      apply ax_done in H as (Hw & x & Heq & H).
+      intros.
+      apply RStepA.
+      + rewrite Heq, bind_ret_l; try (exact (equ eq)).
+        specialize (Hk _ _ H); destruct Hk; try contradiction; auto.
+      + split.
+        * rewrite Heq, bind_ret_l.
+          specialize (Hk _ _ H); remember (k x) as K; destruct Hk; try contradiction.
+          subst.
+          now destruct H1.
+        * intros t' w' TR.
+          apply (b_T (car_' (entailsF <( vis {φ} )>) (entailsF <( ⊥ )>))).
+          cbn.
+          specialize (Hk _ _ H); remember (k x) as K; destruct Hk; try contradiction; subst;
+            destruct H1.
+          assert(TR': [k x, w] ↦ [t', w']) by admit. (* need to show from [t ~ Ret x] *)
+          
+          apply RStepA.
+          rewrite Heq in TR.
+          apply Hk.
+        apply H0.
+      assert (H: carF <( |- vis φ )> <( |- ⊥ )> 
+
+      specialize (H0 _ _ H);
+        step in H0; remember (k x) as K; destruct H0;
+        try contradiction.
+      destruct H1; subst.
+      next; split; auto; next; split; auto.
+    - destruct H1, H2; clear H2.
+      destruct H1 as (t' & w' & TR).
+      cbn in TR, H3, H4.
+      cbn in H.
+      rewrite (ctree_eta t).      
+      remember (observe t) as T.
+      remember (observe t') as T'.
+      rewrite ctl_vis in H.
+      clear HeqT t HeqT' t'.
+      induction TR.
+      + rewrite bind_guard.
+        apply ag_guard.
+        rewrite (ctree_eta t).
+        apply IHTR; eauto.
+        * intros t_ w_ TR_.
+          setoid_rewrite ktrans_guard in H3.
+          setoid_rewrite ktrans_guard in H4.
+          now apply H3.
+        * intros t_ w_ TR_.
+          setoid_rewrite ktrans_guard in H3.
+          setoid_rewrite ktrans_guard in H4.
+          now apply H4.
+      + rewrite bind_br.
+        rewrite <- ag_br.
+        split; [auto|intro j].
+        apply H4.
+        apply ktrans_br.
+        exists j; intuition.
+      + rewrite bind_vis.
+        rewrite <- ag_vis with (v:=v).
+        split; auto. 
+        intro x.
+        apply H4.
+        apply ktrans_vis.
+        exists x; intuition.
+      + inv H.
+      + ddestruction H.
+        rewrite bind_ret_l.
+        assert(TR_:[Ret x, Obs e v] ↦ [stuck, Finish e v x])
+          by now apply ktrans_finish.
+        specialize (H4 Ctree.stuck (Finish e v x) TR_).
+        specialize (H3 Ctree.stuck (Finish e v x) TR_).
+        clear TR_.
+        inv H3; inv H.
+        now apply can_step_stuck in H2.
+
+        
+    step in xx'.
+    cbn; unfold observe; cbn.
+    destruct xx'.
+    - cbn in *.
+      generalize (kk' _ _ H).
+      apply (fequ RR).
+      apply id_T.
+    - constructor; intros ?. apply (fTf_Tf (fequ _)).
+      apply in_bind_ctx2. apply H.
+      red; intros. apply (b_T (fequ _)), kk'; auto.
+    - constructor. apply (fTf_Tf (fequ _)).
+      apply in_bind_ctx2. apply H.
+      red; intros. apply (b_T (fequ _)), kk'; auto.
+    - constructor. intro a. apply (fTf_Tf (fequ _)).
+      apply in_bind_ctx2. apply H.
+      red; intros. apply (b_T (fequ _)), kk'; auto.
+    
   (* [iter k x, w] *)
   (* [k] will terminate with postcondition [RR] and invariant [φ] *)
   (* [x: I] *)

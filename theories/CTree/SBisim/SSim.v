@@ -214,7 +214,7 @@ Section ssim_heterogenous_theory.
   Notation ssT L := (coinduction.T (ss L)).
 
   (*| Strong simulation up-to [equ] is valid |*)
-  Lemma equ_clos2_sst : equ_clos2 <= (sst L).
+  Lemma equ_clos_sst : equ_clos <= (sst L).
   Proof.
     apply Coinduction; cbn.
     intros R x y [x' y' x'' y'' EQ' EQ''] l z x'z.
@@ -228,25 +228,25 @@ Section ssim_heterogenous_theory.
       econstructor; auto; auto.
   Qed.
 
-  #[global] Instance equ_clos2_sst_goal {RR} :
+  #[global] Instance equ_clos_sst_goal {RR} :
     Proper (equ eq ==> equ eq ==> flip impl) (sst L RR).
   Proof.
     cbn; intros ? ? eq1 ? ? eq2 H.
-    apply (ft_t equ_clos2_sst); econstructor; [eauto | | symmetry; eauto]; assumption.
+    apply (ft_t equ_clos_sst); econstructor; [eauto | | symmetry; eauto]; assumption.
   Qed.
 
-  #[global] Instance equ_clos2_sst_ctx {RR} :
+  #[global] Instance equ_clos_sst_ctx {RR} :
     Proper (equ eq ==> equ eq ==> impl) (sst L RR).
   Proof.
     cbn; intros ? ? eq1 ? ? eq2 H.
-    apply (ft_t equ_clos2_sst); econstructor; [symmetry; eauto | | eauto]; assumption.
+    apply (ft_t equ_clos_sst); econstructor; [symmetry; eauto | | eauto]; assumption.
   Qed.
 
   #[global] Instance equ_ssbt_closed_goal {r} :
     Proper (equ eq ==> equ eq ==> flip impl) (ssbt L r).
   Proof.
     unfold Proper, respectful, impl, flip; intros.
-    apply (fbt_bt equ_clos2_sst); econstructor; eauto.
+    apply (fbt_bt equ_clos_sst); econstructor; eauto.
     now symmetry.
   Qed.
 
@@ -257,32 +257,32 @@ Section ssim_heterogenous_theory.
     now rewrite H, H0 in H1.
   Qed.
 
-  #[global] Instance equ_clos2_ssT_goal RR f :
+  #[global] Instance equ_clos_ssT_goal RR f :
     Proper (equ eq ==> equ eq ==> flip impl) (ssT L f RR).
   Proof.
     unfold Proper, respectful, impl, flip; intros ? ? eq1 ? ? eq2 H.
-    apply (fT_T equ_clos2_sst); econstructor; [eauto | | symmetry; eauto]; assumption.
+    apply (fT_T equ_clos_sst); econstructor; [eauto | | symmetry; eauto]; assumption.
   Qed.
 
-  #[global] Instance equ_clos2_ssT_ctx RR f :
+  #[global] Instance equ_clos_ssT_ctx RR f :
     Proper (equ eq ==> equ eq ==> impl) (ssT L f RR).
   Proof.
     unfold Proper, respectful, impl, flip; intros ? ? eq1 ? ? eq2 H.
-    apply (fT_T equ_clos2_sst); econstructor; [symmetry; eauto | | eauto]; assumption.
+    apply (fT_T equ_clos_sst); econstructor; [symmetry; eauto | | eauto]; assumption.
   Qed.
 
-  #[global] Instance equ_clos2_ssim_goal :
+  #[global] Instance equ_clos_ssim_goal :
     Proper (equ eq ==> equ eq ==> flip impl) (ssim L).
   Proof.
     unfold Proper, respectful, impl, flip; intros ? ? eq1 ? ? eq2 H.
-    apply (ft_t equ_clos2_sst); econstructor; [eauto | | symmetry; eauto]; assumption.
+    apply (ft_t equ_clos_sst); econstructor; [eauto | | symmetry; eauto]; assumption.
   Qed.
 
-  #[global] Instance equ_clos2_ssim_ctx :
+  #[global] Instance equ_clos_ssim_ctx :
     Proper (equ eq ==> equ eq ==> impl) (ssim L).
   Proof.
     unfold Proper, respectful, impl, flip; intros ? ? eq1 ? ? eq2 H.
-    apply (ft_t equ_clos2_sst); econstructor; [symmetry; eauto | | eauto]; assumption.
+    apply (ft_t equ_clos_sst); econstructor; [symmetry; eauto | | eauto]; assumption.
   Qed.
 
   #[global] Instance equ_ss_closed_goal {r} :
@@ -411,12 +411,12 @@ Section ssim_heterogenous_bind.
   (*| Specialization of [bind_ctx] to a function acting with [ssim] on the bound value,
     and with the argument (pointwise) on the continuation. |*)
   Program Definition bind_ctx_ssim L0 : mon (rel (ctree E X') (ctree F Y')) :=
-    {|body := fun R => @bind_ctx E F HE HF X Y X' Y' (ssim L0) (pointwise RR R) |}.
+    {|body := fun R => @bind_ctx2 E F HE HF X Y X' Y' (ssim L0) (pointwise RR R) |}.
   Next Obligation.
     unfold Proper, respectful, impl; cbn; intros.
     revert H0.
-    apply leq_bind_ctx. intros ?? H' ?? H''.
-    apply in_bind_ctx. apply H'. intros t t' HS. apply H, H'', HS.
+    apply leq_bind_ctx2. intros ?? H' ?? H''.
+    apply in_bind_ctx2. apply H'. intros t t' HS. apply H, H'', HS.
   Qed.
 
   (*| The resulting enhancing function gives a valid up-to technique |*)
@@ -424,7 +424,7 @@ Section ssim_heterogenous_bind.
     is_update_val_rel L0 -> bind_ctx_ssim L0 <= (sst L).
   Proof.
     intro HL0. apply Coinduction.
-    intros R. apply (leq_bind_ctx _).
+    intros R. apply (leq_bind_ctx2 _).
     intros t1 t2 tt k1 k2 kk.
     step in tt.
     simpl; intros l u STEP;
@@ -439,10 +439,10 @@ Section ssim_heterogenous_bind.
       * now apply H. 
       * now apply H2.
     + split.
-      * apply (fT_T equ_clos2_sst).
+      * apply (fT_T equ_clos_sst).
         econstructor; [exact EQ | | reflexivity].
         apply (fTf_Tf (ss L)).
-        apply in_bind_ctx; auto.
+        apply in_bind_ctx2; auto.
         intros ? ? ?.
         apply (b_T (ss L)).
         red in kk; cbn; now apply kk.
@@ -513,7 +513,7 @@ Lemma sst_clo_bind_gen `{HE: Encode E} `{HF: Encode F} {X Y X' Y': Type} {L : re
 Proof.
   intros ? ?.
   apply (ft_t (@bind_ctx_ssim_t E F HE HF X X' Y Y' L R0 L0 HL0)).
-  apply in_bind_ctx; eauto.
+  apply in_bind_ctx2; eauto.
 Qed.
 
 Lemma sst_clo_bind `{HE: Encode E} `{HF: Encode F} {X Y X' Y': Type} {L : rel (label E) (label F)}
@@ -555,7 +555,7 @@ Lemma ssbt_clo_bind_gen `{HE: Encode E} `{HF: Encode F} {X Y X' Y': Type}
 Proof.
   intros ? ?.
   apply (fbt_bt (@bind_ctx_ssim_t E F HE HF X X' Y Y' L R0 L0 HL0)).
-  apply in_bind_ctx; eauto.
+  apply in_bind_ctx2; eauto.
 Qed.
 
 Lemma ssbt_clo_bind `{HE: Encode E} `{HF: Encode F} {X Y X' Y': Type}
@@ -628,10 +628,10 @@ Tactic Notation "__upto_bind_ssim" uconstr(R0) :=
       apply (ssim_clo_bind_gen R0 (update_val_rel L R0) (update_val_rel_correct L R0))
   | |- body (t (@ss ?E ?F ?C ?D ?X ?Y ?L)) ?R (Ctree.bind (X := ?T) _ _) (Ctree.bind (X := ?T') _ _) =>
       apply (ft_t (@bind_ctx_ssim_t E F C D T X T' Y L R0
-        (update_val_rel L R0) (update_val_rel_correct L R0))), in_bind_ctx
+        (update_val_rel L R0) (update_val_rel_correct L R0))), in_bind_ctx2
   | |- body (bt (@ss ?E ?F ?C ?D ?X ?Y ?L)) ?R (Ctree.bind (X := ?T) _ _) (Ctree.bind (X := ?T') _ _) =>
       apply (fbt_bt (@bind_ctx_ssim_t E F C D T X T' Y L R0
-        (update_val_rel L R0) (update_val_rel_correct L R0))), in_bind_ctx
+        (update_val_rel L R0) (update_val_rel_correct L R0))), in_bind_ctx2
   end.
 
 Tactic Notation "__upto_bind_eq_ssim" uconstr(R0) :=

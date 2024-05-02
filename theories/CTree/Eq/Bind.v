@@ -18,8 +18,35 @@ Local Open Scope ctree_scope.
 
 Generalizable All Variables.
 
+(*| Up-to bind principle (unary) |*)
+Section Bind_ctx1.
+  Context {E:Type} `{HE: Encode E} {X Y: Type}.
+
+  Definition bind_ctx1 (R: ctree E X -> Prop) (S: (X -> ctree E Y) -> Prop):
+    ctree E Y -> Prop :=
+    (sup R
+       (fun x => sup S
+                (fun k => (fun t => t = bind x k)))).
+  
+  Lemma leq_bind_ctx1:
+    forall R S S', @bind_ctx1 R S <= S' <->
+                (forall x, R x -> forall k, S k -> S' (bind x k)).
+  Proof.
+    intros. unfold bind_ctx1.
+    setoid_rewrite sup_spec.
+    setoid_rewrite sup_spec.
+    firstorder congruence.
+  Qed.
+  
+  Lemma in_bind_ctx1 (R : ctree E X -> Prop) (S : (X -> ctree E Y) -> Prop) x f :
+    R x -> S f -> @bind_ctx1 R S (bind x f).
+  Proof. intros. epose proof (proj1 (leq_bind_ctx1 R S _)). apply H1; auto. Qed.
+
+  #[global] Opaque bind_ctx1.
+End Bind_ctx1.
+
 (*|
-Up-to bind principle
+Up-to bind principle (binary)
 ~~~~~~~~~~~~~~~~~~~~
 Consider two computations explicitely built as sequences
 [t >>= k] and [u >>= l]. When trying to prove that they are
@@ -41,14 +68,14 @@ f R = {(bind t k, bind u l) | equ SS t u /\ forall x y, SS x y -> R (k x) (l x)}
 
 |*)
 
-Section Bind_ctx.
+Section Bind_ctx2.
   Context {E F :Type} `{HE: Encode E} `{HF: Encode F} {X X' Y Y': Type}.
 
   (*|
 Most general contextualisation function associated to bind].
 Can be read more digestly as, where R is a relation on ctrees
 (the prefixes of the binds) and S on the continuations:
-bind_ctx R S = {(bind t k, bind t' k') | R t t' /\ S k k'}
+bind_ctx2 R S = {(bind t k, bind t' k') | R t t' /\ S k k'}
 
 Note that at this point, this is more general that what we are
 interested in: we will specialize [R] and [S] for our purpose,
@@ -62,7 +89,7 @@ We could provide an heterogeneous version of [binary_ctx] and have
 of [sup_all] locally.
 |*)
 
-  Definition bind_ctx
+  Definition bind_ctx2
     (R: rel (ctree E X) (ctree F X'))
     (S: rel (X -> ctree E Y) (X' -> ctree F Y')):
     rel (ctree E Y) (ctree F Y') :=
@@ -77,12 +104,12 @@ Two lemmas to interact with [bind_ctx] before making it opaque:
 - [leq_bind_ctx] specifies relations above the context
 - [in_bind_ctx] specifies how to populate it
 |*)
-  Lemma leq_bind_ctx:
-    forall R S S', bind_ctx R S <= S' <->
+  Lemma leq_bind_ctx2:
+    forall R S S', bind_ctx2 R S <= S' <->
                 (forall x x', R x x' -> forall k k', S k k' -> S' (bind x k) (bind x' k')).
   Proof.
     intros.
-    unfold bind_ctx.
+    unfold bind_ctx2.
     setoid_rewrite sup_all_spec.
     setoid_rewrite sup_spec.
     setoid_rewrite sup_all_spec.
@@ -91,15 +118,15 @@ Two lemmas to interact with [bind_ctx] before making it opaque:
     firstorder.
   Qed.
 
-  Lemma in_bind_ctx (R S :rel _ _) x x' y y':
-    R x x' -> S y y' -> bind_ctx R S (bind x y) (bind x' y').
-  Proof. intros. now apply ->leq_bind_ctx. Qed.
-  #[global] Opaque bind_ctx.
+  Lemma in_bind_ctx2 (R S :rel _ _) x x' y y':
+    R x x' -> S y y' -> bind_ctx2 R S (bind x y) (bind x' y').
+  Proof. intros. now apply ->leq_bind_ctx2. Qed.
+  #[global] Opaque bind_ctx2.
 
-End Bind_ctx.
+End Bind_ctx2.
 
 (*|
-Specialization of [bind_ctx] to the [equ]-based closure we are
+Specialization of [bind_ctx2] to the [equ]-based closure we are
 looking for, and the proof of validity of the principle. As
 always with the companion, we prove that it is valid by proving
 that it si below the companion.
@@ -107,33 +134,32 @@ that it si below the companion.
 
 
 (*|
-Specialization of [bind_ctx] to the [equ]-based closure we are
+Specialization of [bind_ctx2] to the [equ]-based closure we are
 looking for, and the proof of validity of the principle. As
 always with the companion, we prove that it is valid by proving
 that it si below the companion.
 |*)
-Section Equ_Bind_ctx.
+Section Equ_bind_ctx.
 
   Context `{HE: Encode E} {X1 X2 Y1 Y2: Type}.
 
   (*|
-Specialization of [bind_ctx] to a function acting with [equ] on the bound value,
+Specialization of [bind_ctx2] to a function acting with [equ] on the bound value,
 and with the argument (pointwise) on the continuation.
-|*)
-  Program Definition bind_ctx_equ r: mon (rel (ctree E Y1) (ctree E Y2)) :=
-    {|body := fun R => @bind_ctx E E HE HE X1 X2 Y1 Y2 (equ r) (pointwise r R) |}.
+|*)  Program Definition bind_ctx_equ r: mon (rel (ctree E Y1) (ctree E Y2)) :=
+    {|body := fun R => @bind_ctx2 E E HE HE X1 X2 Y1 Y2 (equ r) (pointwise r R) |}.
   Next Obligation.
     repeat red; intros.
-    apply (@leq_bind_ctx E E HE HE X1 X2 Y1 Y2 (equ r) (pointwise r x)).
+    apply (@leq_bind_ctx2 E E HE HE X1 X2 Y1 Y2 (equ r) (pointwise r x)).
     intros ?? H' ?? H''.
-    apply in_bind_ctx. apply H'. intros t t' HS. apply H, H'', HS.
+    apply in_bind_ctx2. apply H'. intros t t' HS. apply H, H'', HS.
     apply H0.
   Qed.
 
   (*| The resulting enhancing function gives a valid up-to technique |*)
   Lemma bind_ctx_equ_t (SS : rel X1 X2) (RR : rel Y1 Y2): bind_ctx_equ SS <= et RR.
   Proof.
-    apply Coinduction. intros R. apply (leq_bind_ctx _).
+    apply Coinduction. intros R. apply (leq_bind_ctx2 _).
     intros x x' xx' k k' kk'.
     step in xx'.
     cbn; unfold observe; cbn.
@@ -143,17 +169,17 @@ and with the argument (pointwise) on the continuation.
       apply (fequ RR).
       apply id_T.
     - constructor; intros ?. apply (fTf_Tf (fequ _)).
-      apply in_bind_ctx. apply H.
+      apply in_bind_ctx2. apply H.
       red; intros. apply (b_T (fequ _)), kk'; auto.
     - constructor. apply (fTf_Tf (fequ _)).
-      apply in_bind_ctx. apply H.
+      apply in_bind_ctx2. apply H.
       red; intros. apply (b_T (fequ _)), kk'; auto.
     - constructor. intro a. apply (fTf_Tf (fequ _)).
-      apply in_bind_ctx. apply H.
+      apply in_bind_ctx2. apply H.
       red; intros. apply (b_T (fequ _)), kk'; auto.
   Qed.
 
-End Equ_Bind_ctx.
+End Equ_bind_ctx.
 
 
 (*|
@@ -170,7 +196,7 @@ Lemma et_clo_bind `{HE: Encode E} (X1 X2 Y1 Y2 : Type) :
 Proof.
   intros.
   apply (ft_t (bind_ctx_equ_t S R)).
-  now apply in_bind_ctx.
+  now apply in_bind_ctx2.
 Qed.
 
 Lemma et_clo_bind_eq `{HE: Encode E} (X Y1 Y2 : Type) :
@@ -182,7 +208,7 @@ Lemma et_clo_bind_eq `{HE: Encode E} (X Y1 Y2 : Type) :
 Proof.
   intros * EQ.
   apply (ft_t (bind_ctx_equ_t (X2 := X) eq R)).
-  apply in_bind_ctx.
+  apply in_bind_ctx2.
   reflexivity.
   intros ? ? <-.
   apply EQ.
@@ -214,19 +240,18 @@ Lemma equ_clo_bind `{HE: Encode E} (X1 X2 Y1 Y2 : Type) :
 Proof.
   intros.
   apply (ft_t (bind_ctx_equ_t S R)).
-  now apply in_bind_ctx.
+  now apply in_bind_ctx2.
 Qed.
 
 Lemma equ_clo_bind_eq `{HE: Encode E} (X Y1 Y2 : Type) :
 	forall (t : ctree E X) (k1 : X -> ctree E Y1) (k2 : X -> ctree E Y2)
     (R : rel Y1 Y2),
     (forall x, equ R (k1 x) (k2 x)) ->
-    equ R (bind t k1) (bind t k2)
-.
+    equ R (bind t k1) (bind t k2).
 Proof.
   intros * EQ.
   apply (ft_t (bind_ctx_equ_t (X2 := X) eq R)).
-  apply in_bind_ctx.
+  apply in_bind_ctx2.
   reflexivity.
   intros ? ? <-.
   apply EQ.
@@ -240,11 +265,11 @@ Ltac __upto_bind_equ' SS :=
 
     (* Upto when unguarded *)
   | |- body (t (@fequ ?E ?HE ?R1 ?R2 ?RR)) ?R (Ctree.bind (X := ?T1) _ _) (Ctree.bind (X := ?T2) _ _) =>
-        apply (ft_t (@bind_ctx_equ_t E HE T1 T2 R1 R2 SS RR)), in_bind_ctx
+        apply (ft_t (@bind_ctx_equ_t E HE T1 T2 R1 R2 SS RR)), in_bind_ctx2
 
     (* Upto when guarded *)
   | |- body (bt (@fequ ?E ?HE ?R1 ?R2 ?RR)) ?R (Ctree.bind (X := ?T1) _ _) (Ctree.bind (X := ?T2) _ _) =>
-      apply (fbt_bt (@bind_ctx_equ_t E HE T1 T2 R1 R2 SS RR)), in_bind_ctx
+      apply (fbt_bt (@bind_ctx_equ_t E HE T1 T2 R1 R2 SS RR)), in_bind_ctx2
   end.
 Tactic Notation "__upto_bind_equ" uconstr(eq) := __upto_bind_equ' eq.
 
@@ -256,11 +281,11 @@ Ltac __eupto_bind_equ :=
 
     (* Upto when unguarded *)
   | |- body (t (@fequ ?E ?HE ?R1 ?R2 ?RR)) ?R (Ctree.bind (X := ?T1) _ _) (Ctree.bind (X := ?T2) _ _) =>
-        eapply (ft_t (@bind_ctx_equ_t E HE T1 T2 R1 R2 _ RR)), in_bind_ctx
+        eapply (ft_t (@bind_ctx_equ_t E HE T1 T2 R1 R2 _ RR)), in_bind_ctx2
 
     (* Upto when guarded *)
   | |- body (bt (@fequ ?E ?HE ?R1 ?R2 ?RR)) ?R (Ctree.bind (X := ?T1) _ _) (Ctree.bind (X := ?T2) _ _) =>
-      eapply (fbt_bt (@bind_ctx_equ_t E HE T1 T2 R1 R2 _ RR)), in_bind_ctx
+      eapply (fbt_bt (@bind_ctx_equ_t E HE T1 T2 R1 R2 _ RR)), in_bind_ctx2
   end.
 
 Ltac upto_bind_equ :=
@@ -275,32 +300,17 @@ in order to establish "up-to equ" principles for other bisimulations, we define 
 associated enhancing function.
 |*)
 
-(*| Unary enchancing function up-to-equ |*)
-Variant equ_clos1_body {E X} {HE: Encode E} R : (ctree E X -> Prop) :=
-  | Equ_clos1 : forall t t'
-                  (Equt : t ≅ t')
-                  (HR : R t'),
-      equ_clos1_body R t.
-
-Program Definition equ_clos1 {E X} {HE: Encode E} : mon (ctree E X -> Prop) :=
-  {| body := @equ_clos1_body E X HE |}.
-Next Obligation.
-  intros * ?? LE t EQ; inv EQ.
-  econstructor; eauto.
-  apply LE; auto.
-Qed.
-
 (*| Binary enchancing function up-to-equ |*)
-Variant equ_clos2_body {E F X1 X2} {HE: Encode E} {HF: Encode F}
+Variant equ_clos_body {E F X1 X2} {HE: Encode E} {HF: Encode F}
   (R : rel (ctree E X1) (ctree F X2)) : (rel (ctree E X1) (ctree F X2)) :=
-  | Equ_clos2 : forall t t' u' u
+  | Equ_clos : forall t t' u' u
                  (Equt : t ≅ t')
                  (HR : R t' u')
                  (Equu : u' ≅ u),
-      equ_clos2_body R t u.
+      equ_clos_body R t u.
 
-Program Definition equ_clos2 {E F X1 X2} {HE: Encode E} {HF: Encode F}: mon (rel (ctree E X1) (ctree F X2)) :=
-  {| body := @equ_clos2_body E F X1 X2 HE HF |}.
+Program Definition equ_clos {E F X1 X2} {HE: Encode E} {HF: Encode F}: mon (rel (ctree E X1) (ctree F X2)) :=
+  {| body := @equ_clos_body E F X1 X2 HE HF |}.
 Next Obligation.
   unfold impl; repeat red; intros.
   inv H0; econstructor; eauto.
@@ -309,10 +319,10 @@ Qed.
 (*|
 Sufficient condition to prove compatibility only over the simulation
 |*)
-Lemma equ_clos2_sym {E C X} : compat converse (@equ_clos2 E E C C X X).
+Lemma equ_clos2_sym {E C X} : compat converse (@equ_clos E E C C X X).
 Proof.
   intros R t u EQ; inv EQ.
-  apply Equ_clos2 with u' t'; intuition.
+  apply Equ_clos with u' t'; intuition.
 Qed.
 
 (*| Even eta-laws for coinductive data-structures are not valid w.r.t. to [eq]
