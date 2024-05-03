@@ -549,7 +549,43 @@ Global Hint Resolve
   ktrans_guard ktrans_pure_pred: ctl.
 
 From CTree Require Import CTree.SBisim.
-Local Typeclasses Opaque equ.      
+Local Typeclasses Opaque equ.
+
+Local Typeclasses Opaque sbisim.
+Local Typeclasses Opaque equ.
+Lemma ktrans_sbisim_ret `{Encode E} {X Y}:
+  forall (t : ctree E X) (k: X -> ctree E Y) t' x w w',
+  t ~ Ret x ->
+  [x <- t;; k x, w] ↦ [t', w'] ->
+  [k x, w] ↦ [t', w'].
+Proof.
+  intros.
+  apply ktrans_bind_inv in H1.
+  __eplayR_sbisim.
+  pose proof (trans_val_inv TR).
+  cbn in H1.
+  rewrite <- H0 in TR.
+  clear EQ H0 x1.
+  unfold trans in TR.
+  remember (observe t) as T.
+  remember (observe stuck) as S.
+  remember (val x) as V.
+  clear HeqT t.
+  destruct H1 as [(t2 & TR2 & Hd & Eq2) |
+                   (y & w_ & TRr & ? & TRk)].
+  - induction TR; ddestruction HeqV.
+    + apply IHTR; auto.
+      now apply ktrans_guard in TR2.
+    + inv TR2; inv Hd.
+  - induction TR; ddestruction HeqV.
+    + apply IHTR; auto.
+      assert(TRr': [Guard t, w] ↦ [stuck, w_])
+        by now apply TRr. clear TRr.
+      rewrite ktrans_guard in TRr'.
+      apply TRr'.
+    + ddestruction TRr; ddestruction H1; auto.
+Qed.
+  
 Global Instance KripkeSetoidSBisim{E} {HE: Encode E} {X}:
     @KripkeSetoid (ctree E) E HE ctree_kripke X (sbisim eq) _.
 Proof.    
@@ -579,3 +615,5 @@ Proof.
     pose proof trans_val_inv H0.
     exists e, v, x; intuition.
 Defined.
+
+

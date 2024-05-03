@@ -277,26 +277,81 @@ Section BindLemmas.
     - (* AX done R *)
       apply ax_done in H as (Hw & x & Heq & H).
       intros.
+      specialize (Hk _ _ H); remember (k x) as K;
+        destruct Hk; try contradiction; subst.
       apply RStepA.
       + rewrite Heq, bind_ret_l; try (exact (equ eq)).
-        specialize (Hk _ _ H); destruct Hk; try contradiction; auto.
+        apply H0.
       + split.
         * rewrite Heq, bind_ret_l.
-          specialize (Hk _ _ H); remember (k x) as K; destruct Hk; try contradiction.
-          subst.
           now destruct H1.
         * intros t' w' TR.
-          apply (b_T (car_' (entailsF <( vis {φ} )>) (entailsF <( ⊥ )>))).
+          apply (id_T (car_' (entailsF <( vis {φ} )>) (entailsF <( ⊥ )>))).          
           cbn.
-          specialize (Hk _ _ H); remember (k x) as K; destruct Hk; try contradiction; subst;
-            destruct H1.
-          assert(TR': [k x, w] ↦ [t', w']) by admit. (* need to show from [t ~ Ret x] *)
-          
+          destruct H1.
+          apply H2.
+          eapply ktrans_sbisim_ret with (t:=t0); auto.
+    - (* vis φ *)
+      destruct H0, H1; clear H0.
+      destruct H1 as (t' & w' & TR).
+
+      (* HERE *)
+      cbn in TR, H3, H4.
+      cbn in H.
+      rewrite (ctree_eta t).      
+      remember (observe t) as T.
+      remember (observe t') as T'.
+      rewrite ctl_vis in H.
+      clear HeqT t HeqT' t'.
+      induction TR.
+      + rewrite bind_guard.
+        apply ag_guard.
+        rewrite (ctree_eta t).
+        apply IHTR; eauto.
+        * intros t_ w_ TR_.
+          setoid_rewrite ktrans_guard in H3.
+          setoid_rewrite ktrans_guard in H4.
+          now apply H3.
+        * intros t_ w_ TR_.
+          setoid_rewrite ktrans_guard in H3.
+          setoid_rewrite ktrans_guard in H4.
+          now apply H4.
+      + rewrite bind_br.
+        rewrite <- ag_br.
+        split; [auto|intro j].
+        apply H4.
+        apply ktrans_br.
+        exists j; intuition.
+      + rewrite bind_vis.
+        rewrite <- ag_vis with (v:=v).
+        split; auto. 
+        intro x.
+        apply H4.
+        apply ktrans_vis.
+        exists x; intuition.
+      + inv H.
+      + ddestruction H.
+        rewrite bind_ret_l.
+        assert(TR_:[Ret x, Obs e v] ↦ [stuck, Finish e v x])
+          by now apply ktrans_finish.
+        specialize (H4 Ctree.stuck (Finish e v x) TR_).
+        specialize (H3 Ctree.stuck (Finish e v x) TR_).
+        clear TR_.
+        inv H3; inv H.
+        now apply can_step_stuck in H2.
+      
+      apply H2.
+          cright.
+          apply H0.
+
           apply RStepA.
-          rewrite Heq in TR.
-          apply Hk.
-        apply H0.
-      assert (H: carF <( |- vis φ )> <( |- ⊥ )> 
+          -- rewrite ctl_vis in H0 |- *.
+             destruct H1.
+             specialize (H2 _ _ TR').
+             (* WHYYYYY cannot be proved from context *)
+             admit.
+          -- split.
+          assert (H: carF <( |- vis φ )> <( |- ⊥ )> 
 
       specialize (H0 _ _ H);
         step in H0; remember (k x) as K; destruct H0;
