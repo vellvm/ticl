@@ -105,40 +105,40 @@ Section Shallow.
   Set Elimination Schemes.
   
   (* Forall release *)
-  Variant carF (R p q: MP): MP :=
+  Variant carF (p q R: MP): MP :=
   | RMatchA: forall t w,       
       q t w ->  (* Matches [q] now; done *)
       p t w ->  (* Matches [p] as well *)
-      carF R p q t w
+      carF p q R t w
   | RStepA:  forall t w,
       p t w ->    (* Matches [p] now; steps to (t', s') *)
       cax R t w ->
-      carF R p q t w.
+      carF p q R t w.
 
   (* Exists release *)
-  Variant cerF (R p q: MP): MP :=
+  Variant cerF (p q R: MP): MP :=
   | RMatchE: forall t w,
       q t w ->       (* Matches [q] now; done *)
       p t w ->       (* Matches [p] as well *)
-      cerF R p q t w
+      cerF p q R t w
   | RStepE: forall t w,
       p t w ->    (* Matches [p] now; steps to (t', s') *)
       cex R t w ->
-      cerF R p q t w.
+      cerF p q R t w.
 
   Hint Constructors cau ceu carF cerF: core.
 
   (*| Global (coinductives) |*)
-  Program Definition car_: mon (MP -> MP -> MP) :=
-    {| body := fun R p q m => carF (R p q) p q m |}.
+  Program Definition car_ p q: mon MP :=
+    {| body := fun R m => carF p q R m |}.
   Next Obligation.
     repeat red; unfold impl; intros.
     destruct H0; auto; cbn in H0.
     apply RStepA; unfold cax in *; intuition.
   Qed.
   
-  Program Definition cer_: mon (MP -> MP -> MP) :=
-    {| body := fun R p q m => cerF (R p q) p q m |}.
+  Program Definition cer_ p q: mon MP :=
+    {| body := fun R m => cerF p q R m |}.
   Next Obligation.
     repeat red; unfold impl.
     intros.
@@ -165,8 +165,8 @@ Inductive ctlf (W: Type) `{HW: Encode W} : Type :=
 
 Arguments ctlf W {HW}.
 
-Notation car := (gfp car_).
-Notation cer := (gfp cer_).
+Notation car p q := (gfp (car_ p q)).
+Notation cer p q := (gfp (cer_ p q)).
 
 Section Entailment.
   Context `{KMS: Kripke M W} {X: Type}.
@@ -288,15 +288,15 @@ Module CtlNotations.
   Notation "p '<->' q" := (CAnd (CImpl p q) (CImpl q p)) (in custom ctl at level 77): ctl_scope.
 
   (* Companion notations *)
-  Notation cart := (t car_).
-  Notation cert := (t cer_).
-  Notation carbt := (bt car_).
-  Notation cerbt := (bt cer_).
-  Notation carT := (T car_).
-  Notation cerT := (T cer_).
-  Notation carbT := (bT car_).
-  Notation cwrbT := (bT car_).
-  Notation cerbT := (bT cer_).
+  Notation cart p q := (t (car_ p q)).
+  Notation cert p q := (t (cer_ p q)).
+  Notation carbt p q := (bt (car_ p q)).
+  Notation cerbt p q:= (bt (cer_ p q)).
+  Notation carT p q := (T (car_ p q)).
+  Notation cerT p q := (T (cer_ p q)).
+  Notation carbT p q := (bT (car_ p q)).
+  Notation cwrbT p q := (bT (car_ p q)).
+  Notation cerbT p q := (bT (cer_ p q)).
   #[global] Hint Constructors ceu cau carF cerF: ctl.
   
 End CtlNotations.

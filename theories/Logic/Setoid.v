@@ -172,52 +172,52 @@ Section EquivSetoid.
   Qed.
     
   (*| [meq] closure enchancing function |*)
-  Variant mequ_clos_body(R : MP -> MP -> MP) : MP -> MP -> MP :=
+  Variant mequ_clos_body(R : MP) : MP :=
     | mequ_clos_ctor : forall t0 w0 t1 w1
                          (Heqm : meq t0 t1)
                          (Heqw : w0 = w1)
-                         (HR : R P Q t1 w1),
-        mequ_clos_body R P Q t0 w0.
+                         (HR : R t1 w1),
+        mequ_clos_body R t0 w0.
   Hint Constructors mequ_clos_body: core.
 
   Arguments impl /.
-  Program Definition mequ_clos: mon (MP -> MP -> MP) :=
+  Program Definition mequ_clos: mon MP :=
     {| body := mequ_clos_body |}.
   Next Obligation. repeat red; intros; destruct H0; subst; eauto. Qed.
 
   Lemma mequ_clos_car:
-    mequ_clos <= cart.
+    mequ_clos <= cart P Q.
   Proof.
     apply Coinduction; cbn.
-    intros R p q t0 w0 [t1 w1 t2 w2 Heq -> ?];  inv HR. 
+    intros R t0 w0 [t1 w1 t2 w2 Heq -> ?];  inv HR. 
     - apply RMatchA; now rewrite Heq.
     - apply RStepA; intros.
       + now rewrite Heq. 
       + unfold cax; destruct H0 as [Hsm2 TR2]; split; cbn; cbn in Hsm2.
         * now rewrite Heq. 
         * intros t' w' TR.
-          eapply (f_Tf car_). 
+          eapply (f_Tf (car_ P Q)). 
           ktrans_equ TR.
           eapply mequ_clos_ctor with (t1:=z); eauto. 
   Qed.
 
   Lemma mequ_clos_cer:
-    mequ_clos <= cert.
+    mequ_clos <= cert P Q.
   Proof.    
     apply Coinduction; cbn.
-    intros R p q t0 w0 [t1 w1 t2 w2 Heq -> ?]; inv HR. 
+    intros R t0 w0 [t1 w1 t2 w2 Heq -> ?]; inv HR. 
     - apply RMatchE; now rewrite Heq. 
     - destruct H0 as (t' & w' & TR2 & ?).
       apply RStepE.
       + now rewrite Heq.
       + ktrans_equ TR2.
         exists z, w'; split; auto. 
-        eapply (f_Tf cer_).       
+        eapply (f_Tf (cer_ P Q)).       
         eapply mequ_clos_ctor with (t1:=t') (w1:=w'); eauto.
         now symmetry.
   Qed.
 
-  Global Add Parametric Morphism RR: (cart RR P Q) with signature
+  Global Add Parametric Morphism RR: (cart P Q RR) with signature
          (meq ==> eq ==> iff) as proper_art_equ.
   Proof.
     intros t t' Heqm w'; split; intro G; apply (ft_t mequ_clos_car).
@@ -226,7 +226,7 @@ Section EquivSetoid.
     - eapply mequ_clos_ctor with (t1:=t'); eauto.
   Qed.
   
-  Global Add Parametric Morphism RR f: (carT f RR P Q)
+  Global Add Parametric Morphism RR f: (carT P Q f RR)
          with signature (meq ==> eq ==> iff) as proper_arT_equ.
   Proof.
     intros t t' Heqt w'; split; intro G; apply (fT_T mequ_clos_car).
@@ -244,7 +244,7 @@ Section EquivSetoid.
     - eapply mequ_clos_ctor with (t1:=t'); eauto.
   Qed.      
 
-  Global Add Parametric Morphism RR: (cert RR P Q)
+  Global Add Parametric Morphism RR: (cert P Q RR)
          with signature (meq ==> eq ==> iff) as proper_ert_equ.
   Proof.
     intros t t' Heqt w'; split; intro G; apply (ft_t mequ_clos_cer).
@@ -253,7 +253,7 @@ Section EquivSetoid.
     - eapply mequ_clos_ctor with (t1:=t'); eauto.
   Qed.
 
-  Global Add Parametric Morphism RR f: (cerT f RR P Q)
+  Global Add Parametric Morphism RR f: (cerT P Q f RR)
          with signature (meq ==> eq ==> iff) as proper_erT_equ.
   Proof.
     intros t t' Heqt w'; split; intro G; apply (fT_T mequ_clos_cer).

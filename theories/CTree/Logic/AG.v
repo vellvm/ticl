@@ -237,7 +237,7 @@ Section BindLemmas.
 
   Notation MP X := (rel (ctree E X) (World E)).
   
-  Program Definition ag_bind_clos{X Y} φ Post : mon (rel (ctree E Y) (World E)) :=
+  Program Definition ag_bind_clos{X Y} φ Post : mon (MP Y) :=
     {| body R t w :=
         bind_ctx1
           (fun (t: ctree E X) => <( t, w |= vis φ AU (AX done Post) )>)
@@ -246,32 +246,18 @@ Section BindLemmas.
     |}.
   Next Obligation.
     revert H0.
-    apply leq_bind_ctx1; intros. 
+    apply leq_bind_ctx1; intros.
     apply in_bind_ctx1; eauto.
   Qed.
 
-  (* Here, I have to define a different monotone relation than [car_]
-     to specialize the formulas to [p, q]. Very annoying. *)
-  Program Definition car_'{X} p q : mon (rel (ctree E X) (World E)) :=
-    {| body R := carF R p q |}.
-  Next Obligation.
-    inv H0.
-    - apply RMatchA; auto.
-    - destruct H2.
-      apply RStepA; auto.
-      split; auto.
-  Qed.
-
-  Notation cart' p q := (t (car_' p q)).
-
   Lemma ag_bind_ag{X Y} φ Post:
-      ag_bind_clos (X:=X) (Y:=Y) φ Post <= cart' <( |- vis φ )> <( |- ⊥ )>.
-  Proof.
+      ag_bind_clos (X:=X) (Y:=Y) φ Post <= cart <( |- vis φ )> <( |- ⊥ )>.
+  Proof.    
     apply Coinduction.
     intros R t w; cbn.
     apply (leq_bind_ctx1 _ _
-             (fun t => carF (T (car_' (entailsF <( vis {φ} )>) (entailsF <( ⊥ )>)) (ag_bind_clos φ Post) R)
-    (entailsF <( vis {φ} )>) (entailsF <( ⊥ )>) t w)). 
+             (fun t => carF (entailsF <( vis {φ} )>) (entailsF <( ⊥ )>)
+    (carT (entailsF <( vis {φ} )>) (entailsF <( ⊥ )>) (ag_bind_clos φ Post) R) t w)). 
     intros x Hx k Hk.
     cinduction Hx.
     - (* AX done R *)
@@ -286,7 +272,7 @@ Section BindLemmas.
         * rewrite Heq, bind_ret_l.
           now destruct H1.
         * intros t' w' TR.
-          apply (id_T (car_' (entailsF <( vis {φ} )>) (entailsF <( ⊥ )>))).          
+          apply (id_T (car_ (entailsF <( vis {φ} )>) (entailsF <( ⊥ )>))).          
           cbn.
           destruct H1.
           apply H2.
@@ -294,133 +280,20 @@ Section BindLemmas.
     - (* vis φ *)
       destruct H0, H1; clear H0.
       destruct H1 as (t' & w' & TR).
-
-      (* HERE *)
-      cbn in TR, H3, H4.
-      cbn in H.
-      rewrite (ctree_eta t).      
-      remember (observe t) as T.
-      remember (observe t') as T'.
-      rewrite ctl_vis in H.
-      clear HeqT t HeqT' t'.
-      induction TR.
-      + rewrite bind_guard.
-        apply ag_guard.
-        rewrite (ctree_eta t).
-        apply IHTR; eauto.
-        * intros t_ w_ TR_.
-          setoid_rewrite ktrans_guard in H3.
-          setoid_rewrite ktrans_guard in H4.
-          now apply H3.
-        * intros t_ w_ TR_.
-          setoid_rewrite ktrans_guard in H3.
-          setoid_rewrite ktrans_guard in H4.
-          now apply H4.
-      + rewrite bind_br.
-        rewrite <- ag_br.
-        split; [auto|intro j].
-        apply H4.
-        apply ktrans_br.
-        exists j; intuition.
-      + rewrite bind_vis.
-        rewrite <- ag_vis with (v:=v).
-        split; auto. 
-        intro x.
-        apply H4.
-        apply ktrans_vis.
-        exists x; intuition.
-      + inv H.
-      + ddestruction H.
-        rewrite bind_ret_l.
-        assert(TR_:[Ret x, Obs e v] ↦ [stuck, Finish e v x])
-          by now apply ktrans_finish.
-        specialize (H4 Ctree.stuck (Finish e v x) TR_).
-        specialize (H3 Ctree.stuck (Finish e v x) TR_).
-        clear TR_.
-        inv H3; inv H.
-        now apply can_step_stuck in H2.
-      
-      apply H2.
-          cright.
-          apply H0.
-
-          apply RStepA.
-          -- rewrite ctl_vis in H0 |- *.
-             destruct H1.
-             specialize (H2 _ _ TR').
-             (* WHYYYYY cannot be proved from context *)
-             admit.
-          -- split.
-          assert (H: carF <( |- vis φ )> <( |- ⊥ )> 
-
-      specialize (H0 _ _ H);
-        step in H0; remember (k x) as K; destruct H0;
-        try contradiction.
-      destruct H1; subst.
-      next; split; auto; next; split; auto.
-    - destruct H1, H2; clear H2.
-      destruct H1 as (t' & w' & TR).
-      cbn in TR, H3, H4.
-      cbn in H.
-      rewrite (ctree_eta t).      
-      remember (observe t) as T.
-      remember (observe t') as T'.
-      rewrite ctl_vis in H.
-      clear HeqT t HeqT' t'.
-      induction TR.
-      + rewrite bind_guard.
-        apply ag_guard.
-        rewrite (ctree_eta t).
-        apply IHTR; eauto.
-        * intros t_ w_ TR_.
-          setoid_rewrite ktrans_guard in H3.
-          setoid_rewrite ktrans_guard in H4.
-          now apply H3.
-        * intros t_ w_ TR_.
-          setoid_rewrite ktrans_guard in H3.
-          setoid_rewrite ktrans_guard in H4.
-          now apply H4.
-      + rewrite bind_br.
-        rewrite <- ag_br.
-        split; [auto|intro j].
-        apply H4.
-        apply ktrans_br.
-        exists j; intuition.
-      + rewrite bind_vis.
-        rewrite <- ag_vis with (v:=v).
-        split; auto. 
-        intro x.
-        apply H4.
-        apply ktrans_vis.
-        exists x; intuition.
-      + inv H.
-      + ddestruction H.
-        rewrite bind_ret_l.
-        assert(TR_:[Ret x, Obs e v] ↦ [stuck, Finish e v x])
-          by now apply ktrans_finish.
-        specialize (H4 Ctree.stuck (Finish e v x) TR_).
-        specialize (H3 Ctree.stuck (Finish e v x) TR_).
-        clear TR_.
-        inv H3; inv H.
-        now apply can_step_stuck in H2.
-
-        
-    step in xx'.
-    cbn; unfold observe; cbn.
-    destruct xx'.
-    - cbn in *.
-      generalize (kk' _ _ H).
-      apply (fequ RR).
-      apply id_T.
-    - constructor; intros ?. apply (fTf_Tf (fequ _)).
-      apply in_bind_ctx2. apply H.
-      red; intros. apply (b_T (fequ _)), kk'; auto.
-    - constructor. apply (fTf_Tf (fequ _)).
-      apply in_bind_ctx2. apply H.
-      red; intros. apply (b_T (fequ _)), kk'; auto.
-    - constructor. intro a. apply (fTf_Tf (fequ _)).
-      apply in_bind_ctx2. apply H.
-      red; intros. apply (b_T (fequ _)), kk'; auto.
+      apply RStepA.
+      + apply H. 
+      + split.
+        * apply can_step_bind_l with t' w'; auto.
+          destruct (H3 _ _ TR); try contradiction.
+          destruct H1.
+          inv H0; constructor.
+        * intros k_ w_ TRk.
+          apply ktrans_bind_inv in TRk as [(t0' & TR0 & Hd_ & Heq) | ?].
+          -- (* [t0] steps and is not [Ret] *)
+            apply (fT_T (mequ_clos_car (KS:=KripkeSetoidEqu))).
+            cbn; eapply mequ_clos_ctor with (t1:=x <- t0';; k x) (w1:=w_); auto.
+            
+  Abort.
     
   (* [iter k x, w] *)
   (* [k] will terminate with postcondition [RR] and invariant [φ] *)

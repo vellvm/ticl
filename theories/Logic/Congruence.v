@@ -32,52 +32,6 @@ Section EquivCtlFormulas.
            as proper_equiv_ctl_entailsF.
   Proof. intro x; induction x; intros y EQφ; apply EQφ. Qed.
 
-  (*| Now we start proving congruence on formulas (1st argument) |*)
-  Variant equiv_ctl_clos_body (R : MP -> MP -> MP) : MP -> MP -> MP :=
-    | equiv_ctl_clos_ctor : forall t0 w0 p0 p1 q0 q1
-                              (Heqp: forall t w, p0 t w <-> p1 t w)
-                              (Heqq: forall t w, q0 t w <-> q1 t w)
-                              (HR : R p1 q1 t0 w0),
-        equiv_ctl_clos_body R p0 q0 t0 w0.
-  Hint Constructors equiv_ctl_clos_body: core. 
-
-  Arguments impl /.
-  Program Definition equiv_ctl_clos: mon (MP -> MP -> MP) :=
-    {| body := equiv_ctl_clos_body |}.
-  Next Obligation. repeat red; intros; destruct H0; eauto. Qed.
-
-  Lemma equiv_ctl_clos_car:
-    equiv_ctl_clos <= cart.
-  Proof.    
-    apply Coinduction; cbn.
-    intros R p q t0 w0 [t1 t2 p1 p2 q1 q2]; inv HR. 
-    - apply RMatchA.
-      + now rewrite Heqq. 
-      + now rewrite Heqp.
-    - apply RStepA; intros.
-      + now rewrite Heqp.
-      + unfold cax; destruct H0 as [Hsm2 TR2]; split; cbn; cbn in Hsm2; auto.
-        intros t' w' TR.
-        eapply (f_Tf car_).
-        eapply equiv_ctl_clos_ctor; eauto. 
-  Qed.
-
-  Lemma equiv_ctl_clos_cer:
-    equiv_ctl_clos <= cert.
-  Proof.    
-    apply Coinduction; cbn.
-    intros R p q t0 w0 [t1 t2 p1 p2 q1 q2]; inv HR.
-    - apply RMatchE.
-      + now rewrite Heqq.
-      + now rewrite Heqp.
-    - destruct H0 as (t' & w' & TR2 & ?).
-      apply RStepE.
-      + now rewrite Heqp.
-      + exists t', w'; split; auto. 
-        eapply (f_Tf cer_).       
-        eapply equiv_ctl_clos_ctor; eauto. 
-  Qed.
-
   Arguments CAnd {W} {HW}.
   (*| Congruences over equiv_ctl |*)
   Global Add Parametric Morphism: CAnd
@@ -165,100 +119,26 @@ Section EquivCtlFormulas.
       + exact H1.
   Qed.
 
-  Global Add Parametric Morphism RR:
-    (fun p q => cart RR (entailsF p) (entailsF q)) with signature
-         (equiv_ctl ==> equiv_ctl ==> @eq (M X) ==> eq ==> iff) as proper_equivctl_art.
-  Proof.
-    intros p q Hpq p' q' Hpq'; split; intro G;
-    eapply (ft_t equiv_ctl_clos_car). 
-    - eapply equiv_ctl_clos_ctor with (p1:=entailsF p) (q1:=entailsF p');
-        auto; now symmetry.
-    - eapply equiv_ctl_clos_ctor with (p1:=entailsF q) (q1:=entailsF q');
-        auto; now symmetry.
-  Qed.
-
-  Global Add Parametric Morphism:
-    (fun p q => car (entailsF p) (entailsF q)) with signature
-         (equiv_ctl ==> equiv_ctl ==> @eq (M X) ==> eq ==> iff) as proper_equivctl_ar.
-  Proof.
-    intros p q Hpq p' q' Hpq'; split; intro G;
-    eapply (ft_t equiv_ctl_clos_car). 
-    - eapply equiv_ctl_clos_ctor with (p1:=entailsF p) (q1:=entailsF p');
-        auto; now symmetry.
-    - eapply equiv_ctl_clos_ctor with (p1:=entailsF q) (q1:=entailsF q');
-        auto; now symmetry.
-  Qed.
-  
-  Global Add Parametric Morphism RR f:
-     (fun p q => carT f RR (entailsF p) (entailsF q)) with signature
-         (equiv_ctl ==> equiv_ctl ==> @eq (M X) ==> eq ==> iff) as proper_equivctl_arT.
-  Proof.
-    intros p q Hpq p' q' Hpq'; split; intro G;
-    eapply (fT_T equiv_ctl_clos_car). 
-    - eapply equiv_ctl_clos_ctor with (p1:=entailsF p) (q1:=entailsF p');
-        auto; now symmetry.
-    - eapply equiv_ctl_clos_ctor with (p1:=entailsF q) (q1:=entailsF q');
-        auto; now symmetry.
-  Qed.
-
   Arguments CAR {W} {HW}.
   Global Add Parametric Morphism: CAR with signature
-         (equiv_ctl ==> equiv_ctl ==> equiv_ctl) as proper_equivctl_AR.
+         (equiv_ctl ==> equiv_ctl ==> equiv_ctl)
+           as proper_equivctl_ar.
   Proof.
     intros.
     unfold equiv_ctl.
-    intros t w.
-    change (<( ?t, ?w |= ?x AR ?y )>) with (car (entailsF x) (entailsF y) t w).
-    apply proper_equivctl_ar; auto.
-  Qed.
+    split; revert t w; coinduction R CIH; intros.
+  Admitted.
   
-  Global Add Parametric Morphism RR:
-    (fun p q => cert RR (entailsF p) (entailsF q)) with signature
-         (equiv_ctl ==> equiv_ctl ==> @eq (M X) ==> eq ==> iff) as proper_equivctl_ert.
-  Proof.
-    intros p q Hpq p' q' Hpq'; split; intro G;
-    eapply (ft_t equiv_ctl_clos_cer). 
-    - eapply equiv_ctl_clos_ctor with (p1:=entailsF p) (q1:=entailsF p');
-        auto; now symmetry.
-    - eapply equiv_ctl_clos_ctor with (p1:=entailsF q) (q1:=entailsF q');
-        auto; now symmetry.
-  Qed.
-
-  Global Add Parametric Morphism:
-    (fun p q => cer (entailsF p) (entailsF q)) with signature
-         (equiv_ctl ==> equiv_ctl ==> @eq (M X) ==> eq ==> iff) as proper_equivctl_er.
-  Proof.
-    intros p q Hpq p' q' Hpq'; split; intro G;
-    eapply (ft_t equiv_ctl_clos_cer). 
-    - eapply equiv_ctl_clos_ctor with (p1:=entailsF p) (q1:=entailsF p');
-        auto; now symmetry.
-    - eapply equiv_ctl_clos_ctor with (p1:=entailsF q) (q1:=entailsF q');
-        auto; now symmetry.
-  Qed.
-
-  Global Add Parametric Morphism RR f:
-     (fun p q => cerT f RR (entailsF p) (entailsF q)) with signature
-         (equiv_ctl ==> equiv_ctl ==> @eq (M X) ==> eq ==> iff) as proper_equivctl_erT.
-  Proof.
-    intros p q Hpq p' q' Hpq'; split; intro G;
-    eapply (fT_T equiv_ctl_clos_cer). 
-    - eapply equiv_ctl_clos_ctor with (p1:=entailsF p) (q1:=entailsF p');
-        auto; now symmetry.
-    - eapply equiv_ctl_clos_ctor with (p1:=entailsF q) (q1:=entailsF q');
-        auto; now symmetry.
-  Qed.
-
   Arguments CER {W} {HW}.
   Global Add Parametric Morphism: CER with signature
          (equiv_ctl ==> equiv_ctl ==> equiv_ctl)
-           as proper_equivctl_ER.
+           as proper_equivctl_er.
   Proof.
     intros.
     unfold equiv_ctl.
-    intros t w.
-    change (<( ?t, ?w |= ?x ER ?y )>) with (cer (entailsF x) (entailsF y) t w).
-    apply proper_equivctl_er; auto.
-  Qed.
+    split; revert t w; coinduction R CIH; intros.
+  Admitted.
+  
 End EquivCtlFormulas.
 
 (*| Equations of CTL |*)
