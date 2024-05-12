@@ -2,50 +2,15 @@
 
 From Coq Require Import Fin.
 From Coq Require Export Program.Equality.
-From Coinduction Require Import
-	coinduction rel tactics.
+From Coinduction Require Import all.
 From ITree Require Import Basics.Basics.
 
 Notation fin := Fin.t.
-
-#[global] Arguments bt : simpl never.
-Ltac next := unfold bt; cbn.
-Tactic Notation "cbn*" := next.
 
 Polymorphic Class MonadTrigger (E : Type -> Type) (M : Type -> Type) : Type :=
   mtrigger : forall {X}, E X -> M X.
 
 Notation rel X Y := (X -> Y -> Prop).
-
-Lemma t_gfp_bt : forall {X} `{CompleteLattice X} (b : mon X),
-  t b (gfp (bt b)) == gfp b.
-Proof.
-  intros. cbn.
-  rewrite <- enhanced_gfp. rewrite t_gfp.
-  reflexivity.
-Qed.
-
-#[global] Instance t_weq : forall {X Y},
-  Proper (weq ==> weq) (@t (rel X Y) _).
-Proof.
-  split; repeat red; intros.
-  - destruct H0. exists x0; auto.
-    repeat red. intros.
-    apply H. apply H0.
-    eapply (Hbody x0). { cbn. red. intros. apply H. apply H3. }
-    apply H2.
-  - destruct H0. exists x0; auto.
-    repeat red. intros.
-    apply H. apply H0.
-    eapply (Hbody x0). { cbn. red. intros. apply H. apply H3. }
-    apply H2.
-Qed.
-
-#[global] Instance gfp_weq : forall {X Y},
-  Proper (weq ==> weq) (@gfp (rel X Y) _).
-Proof.
-  intros. intros ? ? ?. now apply t_weq.
-Qed.
 
 Ltac invert :=
   match goal with
@@ -71,15 +36,9 @@ Ltac break_match_in H :=
 
 Ltac step_ :=
   match goal with
-  | |- gfp ?b ?x ?y ?z => apply (proj2 (gfp_fp b x y z))
-  | |- body (t ?b) ?R ?x ?y ?z => apply (bt_t b R x y z)
-  | |- body (body (T ?b) ?f) ?R ?x ?y ?z => apply (bT_T b f R x y z)
-  | |- gfp ?b ?x ?y => apply (proj2 (gfp_fp b x y))
-  | |- body (t ?b) ?R ?x ?y => apply (bt_t b R x y)
-  | |- body (body (T ?b) ?f) ?R ?x ?y => apply (bT_T b f R x y)
-  | |- gfp ?b ?x => apply (proj2 (gfp_fp b x))
-  | |- body (t ?b) ?R ?x => apply (bt_t b R x)
-  | |- body (body (T ?b) ?f) ?R ?x => apply (bT_T b f R x)
+  | |- gfp ?b ?x ?y ?z => apply (proj1 (gfp_fp b x y z))
+  | |- gfp ?b ?x ?y => apply (proj1 (gfp_fp b x y))
+  | |- gfp ?b ?x => apply (proj1 (gfp_fp b x))
   end.
 
 Ltac step := first [step_ | red; step_].
@@ -87,11 +46,8 @@ Ltac step := first [step_ | red; step_].
 Ltac step_in H :=
   match type of H with
   | gfp ?b ?x ?y ?z => apply (gfp_fp b x y z) in H
-  | body (t ?b) ?R ?x ?y ?z => apply (bt_t b R x y z) in H
   | gfp ?b ?x ?y => apply (gfp_fp b x y) in H
-  | body (t ?b) ?R ?x ?y => apply (bt_t b R x y) in H
   | gfp ?b ?x => apply (gfp_fp b x) in H
-  | body (t ?b) ?R ?x => apply (bt_t b R x) in H
   | _ => red in H; step_in H
   end.
 Tactic Notation "step" "in" ident(H) := step_in H.

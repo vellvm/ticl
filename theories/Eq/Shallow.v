@@ -93,7 +93,7 @@ Lemma bind_ret_ {E B R S} (r : R) (k : R -> ctree E B S) :
   observing eq (CTree.bind (Ret r) k) (k r).
 Proof. constructor; reflexivity. Qed.
 
-Lemma bind_Guard_ {E B R} `{B1 -< B} U t (k: U -> ctree E B R) :
+Lemma bind_Guard_ {E B R} U t (k: U -> ctree E B R) :
   observing eq (CTree.bind (Guard t) k) (Guard (CTree.bind t k)).
 Proof. constructor; reflexivity. Qed.
 
@@ -105,15 +105,15 @@ Proof. constructor; reflexivity. Qed.
 
 (** Unfolding lemma for [aloop]. There is also a variant [unfold_aloop]
     without [Tau]. *)
-Lemma unfold_aloop_ {E B X Y} `{B1 -< B} (f : X -> ctree E B (X + Y)) (x : X) :
+Lemma unfold_aloop_ {E B X Y} (f : X -> ctree E B (X + Y)) (x : X) :
   observing eq
     (CTree.iter f x)
     (CTree.bind (f x) (fun lr => CTree.on_left lr l (Guard (CTree.iter f l)))).
 Proof. constructor; reflexivity. Qed.
 
 (** Unfolding lemma for [forever]. *)
-Lemma unfold_forever_ {E B R} `{B1 -< B} (k: R -> ctree E B R) (i: R):
-  observing eq (@CTree.forever B _ _ R k i) (CTree.bind (k i) (fun i => Guard (CTree.forever k i))).
+Lemma unfold_forever_ {E B R} (k: R -> ctree E B R) (i: R):
+  observing eq (@CTree.forever B _ R k i) (CTree.bind (k i) (fun i => Guard (CTree.forever k i))).
 Proof. constructor; reflexivity. Qed.
 
 (** ** [going]: Lift relations through [go]. *)

@@ -66,11 +66,14 @@ TODO YZ:
 
 .. coq::
 |*)
-  
+
   Variant ctreeF (ctree : Type): Type :=
-    | RetF (r : R)                                        (* a pure computation *)
-    | VisF {X : Type} (e : E X) (k : X -> ctree)     (* an external event *)
-    | BrF (vis : bool) {X : Type} (c : B X) (k : X -> ctree) (* an internal non-deterministic branching *)
+    | RetF   (r : R)                                      (* a pure computation *)
+    | StuckF
+    | StepF  (t : ctree)
+    | GuardF (t : ctree)
+    | VisF {X : Type} (e : E X) (k : X -> ctree)           (* an external event *)
+    | BrF {X : Type} (c : B X) (k : X -> ctree)            (* an internal non-deterministic branching *)
   .
 
   CoInductive ctree : Type :=
@@ -89,7 +92,9 @@ Local Open Scope ctree_scope.
 
 Arguments ctree _ _ : clear implicits.
 Arguments ctreeF _ _ : clear implicits.
-Arguments BrF {E B R} [ctree] vis {X} c k.
+Arguments BrF {E B R} [ctree] {X} c k.
+Arguments StepF {E B R} [ctree] t.
+Arguments GuardF {E B R} [ctree] t.
 
 (*|
 A [ctree'] is a "forced" [ctree]. It is the type of inputs
@@ -107,19 +112,24 @@ We wrap the primitive projection [_observe] in a function [observe].
 Definition observe {E B R} (t : ctree E B R) : ctree' E B R := @_observe E B R t.
 
 Notation Ret x        := (go (RetF x)).
+Notation Stuck        := (go StuckF).
+Notation Guard t      := (go (GuardF t)).
+Notation Step t       := (go (StepF t)).
 Notation Vis e k      := (go (VisF e k)).
-Notation Br b n k     := (go (BrF b n k)).
-Notation BrS n k      := (go (BrF true n k)).
-Notation BrD n k      := (go (BrF false n k)).
-Notation BrSF         := (BrF true).
-Notation BrDF         := (BrF false).
+Notation Br n k       := (go (BrF n k)).
+Notation BrS n k      := (go (BrF n (fun x => Step (k x)))).
+(* Notation BrS n k      := (go (BrF true n k)). *)
+(* Notation BrD n k      := (go (BrF false n k)). *)
+(* Notation BrSF         := (BrF true). *)
+(* Notation BrDF         := (BrF false). *)
 
 Notation vis e k      := (Vis (subevent _ e) k).
-Notation br b c k     := (Br b (subevent _ c) k).
-Notation brS c k      := (br true c k).
-Notation brD c k      := (br false c k).
-Notation brSF c       := (BrSF (subevent _ c)).
-Notation brDF c       := (BrDF (subevent _ c)).
+Notation br c k       := (Br (subevent _ c) k).
+Notation brF c        := (BrF (subevent _ c)).
+Notation brS c k      := (BrS (subevent _ c) k).
+(* Notation brD c k      := (br false c k). *)
+(* Notation brSF c       := (BrSF (subevent _ c)). *)
+(* Notation brDF c       := (BrDF (subevent _ c)). *)
 
 Section Branching.
 
@@ -127,69 +137,52 @@ Section Branching.
   Context {R : Type}.
 
 (*|
-Silent failure: contrary to an event-based failure, this
-stuck state cannot be observed, it will be indistinguishable
-from [spin] w.r.t. the bisimulations introduced.
-|*)
-  Definition stuck `{B0 -< B} vis : ctree E B R :=
-    br vis branch0 (fun x : void => match x with end).
-
-(*|
-Guards similar to [itree]'s taus.
-|*)
-  Definition Guard `{B1 -< B} t : ctree E B R :=
-    brD branch1 (fun _ => t).
-
-  Definition Step `{B1 -< B} t : ctree E B R :=
-    brS branch1 (fun _ => t).
-
-(*|
 Bounded branching
 |*)
-  Definition brD2 `{B2 -< B} t u : ctree E B R :=
-    brD branch2 (fun b => if b : bool then t else u).
+  Definition br2 `{B2 -< B} t u : ctree E B R :=
+    br branch2 (fun b => if b : bool then t else u).
   Definition brS2 `{B2 -< B} t u : ctree E B R :=
     brS branch2 (fun b => if b : bool then t else u).
-  Definition brD3 `{B3 -< B} t u v : ctree E B R :=
-    brD branch3 (fun n => match n with
-                           | t31 => t
-                           | t32 => u
-                           | t33 => v
-                           end).
+  Definition br3 `{B3 -< B} t u v : ctree E B R :=
+    br branch3 (fun n => match n with
+                      | t31 => t
+                      | t32 => u
+                      | t33 => v
+                      end).
   Definition brS3 `{B3 -< B} t u v : ctree E B R :=
     brS branch3 (fun n => match n with
-                           | t31 => t
-                           | t32 => u
-                           | t33 => v
-                           end).
-  Definition brD4 `{B4 -< B} t u v w : ctree E B R :=
-    brD branch4 (fun n => match n with
-                           | t41 => t
-                           | t42 => u
-                           | t43 => v
-                           | t44 => w
-                           end).
+                       | t31 => t
+                       | t32 => u
+                       | t33 => v
+                       end).
+  Definition br4 `{B4 -< B} t u v w : ctree E B R :=
+    br branch4 (fun n => match n with
+                      | t41 => t
+                      | t42 => u
+                      | t43 => v
+                      | t44 => w
+                      end).
   Definition brS4 `{B4 -< B} t u v w : ctree E B R :=
     brS branch4 (fun n => match n with
-                           | t41 => t
-                           | t42 => u
-                           | t43 => v
-                           | t44 => w
-                           end).
+                       | t41 => t
+                       | t42 => u
+                       | t43 => v
+                       | t44 => w
+                       end).
 
 (*|
 Finite branch
 |*)
-  Definition brDn `{Bn -< B} n k : ctree E B R :=
-    brD (branchn n) k.
+  Definition brn `{Bn -< B} n k : ctree E B R :=
+    br (branchn n) k.
   Definition brSn `{Bn -< B} n k : ctree E B R :=
     brS (branchn n) k.
 
 (*|
 Countable branch
 |*)
-  Definition brIN `{BN -< B} k : ctree E B R :=
-    brD branchN k.
+  Definition brN `{BN -< B} k : ctree E B R :=
+    br branchN k.
   Definition brSN `{BN -< B} k : ctree E B R :=
     brS branchN k.
 
@@ -257,8 +250,11 @@ as long as the recursive occurences are in the continuation
       cofix _subst (u : ctree E B T) : ctree E B U :=
         match observe u with
         | RetF r => k r
+        | StuckF  => Stuck
+        | GuardF t => Guard (_subst t)
+        | StepF t => Step (_subst t)
         | VisF e h => Vis e (fun x => _subst (h x))
-        | BrF b n h => Br b n (fun x => _subst (h x))
+        | BrF n h => Br n (fun x => _subst (h x))
         end.
 
     Definition bind {T U : Type} (u : ctree E B T) (k : T -> ctree E B U)
@@ -292,8 +288,11 @@ Atomic itrees triggering a single event.
 Atomic ctrees with choice.
 |*)
 
-    Definition branch b {X : Type} : forall (c : B X), ctree E B X :=
-      fun c => Br b c (fun x => Ret x).
+    Definition branch {X : Type} : forall (c : B X), ctree E B X :=
+      fun c => Br c (fun x => Ret x).
+
+    Definition branchS {X : Type} : forall (c : B X), ctree E B X :=
+      fun c => BrS c (fun x => Ret x).
 
 (*|
 Ignore the result of a tree.
@@ -331,9 +330,8 @@ unary choices are available.
   Section withGuard.
 
     Context {E B : Type -> Type}.
-    Context `{B1 -< B}.
 
-    CoFixpoint spinD {R} : ctree E B R := Guard spinD.
+    CoFixpoint spin  {R} : ctree E B R := Guard spin.
     CoFixpoint spinS {R} : ctree E B R := Step spinS.
 (*|
 Repeat a computation infinitely.
@@ -341,6 +339,9 @@ Repeat a computation infinitely.
 
     Definition forever {E R} (k: R -> ctree E B R): R -> ctree E B R :=
       cofix F i := bind (k i) (fun i => Guard (F i)).
+
+    Definition foreverS {E R} (k: R -> ctree E B R): R -> ctree E B R :=
+      cofix F i := bind (k i) (fun i => Step (F i)).
 
 (*|
 [iter]: See [Basics.Basics.MonadIter].
@@ -352,14 +353,18 @@ infinite loop if [step i] is always of the form [Ret (inl _)] (cf. issue #182).
       (step : I -> ctree E B (I + R)) : I -> ctree E B R :=
       cofix iter_ i := bind (step i) (fun lr => on_left lr l (Guard (iter_ l))).
 
+    Definition iterS {R I: Type}
+      (step : I -> ctree E B (I + R)) : I -> ctree E B R :=
+      cofix iter_ i := bind (step i) (fun lr => on_left lr l (Step (iter_ l))).
+
   End withGuard.
 
 (*|
 Infinite taus.
 |*)
 
-  CoFixpoint spinD_gen {E C R X} (x : C X) : ctree E C R :=
-	  BrD x (fun _ => spinD_gen x).
+  CoFixpoint spin_gen {E C R X} (x : C X) : ctree E C R :=
+	  Br x (fun _ => spin_gen x).
   CoFixpoint spinS_gen {E C R X} (x : C X) : ctree E C R :=
 	  BrS x (fun _ => spinS_gen x).
 
@@ -373,12 +378,7 @@ Infinite taus.
 
 End CTree.
 
-Notation branch b c := (CTree.branch b (subevent _ c)).
-Notation branchD c := (CTree.branch false (subevent _ c)).
-Notation branchS c := (CTree.branch true (subevent _ c)).
 Notation trigger e := (CTree.trigger (subevent _ e)).
-Notation stuckD := (stuck false).
-Notation stuckS := (stuck true).
 
 (*|
 =========
@@ -417,8 +417,8 @@ Instances
 ;  bind := @CTree.bind E B
 |}.
 
-#[global] Instance MonadIter_ctree {E B} `{B1 -< B} : MonadIter (ctree E B) :=
-  fun R I => @CTree.iter E B _ R I.
+#[global] Instance MonadIter_ctree {E B} : MonadIter (ctree E B) :=
+  fun R I => @CTree.iter E B R I.
 
 (* #[global] Instance MonadTrigger_ctree {E B} : MonadTrigger E (ctree E B) | 1 := *)
 (*   @CTree.trigger _ _. *)
@@ -429,8 +429,8 @@ Instances
 (* #[global] Instance MonadBr_ctree {E B} : MonadBr B (ctree E B) | 1 := *)
 (*   @CTree.branch _ _. *)
 
-#[global] Instance MonadBr_ctree {E C D} `{C -< D} : MonadBr C (ctree E (B01 +' D)) :=
-  fun b _ c => branch b c.
+(* #[global] Instance MonadBr_ctree {E C D} `{C -< D} : MonadBr C (ctree E D). *)
+(*   fun b _ c => @CTree.branch E B  c. *)
 
 (*|
 ====================================
@@ -449,12 +449,12 @@ Proof. intro H. now dependent destruction H. Qed.
 Lemma Vis_eq2 E C R T Y e k f h: @VisF E C R T Y e k = @VisF E C R T Y f h -> e=f /\ k=h.
 Proof. intro H. now dependent destruction H. Qed.
 
-Lemma Br_eq1 E B R T b b' Y Z c c' k h:
-  @BrF E B R T b Y c k = @BrF E B R T b' Z c' h -> b = b' /\ Y = Z.
+Lemma Br_eq1 E B R T Y Z c c' k h:
+  @BrF E B R T Y c k = @BrF E B R T Z c' h -> Y = Z.
 Proof. intro H. now dependent destruction H. Qed.
 
-Lemma Br_eq2 E B R T b Y c c' k h:
-  @BrF E B R T b Y c k = @BrF E B R T b Y c' h -> c = c' /\ k = h.
+Lemma Br_eq2 E B R T Y c c' k h:
+  @BrF E B R T Y c k = @BrF E B R T Y c' h -> c = c' /\ k = h.
 Proof. intro H. now dependent destruction H. Qed.
 
 (*|
@@ -494,17 +494,16 @@ Compute with fuel
 
 Remove [Guard]s and [Step]s from the front of an [ctree].
 |*)
-Fixpoint burn (n : nat) {E B : Type -> Type} {R} (t : ctree E (B01 +' B) R) : ctree E (B01 +' B) R :=
+Fixpoint burn (n : nat) {E B : Type -> Type} {R} (t : ctree E B R) : ctree E B R :=
   match n with
   | 0 => t
   | S n =>
       match observe t with
       | RetF r => Ret r
+      | StuckF => Stuck
+      | GuardF t => burn n t
+      | StepF t => burn n t
       | VisF e k => Vis e k
-      | BrF b (inl1 (inr1 c)) k =>
-          match c in (B1 T) return (T -> _) -> _ with
-          | branch1 => fun k => burn n (k tt)
-          end k
-      | BrF b c k => Br b c k
+      | BrF c k => Br c (fun x => burn n (k x))
       end
   end.
