@@ -44,12 +44,12 @@ Variant done_with `{Encode E} {X} (R: X -> World E -> Prop): World E -> Prop :=
       R x (Obs e v) -> done_with R (Finish e v x).
 Global Hint Constructors done_with: ctl.
 
-Variant vis_with `{Encode E} R : World E -> Prop :=
+Variant vis_with `{Encode E} (R: forall e, encode e -> Prop) : World E -> Prop :=
   | VisWithVis: forall (e: E) (v: encode e),
       R e v -> vis_with R (Obs e v).
 Global Hint Constructors vis_with: ctl.
 
-Definition finish_with `{Encode E} {X} R: World E -> Prop :=
+Definition finish_with `{Encode E} {X} (R: forall e, encode e -> X -> Prop): World E -> Prop :=
   done_with (fun (x: X) w => exists (e: E) (v: encode e),
                  w = Obs e v /\ R e v x).
 Global Hint Unfold finish_with: ctl.

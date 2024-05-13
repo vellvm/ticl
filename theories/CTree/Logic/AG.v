@@ -15,6 +15,7 @@ From CTree Require Import
   Logic.Setoid
   CTree.Logic.AX
   Logic.Ctl
+  Logic.Tactics
   Logic.Kripke.
 
 Generalizable All Variables.
@@ -41,7 +42,7 @@ Section BasicLemmas.
       + next; split; inv Hd.
         * apply can_step_vis... 
         * intros.
-          apply ktrans_vis in H0 as (i & -> & <- & ?)...
+          apply ktrans_vis in H1 as (i & -> & <- & ?)...
     - next in H.
       destruct H, H0.    
       apply can_step_not_done in H0. 
@@ -166,7 +167,8 @@ Section BindLemmas.
         try contradiction.
       destruct H1; subst.
       next; split; auto; next; split; auto.
-    - destruct H1, H2; clear H2.
+    - (* AG vis φ *)
+      destruct H1, H2; clear H2.
       destruct H1 as (t' & w' & TR).
       cbn in TR, H3, H4.
       cbn in H.
@@ -209,8 +211,8 @@ Section BindLemmas.
         specialize (H4 Ctree.stuck (Finish e v x) TR_).
         specialize (H3 Ctree.stuck (Finish e v x) TR_).
         clear TR_.
-        inv H3; inv H.
-        now apply can_step_stuck in H2.
+        inv H3; inv H2.
+        now apply can_step_stuck in H3.
   Qed.
 
   Lemma ag_iter_l{X I}: forall (k: I -> ctree E (I + X)) i w (x: I) φ,
@@ -257,7 +259,8 @@ Section BindLemmas.
     intros R t w; cbn.
     apply (leq_bind_ctx1 _ _
              (fun t => carF (entailsF <( vis {φ} )>) (entailsF <( ⊥ )>)
-    (carT (entailsF <( vis {φ} )>) (entailsF <( ⊥ )>) (ag_bind_clos φ Post) R) t w)). 
+                      (carT (entailsF <( vis {φ} )>) (entailsF <( ⊥ )>)
+                         (ag_bind_clos φ Post) R) t w)). 
     intros x Hx k Hk.
     cinduction Hx.
     - (* AX done R *)
@@ -292,40 +295,26 @@ Section BindLemmas.
           -- (* [t0] steps and is not [Ret] *)
             apply (fT_T (mequ_clos_car (KS:=KripkeSetoidEqu))).
             cbn; eapply mequ_clos_ctor with (t1:=x <- t0';; k x) (w1:=w_); auto.
+            clear Heq k_.            
+            eapply (fTf_Tf (car_ <( |- vis φ )> <( |- ⊥ )>)).
+            apply in_bind_ctx1.
+            ++ rewrite unfold_entailsF.
+               now apply H2.
+            ++ intros.
+               apply (b_T (car_ <( |- vis φ )> <( |- ⊥ )>)).
+               cbn.
+               now apply Hk.
+          -- (* [t0] steps and is [Ret], contradiction *)
+            destruct H0 as (x & w0 & TRt0 & Hd & TRk).
+            ddestruction Hd; subst;
             
-  Abort.
-    
-  (* [iter k x, w] *)
-  (* [k] will terminate with postcondition [RR] and invariant [φ] *)
-  (* [x: I] *)
-  (* AG <--> AF *)
-  (* vis φ <--> done Rr *)
-  Lemma ag_iter{X I}: forall (k: I -> ctree E (I + X)) w (x: I) φ R,
-      vis_with φ w -> (* Worlds invariant: [w = Obs e v /\ φ e v] *)
-      R x ->          (* Iterator invariant: [x] in [R] *)
-      (forall (i: I) w,
-          R i ->
-          vis_with φ w ->
-          <( {k i}, w |= (vis φ) AU (AX done
-               {fun (lr: I+X) w => exists i', lr = inl i' /\ vis_with φ w /\ R i'}) )>) ->
-      <( {iter k x}, w |= AG vis φ )>.
-  Proof.
-    intros.
-    rewrite sb_unfold_iter.
-    apply ag_bind_r with (R:=fun (lr : I + X) (w : World E) =>
-                               exists i' : I, lr = inl i' /\ vis_with φ w /\ R i'); auto.
-    intros [? | r] w' (l & Hinv & ? & ?); inv Hinv.    
-    pose proof (H1 _ _ H3 H2) as H1'.
-    remember (k l) as K.
-    cinduction H1'; intros; subst.
-    - apply ax_done in H4 as (Hd & ? & Heqk & (j & -> & ? & ?)).
-      rewrite sb_unfold_iter.
-      rewrite Heqk, bind_ret_l.
-      rewrite sb_unfold_iter.
-      apply ag_bind_r with (R:=fun (lr : I + X) (w : World E) =>
-                                 exists i' : I, lr = inl i' /\ vis_with φ w /\ R i'); auto.
-      intros [? | r] w' (l' & Hinv & ? & ?); inv Hinv.    
-  Abort.
+              specialize (H3 _ _ TRt0); ddestruction H3;
+              try contradiction;
+              destruct H1, H0;
+              rewrite can_step_bind in H1;
+              destruct H1 as [(? & ? & TRinv & ?) | (? & ? & TRinv & ?)];
+              now apply ktrans_stuck in TRinv.
+  Qed.
 
   Lemma ag_iter{X I}: forall (k: I -> ctree E (I + X)) w (x: I) φ R,
       vis_with φ w -> (* Worlds invariant: [w = Obs e v /\ φ e v] *)
@@ -333,15 +322,20 @@ Section BindLemmas.
       (forall (i: I) w,
           R i ->
           vis_with φ w ->
-          <( {k i}, w |= (vis φ) AU (AX done
-               {fun (lr: I+X) w => exists i', lr = inl i' /\ vis_with φ w /\ R i'}) )>) ->
+          <( {k i}, w |= (vis φ) AU AX (finish
+            {fun  (e: E) (v: encode e) (lr: I+X) =>
+               exists i', lr = inl i' /\ φ e v /\ R i'}) )>) ->
       <( {iter k x}, w |= AG vis φ )>.
   Proof.
     (* Coinduction steps *)
-    coinduction RR CIH.
     intros.
-    apply RStepA; auto.
-    split.
+    coinduction RR CIH.
+    specialize (H1 _ _ H0 H).
+    remember (k x) as K; cinduction H1; subst.
+    - destruct H1 as [(K' & wk & TRk) ?].
+      destruct (H1 _ _ TRk);
+        destruct H2 as (e' & v' & Hinv & HR); ddestruction Hinv.
+      + destruct HR as (? & -> & Hφ & HR).
     - (* Not true, counter-example [k = fun x => Ret (inl x)] *)
   Admitted.
 
