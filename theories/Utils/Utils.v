@@ -8,8 +8,6 @@ From Coq Require Import Program.Tactics.
 
 From Coinduction Require Import coinduction.
 
-From ITree Require Import Basics.Basics.
-
 Generalizable All Variables.
 
 Notation fin := Fin.t.

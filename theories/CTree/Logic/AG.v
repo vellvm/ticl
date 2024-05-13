@@ -291,7 +291,7 @@ Section BindLemmas.
           destruct H1.
           inv H0; constructor.
         * intros k_ w_ TRk.
-          apply ktrans_bind_inv in TRk as [(t0' & TR0 & Hd_ & Heq) | ?].
+          apply ktrans_bind_inv in TRk as [(t0' & TR0 & Hd_ & Heq) | (x & w0 & TRt0 & Hd & TRk)].
           -- (* [t0] steps and is not [Ret] *)
             apply (fT_T (mequ_clos_car (KS:=KripkeSetoidEqu))).
             cbn; eapply mequ_clos_ctor with (t1:=x <- t0';; k x) (w1:=w_); auto.
@@ -305,9 +305,7 @@ Section BindLemmas.
                cbn.
                now apply Hk.
           -- (* [t0] steps and is [Ret], contradiction *)
-            destruct H0 as (x & w0 & TRt0 & Hd & TRk).
             ddestruction Hd; subst;
-            
               specialize (H3 _ _ TRt0); ddestruction H3;
               try contradiction;
               destruct H1, H0;
@@ -317,26 +315,52 @@ Section BindLemmas.
   Qed.
 
   Lemma ag_iter{X I}: forall (k: I -> ctree E (I + X)) w (x: I) φ R,
-      vis_with φ w -> (* Worlds invariant: [w = Obs e v /\ φ e v] *)
       R x ->          (* Iterator invariant: [x] in [R] *)
+      vis_with φ w -> (* Worlds invariant: [w = Obs e v /\ φ e v] *)
       (forall (i: I) w,
           R i ->
           vis_with φ w ->
-          <( {k i}, w |= (vis φ) AU AX (finish
+          <( {k i}, w |= (vis φ) AU (AX (vis φ /\ AX (finish
             {fun  (e: E) (v: encode e) (lr: I+X) =>
-               exists i', lr = inl i' /\ φ e v /\ R i'}) )>) ->
+               exists i', lr = inl i' /\ φ e v /\ R i'}))) )>) ->
       <( {iter k x}, w |= AG vis φ )>.
   Proof.
     (* Coinduction steps *)
     intros.
-    coinduction RR CIH.
-    specialize (H1 _ _ H0 H).
-    remember (k x) as K; cinduction H1; subst.
-    - destruct H1 as [(K' & wk & TRk) ?].
-      destruct (H1 _ _ TRk);
-        destruct H2 as (e' & v' & Hinv & HR); ddestruction Hinv.
-      + destruct HR as (? & -> & Hφ & HR).
-    - (* Not true, counter-example [k = fun x => Ret (inl x)] *)
+    rewrite sb_unfold_iter.
+    generalize dependent x.
+    generalize dependent w.    
+    coinduction RR CIH; intros.
+    pose proof (H1 _ _ H H0).
+    remember (k x) as K; cinduction H2.
+    - cdestruct H2; subst.
+      apply RStepA; auto.
+      split.
+      + destruct Hs as (k' & w' & TR).
+        specialize (H2 _ _ TR).
+        cdestruct H2.
+        apply can_step_bind_l with k' w'; auto.
+        inv H2; constructor. 
+      + intros t' w' TR.
+        apply ktrans_bind_inv in TR as [(t0' & TR0 & Hd_ & Heq) | (x' & w0 & TRt0 & Hd & TRk)].
+        * (* [k x] steps *)
+          rewrite Heq; clear Heq t'.
+          apply (ft_t (ag_bind_ag φ (fun (lr: I+X) (w: World E) =>
+                                     exists i' : I, lr = inl i' /\ vis_with φ w /\ R i'))); cbn.
+          apply in_bind_ctx1.
+          -- specialize (H2 _ _ TR0).
+             cdestruct H2.
+             next; left.
+             apply ax_done.
+             apply ax_done in H3.
+             intuition.
+             destruct H5 as (? & ? & ? & ? & ? & ? & ? & ? & ?); subst.
+             exists (inl x3); intuition.
+             exists x3; intuition.
+          -- intros [l | r] wi (? & Hinv & ? & ?); inv Hinv.
+             rewrite sb_unfold_iter.
+             apply CIH; auto.
+        * (* [k x] is return *)
   Admitted.
 
 End BindLemmas.

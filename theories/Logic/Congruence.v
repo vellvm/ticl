@@ -127,6 +127,7 @@ Section EquivCtlFormulas.
     intros.
     unfold equiv_ctl.
     split; revert t w; coinduction R CIH; intros.
+    
   Admitted.
   
   Arguments CER {W} {HW}.
@@ -337,7 +338,24 @@ Section CtlEquations.
        apply RStepA; auto.
        split; auto; intros.       
    Qed.
-   
+
+   Lemma ctl_eg_involutive: forall (p: ctlf W),
+       <( EG p )> ⩸ <( EG (EG p) )>.
+   Proof.
+     split; intros;
+       revert H; revert t w; coinduction R CIH; intros t' w' Heg.     
+     - apply RStepE; auto.
+       apply ctl_eg_ex in Heg; cdestruct Heg.
+       cdestruct H0.
+       exists t'0, w'0; intuition.
+     - rewrite ctl_eg_ex in Heg.      
+       cdestruct Heg.
+       cdestruct H0.
+       rewrite ctl_eg_ex in H.
+       cdestruct H.
+       apply RStepE; auto.
+       exists t'0, w'0; intuition.
+   Qed.
 End CtlEquations.
 
 (*| Ltac Tactic [next], rewrite au, af, ag, ar, eu, ef, er, eg

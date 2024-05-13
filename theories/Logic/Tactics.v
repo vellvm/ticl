@@ -61,12 +61,12 @@ Generalizable All Variables.
       rewrite unfold_entailsF in H0; destruct H0
   | @entailsF ?M ?W ?HE ?KMS ?X (CAX ?φ) ?t ?w =>
       let Hs' := fresh "Hs" in
-      rewrite unfold_ax in H0; destruct H0 as (Hs & H0)
+      rewrite unfold_ax in H0; destruct H0 as (Hs' & H0)
   | @entailsF ?M ?W ?HE ?KMS ?X (CEX ?φ) ?t ?w =>
       let t' := fresh t in
       let w' := fresh w in
       let TR' := fresh "TR" in
-      rewrite unfold_ax in H0; destruct H0 as (t' & w' & TR' & H0)
+      rewrite unfold_ex in H0; destruct H0 as (t' & w' & TR' & H0)
   | @entailsF ?M ?W ?HE ?KMS ?X (CAU ?φ ?ψ) ?t ?w =>
       rewrite unfold_entailsF in H0; destruct H0
   | @entailsF ?M ?W ?HE ?KMS ?X (CEU ?φ ?ψ) ?t ?w =>
@@ -85,12 +85,13 @@ Generalizable All Variables.
       rewrite unfold_entailsF in H0; induction H0
   end.
 
-#[local] Ltac coinduction_g R CIH :=
+#[global] Ltac coinduction_g R CIH :=
   let R' := fresh R in
   try change (<( ?t, ?w |= ?p AR ?q )>) with (car (entailsF p) (entailsF q) t w);
   try change (<( ?t, ?w |= ?p ER ?q )>) with (cer (entailsF p) (entailsF q) t w);
   coinduction R' CIH;
-  try change (car (entailsF ?p) (entailsF ?q) ?t ?w) with <( t, w |= p AR q )> in *.
+  try change (car (entailsF ?p) (entailsF ?q) ?t ?w) with <( t, w |= p AR q )> in *;
+  try change (cer (entailsF ?p) (entailsF ?q) ?t ?w) with <( t, w |= p ER q )> in *.
 
 #[global] Tactic Notation "destruct" ident_list(H) :=
   (cdestruct H || destruct H).
