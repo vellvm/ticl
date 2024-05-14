@@ -320,47 +320,55 @@ Section BindLemmas.
       (forall (i: I) w,
           R i ->
           vis_with φ w ->
-          <( {k i}, w |= (vis φ) AU (AX (vis φ /\ AX (finish
-            {fun  (e: E) (v: encode e) (lr: I+X) =>
-               exists i', lr = inl i' /\ φ e v /\ R i'}))) )>) ->
+          <( {k i}, w |= AX vis φ )> /\
+          <( {k i}, w |= vis φ AU AX done
+                      {fun (lr: I+X) (w: World E) =>
+                          exists i' : I, lr = inl i' /\ vis_with φ w /\ R i'})>) ->
       <( {iter k x}, w |= AG vis φ )>.
   Proof.
     (* Coinduction steps *)
     intros.
-    rewrite sb_unfold_iter.
     generalize dependent x.
     generalize dependent w.    
     coinduction RR CIH; intros.
-    pose proof (H1 _ _ H H0).
-    remember (k x) as K; cinduction H2.
-    - cdestruct H2; subst.
-      apply RStepA; auto.
-      split.
-      + destruct Hs as (k' & w' & TR).
-        specialize (H2 _ _ TR).
-        cdestruct H2.
-        apply can_step_bind_l with k' w'; auto.
-        inv H2; constructor. 
-      + intros t' w' TR.
-        apply ktrans_bind_inv in TR as [(t0' & TR0 & Hd_ & Heq) | (x' & w0 & TRt0 & Hd & TRk)].
-        * (* [k x] steps *)
-          rewrite Heq; clear Heq t'.
-          apply (ft_t (ag_bind_ag φ (fun (lr: I+X) (w: World E) =>
-                                     exists i' : I, lr = inl i' /\ vis_with φ w /\ R i'))); cbn.
-          apply in_bind_ctx1.
-          -- specialize (H2 _ _ TR0).
+    apply RStepA; auto.
+    split.
+    - (* can_step (iter k x) w *)
+      destruct (H1 _ _ H H0).
+      cdestruct H2.
+      destruct Hs as (k' & w' & TR).
+      destruct (H2 _ _ TR).
+      rewrite sb_unfold_iter.
+      apply can_step_bind_l with k' (Obs e v); auto with ctl.
+    - intros t' w' TR.
+      rewrite unfold_iter in TR.
+      apply ktrans_bind_inv in TR as [(t0' & TR0 & Hd_ & Heq) | (x' & w0 & TRt0 & Hd & TRk)].
+      + (* [k x] steps *)
+        rewrite Heq; clear Heq t'.
+        apply (ft_t (ag_bind_ag φ
+                       (fun (lr: I+X) (w: World E) =>
+                          exists i' : I, lr = inl i' /\ vis_with φ w /\ R i'))); cbn.
+        apply in_bind_ctx1.
+        * destruct (H1 _ _ H H0).
+          rewrite ctl_au_ax in H3.
+          cdestruct H3.
+          -- apply ax_done in H3 as
+                 (? & lr & Heqk & ? & -> & _ & i).
+             rewrite Heqk in H2.
              cdestruct H2.
-             next; left.
-             apply ax_done.
-             apply ax_done in H3.
-             intuition.
-             destruct H5 as (? & ? & ? & ? & ? & ? & ? & ? & ?); subst.
-             exists (inl x3); intuition.
-             exists x3; intuition.
-          -- intros [l | r] wi (? & Hinv & ? & ?); inv Hinv.
-             rewrite sb_unfold_iter.
-             apply CIH; auto.
-        * (* [k x] is return *)
-  Admitted.
+             destruct Hs as (Stuck & w_ & ?).
+             specialize (H2 _ _ H4); inv H2; inv H4.
+          -- cdestruct H3.
+             cdestruct H4.
+             specialize (H4 _ _ TR0).
+             apply H4.
+        * intros [l | r] wi (? & Hinv & ? & ?); inv Hinv.
+          rewrite sb_guard.
+          apply CIH; auto.
+      + (* [k x] returns *)
+        destruct (H1 _ _ H H0).
+        cdestruct H2.
+        inv Hd; specialize (H2 _ _ TRt0); inv H2.
+  Qed.
 
 End BindLemmas.

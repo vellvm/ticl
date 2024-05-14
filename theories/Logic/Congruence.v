@@ -347,14 +347,14 @@ Section CtlEquations.
      - apply RStepE; auto.
        apply ctl_eg_ex in Heg; cdestruct Heg.
        cdestruct H0.
-       exists t'0, w'0; intuition.
+       exists t, w; intuition.
      - rewrite ctl_eg_ex in Heg.      
        cdestruct Heg.
        cdestruct H0.
        rewrite ctl_eg_ex in H.
        cdestruct H.
        apply RStepE; auto.
-       exists t'0, w'0; intuition.
+       exists t, w; intuition.
    Qed.
 End CtlEquations.
 
@@ -396,11 +396,12 @@ End CtlEquations.
       lazymatch φ with
       | CAX ?p => rewrite (@unfold_ax M W HE KMS X) in H
       | CEX ?p => rewrite (@unfold_ex M W HE KMS X) in H
-      | context[CAU ?p ?q] => lazymatch eval cbv in p with
-                             | CBase (fun _ => True) =>
-                                 rewrite (@ctl_af_ax M W HE KMS X q) in H
-                             | _ => rewrite (@ctl_au_ax M W HE KMS X q) in H
-                             end
+      | context[CAU ?p ?q] =>
+          lazymatch eval cbv in p with
+          | CBase (fun _ => True) =>
+              rewrite (@ctl_af_ax M W HE KMS X q) in H
+          | _ => rewrite (@ctl_au_ax M W HE KMS X q) in H
+          end
       | context[CEU ?p ?q] => lazymatch eval cbv in p with
                              | CBase (fun _ => True) => rewrite (@ctl_ef_ex M W HE KMS X q) in H
                              | _ => rewrite (@ctl_eu_ex M W HE KMS X q) in H

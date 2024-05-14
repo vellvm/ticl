@@ -231,4 +231,14 @@ Section CanStepCtrees.
   Qed.
   Hint Resolve can_step_bind_r: ctl.
 
+  Lemma can_step_iter{I X}: forall (k: I -> ctree E (I+X))
+                              (i: I) t' w w',
+      [k i, w] ↦ [t', w'] ->
+      not_done w' ->
+      can_step (Ctree.iter k i) w.
+  Proof.
+    intros k i t' w w' TR Hd.
+    rewrite unfold_iter.
+    apply can_step_bind_l with t' w'; auto.   
+  Qed.    
 End CanStepCtrees.

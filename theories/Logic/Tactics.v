@@ -63,8 +63,8 @@ Generalizable All Variables.
       let Hs' := fresh "Hs" in
       rewrite unfold_ax in H0; destruct H0 as (Hs' & H0)
   | @entailsF ?M ?W ?HE ?KMS ?X (CEX ?φ) ?t ?w =>
-      let t' := fresh t in
-      let w' := fresh w in
+      let t' := fresh "t" in
+      let w' := fresh "w" in
       let TR' := fresh "TR" in
       rewrite unfold_ex in H0; destruct H0 as (t' & w' & TR' & H0)
   | @entailsF ?M ?W ?HE ?KMS ?X (CAU ?φ ?ψ) ?t ?w =>
