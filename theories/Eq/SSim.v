@@ -155,35 +155,21 @@ Section ssim_heterogenous_theory.
     apply equ_clos_sst; econstructor; [symmetry; eauto | | eauto]; assumption.
   Qed.
 
-  (* #[global] Instance equ_clos_ssim_goal : *)
-  (*   Proper (equ eq ==> equ eq ==> flip impl) (ssim L). *)
-  (* Proof. *)
-  (*   cbn; intros ? ? eq1 ? ? eq2 H. *)
-  (*   apply (ft_t equ_clos_sst); econstructor; [eauto | | symmetry; eauto]; assumption. *)
-  (* Qed. *)
+  #[global] Instance equ_ss_closed_goal {r} :
+    Proper (equ eq ==> equ eq ==> flip impl) (ss L r).
+  Proof.
+    intros t t' tt' u u' uu'; cbn; intros.
+    rewrite tt' in H0. apply H in H0 as (l' & ? & ? & ? & ?).
+    do 2 eexists; eauto. rewrite uu'. eauto.
+  Qed.
 
-  (* #[global] Instance equ_clos_ssim_ctx : *)
-  (*   Proper (equ eq ==> equ eq ==> impl) (ssim L). *)
-  (* Proof. *)
-  (*   cbn; intros ? ? eq1 ? ? eq2 H. *)
-  (*   apply (ft_t equ_clos_sst); econstructor; [symmetry; eauto | | eauto]; assumption. *)
-  (* Qed. *)
-
-  (* #[global] Instance equ_ss_closed_goal {r} : *)
-  (*   Proper (equ eq ==> equ eq ==> flip impl) (ss L r). *)
-  (* Proof. *)
-  (*   intros t t' tt' u u' uu'; cbn; intros. *)
-  (*   rewrite tt' in H0. apply H in H0 as (l' & ? & ? & ? & ?). *)
-  (*   do 2 eexists; eauto. rewrite uu'. eauto. *)
-  (* Qed. *)
-
-  (* #[global] Instance equ_ss_closed_ctx {r} : *)
-  (*   Proper (equ eq ==> equ eq ==> impl) (ss L r). *)
-  (* Proof. *)
-  (*   intros t t' tt' u u' uu'; cbn; intros. *)
-  (*   rewrite <- tt' in H0. apply H in H0 as (l' & ? & ? & ? & ?). *)
-  (*   do 2 eexists; eauto. rewrite <- uu'. eauto. *)
-  (* Qed. *)
+  #[global] Instance equ_ss_closed_ctx {r} :
+    Proper (equ eq ==> equ eq ==> impl) (ss L r).
+  Proof.
+    intros t t' tt' u u' uu'; cbn; intros.
+    rewrite <- tt' in H0. apply H in H0 as (l' & ? & ? & ? & ?).
+    do 2 eexists; eauto. rewrite <- uu'. eauto.
+  Qed.
 
 (*|
   stuck ctrees can be simulated by anything.
@@ -885,9 +871,33 @@ Section Proof_Rules.
     eauto.
   Qed.
 
+  Lemma step_ss_guard_l_gen {Y F D}
+        (t: ctree E C X) (t': ctree F D Y) (R L: rel _ _):
+    ss L R t t' ->
+    ss L R (Guard t) t'.
+  Proof.
+    intros EQ.
+    intros ? ? TR; inv_trans; subst.
+    apply EQ in TR; destruct TR as (u' & ? & TR' & ? & EQ').
+    eauto.
+  Qed.
+
+  Lemma step_ss_guard_r_gen {Y F D}
+    (t: ctree E C X) (t': ctree F D Y) (R L: rel _ _):
+    ss L R t t' ->
+    ss L R t (Guard t').
+  Proof.
+    intros EQ.
+    intros ? ? TR; inv_trans; subst.
+    apply EQ in TR; destruct TR as (u' & ? & TR' & ? & EQ').
+    do 2 eexists; split.
+    constructor. apply TR'.
+    eauto.
+  Qed.
+
   Lemma step_ss_guard_l {Y F D}
-        (t: ctree E C X) (t': ctree F D Y) (L: rel _ _)
-        {R : Chain (@ss E F C D X Y L)} :
+    (t: ctree E C X) (t': ctree F D Y) (L: rel _ _)
+    {R : Chain (@ss E F C D X Y L)} :
     ss L (elem R) t t' ->
     ` R (Guard t) t'.
   Proof.
@@ -899,8 +909,8 @@ Section Proof_Rules.
   Qed.
 
   Lemma step_ss_guard_r {Y F D}
-        (t: ctree E C X) (t': ctree F D Y) (L: rel _ _)
-        {R : Chain (@ss E F C D X Y L)} :
+    (t: ctree E C X) (t': ctree F D Y) (L: rel _ _)
+    {R : Chain (@ss E F C D X Y L)} :
     ss L (elem R) t t' ->
     ` R t (Guard t').
   Proof.
@@ -912,8 +922,8 @@ Section Proof_Rules.
   Qed.
 
   Lemma step_ss_guard {Y F D}
-        (t: ctree E C X) (t': ctree F D Y) (L: rel _ _)
-        {R : Chain (@ss E F C D X Y L)} :
+    (t: ctree E C X) (t': ctree F D Y) (L: rel _ _)
+    {R : Chain (@ss E F C D X Y L)} :
     ss L (elem R) t t' ->
     ` R (Guard t) (Guard t').
   Proof.
