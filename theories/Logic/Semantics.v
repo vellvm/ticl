@@ -295,7 +295,6 @@ Module CtlNotations.
   Notation carT p q := (T (car_ p q)).
   Notation cerT p q := (T (cer_ p q)).
   Notation carbT p q := (bT (car_ p q)).
-  Notation cwrbT p q := (bT (car_ p q)).
   Notation cerbT p q := (bT (cer_ p q)).
   #[global] Hint Constructors ceu cau carF cerF: ctl.
   

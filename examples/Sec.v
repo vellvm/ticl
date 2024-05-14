@@ -7,7 +7,10 @@ From CTree Require Import
   Logic.Ctl
   CTree.SBisim
   CTree.Logic.Trans
-  Logic.Kripke
+  CTree.Logic.AF
+  CTree.Logic.AX
+  CTree.Logic.AG
+  CTree.Logic.Kripke
   CTree.Interp.Core
   CTree.Interp.State
   CTree.Events.State.

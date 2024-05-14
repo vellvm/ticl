@@ -44,9 +44,9 @@ Section BasicLemmas.
     eapply done_not_ktrans with (t:=t); eauto.
   Qed.
 
-  Lemma af_stuck: forall w φ,
-      <( {Ctree.stuck: ctree E X}, w |= AF φ )> <->
-      <( {Ctree.stuck: ctree E X}, w |= φ )>.
+  Lemma au_stuck: forall w φ ψ,
+      <( {Ctree.stuck: ctree E X}, w |= φ AU ψ )> <->
+        <( {Ctree.stuck: ctree E X}, w |= ψ )>.
   Proof.
     split; intros.
     - remember (Ctree.stuck) as S.
@@ -54,6 +54,14 @@ Section BasicLemmas.
       destruct H0, H1; clear H H0.
       now apply can_step_stuck in H1.
     - now next; left.
+  Qed.
+  
+  Lemma af_stuck: forall w φ,
+      <( {Ctree.stuck: ctree E X}, w |= AF φ )> <->
+      <( {Ctree.stuck: ctree E X}, w |= φ )>.
+  Proof.
+    intros.
+    apply au_stuck.
   Qed.
 
   Lemma af_ret: forall r w (Rr: rel X (World E)),      
