@@ -41,28 +41,28 @@ answered by [wtrans].
 .. coq::none
 |*)
 From Coq Require Import
-     Lia
-     Basics
-     Fin
-     RelationClasses
-     Program.Equality
-     Logic.Eqdep.
+  Lia
+  Basics
+  Fin
+  RelationClasses
+  Program.Equality
+  Logic.Eqdep.
 
 From Coinduction Require Import all.
 
 From ITree Require Import Core.Subevent.
 
 From CTree Require Import
-     CTree
-     Utils
-     Eq.Equ
-     Eq.Shallow
-     Eq.Trans
-     Eq.SSim
-     Eq.CSSim.
+  CTree
+  Utils
+  Eq.Equ
+  Eq.Shallow
+  Eq.Trans
+  Eq.SSim
+  Eq.CSSim.
 
 From RelationAlgebra Require Export
-     rel srel.
+  rel srel.
 
 Import CoindNotations.
 Set Implicit Arguments.
@@ -118,7 +118,7 @@ Definition sbisim {E F C D X Y} L :=
   (gfp (@sb E F C D X Y L) : hrel _ _).
 
 #[global] Instance Lequiv_sbisim : forall {E F C D X Y},
-  Proper (Lequiv X Y ==> leq) (@sbisim E F C D X Y).
+    Proper (Lequiv X Y ==> leq) (@sbisim E F C D X Y).
 Proof.
   cbn. intros.
   - unfold sbisim.
@@ -128,7 +128,7 @@ Proof.
 Qed.
 
 #[global] Instance weq_sbisim : forall {E F C D X Y},
-  Proper (weq ==> weq) (@sbisim E F C D X Y).
+    Proper (weq ==> weq) (@sbisim E F C D X Y).
 Proof.
   cbn -[ss weq]. intros. apply gfp_weq. now apply weq_sb.
 Qed.
@@ -212,7 +212,7 @@ Section sbisim_heterogenous_theory.
 
   Arguments label: clear implicits.
   Context {E F C D : Type -> Type} {X Y : Type}
-          {L: rel (@label E) (@label F)}.
+    {L: rel (@label E) (@label F)}.
 
   Notation sb := (@sb E F C D X Y).
   Notation sbisim := (@sbisim E F C D X Y).
@@ -279,11 +279,11 @@ Strong bisimulation up-to [equ] is valid
 Up-to-bisimulation enhancing function
 |*)
   Variant sbisim_clos_body {LE LF}
-          (R : rel (ctree E C X) (ctree F D Y)) : (rel (ctree E C X) (ctree F D Y)) :=
+    (R : rel (ctree E C X) (ctree F D Y)) : (rel (ctree E C X) (ctree F D Y)) :=
     | Sbisim_clos : forall t t' u' u
-                      (Sbisimt : t (~ LE) t')
-                      (HR : R t' u')
-                      (Sbisimu : u' (~ LF) u),
+                           (Sbisimt : t (~ LE) t')
+                           (HR : R t' u')
+                           (Sbisimu : u' (~ LF) u),
         @sbisim_clos_body LE LF R t u.
 
   Program Definition sbisim_clos {LE LF} : mon (rel (ctree E C X) (ctree F D Y)) :=
@@ -350,19 +350,10 @@ stuck ctrees can be simulated by anything.
 End sbisim_heterogenous_theory.
 
 Section sbisim_homogenous_theory.
-  Context {E B: Type -> Type} {X: Type}
-          (L: relation (@label E)).
+  Context {E B: Type -> Type} {X: Type} (L: relation (@label E)).
 
   Notation sb  := (@sb E E B B X X).
   Notation sbisim := (@sbisim E E B B X X).
-
-(*|
-This is just a hack suggested by Damien Pous to avoid a
-universe inconsistency when using both the relational algebra
-and coinduction libraries (we fix the type at which we'll use [eq]).
-|*)
-  Definition seq: relation (ctree E B X) := eq.
-  Arguments seq/.
 
   #[global] Instance refl_sb {LR: Reflexive L} {C: Chain (sb L)}: Reflexive `C.
   Proof.
@@ -390,7 +381,7 @@ and coinduction libraries (we fix the type at which we'll use [eq]).
       eauto 8.
   Qed.
 
-  (*| PreOrder |*)
+(*| PreOrder |*)
   #[global] Instance Equivalence_sb {LPO: Equivalence L} {C: Chain (sb L)}: Equivalence `C.
   Proof. split; typeclasses eauto. Qed.
 
@@ -434,7 +425,7 @@ Section bind.
   Obligation Tactic := trivial.
   Arguments label: clear implicits.
   Context {E F C D: Type -> Type} {X X' Y Y': Type}
-          {L: rel (label E) (label F)} (R0 : rel X Y).
+    {L: rel (label E) (label F)} (R0 : rel X Y).
 
   Lemma bind_chain_gen
     (RR : rel (label E) (label F))
@@ -510,10 +501,10 @@ End bind.
 Expliciting the reasoning rule provided by the up-to principles.
 |*)
 Lemma sbisim_clo_bind_gen {E F C D: Type -> Type} {X Y X' Y': Type} {L : rel (@label E) (@label F)}
-      (R0 : rel X Y) L0
-      (t1 : ctree E C X) (t2: ctree F D Y)
-      (HL0 : is_update_val_rel L R0 L0)
-      (k1 : X -> ctree E C X') (k2 : Y -> ctree F D Y') :
+  (R0 : rel X Y) L0
+  (t1 : ctree E C X) (t2: ctree F D Y)
+  (HL0 : is_update_val_rel L R0 L0)
+  (k1 : X -> ctree E C X') (k2 : Y -> ctree F D Y') :
   t1 (~L0) t2 ->
   (forall x y, R0 x y -> k1 x (~L) k2 y) ->
   t1 >>= k1 (~L) t2 >>= k2.
@@ -522,9 +513,9 @@ Proof.
 Qed.
 
 Lemma sbisim_clo_bind {E F C D: Type -> Type} {X Y X' Y': Type} {L : rel (@label E) (@label F)}
-      (R0 : rel X Y)
-      (t1 : ctree E C X) (t2: ctree F D Y)
-      (k1 : X -> ctree E C X') (k2 : Y -> ctree F D Y') :
+  (R0 : rel X Y)
+  (t1 : ctree E C X) (t2: ctree F D Y)
+  (k1 : X -> ctree E C X') (k2 : Y -> ctree F D Y') :
   t1 (~update_val_rel L R0) t2 ->
   (forall x y, R0 x y -> k1 x (~L) k2 y) ->
   t1 >>= k1 (~L) t2 >>= k2.
@@ -546,8 +537,8 @@ Proof.
 Qed.
 
 Lemma sbisim_clo_bind_eq {E C D: Type -> Type} {X X': Type}
-      (t1 : ctree E C X) (t2: ctree E D X)
-      (k1 : X -> ctree E C X') (k2 : X -> ctree E D X') :
+  (t1 : ctree E C X) (t2: ctree E D X)
+  (k1 : X -> ctree E C X') (k2 : X -> ctree E D X') :
   t1 ~ t2 ->
   (forall x, k1 x ~ k2 x) ->
   t1 >>= k1 ~ t2 >>= k2.
@@ -576,7 +567,7 @@ Qed.
 Ltac __upto_bind_sbisim :=
   match goal with
     |- @sbisim ?E ?F ?C ?D ?X ?Y ?L
-              (CTree.bind (T := ?T) _ _) (CTree.bind (T := ?T) _ _) => apply sbisim_clo_bind_eq
+        (CTree.bind (T := ?T) _ _) (CTree.bind (T := ?T) _ _) => apply sbisim_clo_bind_eq
   end.
 
 Ltac __upto_bind_eq_sbisim :=
@@ -627,7 +618,7 @@ Ltac __playL_sbisim H :=
 
 Ltac __eplayL_sbisim :=
   match goal with
-  | h : @sbisim ?E _ ?C _ ?X _ _ _ ?RR _ _ |- _ =>
+  | h : @sbisim ?E _ ?C _ ?X _ ?RR _ _ |- _ =>
       __playL_sbisim h
   end.
 
@@ -640,7 +631,7 @@ Ltac __playR_sbisim H :=
 
 Ltac __eplayR_sbisim :=
   match goal with
-  | h : @sbisim ?E ?C ?X _ _ _ |- _ =>
+  | h : @sbisim ?E _ ?C _ ?X _ ?RR _ _ |- _ =>
       __playR_sbisim h
   end.
 
@@ -670,7 +661,7 @@ Section Proof_Rules.
   Context {E F C D : Type -> Type} {X Y: Type} {L : rel (label E) (label F)}.
 
   Lemma step_sb_ret_gen
-        (x: X) (y: Y) (R : rel (ctree E C X) (ctree F D Y)) :
+    (x: X) (y: Y) (R : rel (ctree E C X) (ctree F D Y)) :
     R Stuck Stuck ->
     L (val x) (val y) ->
     (Proper (equ eq ==> equ eq ==> impl) R) ->
@@ -700,7 +691,7 @@ Section Proof_Rules.
     now apply step_sb_ret.
   Qed.
 
-(*|
+  (*|
   The vis nodes are deterministic from the perspective of the labeled transition system,
   stepping is hence symmetric and we can just recover the itree-style rule.
 |*)
@@ -764,7 +755,7 @@ Section Proof_Rules.
     now apply step_sb_vis_id.
   Qed.
 
-(*|
+  (*|
   Guard
 |*)
   Lemma step_sb_guard_gen (t : ctree E C X) (u : ctree F D Y) {R : rel _ _} :
@@ -837,12 +828,12 @@ Section Proof_Rules.
     intros * EQ; apply step_sb_guard_r; step in EQ; auto.
   Qed.
 
-(*|
+  (*|
 br
 |*)
 
   Lemma step_sb_br_gen {X' Y'} (c : C X') (d: D Y')
-        (k : X' -> ctree E C X) (k' : Y' -> ctree F D Y) (R : rel _ _) :
+    (k : X' -> ctree E C X) (k' : Y' -> ctree F D Y) (R : rel _ _) :
     (forall x, exists y, sb L R (k x) (k' y)) ->
     (forall y, exists x, sb L R (k x) (k' y)) ->
     sb L R (Br c k) (Br d k').
@@ -865,7 +856,7 @@ br
   Qed.
 
   Lemma step_sb_br_l_gen {X'} (c : C X')
-        (k : X' -> ctree E C X) (u : ctree F D Y) (R : rel _ _) :
+    (k : X' -> ctree E C X) (u : ctree F D Y) (R : rel _ _) :
     X' ->
     (forall x, sb L R (k x) u) ->
     sb L R (Br c k) u.
@@ -879,7 +870,7 @@ br
   Qed.
 
   Lemma step_sb_br_r_gen {Y'} (c : D Y')
-        (t : ctree E C X) (k : Y' -> ctree F D Y) (R : rel _ _) :
+    (t : ctree E C X) (k : Y' -> ctree F D Y) (R : rel _ _) :
     Y' ->
     (forall x, sb L R t (k x)) ->
     sb L R t (Br c k).
@@ -977,7 +968,7 @@ br
     intros x; specialize (H x); step in H; auto.
   Qed.
 
-(*|
+  (*|
   Same goes for step nodes.
 |*)
   Lemma step_sb_step_gen (t : ctree E C X) (u : ctree F D Y) {R : rel _ _} :
@@ -1014,7 +1005,7 @@ br
     apply step_sb_step.
   Qed.
 
-(*|
+  (*|
 BrS
 |*)
 
@@ -1103,21 +1094,15 @@ BrS
 
 End Proof_Rules.
 
-
-(* CHECKPOINT *)
-
 (*|
 Proof system for [~]
 --------------------
 
-While the proof rules from the previous section are useful for performing full on
-coinductive proofs, lifting these at the level of [sbisim] can allow for completely
-avoiding any coinduction when combined with a pre-established equational theory.
+We specialize the proof system established in the previous section to [~] for clarity.
 |*)
 Section Sb_Proof_System.
   Arguments label: clear implicits.
-  Context {E C: Type -> Type} {X: Type}
-         .
+  Context {E C: Type -> Type} {X: Type}.
 
   Lemma sb_ret : forall x y,
       x = y ->
@@ -1132,15 +1117,14 @@ Section Sb_Proof_System.
       Vis e k ~ Vis e k'.
   Proof.
     intros.
-    upto_vis.
-    apply H0.
+    apply vis_chain, H.
   Qed.
 
   (*|
     Visible vs. Invisible Taus
     ~~~~~~~~~~~~~~~~~~~~~~~~~~
     Invisible taus can be stripped-out w.r.t. to [sbisim], but not visible ones
-  |*)
+|*)
   Lemma sb_guard: forall (t : ctree E C X),
       Guard t ~ t.
   Proof.
@@ -1149,7 +1133,7 @@ Section Sb_Proof_System.
     - eauto 6 with trans.
   Qed.
 
- Lemma sb_guard_l: forall (t u : ctree E C X),
+  Lemma sb_guard_l: forall (t u : ctree E C X),
       t ~ u ->
       Guard t ~ u.
   Proof.
@@ -1174,97 +1158,59 @@ Section Sb_Proof_System.
       t ~ u ->
       Step t ~ Step u.
   Proof.
-    intros * EQ; step.
-    apply step_sb_step; auto.
+    intros; apply sbisim_step; auto.
   Qed.
 
-  (* TODO: Double check that this is needed, it should be taus in all contexts I can think of *)
-  Lemma sb_brD1 (c1: C (fin 1)): forall (k : fin 1 -> ctree E C X),
-      BrD c1 k ~ k F1.
+  Lemma sb_br I J (ci : C I) (cj : C J)
+    (k : I -> ctree E C X) (k' : J -> ctree E C X) :
+    (forall x, exists y, k x ~ k' y) ->
+    (forall y, exists x, k x ~ k' y) ->
+    Br ci k ~ Br cj k'.
   Proof.
-    intros; step; econstructor.
-    - intros ? ? ?. inv H0.
-      apply Eqdep.EqdepTheory.inj_pair2 in H4, H5; subst.
-      dependent destruction x; exists l, t'; etrans; auto.
-      inversion x.
-    - intros ? ? ?; cbn.
-      eauto 6 with trans.
+    intros; apply sbisim_br; auto.
+  Qed.
+
+  Lemma sb_br_id I (c : C I)
+    (k k' : I -> ctree E C X) :
+    (forall x, k x ~ k' x) ->
+    Br c k ~ Br c k'.
+  Proof.
+    intros; apply sbisim_br_id; auto.
+  Qed.
+
+  Lemma sb_br_l {Y} c (y : Y) (k: Y -> ctree E C X) (t: ctree E C X):
+    (forall x, k x ~ t) ->
+    Br c k ~ t.
+  Proof.
+    intros; apply sbisim_br_l; auto.
   Qed.
 
   Lemma sb_brS I J (ci : C I) (cj : C J)
-        (k : I -> ctree E C X) (k' : J -> ctree E C X) :
+    (k : I -> ctree E C X) (k' : J -> ctree E C X) :
     (forall x, exists y, k x ~ k' y) ->
     (forall y, exists x, k x ~ k' y) ->
     BrS ci k ~ BrS cj k'.
   Proof.
-    intros * EQs1 EQs2; step.
-    apply @step_sb_brS; auto.
+    intros; apply sbisim_brS; auto.
   Qed.
 
   Lemma sb_brS_id I (c : C I)
-        (k k' : I -> ctree E C X) :
+    (k k' : I -> ctree E C X) :
     (forall x, k x ~ k' x) ->
     BrS c k ~ BrS c k'.
   Proof.
-    intros * EQs; step.
-    apply @step_sb_brS_id; auto.
-  Qed.
-
-  Lemma sb_brD I J (ci : C I) (cj : C J)
-        (k : I -> ctree E C X) (k' : J -> ctree E C X) :
-    (forall x, exists y, k x ~ k' y) ->
-    (forall y, exists x, k x ~ k' y) ->
-    BrD ci k ~ BrD cj k'.
-  Proof.
-    intros; step.
-    eapply @step_sb_brD; auto.
-    intros x; destruct (H0 x) as (y & EQ).
-    exists y; now step in EQ.
-    intros y; destruct (H1 y) as (x & EQ).
-    exists x; now step in EQ.
-  Qed.
-
-  Lemma sb_brD_id I (c : C I)
-        (k k' : I -> ctree E C X) :
-    (forall x, k x ~ k' x) ->
-    BrD c k ~ BrD c k'.
-  Proof.
-    intros; step.
-    apply @step_sb_brD_id; intros x.
-    specialize (H0 x).
-    now step in H0.
-  Qed.
-
-  Lemma sb_brD_idempotent {Y} c (y : Y) (k: Y -> ctree E C X) (t: ctree E C X):
-      (forall x, k x ~ t) ->
-      BrD c k ~ t.
-  Proof.
-    intros * EQ. step.
-    apply step_sb_brD_l_gen; auto.
-    intros. specialize (EQ x).
-    now step in EQ.
-  Qed.
-
-  Lemma sb_brDn_idempotent {HasFin : Bn -< C} n (k: fin (S n) -> ctree E C X) (t: ctree E C X):
-      (forall x, k x ~ t) ->
-      brDn k ~ t.
-  Proof.
-    intros * EQ.
-    apply sb_brD_idempotent.
-    apply F1.
-    apply EQ.
+    intros; apply sbisim_brS_id; auto.
   Qed.
 
   Lemma sb_unfold_forever : forall (k: X -> ctree E C X) (i: X),
       forever k i ~ r <- k i ;; forever k r.
   Proof.
-    intros k i.
-    rewrite (ctree_eta (forever k i)).
-    rewrite unfold_forever_.
-    rewrite <- ctree_eta.
-    __upto_bind_eq_sbisim.
-    apply sb_guard.
+    intros.
+    rewrite unfold_forever.
+    apply sbisim_clo_bind_eq; auto.
+    intros; now rewrite sb_guard.
   Qed.
+
 End Sb_Proof_System.
 
 (* TODO: tactics!
@@ -1316,60 +1262,62 @@ produce any challenge for the other.
       @spinS_gen E C Z X c ~ @spinS_gen E C Z Y c'.
   Proof.
     intros R.
+    unfold sbisim.
     coinduction S CIH. symmetric.
     intros ** L t' TR;
-    rewrite ctree_eta in TR; cbn in TR;
-    apply trans_brS_inv in TR as (_ & EQ & ->);
-    eexists; eexists;
-    rewrite ctree_eta; cbn.
+      rewrite ctree_eta in TR; cbn in TR;
+      apply trans_brS_inv in TR as (_ & EQ & ->);
+      eexists; eexists;
+      rewrite ctree_eta; cbn.
     split; [econstructor|].
     - exact y.
-    - reflexivity.
+    - constructor; reflexivity.
     - rewrite EQ; eauto.
   Qed.
 
-  Lemma spinD_gen_bisim : forall {Z X Y} (c: C X) (c': C Y),
-      @spinD_gen E C Z X c ~ @spinD_gen E C Z Y c'.
+  Lemma spin_gen_bisim : forall {Z X Y} (c: C X) (c': C Y),
+      @spin_gen E C Z X c ~ @spin_gen E C Z Y c'.
   Proof.
     intros R.
+    unfold sbisim.
     coinduction S _; split; cbn;
       intros * TR; exfalso; eapply spinD_gen_is_stuck, TR.
   Qed.
 
-  (*|
-    BrD2 is associative, commutative, idempotent, merges into BrD3, and admits _a lot_ of units.
-    |*)
-  Lemma brD2_assoc X : forall (t u v : ctree E C X),
-	    brD2 (brD2 t u) v ~ brD2 t (brD2 u v).
+(*|
+  Br2 is associative, commutative, idempotent, merges into Br3, and admits _a lot_ of units.
+|*)
+  Lemma br2_assoc X : forall (t u v : ctree E C X),
+	    br2 (br2 t u) v ~ br2 t (br2 u v).
   Proof.
     intros.
     play; inv_trans; eauto 7 with trans.
   Qed.
 
-  Lemma brD2_commut {X} : forall (t u : ctree E C X),
-	    brD2 t u ~ brD2 u t.
+  Lemma br2_commut {X} : forall (t u : ctree E C X),
+	    br2 t u ~ br2 u t.
   Proof.
     intros.
     play; inv_trans; eauto 6 with trans.
   Qed.
 
-  Lemma brD2_idem {X} : forall (t : ctree E C X),
-	    brD2 t t ~ t.
+  Lemma br2_idem {X} : forall (t : ctree E C X),
+	    br2 t t ~ t.
   Proof.
     intros.
     play; inv_trans; eauto 6 with trans.
   Qed.
 
-  Lemma brD2_merge {X} : forall (t u v : ctree E C X),
-	    brD2 (brD2 t u) v ~ brD3 t u v.
+  Lemma br2_merge {X} : forall (t u v : ctree E C X),
+	    br2 (br2 t u) v ~ br3 t u v.
   Proof.
     intros.
     play; inv_trans; eauto 7 with trans.
   Qed.
 
-  Lemma brD2_is_stuck {X} : forall (u v : ctree E C X),
+  Lemma br2_is_stuck {X} : forall (u v : ctree E C X),
       is_stuck u ->
-	    brD2 u v ~ v.
+	    br2 u v ~ v.
   Proof.
     intros * ST.
     play.
@@ -1379,40 +1327,28 @@ produce any challenge for the other.
     - eauto 6 with trans.
   Qed.
 
-  Lemma brD2_stuckS_l {X} : forall (t : ctree E C X),
-	    brD2 stuckS t ~ t.
+  Lemma br2_stuck_l {X} : forall (t : ctree E C X),
+	    br2 Stuck t ~ t.
   Proof.
-    intros; apply brD2_is_stuck, stuckS_is_stuck.
+    intros; apply br2_is_stuck, Stuck_is_stuck.
   Qed.
 
-  Lemma brD2_Stuck_l {X} : forall (t : ctree E C X),
-	    brD2 Stuck t ~ t.
+  Lemma br2_stuck_r {X} : forall (t : ctree E C X),
+	    br2 t Stuck ~ t.
   Proof.
-    intros; apply brD2_is_stuck, Stuck_is_stuck.
+    intros; rewrite br2_commut; apply br2_stuck_l.
   Qed.
 
-  Lemma brD2_stuckS_r {X} : forall (t : ctree E C X),
-	    brD2 t stuckS ~ t.
+  Lemma br2_spin_l {X} : forall (t : ctree E C X),
+	    br2 spin t ~ t.
   Proof.
-    intros; rewrite brD2_commut; apply brD2_stuckS_l.
+    intros; apply br2_is_stuck, spin_is_stuck.
   Qed.
 
-  Lemma brD2_Stuck_r {X} : forall (t : ctree E C X),
-	    brD2 t Stuck ~ t.
+  Lemma br2_spin_r {X} : forall (t : ctree E C X),
+	    br2 t spin ~ t.
   Proof.
-    intros; rewrite brD2_commut; apply brD2_Stuck_l.
-  Qed.
-
-  Lemma brD2_spinD_l {X} : forall (t : ctree E C X),
-	    brD2 spinD t ~ t.
-  Proof.
-    intros; apply brD2_is_stuck, spinD_is_stuck.
-  Qed.
-
-  Lemma brD2_spinD_r {X} : forall (t : ctree E C X),
-	    brD2 t spinD ~ t.
-  Proof.
-    intros; rewrite brD2_commut; apply brD2_is_stuck, spinD_is_stuck.
+    intros; rewrite br2_commut; apply br2_is_stuck, spin_is_stuck.
   Qed.
 
 (*|
@@ -1451,7 +1387,7 @@ Inversion principles
  take a step
 |*)
   Lemma sbisim_vis_invT {X X1 X2}
-        (e1 : E X1) (e2 : E X2) (k1 : X1 -> ctree E C X) (k2 : X2 -> ctree E C X) (x : X1):
+    (e1 : E X1) (e2 : E X2) (k1 : X1 -> ctree E C X) (k2 : X2 -> ctree E C X) (x : X1):
     Vis e1 k1 ~ Vis e2 k2 ->
     X1 = X2.
   Proof.
@@ -1478,34 +1414,34 @@ Inversion principles
       Unshelve. auto.
   Qed.
 
-  Lemma sbisim_BrS_inv {X Y Z}
-        c1 c2 (k1 : X -> ctree E C Z) (k2 : Y -> ctree E C Z) :
+  Lemma sbisim_brS_inv {X Y Z}
+    c1 c2 (k1 : X -> ctree E C Z) (k2 : Y -> ctree E C Z) :
     BrS c1 k1 ~ BrS c2 k2 ->
-    (forall i1, exists i2, k1 i1 ~ k2 i2).
+    (forall i1, exists i2, k1 i1 ~ k2 i2) /\ (forall i2, exists i1, k1 i1 ~ k2 i2).
   Proof.
-    intros EQ i1.
-    eplayL.
-    inv_trans.
-    eexists; eauto.
+    intros EQ; split; intros i.
+    eplayL; inv_trans; eauto.
+    eplayR; inv_trans; eauto.
   Qed.
 
-  (*|
+(*|
     Annoying case: [Vis e k ~ BrS c k'] is true if [e : E void] and [c : C void].
     We rule out this case in this definition.
-    |*)
+|*)
   Definition are_bisim_incompat {X} (t u : ctree E C X) : Type :=
     match observe t, observe u with
     | RetF _, RetF _
     | VisF _ _, VisF _ _
-    | BrF true _ _, BrF true _ _
-    | BrF false _ _, _
-    | _, BrF false _ _ => False
-    | BrF true n _, RetF _ => True
-    | RetF _,  BrF true n _ => True
-    | @BrF _ _ _ _ true X _ _, @VisF _ _ _ _ Y _ _ =>
-        inhabited X + inhabited Y
-    | @VisF _ _ _ _ Y _ _, @BrF _ _ _ _ true X _ _ =>
-        inhabited X + inhabited Y
+    | BrF _ _, _
+    | _, BrF _ _
+    | GuardF _, _
+    | _, GuardF _
+    | StepF _, StepF _
+    | StuckF, StuckF
+      => False
+    | @VisF _ _ _ _ X _ _, StuckF
+    | StuckF, @VisF _ _ _ _ X _ _ =>
+        inhabited X
     | _, _ => True
     end.
 
@@ -1518,22 +1454,16 @@ Inversion principles
     unfold are_bisim_incompat in IC.
     setoid_rewrite ctree_eta in EQ.
     genobs t ot. genobs u ou.
-    destruct ot, ou;
-      (try now inv IC); (try destruct vis); (try destruct vis0);
-      try now inv IC.
-    - playL in EQ. inv_trans.
-    - playL in EQ. inv_trans.
-    - playR in EQ. inv_trans.
-    - destruct IC as [[] | []]; [ playR in EQ | playL in EQ ]; inv_trans.
-    - playR in EQ. inv_trans.
-    - destruct IC as [[] | []]; [ playL in EQ | playR in EQ ]; inv_trans.
-    Unshelve. all: auto.
+    destruct ot, ou.
+    all: try now inv IC.
+    all: try now unshelve (inv IC; playR in EQ; inv_trans); auto.
+    all: try now unshelve (inv IC; playL in EQ; inv_trans); auto.
   Qed.
 
   Ltac sb_abs h :=
     eapply sbisim_absurd; [| eassumption]; cbn; try reflexivity.
 
-  Lemma sbisim_ret_vis_inv {X Y}(r : Y) (e : E X) (k : X -> ctree E C Y) :
+  Lemma sbisim_ret_vis_inv {X Y} (r : Y) (e : E X) (k : X -> ctree E C Y) :
     (Ret r : ctree E C _) ~ Vis e k -> False.
   Proof.
     intros * abs. sb_abs abs.
@@ -1542,169 +1472,206 @@ Inversion principles
   Lemma sbisim_ret_BrS_inv {X Y} (r : Y) (c : C X) (k : X -> ctree E C Y) :
     (Ret r : ctree E C _) ~ BrS c k -> False.
   Proof.
-    intros * abs; sb_abs abs.
-  Qed.
-
-  (*|
-    For this to be absurd, we need one of the return types to be inhabited.
-    |*)
-  Lemma sbisim_vis_BrS_inv {X Y Z}
-        (e : E X) (k1 : X -> ctree E C Z) (c : C Y) (k2: Y -> ctree E C Z) (y : Y) :
-    Vis e k1 ~ BrS c k2 -> False.
-  Proof.
-    intros * abs.
-    sb_abs abs. eauto.
-  Qed.
-
-  Lemma sbisim_vis_BrS_inv' {X Y Z}
-        (e : E X) (k1 : X -> ctree E C Z) (c : C Y) (k2: Y -> ctree E C Z) (x : X) :
-    Vis e k1 ~ BrS c k2 -> False.
-  Proof.
-    intros * abs.
-    sb_abs abs. eauto.
+    intros EQ; playL in EQ; inv_trans.
   Qed.
 
 (*|
-Not fond of these two, need to give some thoughts about them
+  For this to be absurd, we need one of the return types to be inhabited.
 |*)
-  Lemma sbisim_ret_BrD_inv {X Y} (r : Y) (c : C X) (k : X -> ctree E C Y) :
-    (Ret r : ctree E C _) ~ BrD c k ->
-    exists x, (Ret r : ctree E C _) ~ k x.
+  Lemma sbisim_vis_BrS_inv {X Y Z}
+    (e : E X) (k1 : X -> ctree E C Z) (c : C Y) (k2: Y -> ctree E C Z) (y : Y) :
+    Vis e k1 ~ BrS c k2 -> False.
   Proof.
-    intro. step in H. destruct H as [Hf Hb]. cbn in *.
-    edestruct Hf as (x & ? & Ht & Hs & ?); [apply trans_ret |].
-    apply trans_brD_inv in Ht.
-    destruct Ht as [i Ht]. exists i.
-    step. split.
-    - repeat intro. inv H0. exists (val r), x0. split; intuition. rewrite <- Hs.
-      rewrite ctree_eta. rewrite <- H4. rewrite br0_always_stuck. reflexivity.
-    - repeat intro. eapply trans_brD in H0; eauto.
+    unshelve (intros EQ; playR in EQ; inv_trans); auto.
   Qed.
 
-  Lemma sbisim_BrD_1_inv X (c1: C (fin 1)) (k : fin 1 -> ctree E C X) (t: ctree E C X) i :
-    BrD c1 k ~ t ->
-    k i ~ t.
+  Lemma sbisim_vis_BrS_inv' {X Y Z}
+    (e : E X) (k1 : X -> ctree E C Z) (c : C Y) (k2: Y -> ctree E C Z) (x : X) :
+    Vis e k1 ~ BrS c k2 -> False.
   Proof.
-    intro. step in H. step. destruct H. cbn in *. split; repeat intro.
-    - apply H. econstructor; apply H1.
-    - edestruct H0. apply H1. exists x; auto.
-      destruct H2 as (? & ? & ? & ?); subst.
-      destruct (trans_brD_inv H2) as (j & ?).
-      assert (i = j).
-      {
-        remember 1%nat.
-        destruct i.
-        - dependent destruction j; auto.
-          inv Heqn. inv j.
-        - inv Heqn. inv i.
-      }
-      subst. eauto.
+    unshelve (intros EQ; playL in EQ; inv_trans); auto.
+  Qed.
+
+(*|
+Not fond of this, need to give some thoughts about them
+|*)
+  Lemma sbisim_ret_Br_inv {X Y} (r : Y) (c : C X) (k : X -> ctree E C Y) :
+    (Ret r : ctree E C _) ~ Br c k ->
+    exists x, (Ret r : ctree E C _) ~ k x.
+  Proof.
+    intros EQ; generalize EQ; intros EQ'; playL in EQ; inv_trans.
+    pose proof trans_val_inv TR as H; rewrite H in TR; clear x0 EQ H.
+    exists x; play.
+    - inv_trans; subst.
+      do 2 eexists; intuition; eauto.
+      now rewrite EQ.
+    - playR in EQ'.
+      apply trans_ret_inv in TR1; intuition; subst.
+      do 2 eexists; intuition; eauto.
+      apply trans_val_inv in TR0.
+      rewrite TR0; eauto.
   Qed.
 
 End WithParams.
 
 Section StrongSimulations.
 
-  Context {E F C D: Type -> Type} {X Y: Type}
-          {L: rel (@label E) (@label F)}
-           .
+  Section Heterogeneous.
 
-  Notation ss := (@ss E F C D X Y _ _).
-  Notation sst L := (coinduction.t (ss L)).
-  Notation ssim  := (@ssim E F C D X Y _ _).
-  Notation ssbt L := (coinduction.bt (ss L)).
-  Notation ssT L := (coinduction.T (ss L)).
+    Context {E F C D: Type -> Type} {X Y: Type}
+      {L: rel (@label E) (@label F)}.
 
-  Lemma sbisim_clos_ss : @sbisim_clos E F C D X Y _ _ eq eq <= (sst L).
-  Proof.
-    intro R1. apply Coinduction.
-    cbn; intros Rs x y [z x' y' z' SBzx' x'y' SBy'z'].
-    - intros l t zt.
-      step in SBzx'.
-      apply SBzx' in zt as (l' & t' & x't' & ? & ?); subst.
-      destruct (x'y' _ _ x't') as (l'' & t'' & y't'' & ? & ?).
+    Notation ss := (@ss E F C D X Y).
+    Notation ssim  := (@ssim E F C D X Y).
 
-      step in SBy'z'.
-      apply SBy'z' in y't'' as (ll & tt & z'tt & ? & ?); subst.
-      exists ll, tt; split; trivial.
-      + split; trivial.
-        apply (f_Tf (ss L)).
+    Lemma sbisim_clos_ss {c: Chain (ss L)}:
+      forall x y, sbisim_clos (LE := eq) (LF := eq) `c x y -> `c x y.
+    Proof.
+      apply tower.
+      - intros ? INC x y [x' y' x'' y'' EQ' EQ''] ??. red.
+        apply INC; auto.
         econstructor; eauto.
-  Qed.
+        apply leq_infx in H.
+        now apply H.
+      - clear.
+        intros c IH x y []; intros ? ? TR.
+        step in Sbisimt; apply Sbisimt in TR; destruct TR as (? & ? & TR & Sbis & <-).
+        apply HR in TR; destruct TR as (? & ? & TR & Sbis' & HL).
+        step in Sbisimu; apply Sbisimu in TR; destruct TR as (? & ? & TR & Sbis'' & <-).
+        do 2 eexists; repeat split; eauto.
+        apply IH.
+        econstructor; eauto.
+    Qed.
 
 (*|
-    Instances for rewriting [sbisim] under all [ss]-related contexts
+  Instances for rewriting [sbisim] under all [ss]-related contexts
 |*)
-  #[global] Instance sbisim_eq_clos_ssim_goal:
-    Proper (sbisim eq ==> sbisim eq ==> flip impl) (ssim L).
-  Proof.
-    cbn.
-    coinduction R CH. intros * EQ1 * EQ2 SIM.
-    do 2 red; cbn; intros * TR.
-    symmetry in EQ2.
-    step in EQ1; apply EQ1 in TR as (? & ? & ? & ? & ?).
-    step in SIM; apply SIM in H as (? & ? & ? & ? & ?).
-    step in EQ2; apply EQ2 in H as (? & ? & ? & ? & ?); subst.
-    do 2 eexists.
-    split; [eassumption |].
-    split; [| eassumption].
-    symmetry in H4. eapply CH; eassumption.
-  Qed.
+    #[global] Instance sbisim_eq_clos_ssim_goal:
+      Proper (sbisim eq ==> sbisim eq ==> flip impl) (ssim L).
+    Proof.
+      repeat intro.
+      apply sbisim_clos_ss.
+      econstructor; [eassumption | | symmetry in H0; eassumption].
+      eauto.
+    Qed.
 
-  #[global] Instance sbisim_eq_clos_ssim_ctx :
-    Proper (sbisim eq ==> sbisim eq ==> impl) (ssim L).
-  Proof.
-    repeat intro. symmetry in H, H0. eapply sbisim_eq_clos_ssim_goal; eauto.
-  Qed.
+    #[global] Instance sbisim_eq_clos_ssim_ctx :
+      Proper (sbisim eq ==> sbisim eq ==> impl) (ssim L).
+    Proof.
+      repeat intro. symmetry in H, H0. eapply sbisim_eq_clos_ssim_goal; eauto.
+    Qed.
 
-  #[global] Instance sbisim_eq_clos_sst_goal RR :
-    Proper (sbisim eq ==> sbisim eq ==> flip impl) (sst L RR).
-  Proof.
-    cbn; intros ? ? eq1 ? ? eq2 H.
-    apply (ft_t sbisim_clos_ss). cbn.
-    econstructor; eauto.
-    now rewrite eq2.
-  Qed.
+    Lemma ss_sb : forall RR (t : ctree E C X) (t' : ctree F D Y),
+        ss L RR t t' ->
+        SSim.ss (flip L) (flip RR) t' t ->
+        sb L RR t t'.
+    Proof.
+      split; cbn; intros.
+      - apply H in H1 as (? & ? & ? & ? & ?); eauto.
+      - apply H0 in H1 as (? & ? & ? & ? & ?); eauto.
+    Qed.
 
-  #[global] Instance sbisim_eq_clos_sst_ctx RR :
-    Proper (sbisim eq ==> sbisim eq ==> impl) (sst L RR).
-  Proof.
-    cbn; intros ? ? eq1 ? ? eq2 ?.
-    rewrite <- eq1, <- eq2.
-    auto.
-  Qed.
+  End Heterogeneous.
 
-  #[global] Instance sbisim_eq_clos_ssT_goal RR f :
-    Proper (sbisim eq ==> sbisim eq ==> flip impl) (ssT L f RR).
-  Proof.
-    cbn; intros ? ? eq1 ? ? eq2 H.
-    apply (fT_T sbisim_clos_ss). cbn.
-    econstructor; eauto.
-    now rewrite eq2.
-  Qed.
+  Section Homogeneous.
 
-  #[global] Instance sbisim_eq_clos_ssT_ctx RR f :
-    Proper (sbisim eq ==> sbisim eq ==> impl) (ssT L f RR).
-  Proof.
-    cbn; intros ? ? eq1 ? ? eq2 ?.
-    rewrite <- eq1, <- eq2.
-    auto.
-  Qed.
+    Context {E C: Type -> Type} {X: Type}
+      {L: rel (@label E) (@label E)}.
+    Notation ss := (@ss E E C C X X).
+    Notation ssim  := (@ssim E E C C X X).
+
+    #[global] Instance sbisim_clos_ssim_goal `{Symmetric _ L} `{Transitive _ L} :
+      Proper (sbisim L ==> sbisim L ==> flip impl) (ssim L).
+    Proof.
+      repeat intro.
+      transitivity y0. transitivity y.
+      - now apply sbisim_ssim_subrelation in H1.
+      - now exact H3.
+      - symmetry in H2; now apply sbisim_ssim_subrelation in H2.
+    Qed.
+
+    #[global] Instance sbisim_clos_ssim_ctx `{Equivalence _ L}:
+      Proper (sbisim L ==> sbisim L ==> impl) (ssim L).
+    Proof.
+      repeat intro. symmetry in H0, H1. eapply sbisim_clos_ssim_goal; eauto.
+    Qed.
+
+  End Homogeneous.
+
+  Section two_ss_is_not_sb.
+
+    Lemma split_sb_eq : forall {E C X} RR
+                          (t t' : ctree E C X),
+        ss eq RR t t' ->
+        ss eq (flip RR) t' t ->
+        sb eq RR t t'.
+    Proof.
+      intros.
+      split; eauto.
+      simpl in *; intros.
+      destruct (H0 _ _ H1) as (? & ? & ? & ? & ?).
+      destruct (H _ _ H2) as (? & ? & ? & ? & ?).
+      subst; eauto.
+    Qed.
+
+    Lemma split_sbisim_eq : forall {E B X} (t u : ctree E B X),
+        t ~ u <-> ss eq (sbisim eq) t u /\ ss eq (sbisim eq) u t.
+    Proof.
+      split; intro.
+      - step in H. split; [apply H |].
+        symmetry in H. apply H.
+      - step. split; [apply H |].
+        destruct H as [_ ?].
+        eapply weq_ss with (y := eq). { cbn. split; auto. }
+        eapply (Hbody (ss eq)). 2: apply H.
+        cbn. intros. now symmetry.
+    Qed.
+
+    #[local] Definition t1 : ctree void1 B2 unit :=
+      Step (Ret tt).
+
+    #[local] Definition t2 : ctree void1 B2 unit :=
+      brS2 (Ret tt) (Stuck).
+
+    Lemma ssim_sbisim_nequiv :
+      ssim eq t1 t2 /\ ssim eq t2 t1 /\ ~ sbisim eq t1 t2.
+    Proof.
+      unfold t1, t2. intuition.
+      - unfold brS2.
+        step.
+        intros ?? TR.
+        inv_trans; subst.
+        exists τ, (Ret tt); split.
+        apply Transbr with true.
+        constructor; reflexivity.
+        split; auto.
+        rewrite EQ; auto.
+      - step; intros ?? TR.
+        inv_trans; subst.
+        exists τ, (Ret tt); intuition; now rewrite EQ.
+        exists τ, (Ret tt). intuition.
+        rewrite EQ; apply Stuck_ssim.
+      - step in H. cbn in H. destruct H as [_ ?].
+        specialize (H τ Stuck). lapply H; [| etrans].
+        intros. destruct H0 as (? & ? & ? & ? & ?).
+        inv_trans. step in H1. cbn in H1. destruct H1 as [? _].
+        specialize (H0 (val tt) Stuck). lapply H0.
+        2: subst; etrans.
+        intro; destruct H1 as (? & ? & ? & ? & ?).
+        now apply Stuck_is_stuck in H1.
+    Qed.
+
+  End two_ss_is_not_sb.
 
 End StrongSimulations.
 
 Section CompleteStrongSimulations.
 
   Context {E F C D: Type -> Type} {X Y: Type}
-          {L: rel (@label E) (@label F)}
-           .
+    {L: rel (@label E) (@label F)}.
 
-  Notation css := (@css E F C D X Y _ _).
-  Notation csst L := (coinduction.t (css L)).
-  Notation cssim  := (@cssim E F C D X Y _ _).
-  Notation cssbt L := (coinduction.bt (css L)).
-  Notation cssT L := (coinduction.T (css L)).
-
+  Notation css := (@css E F C D X Y).
+  Notation cssim  := (@cssim E F C D X Y).
 
 (*|
 A bisimulation trivially gives a simulation.
@@ -1717,52 +1684,45 @@ A bisimulation trivially gives a simulation.
     - intros. apply H in H0 as (? & ? & ? & ? & ?). eauto.
   Qed.
 
-  (* TODO MOVE to CSim *)
-  Lemma cssim_ssim : forall (t : ctree E C X) (t' : ctree F D Y),
-      cssim L t t' -> ssim L t t'.
+  Lemma sbisim_clos_css {c: Chain (css L)}:
+    forall x y, sbisim_clos (LE := eq) (LF := eq) `c x y -> `c x y.
   Proof.
-    coinduction R CH. simpl. intros.
-    step in H.
-    apply H in H0 as (? & ? & ? & ? & ?).
-    apply CH in H1.
-    exists x, x0; eauto.
-  Qed.
-
-  Lemma sbisim_cssim : forall (t : ctree E C X) (t' : ctree F D Y),
-      sbisim L t t' -> cssim L t t'.
-  Proof.
-    coinduction R CH. simpl. intros.
-    split; step in H; intros;
-      apply H in H0 as (? & ? & ? & ? & ?);
-      exists x, x0; auto.
+    apply tower.
+    - intros ? INC x y [x' y' x'' y'' EQ' EQ''] ??. red.
+      apply INC; auto.
+      econstructor; eauto.
+      apply leq_infx in H.
+      now apply H.
+    - clear.
+      intros c IH x y []; split; intros ? ? TR.
+      + step in Sbisimt; apply Sbisimt in TR; destruct TR as (? & ? & TR & Sbis & <-).
+        apply HR in TR; destruct TR as (? & ? & TR & Sbis' & HL).
+        step in Sbisimu; apply Sbisimu in TR; destruct TR as (? & ? & TR & Sbis'' & <-).
+        do 2 eexists; repeat split; eauto.
+        apply IH.
+        econstructor; eauto.
+      + playR in Sbisimu.
+        apply HR in TR0 as (? & ? & ?).
+        playR in Sbisimt.
+        eauto.
   Qed.
 
 (*|
-Various results on reflexivity and transitivity.
+  Instances for rewriting [sbisim] under all [css]-related contexts
 |*)
-  Lemma sbisim_clos_css : @sbisim_clos E F C D X Y _ _ eq eq <= (csst L).
+  #[global] Instance sbisim_eq_clos_cssim_goal:
+    Proper (sbisim eq ==> sbisim eq ==> flip impl) (cssim L).
   Proof.
-    intro R1. apply Coinduction.
-    cbn; intros Rs x y [z x' y' z' SBzx' [x'y' y'x'] SBy'z']; split.
-    - intros l t zt.
-      step in SBzx'.
-      apply SBzx' in zt as (l' & t' & x't' & ? & ?); subst.
-      destruct (x'y' _ _ x't') as (l'' & t'' & y't'' & ? & ?).
+    repeat intro.
+    apply sbisim_clos_css.
+    econstructor; [eassumption | | symmetry in H0; eassumption].
+    eauto.
+  Qed.
 
-      step in SBy'z'.
-      apply SBy'z' in y't'' as (ll & tt & z'tt & ? & ?); subst.
-      exists ll, tt; split; trivial.
-      + split; trivial.
-        apply (f_Tf (css L)).
-        econstructor; eauto.
-    - intros l t z't.
-      step in SBy'z'.
-      symmetry in SBy'z'.
-      apply SBy'z' in z't as (l' & t' & y't' & ? & ?); subst.
-      destruct (y'x' _ _ y't') as (l'' & t'' & y't'').
-      step in SBzx'.
-      apply SBzx' in y't'' as (ll & tt & ztt & ?); subst.
-      exists ll, tt; trivial.
+  #[global] Instance sbisim_eq_clos_cssim_ctx :
+    Proper (sbisim eq ==> sbisim eq ==> impl) (cssim L).
+  Proof.
+    repeat intro. symmetry in H, H0. eapply sbisim_eq_clos_cssim_goal; eauto.
   Qed.
 
 (*|
@@ -1773,22 +1733,8 @@ Various results on reflexivity and transitivity.
   #[global] Instance sbisim_clos_cssim_goal:
     Proper (sbisim eq ==> sbisim eq ==> flip impl) (cssim L).
   Proof.
-    cbn.
-    coinduction R CH. intros * EQ1 * EQ2 SIM.
-    do 2 red; cbn; split; intros * TR.
-    - symmetry in EQ2.
-      step in EQ1; apply EQ1 in TR as (? & ? & ? & ? & ?).
-      step in SIM; apply SIM in H as (? & ? & ? & ? & ?).
-      step in EQ2; apply EQ2 in H as (? & ? & ? & ? & ?); subst.
-      do 2 eexists.
-      split; [eassumption |].
-      split; [| eassumption].
-      symmetry in H4. eapply CH; eassumption.
-    - step in EQ2; apply EQ2 in TR as (? & ? & ? & ? & ?).
-      step in SIM. apply SIM in H as (? & ? & ?).
-      step in EQ1. apply EQ1 in H as (? & ? & ? & ?); simpl in *; subst.
-      do 2 eexists.
-      eauto.
+    cbn; intros; eapply sbisim_clos_css; econstructor; eauto.
+    now symmetry.
   Qed.
 
   #[global] Instance sbisim_clos_cssim_ctx :
@@ -1797,47 +1743,12 @@ Various results on reflexivity and transitivity.
     repeat intro. symmetry in H, H0. eapply sbisim_clos_cssim_goal; eauto.
   Qed.
 
-  #[global] Instance sbisim_clos_csst_goal RR :
-    Proper (sbisim eq ==> sbisim eq ==> flip impl) (csst L RR).
-  Proof.
-    cbn; intros ? ? eq1 ? ? eq2 H.
-    apply (ft_t sbisim_clos_css). cbn.
-    econstructor; eauto.
-    now rewrite eq2.
-  Qed.
-
-  #[global] Instance sbisim_clos_csst_ctx RR :
-    Proper (sbisim eq ==> sbisim eq ==> impl) (csst L RR).
-  Proof.
-    cbn; intros ? ? eq1 ? ? eq2 ?.
-    rewrite <- eq1, <- eq2.
-    auto.
-  Qed.
-
-  #[global] Instance sbisim_clos_cssT_goal RR f :
-    Proper (sbisim eq ==> sbisim eq ==> flip impl) (cssT L f RR).
-  Proof.
-    cbn; intros ? ? eq1 ? ? eq2 H.
-    apply (fT_T sbisim_clos_css). cbn.
-    econstructor; eauto.
-    now rewrite eq2.
-  Qed.
-
-  #[global] Instance sbisim_clos_ccssT_ctx RR f :
-    Proper (sbisim eq ==> sbisim eq ==> impl) (cssT L f RR).
-  Proof.
-    cbn; intros ? ? eq1 ? ? eq2 ?.
-    rewrite <- eq1, <- eq2.
-    auto.
-  Qed.
-
 (*|
 A strong bisimulation gives two strong simulations,
 but two strong simulations do not always give a strong bisimulation.
 This property is true if we only allow choices with 0 or 1 branch,
 but we prove a counter-example for a ctree with a binary choice.
 |*)
-
   Lemma css_sb : forall RR (t : ctree E C X) (t' : ctree F D Y),
       css L RR t t' ->
       CSSim.css (flip L) (flip RR) t' t ->
@@ -1848,318 +1759,5 @@ but we prove a counter-example for a ctree with a binary choice.
     - apply H0 in H1 as (? & ? & ? & ? & ?); eauto.
   Qed.
 
-  (* TODO MOVE To Trans *)
-  Lemma ctree_B01_trans_det : forall {E X} l (t t' t'' : ctree E B01 X),
-      trans l t t' -> trans l t t'' -> t' ≅ t''.
-  Proof.
-    intros. do 3 red in H.
-    rewrite ctree_eta in H0.
-    genobs t ot. genobs t' ot'. rewrite ctree_eta, <- Heqot'.
-    clear t t' Heqot Heqot'. revert t'' H0.
-    dependent induction H; intros; inv_trans.
-    - eapply IHtrans_; cbn.
-      rewrite <- ctree_eta.
-      destruct c, b, x0, x; intuition.
-    - rewrite <- ctree_eta. destruct c, b, x, x0.
-      now rewrite H.
-    - subst. rewrite <- ctree_eta. now rewrite H.
-    - apply br0_always_stuck.
-  Qed.
-
-  Lemma trans_val_sbisim : forall (t t' u: ctree E C X) (x: X),
-      trans (val x) t t' ->
-      t ~ u ->
-      exists s, s ≅ Stuck /\ trans (val x) u s.
-  Proof.
-    intros * TR EQ.
-    step in EQ.
-    destruct EQ as [Fwd _].
-    apply Fwd in TR as (? & s & ? & ? & <-).
-    exists s; split; auto.
-    exact (trans_val_inv H).
-  Qed.
-
-  (* TODO Think a bit about these and reestablish them, they are a bit weird *)
-  (* Lemma ssim_sbisim_equiv_gen :
-    forall `{Injective (@label E) (@label F) L}
-      `{Deterministic _ _ L}
-      (t : ctree E C X) (t' : ctree F D Y),
-      ssim L t t' -> ssim (flip L) t' t -> sbisim L t t'.
-  Proof.
-    intros until 2.
-    coinduction R CH. red. red. cbn. split; intros.
-    - step in H1. cbn in H1.
-      apply H1 in H3 as H3'. destruct H3' as (? & ? & ? & ? & ?).
-      exists x, x0. intuition. apply CH.
-      + apply H5.
-      + step in H2. cbn in H2. apply H2 in H4 as (? & ? & ? & ? & ?).
-        do_inj.
-        assert (t'0 ≅ x2) by (eapply ctree_B01_trans_det; eauto). *)
-  (*       now rewrite H6. *)
-  (*   - step in H2. cbn in H2. *)
-  (*     apply H2 in H3 as H3'. destruct H3' as (? & ? & ? & ? & ?). *)
-  (*     exists x, x0. intuition. apply CH. *)
-  (*     + step in H1. cbn in H1. apply H1 in H4 as (? & ? & ? & ? & ?). *)
-  (*       do_det. *)
-  (*       assert (t'0 ≅ x2) by (eapply ctree_B01_trans_det; eauto). *)
-  (*       now rewrite H6. *)
-  (*     + apply H5. *)
-  (* Qed. *)
-
-  (* Import SSimNotations. *)
-  (* Lemma ssim_sbisim_equiv_gen : *)
-  (*   forall `{Injective (@label E) (@label F) L} *)
-  (*     `{Deterministic _ _ L} *)
-  (*     (t : ctree E C X) (t' : ctree F D Y), *)
-  (*     ssim L t t' -> ssim (flip L) t' t -> sbisim L t t'. *)
-  (* Proof. *)
-  (*   intros until 2. *)
-  (*   clear H H0. *)
-  (*   coinduction R CH. red. red. cbn. intros * SIM1 SIM2; split; intros * TR. *)
-  (*   - step in SIM1. *)
-  (*     apply SIM1 in TR as (l' & u' & TR' & ? & ?). *)
-  (*     exists l', u'; intuition. *)
-  (*     apply CH. *)
-  (*     auto. *)
-  (*     step in SIM2. *)
-
-  (*     apply SIM1 in TR as TR'. destruct TR' as (? & ? & TR' & ? & ?). *)
-  (*     exists x, x0. intuition. apply CH; auto. *)
-  (*     step in SIM2. cbn in SIM2. apply SIM2 in TR' as (? & ? & ? & ? & ?). *)
-
-  (*     do_inj. *)
-  (*     assert (t'0 ≅ x2) by (eapply ctree_B01_trans_det; eauto). *)
-  (*     now rewrite H6. *)
-  (*   - step in H2. cbn in H2. *)
-  (*     apply H2 in H3 as H3'. destruct H3' as (? & ? & ? & ? & ?). *)
-  (*     exists x, x0. intuition. apply CH. *)
-  (*     + step in H1. cbn in H1. apply H1 in H4 as (? & ? & ? & ? & ?). *)
-  (*       do_det. *)
-  (*       assert (t'0 ≅ x2) by (eapply ctree_B01_trans_det; eauto). *)
-  (*       now rewrite H6. *)
-  (*     + apply H5. *)
-  (* Qed. *)
-
-  (* Lemma ssim_sbisim_equiv_eq : forall {E X} (t t' : ctree E B01 X), *)
-  (*     ssim eq t t' -> ssim eq t' t -> sbisim eq t t'. *)
-  (* Proof. *)
-  (*   intros. apply ssim_sbisim_equiv_gen; intros. *)
-  (*   - typeclasses eauto. *)
-  (*   - typeclasses eauto. *)
-  (*   - apply H. *)
-  (*   - apply (@ssim_subrelation _ _ _ eq); auto. *)
-  (*     red. intros. subst. reflexivity. *)
-  (* Qed. *)
-
-  (* #[local] Definition t1 : ctree void1 (B01 +' B2) unit := *)
-  (*   Step (Ret tt). *)
-
-  (* #[local] Definition t2 : ctree void1 (B01 +' B2) unit := *)
-  (*   brS2 (Ret tt) (Stuck). *)
-
-  (* Lemma ssim_sbisim_nequiv : *)
-  (*   ssim eq t1 t2 /\ ssim (flip eq) t2 t1 /\ ~ sbisim eq t1 t2. *)
-  (* Proof. *)
-  (*   unfold t1, t2. intuition. *)
-  (*   - step. eapply step_ss_brS; auto. *)
-  (*     exact  (exist _ tt I). *)
-  (*     intros _. exists true. reflexivity. *)
-  (*   - step. eapply step_ss_brS; auto. *)
-  (*     exact  (exist _ true I). *)
-  (*     intro. exists tt. destruct x. *)
-  (*     + reflexivity. *)
-  (*     + step. apply ss_is_stuck. *)
-  (*       * apply Stuck_is_stuck. *)
-  (*       * admit. (* This looks wrong, Ret is not stuck *) *)
-  (*   - step in H. cbn in H. destruct H as [_ ?]. *)
-  (*     specialize (H tau Stuck). lapply H; [| etrans]. *)
-  (*     intros. destruct H0 as (? & ? & ? & ? & ?). subst. *)
-  (*     inv_trans. step in H1. cbn in H1. destruct H1 as [? _]. *)
-  (*     specialize (H0 (val tt) Stuck). lapply H0. 2: { etrans. } *)
-  (*                                               intro. destruct H1 as (? & ? & ? & ? & ?). subst. *)
-  (*     now apply Stuck_is_stuck in H1. *)
-  (* Admitted. *)
-
-  (* #[global] Instance sbisim_sbisim_hclosed_goal {E F C D X Y} ` *)
-  (*   {L: rel (@label E) (@label F)} {LE: rel (@label E) (@label E)} {LF: rel (@label F) (@label F)}: *)
-  (*   Proper (@sbisim E E C C X X _ _ LE ==> @sbisim F F D D Y Y _ _ LF ==> flip impl) (@sbisim E F C D X Y _ _ L). *)
-  (* Proof. *)
-  (* Admitted. *)
-
-  (* #[global] Instance sbisim_sbisim_hclosed_ctx {E F C D X Y} ` *)
-  (*   {L: rel (@label E) (@label F)} {LE: rel (@label E) (@label E)} {LF: rel (@label F) (@label F)}: *)
-  (*   Proper (@sbisim E E C C X X _ _ LE ==> @sbisim F F D D Y Y _ _ LF ==> impl) (@sbisim E F C D X Y _ _ L). *)
-  (* Proof. *)
-  (* Admitted. *)
-
 End CompleteStrongSimulations.
 
-Section StrongSimulations.
-
-  Section Heterogeneous.
-    Context {E F C D: Type -> Type} {X Y: Type}
-      {L: rel (@label E) (@label F)}
-       .
-    Notation ss := (@ss E F C D X Y _ _).
-    Notation sst L := (coinduction.t (ss L)).
-    Notation ssim  := (@ssim E F C D X Y _ _).
-    Notation ssbt L := (coinduction.bt (ss L)).
-    Notation ssT L := (coinduction.T (ss L)).
-
-    Lemma sbisim_ssim : forall (t : ctree E C X) (t' : ctree F D Y),
-        sbisim L t t' -> ssim L t t'.
-    Proof.
-      intros. apply cssim_ssim. now apply sbisim_cssim.
-    Qed.
-
-  End Heterogeneous.
-
-  Section Homogeneous.
-    Context {E C: Type -> Type} {X: Type}
-      {L: rel (@label E) (@label E)}
-      .
-    Notation ss := (@ss E E C C X X _ _).
-    Notation sst L := (coinduction.t (ss L)).
-    Notation ssim  := (@ssim E E C C X X _ _).
-    Notation ssbt L := (coinduction.bt (ss L)).
-    Notation ssT L := (coinduction.T (ss L)).
-
-(*|
-Aggressively providing instances for rewriting hopefully faster
-[sbisim] under all [ss1]-related contexts (consequence of the transitivity
-of the companion).
-|*)
-  #[global] Instance sbisim_clos_ssim_goal `{Symmetric _ L} `{Transitive _ L} :
-    Proper (sbisim L ==> sbisim L ==> flip impl) (ssim L).
-  Proof.
-    repeat intro.
-    transitivity y0. transitivity y.
-    - now apply sbisim_ssim in H1.
-    - now exact H3.
-    - symmetry in H2; now apply sbisim_ssim in H2.
-  Qed.
-
-  #[global] Instance sbisim_clos_ssim_ctx `{Equivalence _ L}:
-    Proper (sbisim L ==> sbisim L ==> impl) (ssim L).
-  Proof.
-    repeat intro. symmetry in H0, H1. eapply sbisim_clos_ssim_goal; eauto.
-  Qed.
-
-  #[global] Instance sbisim_clos_sst_goal RR `{Equivalence _ L}:
-    Proper (sbisim L ==> sbisim L ==> flip impl) (sst L RR).
-  Proof.
-    cbn; intros ? ? eq1 ? ? eq2 H0.
-    symmetry in eq2. apply sbisim_ssim in eq1, eq2.
-    rewrite eq1, <- eq2.
-    auto.
-  Qed.
-
-  #[global] Instance sbisim_clos_sst_ctx RR `{Equivalence _ L}:
-    Proper (sbisim L ==> sbisim L ==> impl) (sst L RR).
-  Proof.
-    cbn; intros ? ? eq1 ? ? eq2 ?.
-    rewrite <- eq1, <- eq2.
-    auto.
-  Qed.
-
-  #[global] Instance sbisim_clos_ssT_goal RR f `{Equivalence _ L}:
-    Proper (sbisim L ==> sbisim L ==> flip impl) (ssT L f RR).
-  Proof.
-    cbn; intros ? ? eq1 ? ? eq2 ?.
-    symmetry in eq2. apply sbisim_ssim in eq1, eq2.
-    rewrite eq1, <- eq2.
-    auto.
-  Qed.
-
-  #[global] Instance sbisim_clos_ssT_ctx RR f `{Equivalence _ L}:
-    Proper (sbisim L ==> sbisim L ==> impl) (ssT L f RR).
-  Proof.
-    cbn; intros ? ? eq1 ? ? eq2 ?.
-    rewrite <- eq1, <- eq2.
-    auto.
-  Qed.
-
-(*|
-A strong bisimulation gives two strong simulations,
-but two strong simulations do not always give a strong bisimulation.
-This property is true if we only allow brs with 0 or 1 branch,
-but we prove a counter-example for a ctree with a binary br.
-|*)
-
-  End Homogeneous.
-
-  Lemma ss_sb : forall {E F B C X Y} {L} {R : rel (ctree E B X) (ctree F C Y)} t t',
-    sb L R t t' ->
-    ss L R t t'.
-  Proof.
-    intros. apply H1.
-  Qed.
-
-  Lemma split_sb_eq : forall {E C X} RR
-                  (t t' : ctree E C X),
-      ss eq RR t t' ->
-      ss eq (flip RR) t' t ->
-      sb eq RR t t'.
-  Proof.
-    intros.
-    split; eauto.
-    simpl in *; intros.
-    destruct (H0 _ _ H1) as (? & ? & ? & ? & ?).
-    destruct (H _ _ H2) as (? & ? & ? & ? & ?).
-    subst; eauto.
-  Qed.
-
-  Lemma split_sbt_eq : forall {E B X R} (t u : ctree E B X), sbt eq R t u <->
-    ss eq (st eq R) t u /\ ss eq (st eq R) u t.
-  Proof.
-    split; intro.
-    - split; [apply H |].
-      symmetry in H. apply H.
-    - apply split_sb_eq. { apply H. }
-      destruct H as [_ H].
-      cbn. intros. apply H in H0 as (? & ? & ? & ? & ?).
-      unfold flip in H1, H2. symmetry in H1. etrans.
-  Qed.
-
-  Lemma split_sbisim_eq : forall {E B X} (t u : ctree E B X),
-    t ~ u <->
-    ss eq (sbisim eq) t u /\ ss eq (sbisim eq) u t.
-  Proof.
-    split; intro.
-    - step in H. split; [apply H |].
-      symmetry in H. apply H.
-    - step. split; [apply H |].
-      destruct H as [_ ?].
-      eapply weq_ss with (y := eq). { cbn. split; auto. }
-      eapply (Hbody (ss eq)). 2: apply H.
-      cbn. intros. now symmetry.
-  Qed.
-
-  #[local] Definition t1 : ctree void1 (B0 +' B1 +' B2) unit :=
-    Step (Ret tt).
-
-  #[local] Definition t2 : ctree void1 (B0 +' B1 +' B2) unit :=
-    brS2 (Ret tt) (Stuck).
-
-  Lemma ssim_sbisim_nequiv :
-    ssim eq t1 t2 /\ ssim eq t2 t1 /\ ~ sbisim eq t1 t2.
-  Proof.
-    unfold t1, t2. intuition.
-    - step.
-      apply step_ss_brS; auto.
-      intros _. exists true. reflexivity.
-    - step. apply step_ss_brS; auto.
-      intros [|]; exists tt.
-      + reflexivity.
-      + step. apply Stuck_ss.
-    - step in H. cbn in H. destruct H as [_ ?].
-      specialize (H tau Stuck). lapply H; [| etrans].
-      intros. destruct H0 as (? & ? & ? & ? & ?).
-      inv_trans. step in H1. cbn in H1. destruct H1 as [? _].
-      specialize (H0 (val tt) Stuck). lapply H0.
-      2: subst; etrans.
-      intro; destruct H1 as (? & ? & ? & ? & ?).
-      now apply Stuck_is_stuck in H1.
-  Qed.
-
-End StrongSimulations.
