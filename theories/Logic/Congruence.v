@@ -96,10 +96,10 @@ Section EquivCtlFormulas.
   Proof.
     intros p q EQpq p' q' EQpq'.
     split; intros Hau; cinduction Hau.
-    - cleft; now rewrite <- EQpq'.
-    - cright; auto; now rewrite <- EQpq.
-    - cleft; now rewrite EQpq'.
-    - cright; auto; now rewrite EQpq.
+    - cright; now rewrite <- EQpq'.
+    - cleft; auto; now rewrite <- EQpq.
+    - cright; now rewrite EQpq'.
+    - cleft; auto; now rewrite EQpq.
   Qed.
 
   Arguments CEU {W} {HW}.
@@ -109,12 +109,12 @@ Section EquivCtlFormulas.
   Proof.
     intros p q EQpq p' q' EQpq'.
     split; intros Heu; cinduction Heu.
-    - cleft; now rewrite <- EQpq'.
-    - cright; destruct H0 as (m' & TR & Heu).
+    - cright; now rewrite <- EQpq'.
+    - cleft; destruct H0 as (m' & TR & Heu).
       + now rewrite <- EQpq.
       + exact H1. 
-    - cleft; now rewrite EQpq'.
-    - cright; destruct H0 as (m' & TR & Heu).
+    - cright; now rewrite EQpq'.
+    - cleft; destruct H0 as (m' & TR & Heu).
       + now rewrite EQpq.
       + exact H1.
   Qed.
@@ -157,10 +157,10 @@ Section CtlEquations.
       + destruct H1 as ([? ?] & ?).
         cright; split; auto.
     - cdestruct Hind.
-      + now cleft. 
+      + now cright. 
       + cdestruct H.
         cdestruct H0.
-        cright; auto.
+        cleft; auto.
         split; auto.
   Qed.
 
@@ -173,9 +173,9 @@ Section CtlEquations.
       + destruct H1 as (t' & w' & TR & ?).
         cright; csplit; auto.
     - cdestruct Hind.
-      + now cleft. 
+      + now cright. 
       + cdestruct H.
-        now cright.
+        now cleft.
   Qed.
   
   Lemma ctl_and_idL: forall (p: ctlf W),
@@ -400,20 +400,23 @@ End CtlEquations.
           lazymatch eval cbv in p with
           | CBase (fun _ => True) =>
               rewrite (@ctl_af_ax M W HE KMS X q) in H
-          | _ => rewrite (@ctl_au_ax M W HE KMS X q) in H
+          | _ => rewrite (@ctl_au_ax M W HE KMS X p q) in H
           end
-      | context[CEU ?p ?q] => lazymatch eval cbv in p with
-                             | CBase (fun _ => True) => rewrite (@ctl_ef_ex M W HE KMS X q) in H
-                             | _ => rewrite (@ctl_eu_ex M W HE KMS X q) in H
-                             end
-      | context[CAR ?p ?q] => lazymatch eval cbv in q with
-                             | CBase (fun _ => False) => rewrite (@ctl_ag_ax M W HE KMS X p) in H
-                             | _ => rewrite (@ctl_ar_ax M W HE KMS X p) in H
-                             end
-      | context[CER ?p ?q] => lazymatch eval cbv in q with
-                             | CBase (fun _ => False) => rewrite (@ctl_eg_ex M W HE KMS X p) in H
-                             | _ => rewrite (@ctl_er_ex M W HE KMS X p) in H
-                             end
+      | context[CEU ?p ?q] =>
+          lazymatch eval cbv in p with
+          | CBase (fun _ => True) => rewrite (@ctl_ef_ex M W HE KMS X q) in H
+          | _ => rewrite (@ctl_eu_ex M W HE KMS X p q) in H
+          end
+      | context[CAR ?p ?q] =>
+          lazymatch eval cbv in q with
+          | CBase (fun _ => False) => rewrite (@ctl_ag_ax M W HE KMS X p) in H
+          | _ => rewrite (@ctl_ar_ax M W HE KMS X p q) in H
+          end
+      | context[CER ?p ?q] =>
+          lazymatch eval cbv in q with
+          | CBase (fun _ => False) => rewrite (@ctl_eg_ex M W HE KMS X p) in H
+          | _ => rewrite (@ctl_er_ex M W HE KMS X p q) in H
+          end
       | ?ptrivial => fail "Cannot step formula " ptrivial " in " H
       end
   end.

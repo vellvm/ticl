@@ -35,22 +35,22 @@ Generalizable All Variables.
   | |- <( ?t, ?w |= AX ?φ )> => rewrite unfold_ex                                      
   end.
 
-#[global] Ltac cright :=
+#[global] Ltac cleft :=
   match goal with
-  | |- <( ?t, ?w |= ?φ \/ ?ψ )> => rewrite unfold_entailsF; right
+  | |- <( ?t, ?w |= ?φ \/ ?ψ )> => rewrite unfold_entailsF; left
   | |- <( ?t, ?w |= ?φ AU ?ψ )> => rewrite unfold_entailsF; apply StepA
   | |- <( ?t, ?w |= ?φ EU ?ψ )> => rewrite unfold_entailsF; apply StepE
   | |- <( ?t, ?w |= ?φ AR ?ψ )> => step; cbn; apply RStepA
   | |- <( ?t, ?w |= ?φ ER ?ψ )> => step; cbn; apply RStepE
   end.
 
-#[global] Ltac cleft :=
+#[global] Ltac cright :=
   match goal with
-  | |- <( ?t, ?w |= ?φ \/ ?ψ )> => rewrite unfold_entailsF; left
+  | |- <( ?t, ?w |= ?φ \/ ?ψ )> => rewrite unfold_entailsF; right
   | |- <( ?t, ?w |= ?φ AU ?ψ )> => rewrite unfold_entailsF; apply MatchA
   | |- <( ?t, ?w |= ?φ EU ?ψ )> => rewrite unfold_entailsF; apply MatchE
   | |- <( ?t, ?w |= ?φ AR ?ψ )> => step; cbn; apply RMatchA
-  | |- <( ?t, ?w |= ?φ ER ?ψ )> => step; cbn; apply RMatchE                                                  
+  | |- <( ?t, ?w |= ?φ ER ?ψ )> => step; cbn; apply RMatchE
   end.
 
 #[global] Ltac cdestruct H0 :=

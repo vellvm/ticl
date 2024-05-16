@@ -10,7 +10,7 @@ From CTree Require Import
   CTree.Logic.AF
   CTree.Logic.AX
   CTree.Logic.AG
-  CTree.Logic.Kripke
+  CTree.Logic.CanStep
   CTree.Interp.Core
   CTree.Interp.State
   CTree.Events.State.
@@ -53,16 +53,7 @@ Qed.
 Local Instance sec_lte_trans: Transitive sec_lte.
 Proof. red; intros [] [] [] *; auto. Qed.
 
-Lemma sec_lt_dec(l r: Sec): { l ≺ r } + { r ⪯ l }.
-Proof.
-  revert r; induction l; destruct r.
-  - right; auto. 
-  - right; auto. 
-  - left; auto.
-  - right; auto. 
-Qed.
-
-Lemma sec_lte_dec(l r: Sec): { l ⪯ r } + { r ⪯ l }.
+Lemma sec_lte_dec(l r: Sec): { l ⪯ r } + { r ≺ l }.
 Proof.
   revert r; induction l; destruct r.
   - left; reflexivity. 
@@ -78,10 +69,9 @@ Variant secE: Type :=
   | Read (l: Sec) (addr: Addr)
   | Write (l: Sec) (addr: Addr) (val: nat).
 
-Section SecurityEx.  
-
+Section SecurityEx.
   Context `{MF: Map Addr (Sec * nat) St} `{OF: MapOk Addr (Sec * nat) St eq}.
-  
+
   Global Instance encode_secE: Encode secE :=
     fun e => match e with
           | Read l addr => option nat
@@ -92,24 +82,30 @@ Section SecurityEx.
     fun e => mkStateT
             (fun (st: St) =>                                     
                match e return ctree void (encode e * St) with
-               | Read l_r addr =>                                 
+               | Read l addr =>                                 
                    match lookup addr st with
+                   (* [addr] exists and set to [(v, l_a)] *)
                    | Some (l_a, v) =>
-                       if sec_lte_dec l_a l_r then
+                       (* [l_a ⪯ l] *)
+                       if sec_lte_dec l_a l then
                          Ret (Some v, st)
                        else
                          Ret (None, st)
+                   (* [addr] does not exist, return [None] *)
                    | None => Ret (None, st)
                    end
-               | Write l_w addr v =>
+               | Write l addr v =>                   
                    match lookup addr st with
+                   (* [addr] exists and set to [(_, l_a)] *)
                    | Some (l_a, _) =>
-                       if sec_lt_dec l_a l_w then
-                         Ret (tt, add addr (l_w, v) st)
+                       (* [l_a ⪯ l] *)
+                       if sec_lte_dec l_a l then
+                         Ret (tt, add addr (l, v) st)
                        else
                          Ret (tt, st)
+                   (* [addr] does not exist, create it *)
                    | None =>
-                       Ret (tt, add addr (l_w, v) st)
+                       Ret (tt, add addr (l, v) st)
                    end
                end).
 
@@ -124,6 +120,9 @@ Section SecurityEx.
       ml: Sec;
       al: Sec;
     }.
+
+  Definition initG :=
+    {| m := 0; ml:= L; al:= L |}.
                
   (* Instrumented semantics, simply log every successful read with [readG] *)
   Definition h_secE_instr: secE ~> stateT St (ctreeW readG) :=
@@ -141,10 +140,12 @@ Section SecurityEx.
 
   (* Trigger instructions *)
   Definition read: Sec -> Addr -> ctree secE (option nat) :=
-    fun (l: Sec) (addr: Addr) => @Ctree.trigger secE secE _ _ (ReSum_refl) (ReSumRet_refl) (Read l addr).
+    fun (l: Sec) (addr: Addr) =>
+      @Ctree.trigger secE secE _ _ (ReSum_refl) (ReSumRet_refl) (Read l addr).
   
   Definition write: Sec -> Addr -> nat -> ctree secE unit :=
-    fun (l: Sec) (addr: Addr) (s: nat) => Ctree.trigger (Write l addr s).
+    fun (l: Sec) (addr: Addr) (s: nat) =>
+      Ctree.trigger (Write l addr s).
 
   (* Alice (H) writes [secret] to odd addresses *)
   Definition sec_alice1(secret: nat)(i: Addr): ctree secE unit :=
@@ -164,7 +165,7 @@ Section SecurityEx.
       (* [i] odd, read [i+1] *)
       read L (i+1) ;; Ret tt.
 
-  (* The unfair composition of Alice/Bob *)
+  (* The (unfair) infinite interleaving of Alice/Bob *)
   Definition sec_system(secret: nat): ctree secE void :=
     Ctree.forever void
       (fun (i: nat) =>
@@ -173,16 +174,63 @@ Section SecurityEx.
             (sec_bob1 i));;
          (* Increase counter by 1 *)
          Ret (S i)) 0.
-
-  (* Safety property: there does not exist a memory label ml ≺ al, or there does
-     not exist a low intruction that reads from high-security memory *)
+  
+  Definition even_noleak(i: Addr) (σ: St) : Prop :=
+      Nat.Even_Odd_dec i -> exists v, lookup i σ = Some (L, v).
+          
+  (* Safety property: there does not exist a memory label [ml] accessed by
+     label [al ≺ ml], or there does not exist a low intruction that reads from
+     high-security memory *)
+  Typeclasses Transparent equ.
+  Arguments br2 /.
   Theorem ag_safety_sec: forall (secret: nat) (σ: St),
-      <( {interp_state h_secE_instr (sec_system secret) σ}, Pure |= AG visW \s, s.(ml) ⪯ s.(al) )>.
+      (forall i, even_noleak i σ) ->
+      <( {interp_state h_secE_instr (sec_system secret) σ},
+         {Obs (Log initG) tt} |= AG visW \s, s.(ml) ⪯ s.(al) )>.
   Proof.
-    intros.
-    unfold sec_system, forever.
-    
-    
+    intros.    
+    unfold sec_system, forever, σ0.
+    apply ag_iter_state_vis with (R:=fun '(i, σ) => noleak i σ).
+    - now specialize (H0 0).
+    - unfold initG.
+      econstructor; cbn. reflexivity.
+    - intros.
+      ddestruction e.
+      red in v.
+      destruct v.
+      next.
+      split.
+      + rewrite map_bind, interp_state_bind.
+        eapply can_step_bind_l.
+        unfold br2.
+        rewrite interp_state_br.
+        apply ktrans_br.
+        exists Fin.F1; intuition.
+        constructor.
+      + intros  t' w' TR.
+        Search interp_state.        
+        rewrite map_bind, interp_state_bind in TR.
+        unfold br2 in TR.
+        apply ktrans_bind_inv in TR as [(? & ? & ? & ?) | (? & ? & ? & ?)].
+        * (* The head steps *)
+          rewrite H5.
+          rewrite interp_state_br in H3.
+          apply ktrans_br in H3 as (i & Heqx0 & <- & ?).
+          clear H3 H4.
+          ddestruction i.
+          -- 
+             clear H5 t'.
+             rewrite Heqx0.
+             clear Heqx0 x0.
+             rewrite bind_guard.
+             unfold sec_alice1.
+             destruct (Nat.Even_Odd_dec x) eqn:Hx.
+             ++ unfold write. setoid_rewrite interp_state_trigger.
+
+               apply au_guard.
+        rewrite unfold_interp_state.
+      ddestruction v.
+      destruct p.
     unfold t_w, sec_system.
   Admitted.
                 

@@ -19,6 +19,13 @@ Notation rel X Y := (X -> Y -> Prop).
 
 Ltac ddestruction H := cbn in H; dependent destruction H.
 
+Global Coercion is_true(b: bool): Prop :=
+  if b then True else False.
+
+Global Coercion is_left{A B}(b: {A} + {B}): Prop :=
+  if b then True else False.
+
+
 (*|
 Heterogeneous [pair], todo move to coinduction library
 |*)

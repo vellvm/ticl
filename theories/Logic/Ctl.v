@@ -9,4 +9,5 @@ From CTree Require Export
   Logic.Kripke
   Logic.Semantics
   Logic.Congruence
+  Logic.Setoid
   Logic.Tactics.

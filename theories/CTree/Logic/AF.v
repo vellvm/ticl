@@ -106,38 +106,35 @@ Section BasicLemmas.
       now apply can_step_not_done with t.
   Qed.
 
-  Lemma af_guard: forall (t: ctree E X) w φ,
-      <( {Guard t}, w |= AF φ )> <->
-      <( t, w |= AF φ )>.
+  Lemma au_guard: forall (t: ctree E X) w ψ φ,
+      <( {Guard t}, w |= ψ AU φ )> <->
+      <( t, w |= ψ AU φ )>.
   Proof.
     intros.
     now rewrite sb_guard.
   Qed.
 
-  Lemma af_br: forall n (k: fin' n -> ctree E X) w φ,
-      <( {Br n k}, w |= AF now φ )> <->
-        (forall (i: fin' n), <( {k i}, w |= AF now φ )>).
+  Lemma au_br: forall n (k: fin' n -> ctree E X) w ψ φ,
+      <( {Br n k}, w |= now ψ AU now φ )> <->
+        (forall (i: fin' n), <( {k i}, w |= now ψ AU now φ )>).
   Proof.
     split; intros.
-    - next in H; destruct H.
-      + next; left.
-        now rewrite ctl_now in *.
-      + destruct H.
-        rewrite unfold_entailsF.
-        apply H0.
-        apply ktrans_br.
-        apply can_step_not_done in H.
-        exists i; eauto.
-    - destruct (not_done_dec w).
-      + next; right.
-        next; split; auto.
-        * now apply can_step_br.
-        * intros t' w' TR'.
-          apply ktrans_br in TR' as (? & -> & -> & ?).
-          apply H.
-      + apply af_done with (φ:=φ) (t:= k Fin.F1) in i; auto.
-        next; left.
-        now apply ctl_now.
+    - next in H; cdestruct H.
+      + next; now left. 
+      + cdestruct H.
+        now apply ax_br in H0 as (? & ?).
+    - next.
+      pose proof (H Fin.F1).
+      next in H0; cdestruct H0. 
+      + now left.
+      + cdestruct H0.
+        right; split; auto.
+        split.
+        * apply can_step_br.
+          destruct H1.
+          now apply can_step_not_done with (k Fin.F1).
+        * intros t' w' TR.
+          apply ktrans_br in TR as (i & -> & -> & ?); auto.
   Qed.
 
   Lemma af_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ,
@@ -434,13 +431,13 @@ Section CtlAfBind.
       rewrite bind_ret_l; eauto with ctl.
     - (* Tau *)
       rewrite bind_guard.
-      apply af_guard; eauto with ctl.
+      apply au_guard; eauto with ctl.
     - (* Vis *)
       rewrite bind_vis.
       apply af_vis; eauto with ctl.
     - (* Br *)
       rewrite bind_br.
-      apply af_br; eauto with ctl.
+      apply au_br; eauto with ctl.
   Qed.
 
   Lemma af_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ r w',
@@ -500,7 +497,7 @@ Section CtlAfIter.
             end); auto.
     intros [i' | r] w'.
     - intros (Hi' & Hv) Hd.
-      apply af_guard.
+      apply au_guard.
       remember (i', w') as y.
       replace i' with (fst y) by now subst.
       replace w' with (snd y) by now subst.      
@@ -652,7 +649,7 @@ Section CtlAfState.
                       end); auto.
     intros ([i' | r] & s') w'; cbn.
     - intros (Hi' & Hv) Hd.
-      apply af_guard.
+      apply au_guard.
       remember (i', w',s') as y.
       replace i' with (fst (fst y)) by now subst.
       replace w' with (snd (fst y)) by now subst.
