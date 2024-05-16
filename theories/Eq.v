@@ -11,8 +11,7 @@ From Coq Require Export Basics.
 From RelationAlgebra Require Export
      rel srel.
 
-From Coinduction Require Export
-     coinduction rel tactics.
+From Coinduction Require Export all.
 
 From CTree.Eq Require Export
      Shallow
@@ -37,6 +36,7 @@ Export CSSimNotations.
 The [step], [step in] and [coinduction] tactics from [coinduction]
  with additional unfolding and refolding of [equ] and [sbisim]
 |*)
+
 #[global] Tactic Notation "step" :=
   __step_equ || __step_sbisim || __step_ssim || __step_cssim || step.
 
@@ -65,8 +65,7 @@ or backward (playR) challenge --- the e-versions looks for the hypothesis
 (*|
 The upto [Vis] context principle for [sbisim]
 |*)
-#[global] Tactic Notation "upto_vis" := __upto_vis_sbisim.
-(* TODO: rule that goes from [sbt] to [st] when stripping the vis (it's not a upto) *)
+(* #[global] Tactic Notation "upto_vis" := __upto_vis_sbisim. *)
 
 (*|
 The upto [bind] context principle for [equ] and [sbisim] ---
@@ -77,14 +76,14 @@ The three variants are:
 are identical: assumes [reflexivity] will solve the first goal, and proceed to substitute the equality
 - [upto_bind with SS]: for [equ], provides explicitly the intermediate relation
 |*)
-#[global] Tactic Notation "upto_bind" :=
-  __eupto_bind_equ || __upto_bind_sbisim || __upto_bind_ssim eq || __upto_bind_cssim.
+(* #[global] Tactic Notation "upto_bind" := *)
+(*   __eupto_bind_equ || __upto_bind_sbisim || __upto_bind_ssim eq || __upto_bind_cssim. *)
 
-#[global] Tactic Notation "upto_bind_eq" :=
-  __upto_bind_eq_equ || __upto_bind_eq_sbisim || __upto_bind_eq_ssim eq || __upto_bind_eq_cssim.
+(* #[global] Tactic Notation "upto_bind_eq" := *)
+(*   __upto_bind_eq_equ || __upto_bind_eq_sbisim || __upto_bind_eq_ssim eq || __upto_bind_eq_cssim. *)
 
-#[global] Tactic Notation "upto_bind" "with" uconstr(SS) :=
-  __upto_bind_equ SS.
+(* #[global] Tactic Notation "upto_bind" "with" uconstr(SS) := *)
+(*   __upto_bind_equ SS. *)
 
 (*|
 Weakens equalities into respectively [equ] and [sbisim] equations ---

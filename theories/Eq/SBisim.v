@@ -169,37 +169,28 @@ Ltac fold_sbisim :=
     | |- context[gfp (@sb ?E ?F ?C ?D ?X ?Y ?L)]       => fold (@sbisim E F C D X Y L)
     end.
 
-(* Ltac __coinduction_sbisim R H := *)
-(*   (try unfold sbisim); *)
-(*   apply_coinduction; fold_sbisim; intros R H. *)
-
-(* Tactic Notation "__step_sbisim" := *)
-(*   match goal with *)
-(*   | |- context[@sbisim ?E ?F ?C ?D ?X ?Y _ _ ?LR] => *)
-(*       unfold sbisim; *)
-(*       step; *)
-(*       fold (@sbisim E F C D X Y _ _ L) *)
-(*            (* TODO double check that this second match made no sense, I'm confused *) *)
-(*   (* | |- context[@sb ?E ?F ?C ?D ?X ?Y _ _ ?LR] => *) *)
-(*   (*     unfold sb; *) *)
-(*   (*     step; *) *)
-(*   (*     fold (@sb E F C D X Y _ _ L) *) *)
-(*   end. *)
-
-(* #[local] Tactic Notation "step" := __step_sbisim || __step_ssim || __step_cssim || step. *)
-
-(* #[local] Tactic Notation "coinduction" simple_intropattern(R) simple_intropattern(H) := *)
-(*   __coinduction_sbisim R H || __coinduction_ssim R H || __coinduction_cssim R H || coinduction R H. *)
+Tactic Notation "__step_sbisim" :=
+  match goal with
+  | |- context[@sbisim ?E ?F ?C ?D ?X ?Y ?LR] =>
+      unfold sbisim;
+      step;
+      fold (@sbisim E F C D X Y L)
+  end.
+#[local] Tactic Notation "step" := __step_sbisim || __step_ssim || __step_cssim || step.
 
 Ltac __step_in_sbisim H :=
   match type of H with
-  | context [@sbisim ?E ?F ?C ?D ?X ?Y _ _ ?LR] =>
+  | context [@sbisim ?E ?F ?C ?D ?X ?Y ?LR] =>
       unfold sbisim in H;
       step in H;
       fold (@sbisim E F C D X Y L) in H
   end.
-
 #[local] Tactic Notation "step" "in" ident(H) := __step_in_sbisim H || step in H.
+
+Tactic Notation "__coinduction_sbisim" simple_intropattern(r) simple_intropattern(cih) :=
+  first [unfold sbisim at 4 | unfold sbisim at 3 | unfold sbisim at 2 | unfold sbisim at 1]; coinduction r cih.
+#[local] Tactic Notation "coinduction" simple_intropattern(r) simple_intropattern(cih) :=
+  __coinduction_sbisim r cih || __coinduction_cssim r cih || __coinduction_ssim r cih || coinduction r cih.
 
 (*|
   This section should describe lemmas proved for the
@@ -334,7 +325,6 @@ stuck ctrees can be simulated by anything.
   Lemma sbisim_cssim_subrelation_gen : forall x y, sbisim L x y -> cssim L x y.
   Proof.
     red.
-    unfold cssim.
     coinduction r cih; intros * SB.
     step in SB; destruct SB as [fwd bwd].
     split.
@@ -691,7 +681,7 @@ Section Proof_Rules.
     now apply step_sb_ret.
   Qed.
 
-  (*|
+(*|
   The vis nodes are deterministic from the perspective of the labeled transition system,
   stepping is hence symmetric and we can just recover the itree-style rule.
 |*)
@@ -828,7 +818,7 @@ Section Proof_Rules.
     intros * EQ; apply step_sb_guard_r; step in EQ; auto.
   Qed.
 
-  (*|
+(*|
 br
 |*)
 
@@ -968,7 +958,7 @@ br
     intros x; specialize (H x); step in H; auto.
   Qed.
 
-  (*|
+(*|
   Same goes for step nodes.
 |*)
   Lemma step_sb_step_gen (t : ctree E C X) (u : ctree F D Y) {R : rel _ _} :
@@ -1005,7 +995,7 @@ br
     apply step_sb_step.
   Qed.
 
-  (*|
+(*|
 BrS
 |*)
 
@@ -1262,7 +1252,6 @@ produce any challenge for the other.
       @spinS_gen E C Z X c ~ @spinS_gen E C Z Y c'.
   Proof.
     intros R.
-    unfold sbisim.
     coinduction S CIH. symmetric.
     intros ** L t' TR;
       rewrite ctree_eta in TR; cbn in TR;
@@ -1279,7 +1268,6 @@ produce any challenge for the other.
       @spin_gen E C Z X c ~ @spin_gen E C Z Y c'.
   Proof.
     intros R.
-    unfold sbisim.
     coinduction S _; split; cbn;
       intros * TR; exfalso; eapply spinD_gen_is_stuck, TR.
   Qed.

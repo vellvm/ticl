@@ -115,7 +115,7 @@ Ltac fold_equ :=
 
 Tactic Notation "__step_equ" :=
   match goal with
-  | |- context [@equ ?E ?B ?R1 ?R2 ?RR _ _] =>
+  | |- context [@equ ?E ?B ?R1 ?R2 ?RR] =>
       unfold equ;
       step;
       fold (@equ E B R1 R2 RR)
@@ -125,13 +125,18 @@ Tactic Notation "__step_equ" :=
 
 Ltac __step_in_equ H :=
   match type of H with
-  | context [@equ ?E ?B ?R1 ?R2 ?RR _ _] =>
+  | context [@equ ?E ?B ?R1 ?R2 ?RR] =>
       unfold equ in H;
       step in H;
       fold (@equ E B R1 R2 RR) in H
   end.
 
 #[local] Tactic Notation "step" "in" ident(H) := __step_in_equ H || step in H.
+
+Tactic Notation "__coinduction_equ" simple_intropattern(r) simple_intropattern(cih) :=
+  first [unfold equ at 4 | unfold equ at 3 | unfold equ at 2 | unfold equ at 1]; coinduction r cih.
+#[local] Tactic Notation "coinduction" simple_intropattern(r) simple_intropattern(cih) :=
+  __coinduction_equ r cih || coinduction r cih.
 
 Module EquNotations.
 
@@ -239,8 +244,7 @@ Arguments equb_ {E B R1 R2} RR eq t1 t2/.
   Proper (equ eq ==> equ eq ==> flip impl) (@equ E B X Y R).
 Proof.
   unfold Proper, respectful, flip, impl; cbn.
-  unfold equ at 4. coinduction C CH. intros t t' EQt u u' EQu EQ.
-  unfold equ in *.
+  coinduction C CH. intros t t' EQt u u' EQu EQ.
   step in EQt.
   step in EQu.
   step in EQ.
@@ -273,6 +277,14 @@ Qed.
 #[global] Instance equb_eq_equ {E B X} {Q : rel X X} :
   Proper (equ eq ==> equ eq ==> flip impl) (@equ E B X X Q).
 Proof. apply equb_eq_equ'. Qed.
+
+Lemma guard_equ: forall (E B: Type -> Type) R (t u : ctree E B R),
+    (t ≅ u) ->
+    Guard t ≅ Guard u.
+Proof.
+  intros.
+  now step; constructor.
+Qed.
 
 (*|
 Dependent inversion of [equ] and [equb] equations
@@ -356,6 +368,14 @@ Proof.
   intros EQ.
   inv EQ.
   dependent destruction H. now dependent destruction H4.
+Qed.
+
+Lemma equ_guard_inv {E B S S'} {Q : rel S S'} (t : ctree E B S) u :
+  Guard t (≅Q) Guard u ->
+  t (≅Q) u.
+Proof.
+  intros EQ; step in EQ.
+	now inv EQ.
 Qed.
 
 (*|
@@ -443,7 +463,6 @@ Qed.
 Proof.
   unfold Proper, respectful, flip, impl. cbn. unfold impl.
   intros R R'.
-  unfold equ at 2.
   coinduction RR CH. intros.
   do 3 red. cbn. step in H0.
   destruct (observe a), (observe a0); try now inv H0; eauto.
@@ -487,7 +506,6 @@ Lemma equ_trans {E B X Y Z R R'} :
   forall (t : ctree E B X) (u : ctree E B Y) (v : ctree E B Z),
   equ R t u -> equ R' u v -> equ (hsquare R R') t v.
 Proof.
-  unfold equ at 3.
   coinduction RR CH. intros.
   step in H. step in H0.
   do 3 red. cbn.
@@ -546,7 +564,7 @@ Heterogeneous [pair], todo move to coinduction library
 
     (* TODO: Comment *)
     (* TODO: Can we define the underlying generic closure in the style of the old [bind_ctx]? *)
-    Lemma bind_chain_gen
+    Lemma equ_bind_chain_gen
       {E B: Type -> Type} {X X' Y Y': Type} (SS : X -> X' -> Prop) (RR : Y -> Y' -> Prop)
       {R : Chain (@fequ E B Y Y' RR)} :
       forall (t : ctree E B X) (t' : ctree E B X') (k : X -> ctree E B Y) (k' : X' -> ctree E B Y'),
@@ -574,15 +592,24 @@ Heterogeneous [pair], todo move to coinduction library
           intros. apply (b_chain x). now apply kk'.
     Qed.
 
-    #[global] Instance bind_chain
+    #[global] Instance equ_bind_chain
       {E B: Type -> Type} {X Y: Type} (RR : Y -> Y -> Prop)
       {R : Chain (@fequ E B Y Y RR)} :
       Proper (equ eq ==>
                 (pointwise_relation _ (elem R)) ==>
                 (elem R)) (@bind E B X Y).
     Proof.
-      repeat intro; eapply bind_chain_gen; eauto.
+      repeat intro; eapply equ_bind_chain_gen; eauto.
       intros ?? <-; auto.
+    Qed.
+
+    #[global] Instance equ_bind
+      {E B: Type -> Type} {X Y: Type} (RR : Y -> Y -> Prop) :
+      Proper (equ eq ==>
+                (pointwise_relation _ (equ RR)) ==>
+                (equ RR)) (@CTree.bind E B X Y).
+    Proof.
+      apply equ_bind_chain.
     Qed.
 
   End Bind_ctx.
@@ -607,7 +634,7 @@ Lemma equ_clo_bind (E B: Type -> Type) (X1 X2 Y1 Y2 : Type) :
 .
 Proof.
   intros.
-  eapply bind_chain_gen; eauto.
+  eapply equ_bind_chain_gen; eauto.
 Qed.
 
 Lemma equ_clo_bind_eq (E B: Type -> Type) (X Y1 Y2 : Type) :
@@ -752,13 +779,6 @@ Lemma unfold_iter {E B R I} (step : I -> ctree E B (I + R)) i:
 Proof.
 	now step.
 Qed.
-
-
-Ltac __coinduction_equ R H :=
-  unfold equ; coinduction R H.
-
-#[local] Tactic Notation "coinduction" simple_intropattern(R) simple_intropattern(H) :=
-  __coinduction_equ R H.
 
 (* TODO: Understand this better *)
 (* TODO: Create ctrees database *)
@@ -1051,7 +1071,7 @@ Proof.
   now rewrite eq1, eq2.
 Qed.
 
-Tactic Notation "ibind" := eapply bind_chain; [try reflexivity | unfold pointwise_relation].
+Tactic Notation "ibind" := eapply equ_bind_chain; [try reflexivity | unfold pointwise_relation].
 
 Tactic Notation "iguard" := constructor.
 
@@ -1078,61 +1098,46 @@ Ltac subst_hyp_in EQ h :=
   | ?x = ?y => subst x || subst y || rewrite EQ in h
   end.
 
-(* Ltac ctree_head_in t h := *)
-(*   match t with *)
-(*   | Guard ?t => *)
-(*       change (Guard t) with (brD branch1 (fun _ => t)) in h *)
-(*   | Step ?t => *)
-(*       change (Step t) with (brS branch1 (fun _ => t)) in h *)
-(*   | @stuck ?E ?B ?X ?H ?vis => *)
-(*       change t with (br vis branch0 (fun x : void => match x with end) : ctree E B X) in h *)
-(*   | @CTree.trigger ?E ?B ?R ?e => *)
-(*       change t with (Vis e (fun x => Ret x) : ctree E B R) in h *)
-(*   | @CTree.branch ?E ?B ?vis ?X ?b => *)
-(*       change t with (Br vis b (fun x => Ret x) : ctree E B X) in h *)
-(*   | _ => idtac *)
-(*   end. *)
+Ltac inv_equ h :=
+  match type of h with
+  | ?t (≅?Q) ?u =>
+      (* ctree_head_in t h; ctree_head_in u h; *)
+      try solve [ step in h; inv h; (idtac || invert) | step in h; dependent induction h ]
+  end;
+  match type of h with
+  | Ret _ (≅?Q) Ret _ =>
+      apply equ_ret_inv in h;
+      subst
+  | Vis _ _ (≅?Q) Vis _ _ =>
+      let EQt := fresh "EQt" in
+      let EQe := fresh "EQe" in
+      let EQ := fresh "EQ" in
+      apply equ_vis_invT in h as EQt;
+      subst_hyp_in EQt h;
+      apply equ_vis_invE in h as [EQe EQ];
+      subst
+  | Br _ _ (≅?Q) Br _ _ =>
+      let EQt := fresh "EQt" in
+      let EQe := fresh "EQe" in
+      let EQ := fresh "EQ" in
+      apply equ_br_invT in h as EQt;
+      subst_hyp_in EQt h;
+      apply equ_br_invE in h as [EQe EQ];
+      subst
+  | Guard _ (≅?Q) Guard _ =>
+      apply equ_guard_inv in h
+  end.
 
-(* Ltac inv_equ h := *)
-(*   match type of h with *)
-(*   | ?t (≅?Q) ?u => ctree_head_in t h; ctree_head_in u h; *)
-(*       try solve [ step in h; inv h; (idtac || invert) | step in h; dependent induction h ] *)
-(*   end; *)
-(*   match type of h with *)
-(*   | Ret _ (≅?Q) Ret _ => *)
-(*       apply equ_ret_inv in h; *)
-(*       subst *)
-(*   | Vis _ _ (≅?Q) Vis _ _ => *)
-(*       let EQt := fresh "EQt" in *)
-(*       let EQe := fresh "EQe" in *)
-(*       let EQ := fresh "EQ" in *)
-(*       apply equ_vis_invT in h as EQt; *)
-(*       subst_hyp_in EQt h; *)
-(*       apply equ_vis_invE in h as [EQe EQ]; *)
-(*       subst *)
-(*   | Br _ _ _ (≅?Q) Br _ _ _ => *)
-(*       let EQt := fresh "EQt" in *)
-(*       let EQb := fresh "EQb" in *)
-(*       let EQe := fresh "EQe" in *)
-(*       let EQ := fresh "EQ" in *)
-(*       apply equ_br_invT in h as EQt; *)
-(*       destruct EQt as [EQt EQb]; *)
-(*       subst_hyp_in EQt h; *)
-(*       subst_hyp_in EQb h; *)
-(*       apply equ_br_invE in h as [EQe EQ]; *)
-(*       subst *)
-(*   end. *)
+Ltac inv_equ_one :=
+  multimatch goal with
+  | [ h : _ (≅?Q) _ |- _ ] =>
+      inv_equ h
+  end.
 
-(* Ltac inv_equ_one := *)
-(*   multimatch goal with *)
-(*   | [ h : _ (≅?Q) _ |- _ ] => *)
-(*       inv_equ h *)
-(*   end. *)
+Ltac inv_equ_all := repeat inv_equ_one.
 
-(* Ltac inv_equ_all := repeat inv_equ_one. *)
-
-(* Tactic Notation "inv_equ" hyp(h) := inv_equ h. *)
-(* Tactic Notation "inv_equ" := inv_equ_all. *)
+Tactic Notation "inv_equ" hyp(h) := inv_equ h.
+Tactic Notation "inv_equ" := inv_equ_all.
 
 (*|
 Very crude simulation of [subst] for [≅] equations

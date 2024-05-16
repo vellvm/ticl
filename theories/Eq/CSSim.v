@@ -67,10 +67,6 @@ Ltac fold_cssim :=
     | |- context[gfp (@css ?E ?F ?C ?D ?X ?Y ?L)]      => fold (@cssim E F C D X Y L)
     end.
 
-(* Ltac __coinduction_cssim R H := *)
-(*   (try unfold cssim); *)
-(*   apply_coinduction; fold_cssim; intros R H. *)
-
 Tactic Notation "__step_cssim" :=
   match goal with
   | |- context[@cssim ?E ?F ?C ?D ?X ?Y ?LR] =>
@@ -81,8 +77,10 @@ Tactic Notation "__step_cssim" :=
 
 #[local] Tactic Notation "step" := __step_cssim || step.
 
-(* #[local] Tactic Notation "coinduction" simple_intropattern(R) simple_intropattern(H) := *)
-(*   __coinduction_cssim R H || coinduction R H. *)
+Tactic Notation "__coinduction_cssim" simple_intropattern(r) simple_intropattern(cih) :=
+  first [unfold cssim at 4 | unfold cssim at 3 | unfold cssim at 2 | unfold cssim at 1]; coinduction r cih.
+#[local] Tactic Notation "coinduction" simple_intropattern(r) simple_intropattern(cih) :=
+  __coinduction_cssim r cih || __coinduction_ssim r cih || coinduction r cih.
 
 Ltac __step_in_cssim H :=
   match type of H with
@@ -108,7 +106,7 @@ Section cssim_homogenous_theory.
   Lemma cssim_subrelation : forall (t t' : ctree E B X) L',
       subrelation L L' -> cssim L t t' -> cssim L' t t'.
   Proof.
-    intros. revert t t' H0. unfold cssim at 2. coinduction R CH.
+    intros. revert t t' H0. coinduction R CH.
     intros. step in H0. simpl; split; intros; cbn in H0; destruct H0 as [H0' H0''].
     - cbn in H0'; apply H0' in H1 as (? & ? & ? & ? & ?);
         apply H in H2. exists x, x0. auto.
@@ -146,7 +144,6 @@ Section cssim_homogenous_theory.
   #[global] Instance cssim_ssim_subrelation : subrelation (cssim L) (ssim L).
   Proof.
     red.
-    unfold ssim.
     coinduction r cih; intros * SB.
     step in SB; destruct SB as [fwd _].
     intros ?? TR; apply fwd in TR as (? & ? & ? & ? & ?); eauto 10.
@@ -251,7 +248,6 @@ Section cssim_heterogenous_theory.
   Lemma cssim_ssim_subrelation_gen : forall x y, cssim L x y -> ssim L x y.
   Proof.
     red.
-    unfold ssim.
     coinduction r cih; intros * SB.
     step in SB; destruct SB as [fwd _].
     intros ?? TR; apply fwd in TR as (? & ? & ? & ? & ?); eauto 10.

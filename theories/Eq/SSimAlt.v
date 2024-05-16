@@ -6,8 +6,7 @@ From Coq Require Import
      Program.Equality
      Logic.Eqdep.
 
-From Coinduction Require Import
-     coinduction rel tactics.
+From Coinduction Require Import all.
 
 From ITree Require Import Core.Subevent.
 
@@ -27,16 +26,23 @@ Set Implicit Arguments.
 Arguments trans : simpl never.
 
 Section StrongSimAlt.
+
   Definition ss'_gen {E F C D : Type -> Type} {X Y : Type}
-    `{HasStuck : B0 -< C} `{HasStuck' : B0 -< D}
     (L : rel (@label E) (@label F))
     (R Reps : rel (ctree E C X) (ctree F D Y))
     (t : ctree E C X) (u : ctree F D Y) :=
-    (productive t -> forall l t', trans l t t' -> exists l' u', trans l' u u' /\ R t' u' /\ L l l') /\
-    (forall {Z} (c : C Z) k, t ≅ BrD c k -> forall x, exists u', epsilon u u' /\ Reps (k x) u').
+    (productive t ->
+     forall l t', trans l t t' ->
+             exists l' u', trans l' u u' /\ R t' u' /\ L l l')
+    /\ (forall {Z} (c : C Z) k,
+          t ≅ BrD c k ->
+          forall x, exists u', epsilon u u' /\ Reps (k x) u')
+    /\ (forall t',
+          t ≅ Guard t' ->
+          exists u', epsilon u u' /\ Reps t' u').
 
-  #[global] Instance weq_ss'_gen {E F C D X Y} `{HasB0: B0 -< C} `{HasB0': B0 -< D} :
-    Proper (weq ==> weq) (@ss'_gen E F C D X Y _ _).
+  #[global] Instance weq_ss'_gen {E F C D X Y} :
+    Proper (weq ==> weq) (@ss'_gen E F C D X Y).
   Proof.
     cbn. intros. split; split; intros.
     - apply H0 in H2 as (? & ? & ? & ? & ?); auto. edestruct H. eauto 6 with trans.
@@ -46,9 +52,8 @@ Section StrongSimAlt.
   Qed.
 
   #[global] Instance ss'_gen_mon {E F C D : Type -> Type} {X Y : Type}
-    `{HasStuck : B0 -< C} `{HasStuck' : B0 -< D}
     (L : rel (@label E) (@label F)) :
-    Proper (leq ==> leq ==> leq) (@ss'_gen E F C D X Y _ _ L).
+    Proper (leq ==> leq ==> leq) (@ss'_gen E F C D X Y L).
   Proof.
     cbn. intros.
     split.
@@ -64,35 +69,33 @@ The simulation challenge does not involve an inductive transition relation,
 thus simplifying proofs.
 |*)
   Program Definition ss' {E F C D : Type -> Type} {X Y : Type}
-    `{HasStuck : B0 -< C} `{HasStuck' : B0 -< D}
     (L : rel (@label E) (@label F)) :
     mon (ctree E C X -> ctree F D Y -> Prop) :=
     {| body R t u :=
       ss'_gen L R R t u
     |}.
   Next Obligation.
-    epose proof (@ss'_gen_mon E F C D X Y _ _). eapply H1.
+    epose proof (@ss'_gen_mon E F C D X Y). eapply H1.
     3: apply H0.
     all: auto.
   Qed.
 
 End StrongSimAlt.
 
-Definition ssim' {E F C D X Y} `{HasStuck : B0 -< C} `{HasStuck' : B0 -< D} L :=
-  (gfp (@ss' E F C D X Y _ _ L): hrel _ _).
+Definition ssim' {E F C D X Y} L :=
+  (gfp (@ss' E F C D X Y L): hrel _ _).
 
 Section ssim'_theory.
   Arguments label: clear implicits.
   Context {E F C D: Type -> Type} {X Y: Type}
-          {L: rel (@label E) (@label F)}
-          {HasStuck1: B0 -< C} {HasStuck2: B0 -< D}.
+          {L: rel (@label E) (@label F)}.
 
 (*|
    Strong simulation up-to [equ] is valid
    ----------------------------------------
 |*)
   #[global] Instance equ_ss'_gen_goal {R Reps} :
-    Proper (equ eq ==> equ eq ==> flip impl) (@ss'_gen E F C D X Y _ _ L R Reps).
+    Proper (equ eq ==> equ eq ==> flip impl) (@ss'_gen E F C D X Y L R Reps).
   Proof.
     split; intros; subs.
     - destruct H1 as [? _]. apply H in H3; auto.
@@ -102,12 +105,12 @@ Section ssim'_theory.
   Qed.
 
   #[global] Instance equ_ss'_gen_ctx {R Reps} :
-    Proper (equ eq ==> equ eq ==> impl) (@ss'_gen E F C D X Y _ _ L R Reps).
+    Proper (equ eq ==> equ eq ==> impl) (@ss'_gen E F C D X Y L R Reps).
   Proof.
     do 4 red. intros. now rewrite <- H, <- H0.
   Qed.
 
-  Lemma equ_clos_sst' : equ_clos <= (t (@ss' E F C D X Y _ _ L)).
+  Lemma equ_clos_sst' : equ_clos <= (t (@ss' E F C D X Y L)).
   Proof.
     apply leq_t; cbn.
     intros R x y [x' y' x'' y'' EQ' EQ''].
@@ -115,13 +118,13 @@ Section ssim'_theory.
     all: econstructor; eauto.
   Qed.
 
-  #[global] Instance equ_clos_ssim'_goal : Proper (equ eq ==> equ eq ==> flip impl) (@ssim' E F C D X Y _ _ L).
+  #[global] Instance equ_clos_ssim'_goal : Proper (equ eq ==> equ eq ==> flip impl) (@ssim' E F C D X Y L).
   Proof.
     cbn; intros ? ? eq1 ? ? eq2 H.
     apply (ft_t equ_clos_sst'); econstructor; [eauto | | symmetry; eauto]; assumption.
   Qed.
 
-  #[global] Instance equ_clos_ssim'_ctx : Proper (equ eq ==> equ eq ==> impl) (@ssim' E F C D X Y _ _ L).
+  #[global] Instance equ_clos_ssim'_ctx : Proper (equ eq ==> equ eq ==> impl) (@ssim' E F C D X Y L).
   Proof.
     cbn; intros ? ? eq1 ? ? eq2 H.
     now rewrite <- eq1, <- eq2.
@@ -152,8 +155,8 @@ Import SSim'Notations.
 Ltac fold_ssim' :=
   repeat
     match goal with
-    | h: context[gfp (@ss' ?E ?F ?C ?D ?X ?Y _ _ ?L)] |- _ => fold (@ssim' E F C D X Y _ _ L) in h
-    | |- context[gfp (@ss' ?E ?F ?C ?D ?X ?Y _ _ ?L)]      => fold (@ssim' E F C D X Y _ _ L)
+    | h: context[gfp (@ss' ?E ?F ?C ?D ?X ?Y ?L)] |- _ => fold (@ssim' E F C D X Y L) in h
+    | |- context[gfp (@ss' ?E ?F ?C ?D ?X ?Y ?L)]      => fold (@ssim' E F C D X Y L)
     end.
 
 Ltac __coinduction_ssim' R H :=
@@ -162,10 +165,10 @@ Ltac __coinduction_ssim' R H :=
 
 Tactic Notation "__step_ssim'" :=
   match goal with
-  | |- context[@ssim' ?E ?F ?C ?D ?X ?Y _ _ ?LR] =>
+  | |- context[@ssim' ?E ?F ?C ?D ?X ?Y ?LR] =>
       unfold ssim';
       step;
-      fold (@ssim' E F C D X Y _ _ L)
+      fold (@ssim' E F C D X Y L)
   end.
 
 #[local] Tactic Notation "step" := __step_ssim' || step.
@@ -175,10 +178,10 @@ Tactic Notation "__step_ssim'" :=
 
 Ltac __step_in_ssim' H :=
   match type of H with
-  | context[@ssim' ?E ?F ?C ?D ?X ?Y _ _ ?LR] =>
+  | context[@ssim' ?E ?F ?C ?D ?X ?Y ?LR] =>
       unfold ssim' in H;
       step in H;
-      fold (@ssim' E F C D X Y _ _ L) in H
+      fold (@ssim' E F C D X Y L) in H
   end.
 
 #[local] Tactic Notation "step" "in" ident(H) := __step_in_ssim' H || step in H.
@@ -201,7 +204,7 @@ Section ssim'_homogenous_theory.
   |*)
   #[global] Instance Reflexive_ss' R Reps
     `{Reflexive _ R} `{Reflexive _ Reps} `{Reflexive _ L}:
-    Reflexive (@ss'_gen E E C C X X _ _ L R Reps).
+    Reflexive (@ss'_gen E E C C X X L R Reps).
   Proof.
     split; intros; eauto.
     exists (k x0). subs. split; auto. now eapply epsilon_br.
@@ -234,11 +237,10 @@ Parametric theory of [ss] with heterogenous [L]
 Section ssim'_heterogenous_theory.
   Arguments label: clear implicits.
   Context {E F C D: Type -> Type} {X Y: Type}
-          {L: rel (@label E) (@label F)}
-          {HasStuck1: B0 -< C} {HasStuck2: B0 -< D}.
+          {L: rel (@label E) (@label F)}.
 
-  Notation ss' := (@ss' E F C D X Y _ _).
-  Notation ssim'  := (@ssim' E F C D X Y _ _).
+  Notation ss' := (@ss' E F C D X Y).
+  Notation ssim'  := (@ssim' E F C D X Y).
   Notation sst' L := (coinduction.t (ss' L)).
   Notation ssbt' L := (coinduction.bt (ss' L)).
   Notation ssT' L := (coinduction.T (ss' L)).
@@ -315,7 +317,7 @@ Ltac __play_ssim'_in H :=
 
 Ltac __eplay_ssim' :=
   match goal with
-  | h : @ssim' ?E ?F ?C ?D ?X ?Y _ _ ?L _ _ |- _ =>
+  | h : @ssim' ?E ?F ?C ?D ?X ?Y ?L _ _ |- _ =>
       __play_ssim'_in h
   end.
 
@@ -328,8 +330,6 @@ Section Proof_Rules.
   Arguments label: clear implicits.
   Context {E F C D : Type -> Type}
           {X Y : Type}
-          {HasStuck: B0 -< C}
-          {HasStuck': B0 -< D}
           {L : rel (@label E) (@label F)}
           {R Reps : rel (ctree E C X) (ctree F D Y)}
           {HR : (Proper (equ eq ==> equ eq ==> impl) R)}
@@ -595,8 +595,6 @@ Section Inversion_Rules.
 
   Context {E F C D : Type -> Type}
           {X Y : Type}
-          {HasStuck: B0 -< C}
-          {HasStuck': B0 -< D}
           {L : rel (@label E) (@label F)}
           {R Reps : rel (ctree E C X) (ctree F D Y)}.
 
@@ -642,7 +640,7 @@ Section upto.
   Qed.
 
   Lemma epsilon_ctx_r_ssim' :
-      epsilon_ctx_r <= t (@ss' E F C D X Y _ _ L).
+      epsilon_ctx_r <= t (@ss' E F C D X Y L).
   Proof.
     apply Coinduction. cbn -[ss']. intros.
     destruct H as (? & ? & ?).
@@ -654,7 +652,7 @@ Section upto.
   (* Up-to ss. *)
   (* This principle holds because an ss step always corresponds
      to one or more ss' steps. *)
-  Lemma ss_sst' : @ss E F C D X Y _ _ L <= t (ss' L).
+  Lemma ss_sst' : @ss E F C D X Y L <= t (ss' L).
   Proof.
     intro. apply Coinduction. cbn. intros. split; intros.
     - apply H in H1 as (? & ? & ? & ? & ?).
@@ -692,7 +690,7 @@ Section bind.
     The resulting enhancing function gives a valid up-to technique
 |*)
   Lemma bind_ctx_ssim'_t L0 (*{RV: Respects_val L}*):
-    is_update_val_rel L R0 L0 -> @bind_ctx_ssim E F C D X X' Y Y' _ _ R0 L0 <= (t (ss' L)).
+    is_update_val_rel L R0 L0 -> @bind_ctx_ssim E F C D X X' Y Y' R0 L0 <= (t (ss' L)).
   Proof.
     intro HL0. apply Coinduction.
     intros R. apply (leq_bind_ctx _).
@@ -755,7 +753,6 @@ End bind.
 Expliciting the reasoning rule provided by the up-to principles.
 |*)
 Lemma sst'_clo_bind_gen {E F C D: Type -> Type} {X Y X' Y': Type} {L : rel (@label E) (@label F)}
-      `{HasStuck: B0 -< C} `{HasStuck': B0 -< D}
       (R0 : rel X Y) L0
       (HL0 : is_update_val_rel L R0 L0)
       (t1 : ctree E C X) (t2: ctree F D Y)
@@ -765,12 +762,11 @@ Lemma sst'_clo_bind_gen {E F C D: Type -> Type} {X Y X' Y': Type} {L : rel (@lab
   sst' L RR (t1 >>= k1) (t2 >>= k2).
 Proof.
   intros ? ?.
-  apply (ft_t (@bind_ctx_ssim'_t E F C D X X' Y Y' _ _ L R0 L0 HL0)).
+  apply (ft_t (@bind_ctx_ssim'_t E F C D X X' Y Y' L R0 L0 HL0)).
   apply in_bind_ctx; eauto.
 Qed.
 
 Lemma sst'_clo_bind {E F C D: Type -> Type} {X Y X' Y': Type} {L : rel (@label E) (@label F)}
-      `{HasStuck: B0 -< C} `{HasStuck': B0 -< D}
       (R0 : rel X Y)
       (t1 : ctree E C X) (t2: ctree F D Y)
       (k1 : X -> ctree E C X') (k2 : Y -> ctree F D Y') RR:
@@ -808,7 +804,7 @@ Lemma ssbt'_clo_bind_gen {E F C D: Type -> Type} {X Y X' Y': Type} {L : rel (@la
   ssbt' L RR (t1 >>= k1) (t2 >>= k2).
 Proof.
   intros ? ?.
-  apply (fbt_bt (@bind_ctx_ssim'_t E F C D X X' Y Y' _ _ L R0 L0 HL0)).
+  apply (fbt_bt (@bind_ctx_ssim'_t E F C D X X' Y Y' L R0 L0 HL0)).
   apply in_bind_ctx; eauto.
 Qed.
 
@@ -842,11 +838,11 @@ Qed.
 
 Tactic Notation "__upto_bind_ssim'" uconstr(R0) :=
   match goal with
-  | |- body (t (@ss' ?E ?F ?C ?D ?X ?Y _ _ ?L)) ?R (CTree.bind (T := ?T) _ _) (CTree.bind (T := ?T') _ _) =>
-      apply (ft_t (@bind_ctx_ssim'_t E F C D T X T' Y _ _ L R0
+  | |- body (t (@ss' ?E ?F ?C ?D ?X ?Y ?L)) ?R (CTree.bind (T := ?T) _ _) (CTree.bind (T := ?T') _ _) =>
+      apply (ft_t (@bind_ctx_ssim'_t E F C D T X T' Y L R0
         (update_val_rel L R0) (update_val_rel_correct L R0))), in_bind_ctx
-  | |- body (bt (@ss' ?E ?F ?C ?D ?X ?Y _ _ ?L)) ?R (CTree.bind (T := ?T) _ _) (CTree.bind (T := ?T') _ _) =>
-      apply (fbt_bt (@bind_ctx_ssim'_t E F C D T X T' Y _ _ L R0
+  | |- body (bt (@ss' ?E ?F ?C ?D ?X ?Y ?L)) ?R (CTree.bind (T := ?T) _ _) (CTree.bind (T := ?T') _ _) =>
+      apply (fbt_bt (@bind_ctx_ssim'_t E F C D T X T' Y L R0
         (update_val_rel L R0) (update_val_rel_correct L R0))), in_bind_ctx
   end.
 
@@ -856,7 +852,7 @@ Tactic Notation "__upto_bind_eq_ssim'" uconstr(R0) :=
    end.
 
 (* This alternative notion of simulation is equivalent to [ssim] *)
-Theorem ssim_ssim' {E F C D X Y} `{HasStuck: B0 -< C} `{HasStuck': B0 -< D} :
+Theorem ssim_ssim' {E F C D X Y} :
   forall L (t : ctree E C X) (t' : ctree F D Y), ssim L t t' <-> ssim' L t t'.
 Proof.
   split; intro.

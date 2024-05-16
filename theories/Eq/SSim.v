@@ -81,6 +81,30 @@ Ltac fold_ssim :=
 Import CTreeNotations.
 Import EquNotations.
 
+Tactic Notation "__step_ssim" :=
+  match goal with
+  | |- context[@ssim ?E ?F ?C ?D ?X ?Y ?LR] =>
+      unfold ssim;
+      step;
+      fold (@ssim E F C D X Y L)
+  end.
+
+#[local] Tactic Notation "step" := __step_ssim || step.
+
+Ltac __step_in_ssim H :=
+  match type of H with
+  | context[@ssim ?E ?F ?C ?D ?X ?Y ?LR] =>
+      unfold ssim in H;
+      step in H;
+      fold (@ssim E F C D X Y L) in H
+  end.
+
+#[local] Tactic Notation "step" "in" ident(H) := __step_in_ssim H || step in H.
+
+Tactic Notation "__coinduction_ssim" simple_intropattern(r) simple_intropattern(cih) :=
+  first [unfold ssim at 4 | unfold ssim at 3 | unfold ssim at 2 | unfold ssim at 1]; coinduction r cih.
+#[local] Tactic Notation "coinduction" simple_intropattern(r) simple_intropattern(cih) := __coinduction_ssim r cih || coinduction r cih.
+
 Section ssim_homogenous_theory.
   Context {E B: Type -> Type} {X: Type}
           {L: relation (@label E)}.
@@ -1049,7 +1073,7 @@ Section Proof_Rules.
       L τ τ ->
       ssim L (@spinS_gen E C Z X c) (@spinS_gen F D Z Y c').
   Proof.
-    intros until L; intros x y. unfold ssim.
+    intros until L; intros x y.
     coinduction S CIH; simpl. intros ? ? ? ? ? TR;
       rewrite ctree_eta in TR; cbn in TR.
       apply trans_brS_inv in TR as (_ & EQ & ->).
