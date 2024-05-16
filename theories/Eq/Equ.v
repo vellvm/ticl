@@ -137,20 +137,8 @@ Module EquNotations.
 
   Infix "≅" := (equ eq) (at level 70).
   Notation "t (≅ Q ) u" := (equ Q t u) (at level 79).
-
-(*|
-The associated companions:
-|*)
-  (* Notation et Q  := (t (fequ Q)). *)
-  (* Notation eT Q  := (T (fequ Q)). *)
-  (* Notation ebt Q := (bt (fequ Q)). *)
-  (* Notation ebT Q := (bT (fequ Q)). *)
-  (* Notation "t [≅ Q ] u" := (et Q _ t u) (at level 79). *)
-  (* Notation "t {≅ Q } u" := (ebt Q _ t u) (at level 79). *)
-  (* Notation "t {{≅ Q }} u" := (equb Q (equ Q) t u) (at level 79). *)
-  (* Notation "t [≅] u" := (et eq _ t u) (at level 79). *)
-  (* Notation "t {≅} u" := (ebt eq _ t u) (at level 79). *)
-  (* Notation "t {{≅}} u" := (equb eq (equ eq) t u) (at level 79). *)
+  Notation "t {{≅ Q }} u" := (equb Q (equ Q) t u) (at level 79).
+  Notation "t {{≅}} u" := (equb eq (equ eq) t u) (at level 79).
 
 End EquNotations.
 
@@ -160,9 +148,7 @@ Section equ_theory.
 
   Context {E B : Type -> Type} {R : Type} (RR : R -> R -> Prop).
   Notation fequ := (fequ (E := E) (B := B)).
-  (* Notation eT  := (coinduction.T (fequ (E := E) (B := B) RR)). *)
-  (* Notation et  := (coinduction.t (fequ (E := E) (B := B) RR)). *)
-  (* Notation ebt := (coinduction.bt (fequ (E := E) (B := B) RR)). *)
+
 (*|
 This is just a hack suggested by Damien Pous to avoid a
 universe inconsistency when using both the relational algebra
@@ -439,45 +425,19 @@ Proof.
   step. rewrite (observing_observe H). apply Reflexive_equb; eauto.
 Qed.
 
-(* #[global] Instance equ_eq_equ {E B R r} : *)
-(*   Proper (going (equ eq) ==> eq ==> flip impl) *)
-(* 	     (@equb E B R R eq (et eq r)). *)
-(* Proof. *)
-(*   unfold Proper, respectful, flip, impl. intros. subst. *)
-(*   inv H. step in H0. inv H0; inv H1; auto. *)
-(*   - invert. *)
-(*     subst. constructor. intros. rewrite REL. auto. *)
-(*   - invert. *)
-(*     subst. constructor. intros. rewrite REL. auto. *)
-(* Qed. *)
-
-(* #[global] Instance eq_equ_equ {E B R r} : *)
-(*   Proper (eq ==> going (equ eq) ==> flip impl) *)
-(* 	     (@equb E B R R eq (et eq r)). *)
-(* Proof. *)
-(*   unfold Proper, respectful, flip, impl. intros. subst. *)
-(*   inv H0. step in H. inv H; inv H1; auto. *)
-(*   - invert. *)
-(*     subst. constructor. intros. rewrite REL. auto. *)
-(*   - invert. *)
-(*     subst. constructor. intros. rewrite REL. auto. *)
-(* Qed. *)
-
-(* #[global] Instance equ_clos_eT_goal {E B R} RR f : *)
-(*   Proper (@equ E B R R eq ==> equ eq ==> flip impl) (eT eq f RR). *)
-(* Proof. *)
-(*   cbn; intros ? ? eq1 ? ? eq2 H. *)
-(*   rewrite eq1, eq2. *)
-(*   auto. *)
-(* Qed. *)
-
-(* #[global] Instance equ_clos_eT_ctx {E B R} RR f : *)
-(*   Proper (@equ E B R R eq ==> equ eq ==> impl) (eT eq f RR). *)
-(* Proof. *)
-(*   cbn; intros ? ? eq1 ? ? eq2 H. *)
-(*   rewrite <- eq1, <- eq2. *)
-(*   auto. *)
-(* Qed. *)
+#[global] Instance equ_eq_equ {E C R}  (r : Chain (fequ eq)) :
+  Proper (going (equ eq) ==> eq ==> flip impl)
+	     (@equb E C R R eq (elem r)).
+Proof.
+  repeat intro; subst.
+  inv H. step in H0. inv H0; inv H1; auto.
+  - constructor; rewrite REL; auto.
+  - constructor; rewrite REL; auto.
+  - invert.
+    constructor; intros; rewrite REL; auto.
+  - invert.
+    constructor; intros; rewrite REL; auto.
+Qed.
 
 #[global] Instance equ_leq {E B X Y} : Proper (leq ==> leq) (@equ E B X Y).
 Proof.

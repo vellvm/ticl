@@ -9,8 +9,7 @@ From RelationAlgebra Require Import
      rewriting
      normalisation.
 
-From Coinduction Require Import
-	 coinduction rel tactics.
+From Coinduction Require Import all.
 
 From CTree Require Import
 	   CTree Eq.Shallow Eq.Equ.
@@ -36,13 +35,17 @@ Section Visible.
 	{| type_of := S ; Eq := equ eq |}.
 
   Inductive visible_ : hrel S' S' :=
-  | VisibleI {X} (c : C X) x k t :
+  | VisibleBr {X} (c : C X) x k t :
     visible_ (observe (k x)) t ->
-    visible_ (BrF false c k) t
+    visible_ (BrF c k) t
 
-  | VisibleV {X} (c : C X) (x : X) k1 k2 :
-    (forall x, k1 x ≅ k2 x) ->
-    visible_ (BrF true c k1) (BrF true c k2)
+  | VisibleGuard t t' :
+    visible_ (observe t) t' ->
+    visible_ (GuardF t) t'
+
+  | VisibleStep t t' :
+    t ≅ t' ->
+    visible_ (StepF t) (StepF t')
 
   | VisibleVis {X} (e : E X) k1 k2 :
     (forall x, k1 x ≅ k2 x) ->
@@ -61,9 +64,11 @@ Section Visible.
   Proof.
 	  intros x x' equ TR.
 	  inv equ; rename H into equ.
-	  step in equ. cbn in equ.
-	  dependent induction TR; intros; eauto; inv equ; try invert; auto;
-	    (constructor; auto; etransitivity; [apply H | symmetry; auto]).
+	  step in equ.
+	  dependent induction TR.
+    all: intros; eauto; inv equ; try invert; auto; constructor.
+    rewrite H, REL; auto.
+    intros; rewrite H, REL; auto.
   Qed.
 
   #[local] Instance visible__equ_aux2 :
@@ -73,8 +78,10 @@ Section Visible.
 	  inv xequ; rename H into xequ.	step in xequ. cbn in xequ.
     revert x' xequ.
 	  dependent induction TR; intros; eauto; inv xequ; try invert; auto.
-    2, 3: constructor; auto; intros; rewrite <- H; symmetry; auto.
-    econstructor. apply IHTR. rewrite REL. reflexivity.
+    - econstructor; apply IHTR; rewrite REL; eauto.
+    - econstructor; apply IHTR; rewrite REL; eauto.
+    - econstructor; rewrite <- REL; eauto.
+    - econstructor; intros ?; rewrite <- REL; eauto.
   Qed.
 
   #[global] Instance visible__equ :
