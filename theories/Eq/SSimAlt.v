@@ -19,11 +19,14 @@ From CTree Require Import
 From RelationAlgebra Require Export
      rel srel.
 
+Import CoindNotations.
 Import CTree.
 Set Implicit Arguments.
 
 (* TODO: Decide where to set this *)
 Arguments trans : simpl never.
+
+Ltac ssplit := split; [| split].
 
 Section StrongSimAlt.
 
@@ -35,7 +38,7 @@ Section StrongSimAlt.
      forall l t', trans l t t' ->
              exists l' u', trans l' u u' /\ R t' u' /\ L l l')
     /\ (forall {Z} (c : C Z) k,
-          t ≅ BrD c k ->
+          t ≅ Br c k ->
           forall x, exists u', epsilon u u' /\ Reps (k x) u')
     /\ (forall t',
           t ≅ Guard t' ->
@@ -44,11 +47,9 @@ Section StrongSimAlt.
   #[global] Instance weq_ss'_gen {E F C D X Y} :
     Proper (weq ==> weq) (@ss'_gen E F C D X Y).
   Proof.
-    cbn. intros. split; split; intros.
-    - apply H0 in H2 as (? & ? & ? & ? & ?); auto. edestruct H. eauto 6 with trans.
-    - intros. eapply H0 in H1 as (? & ? & ?). etrans.
-    - apply H0 in H2 as (? & ? & ? & ? & ?); auto. edestruct H. eauto 6 with trans.
-    - intros. eapply H0 in H1 as (? & ? & ?). etrans.
+    cbn. intros; split; (split; [| split]); intros.
+    all: try now (eapply H0 in H1 as (? & ? & ?); eauto).
+    all: apply H0 in H2 as (? & ? & ? & ? & ?); auto; edestruct H; eauto 6 with trans.
   Qed.
 
   #[global] Instance ss'_gen_mon {E F C D : Type -> Type} {X Y : Type}
@@ -56,11 +57,13 @@ Section StrongSimAlt.
     Proper (leq ==> leq ==> leq) (@ss'_gen E F C D X Y L).
   Proof.
     cbn. intros.
-    split.
+    destruct H1 as (? & ? & ?).
+    split; [| split].
     - intros.
-      edestruct (proj1 H1) as (? & ? & ? & ?); eauto.
+      edestruct H1 as (? & ? & ? & ?); eauto.
       eexists _, x2; intuition; eauto.
-    - intros. edestruct (proj2 H1) as (? & ? & ?); eauto.
+    - intros. edestruct H2 as (? & ? & ?); eauto.
+    - intros. edestruct H3 as (? & ? & ?); eauto.
   Qed.
 
 (*|
@@ -97,12 +100,14 @@ Section ssim'_theory.
   #[global] Instance equ_ss'_gen_goal {R Reps} :
     Proper (equ eq ==> equ eq ==> flip impl) (@ss'_gen E F C D X Y L R Reps).
   Proof.
-    split; intros; subs.
-    - destruct H1 as [? _]. apply H in H3; auto.
+    split; [| split]; intros; subs; destruct H1 as (HA & HB & HC).
+    - apply HA in H3; auto.
       destruct H3 as (? & ? & ? & ? & ?). eexists _, _. subs. etrans.
-    - destruct H1 as [_ ?]. symmetry in H. eapply H1 in H. destruct H as (? & ? & ?).
+    - symmetry in H. eapply HB in H. destruct H as (? & ? & ?).
       eexists. subs. etrans.
-  Qed.
+    - symmetry in H. eapply HC in H. destruct H as (? & ? & ?).
+      eexists. subs. etrans.
+   Qed.
 
   #[global] Instance equ_ss'_gen_ctx {R Reps} :
     Proper (equ eq ==> equ eq ==> impl) (@ss'_gen E F C D X Y L R Reps).
@@ -110,18 +115,37 @@ Section ssim'_theory.
     do 4 red. intros. now rewrite <- H, <- H0.
   Qed.
 
-  Lemma equ_clos_sst' : equ_clos <= (t (@ss' E F C D X Y L)).
+  Lemma equ_clos_sst' {c: Chain (ss' L)}:
+    forall x y, @equ_clos E F C D X Y `c x y -> `c x y.
   Proof.
-    apply leq_t; cbn.
-    intros R x y [x' y' x'' y'' EQ' EQ''].
-    subs. eapply ss'_gen_mon. 3: apply EQ''.
-    all: econstructor; eauto.
+    apply tower.
+    - intros ? INC x y [x' y' x'' y'' EQ' EQ''] ??. red.
+      apply INC; auto.
+      econstructor; eauto.
+      apply leq_infx in H.
+      now apply H.
+    - intros R IH x y [x' y' x'' y'' EQ' EQ''].
+      now subs.
+  Qed.
+
+  #[global] Instance equ_clos_sst_goal {c: Chain (@ss' E F C D X Y L)} :
+    Proper (equ eq ==> equ eq ==> flip impl) `c.
+  Proof.
+    cbn; intros ? ? eq1 ? ? eq2 H.
+    apply equ_clos_sst'; econstructor; [eauto | | symmetry; eauto]; assumption.
+  Qed.
+
+  #[global] Instance equ_clos_sst'_ctx  {c: Chain (@ss' E F C D X Y L)} :
+    Proper (equ eq ==> equ eq ==> impl) `c.
+  Proof.
+    cbn; intros ? ? eq1 ? ? eq2 H.
+    apply equ_clos_sst'; econstructor; [symmetry; eauto | | eauto]; assumption.
   Qed.
 
   #[global] Instance equ_clos_ssim'_goal : Proper (equ eq ==> equ eq ==> flip impl) (@ssim' E F C D X Y L).
   Proof.
     cbn; intros ? ? eq1 ? ? eq2 H.
-    apply (ft_t equ_clos_sst'); econstructor; [eauto | | symmetry; eauto]; assumption.
+    apply equ_clos_sst'; econstructor; eauto; now symmetry.
   Qed.
 
   #[global] Instance equ_clos_ssim'_ctx : Proper (equ eq ==> equ eq ==> impl) (@ssim' E F C D X Y L).
@@ -130,38 +154,32 @@ Section ssim'_theory.
     now rewrite <- eq1, <- eq2.
   Qed.
 
-  Lemma ss'_gen_brD : forall {Z} (c : C Z) (k : Z -> ctree E C X) (u : ctree F D Y)
+  Lemma ss'_gen_br : forall {Z} (c : C Z) (k : Z -> ctree E C X) (u : ctree F D Y)
     (R Reps : rel _ _),
-    ss'_gen L R Reps (BrD c k) u ->
+    ss'_gen L R Reps (Br c k) u ->
     forall x, exists u', epsilon u u' /\ Reps (k x) u'.
   Proof.
-    intros. eapply H. reflexivity.
+    intros. destruct H as (_ & H & _); eapply H; reflexivity.
+  Qed.
+
+  Lemma ss'_gen_guard : forall (t : ctree E C X) (u : ctree F D Y)
+    (R Reps : rel _ _),
+    ss'_gen L R Reps (Guard t) u ->
+    exists u', epsilon u u' /\ Reps t u'.
+  Proof.
+    intros. destruct H as (_ & _ & H); eapply H; reflexivity.
   Qed.
 
 End ssim'_theory.
 
-Module SSim'Notations.
-
-  (*| ss (simulation) notation |*)
-  Notation sst' L := (t (ss' L)).
-  Notation ssbt' L := (bt (ss' L)).
-  Notation ssT' L := (T (ss' L)).
-  Notation ssbT' L := (bT (ss' L)).
-
-End SSim'Notations.
-
-Import SSim'Notations.
-
 Ltac fold_ssim' :=
   repeat
     match goal with
-    | h: context[gfp (@ss' ?E ?F ?C ?D ?X ?Y ?L)] |- _ => fold (@ssim' E F C D X Y L) in h
-    | |- context[gfp (@ss' ?E ?F ?C ?D ?X ?Y ?L)]      => fold (@ssim' E F C D X Y L)
+    | h: context[gfp (@ss' ?E ?F ?C ?D ?X ?Y ?L)] |- _ =>
+        fold (@ssim' E F C D X Y L) in h
+    | |- context[gfp (@ss' ?E ?F ?C ?D ?X ?Y ?L)]      =>
+        fold (@ssim' E F C D X Y L)
     end.
-
-Ltac __coinduction_ssim' R H :=
-  (try unfold ssim');
-  apply_coinduction; fold_ssim'; intros R H.
 
 Tactic Notation "__step_ssim'" :=
   match goal with
@@ -171,10 +189,7 @@ Tactic Notation "__step_ssim'" :=
       fold (@ssim' E F C D X Y L)
   end.
 
-#[local] Tactic Notation "step" := __step_ssim' || step.
-
-#[local] Tactic Notation "coinduction" simple_intropattern(R) simple_intropattern(H) :=
-  __coinduction_ssim' R H || coinduction R H.
+Tactic Notation "step" := __step_ssim' || step.
 
 Ltac __step_in_ssim' H :=
   match type of H with
@@ -184,50 +199,77 @@ Ltac __step_in_ssim' H :=
       fold (@ssim' E F C D X Y L) in H
   end.
 
-#[local] Tactic Notation "step" "in" ident(H) := __step_in_ssim' H || step in H.
+Tactic Notation "step" "in" ident(H) := __step_in_ssim' H || step in H.
+
+Tactic Notation "__coinduction_ssim'" simple_intropattern(r) simple_intropattern(cih) :=
+  first [unfold ssim' at 4 | unfold ssim' at 3 | unfold ssim' at 2 | unfold ssim' at 1]; coinduction r cih.
+Tactic Notation "coinduction" simple_intropattern(r) simple_intropattern(cih) := __coinduction_ssim' r cih || coinduction r cih.
 
 Import CTreeNotations.
 Import EquNotations.
 Section ssim'_homogenous_theory.
-  Context {E C: Type -> Type} {X: Type}
-          {L: relation (@label E)}
-          {HasStuck1: B0 -< C}.
+  Context {E B: Type -> Type} {X: Type}
+          {L: relation (@label E)}.
 
-  Notation ss' := (@ss' E E C C X X _ _).
-  Notation ssim' := (@ssim' E E C C X X _ _).
-  Notation sst' L := (coinduction.t (ss' L)).
-  Notation ssbt' L := (coinduction.bt (ss' L)).
-  Notation ssT' L := (coinduction.T (ss' L)).
+  Notation ss' := (@ss' E E B B X X).
+  Notation ssim' := (@ssim' E E B B X X).
 
-  (*|
-    Various results on reflexivity and transitivity.
-  |*)
   #[global] Instance Reflexive_ss' R Reps
     `{Reflexive _ R} `{Reflexive _ Reps} `{Reflexive _ L}:
-    Reflexive (@ss'_gen E E C C X X L R Reps).
+    Reflexive (@ss'_gen E E B B X X L R Reps).
   Proof.
-    split; intros; eauto.
+    split; [| split]; intros; eauto.
     exists (k x0). subs. split; auto. now eapply epsilon_br.
+    exists t'; split; eauto.
+    rewrite H2; now apply epsilon_guard.
   Qed.
 
-  Lemma refl_sst' `{Reflexive _ L}: const seq <= (sst' L).
+  #[global] Instance refl_ss' {LR: Reflexive L} {C: Chain (ss' L)}: Reflexive `C.
   Proof.
-    apply leq_t. cbn.
-    intros. unfold seq in H0. subst. reflexivity.
+    apply Reflexive_chain.
+    split; [| split]; cbn; intros; eauto.
+    - exists (k x0); split; auto.
+      rewrite H0; eapply epsilon_br, epsilon_id; reflexivity.
+    - exists t'; split; auto.
+      rewrite H0; eapply epsilon_guard, epsilon_id; reflexivity.
   Qed.
 
-  (*| Reflexivity |*)
-  #[global] Instance Reflexive_sst' R `{Reflexive _ L}: Reflexive (sst' L R).
-  Proof. apply build_reflexive; apply ft_t; apply (refl_sst'). Qed.
+  (* #[global] Instance square_ss' {LT: Transitive L} {C: Chain (ss' L)}: Transitive `C. *)
+  (* Proof. *)
+  (*   apply Transitive_chain. *)
+  (*   cbn; intros * IH * (xy & xy' & xy'') (yz & yz' & yz''); split; [| split]. *)
+  (*   - intros HP * TR. *)
+  (*     apply xy in TR as (? & ? & ? & ? & ?); auto. *)
+  (*     rewrite (ctree_eta y) in H. *)
+  (*     destruct (observe y) eqn:eqoy. *)
+  (*     + edestruct yz as (? & ? & ? & ? & ?). *)
+  (*       rewrite ctree_eta, eqoy; econstructor; reflexivity. *)
+  (*       rewrite ctree_eta, eqoy; apply H. *)
+  (*       eauto 8. *)
+  (*     + exfalso; eapply trans_stuck_inv; eauto. *)
+  (*     + edestruct yz as (? & ? & ? & ? & ?). *)
+  (*       rewrite ctree_eta, eqoy; econstructor; reflexivity. *)
+  (*       rewrite ctree_eta, eqoy; apply H. *)
+  (*       eauto 8. *)
+  (*     + inv_trans. *)
+  (*       rename z into foo. *)
+  (*       edestruct yz'' as (? & ? & ?). *)
+  (*       rewrite ctree_eta, eqoy; reflexivity. *)
+  (*       do 2 eexists; split. *)
 
-  Corollary Reflexive_ssim' `{Reflexive _ L}: Reflexive (ssim' L).
-  Proof. now apply Reflexive_sst'. Qed.
+  (*       rewrite ctree_eta, eqoy; apply H. *)
+  (*       eauto 8. *)
 
-  #[global] Instance Reflexive_ssbt' R `{Reflexive _ L}: Reflexive (ssbt' L R).
-  Proof. apply build_reflexive; apply fbt_bt; apply refl_sst'. Qed.
 
-  #[global] Instance Reflexive_ssT' f R `{Reflexive _ L}: Reflexive (ssT' L f R).
-  Proof. apply build_reflexive; apply fT_T; apply refl_sst'. Qed.
+  (*   intros ?? xx'. *)
+  (*   destruct (xy _ _ xx') as (l' & y' & yy' & ? & ?). *)
+  (*   destruct (yz _ _ yy') as (l'' & z' & zz' & ? & ?). *)
+  (*   eauto 8. *)
+  (* Qed. *)
+
+  (* (*| PreOrder |*) *)
+  (* #[global] Instance PreOrder_sst {LPO: PreOrder L} {C: Chain (ss L)}: PreOrder `C. *)
+  (* Proof. ssplitypeclasses eauto. Qed. *)
 
 End ssim'_homogenous_theory.
 
@@ -241,72 +283,24 @@ Section ssim'_heterogenous_theory.
 
   Notation ss' := (@ss' E F C D X Y).
   Notation ssim'  := (@ssim' E F C D X Y).
-  Notation sst' L := (coinduction.t (ss' L)).
-  Notation ssbt' L := (coinduction.bt (ss' L)).
-  Notation ssT' L := (coinduction.T (ss' L)).
-
-  #[global] Instance equ_clos_sst'_goal {RR} :
-    Proper (equ eq ==> equ eq ==> flip impl) (sst' L RR).
-  Proof.
-    cbn; intros ? ? eq1 ? ? eq2 H.
-    apply (ft_t equ_clos_sst'); econstructor; [eauto | | symmetry; eauto]; assumption.
-  Qed.
-
-  #[global] Instance equ_clos_sst'_ctx {RR} :
-    Proper (equ eq ==> equ eq ==> impl) (sst' L RR).
-  Proof.
-    cbn; intros ? ? eq1 ? ? eq2 H.
-    apply (ft_t equ_clos_sst'); econstructor; [symmetry; eauto | | eauto]; assumption.
-  Qed.
-
-  #[global] Instance equ_ssbt'_closed_goal {r} :
-    Proper (equ eq ==> equ eq ==> flip impl) (ssbt' L r).
-  Proof.
-    cbn. intros.
-    apply (fbt_bt equ_clos_sst'); econstructor; eauto.
-    now symmetry.
-  Qed.
-
-  #[global] Instance equ_ssbt'_closed_ctx {r} :
-    Proper (equ eq ==> equ eq ==> impl) (ssbt' L r).
-  Proof.
-    cbn; intros.
-    now rewrite H, H0 in H1.
-  Qed.
-
-  #[global] Instance equ_clos_ssT'_goal RR f :
-    Proper (equ eq ==> equ eq ==> flip impl) (ssT' L f RR).
-  Proof.
-    cbn; intros ? ? eq1 ? ? eq2 H.
-    apply (fT_T equ_clos_sst'); econstructor; [eauto | | symmetry; eauto]; assumption.
-  Qed.
-
-  #[global] Instance equ_clos_ssT'_ctx RR f :
-    Proper (equ eq ==> equ eq ==> impl) (ssT' L f RR).
-  Proof.
-    cbn; intros ? ? eq1 ? ? eq2 H.
-    apply (fT_T equ_clos_sst'); econstructor; [symmetry; eauto | | eauto]; assumption.
-  Qed.
 
 (*|
   stuck ctrees can be simulated by anything.
 |*)
   Lemma ss'_stuck R Reps :
-    forall b (u : ctree F D Y) k,
-    ss'_gen L R Reps (go (@BrF E C X _ b void (subevent _ branch0) k)) u.
+    forall (u : ctree F D Y),
+    ss'_gen (E := E) (C := C) (X := X) L R Reps Stuck u.
   Proof.
-    split; intros.
-    - destruct b; inv_trans; destruct x.
-    - destruct b; inv_equ. destruct x.
+    split; [| split]; intros; inv_equ.
+    inv_trans.
   Qed.
 
-  Lemma ssim'_stuck (t : ctree F D Y) : ssim' L stuckD t.
+  Lemma ssim'_stuck (t : ctree F D Y) : ssim' L Stuck t.
   Proof.
     intros. step. apply ss'_stuck.
   Qed.
 
 End ssim'_heterogenous_theory.
-
 
 Ltac __play_ssim' := step; cbn; intros ? ? ?TR.
 
@@ -335,28 +329,34 @@ Section Proof_Rules.
           {HR : (Proper (equ eq ==> equ eq ==> impl) R)}
           {HReps : (Proper (equ eq ==> equ eq ==> impl) Reps)}.
 
+  Lemma step_ss'_stuck :
+    ss'_gen L R Reps Stuck Stuck.
+  Proof.
+    ssplit; intros; inv_equ.
+    exfalso; eapply productive_stuck; eauto.
+  Qed.
+
   Lemma step_ss'_ret (x : X) (y : Y) :
-    R stuckD stuckD ->
+    R Stuck Stuck ->
     L (val x) (val y) ->
     ss'_gen L R Reps (Ret x : ctree E C X) (Ret y : ctree F D Y).
   Proof.
-    intros Rstuck Lval. split; intros.
-    2: inv_equ.
+    intros Rstuck Lval. split; [| split]; intros.
+    2,3: inv_equ.
     inv_trans; subst.
     do 3 eexists; intuition; etrans. now subs.
   Qed.
 
   Lemma step_ss'_ret_l (x : X) (y : Y) (u u' : ctree F D Y) :
-    R stuckD stuckD ->
+    R Stuck Stuck ->
     L (val x) (val y) ->
     trans (val y) u u' ->
     ss'_gen L R Reps (Ret x : ctree E C X) u.
   Proof.
     intros. cbn. intros.
     apply trans_val_inv in H1 as ?. subs.
-    split; intros.
-    - inv_trans. subst. rewrite <- EQ in H. etrans.
-    - inv_equ.
+    split; [| split]; intros; inv_equ.
+    inv_trans. subst. rewrite <- EQ in H. etrans.
   Qed.
 
 (*|
@@ -369,7 +369,7 @@ Section Proof_Rules.
     (forall x, exists y, R (k x) (k' y) /\ L (obs e x) (obs f y)) ->
     ss'_gen L R Reps (Vis e k) (Vis f k').
   Proof.
-    intros. split; intros; inv_equ.
+    intros. split; [| split]; intros; inv_equ.
     cbn; inv_trans; subst;
       destruct (H x) as (x' & RR & LL);
       cbn; do 3 eexists; intuition.
@@ -391,138 +391,116 @@ Section Proof_Rules.
     (forall x, exists l' u', trans l' u u' /\ R (k x) u' /\ L (obs e x) l') ->
     ss'_gen L R Reps (Vis e k) u.
   Proof.
-    intros. split; intros; [| inv_equ].
+    intros. split; [| split]; intros; inv_equ.
     inv_trans. subst. destruct (H x) as (? & ? & ? & ? & ?).
     eexists _, _. rewrite <- EQ in H2. etrans.
   Qed.
 
-  (*|
-    Same goes for visible tau nodes.
-    |*)
-  Lemma step_ss'_step `{HasTau: B1 -< C} `{HasTau': B1 -< D}
-        (t : ctree E C X) (t': ctree F D Y) :
-    L tau tau ->
-    R t t' ->
-    ss'_gen L R Reps (Step t) (Step t').
-  Proof.
-    split; intros; inv_equ.
-    inv_trans; subst.
-    cbn; do 3 eexists; intuition; subs; eauto.
-  Qed.
-
-  (*|
-    When matching visible brs one against another, in general we need to explain how
-    we map the branches from the left to the branches to the right.
-    A useful special case is the one where the arity coincide and we simply use the identity
-    in both directions. We can in this case have [n] rather than [2n] obligations.
-    |*)
-  Lemma step_ss'_brS {Z Z'} (c : C Z) (d : D Z')
-        (k : Z -> ctree E C X) (k' : Z' -> ctree F D Y) :
-    (forall x, exists y, R (k x) (k' y)) ->
-    L tau tau ->
-    ss'_gen L R Reps (BrS c k) (BrS d k').
-  Proof.
-    split; intros; inv_equ. inv_trans. subst.
-    destruct (H x).
-    cbn; do 3 eexists; intuition; subs; eauto.
-  Qed.
-
-  Lemma step_ss'_brS_id {Z} (c : C Z) (d: D Z)
-        (k: Z -> ctree E C X) (k': Z -> ctree F D Y) :
-    (forall x, R (k x) (k' x)) ->
-    L tau tau ->
-    ss'_gen L R Reps (BrS c k) (BrS d k').
-  Proof.
-    intros; apply step_ss'_brS; eauto.
-  Qed.
-
-  Lemma step_ss'_brS_l {Z} :
-    forall (c : C Z) (k : Z -> ctree E C X) (u : ctree F D Y),
-    (forall x, exists l' u', trans l' u u' /\ R (k x) u' /\ L tau l') ->
-    ss'_gen L R Reps (BrS c k) u.
-  Proof.
-    intros. split; intros; [| inv_equ].
-    inv_trans. subst. destruct (H x) as (? & ? & ? & ? & ?).
-    eexists _, _. rewrite <- EQ in H2. etrans.
-  Qed.
-
-  (*|
+(*|
     With this definition [ss'] of simulation, delayed nodes allow to perform a coinductive step.
-    |*)
-  Lemma step_ss'_brD_l {Z} (c : C Z)
+|*)
+  Lemma step_ss'_br_l {Z} (c : C Z)
         (k : Z -> ctree E C X) (t': ctree F D Y):
     (forall x, Reps (k x) t') ->
-    ss'_gen L R Reps (BrD c k) t'.
+    ss'_gen L R Reps (Br c k) t'.
   Proof.
-    split; intros. { now apply productive_brD in H0. }
-    inv_equ. setoid_rewrite EQ in H. eauto.
+    ssplit; intros.
+    now apply productive_br in H0.
+    inv_equ. exists t'; split; eauto; rewrite <- EQ; auto.
+    inv_equ.
   Qed.
 
-  Lemma step_ss'_brD_r {Z} (c : D Z) x
+  Lemma step_ss'_br_r {Z} (c : D Z) x
         (k : Z -> ctree F D Y) (t: ctree E C X):
     ss'_gen L R Reps t (k x) ->
-    ss'_gen L R Reps t (BrD c k).
+    ss'_gen L R Reps t (Br c k).
   Proof.
-    cbn. split; intros.
-    apply H in H1 as (? & ? & ? & ? & ?).
-    exists x0, x1; etrans. auto.
-    eapply (proj2 H) in H0 as (? & ? & ?). eapply EpsilonBr in H0. etrans.
+    intros (HA & HB & HC); ssplit; intros.
+    - apply HA in H0 as (? & ? & ? & ? & ?).
+      exists x0, x1; etrans. auto.
+    - eapply HB in H as (? & ? & ?). eapply epsilon_br in H. etrans.
+    - eapply HC in H as (? & ? & ?).
+      eexists; split; [| eauto].
+      eapply epsilon_br, H.
+  Qed.
+
+  Lemma step_ss'_br {Z Z'} (a: C Z) (b: D Z')
+    (k : Z -> ctree E C X) (k' : Z' -> ctree F D Y) :
+    (forall x, exists y, Reps (k x) (k' y)) ->
+    ss'_gen L R Reps (Br a k) (Br b k').
+  Proof.
+    ssplit; intros. { now apply productive_br in H0. }
+    2: inv_equ.
+    inv_equ.
+    setoid_rewrite EQ in H. destruct (H x).
+    eexists. split; [| eassumption].
+    econstructor 2.
+    econstructor.
+    reflexivity.
+  Qed.
+
+  Lemma step_ss'_br_id {Z} (c: C Z) (d: D Z)
+        (k : Z -> ctree E C X) (k' : Z -> ctree F D Y) :
+    (forall x, Reps (k x) (k' x)) ->
+    ss'_gen L R Reps (Br c k) (Br d k').
+  Proof.
+   intros. apply step_ss'_br; eauto.
+  Qed.
+
+  Lemma step_ss'_guard_l
+        (t: ctree E C X) (t': ctree F D Y) :
+    Reps t t' ->
+    ss'_gen L R Reps (Guard t) t'.
+  Proof.
+    ssplit; intros.
+    now apply productive_guard in H0.
+    inv_equ.
+    inv_equ.
+    eexists t'; split.
+    reflexivity.
+    rewrite <- H0; auto.
+  Qed.
+
+  Lemma step_ss'_guard_r
+    (t: ctree E C X) (t': ctree F D Y) :
+    ss'_gen L R Reps t t' ->
+    ss'_gen L R Reps t (Guard t').
+  Proof.
+    intros (HA & HB & HC); ssplit; intros.
+    - apply HA in H0 as (? & ? & ? & ? & ?).
+      do 2 eexists; etrans.
+      auto.
+    - eapply HB in H as (? & ? & ?).
+      eexists; split; [| eauto].
+      eapply epsilon_guard, H.
+    - eapply HC in H as (? & ? & ?).
+      eexists; split; [| eauto].
+      eapply epsilon_guard, H.
+  Qed.
+
+  Lemma step_ss'_guard
+        (t: ctree E C X) (t': ctree F D Y) :
+    Reps t t' ->
+    ss'_gen L R Reps (Guard t) (Guard t').
+  Proof.
+    ssplit; intros. { now apply productive_guard in H0. }
+    inv_equ.
+    inv_equ.
+    setoid_rewrite H0 in H.
+    eexists. split; [| eassumption].
+    now econstructor 3.
   Qed.
 
   Lemma step_ss'_epsilon_r :
     forall (t : ctree E C X) (u u' : ctree F D Y),
-    ss'_gen L R Reps t u' -> epsilon u u' -> ss'_gen L R Reps t u.
+      ss'_gen L R Reps t u' -> epsilon u u' -> ss'_gen L R Reps t u.
   Proof.
     intros. red in H0. rewrite (ctree_eta u). rewrite (ctree_eta u') in H.
     genobs u ou. genobs u' ou'. clear u Heqou u' Heqou'.
     revert t H. induction H0; intros.
     - now subs.
-    - apply IHepsilon_ in H. rewrite <- ctree_eta in H.
-      eapply step_ss'_brD_r. apply H.
-  Qed.
-
-  Lemma step_ss'_brD {Z Z'} (a: C Z) (b: D Z')
-    (k : Z -> ctree E C X) (k' : Z' -> ctree F D Y) :
-    (forall x, exists y, Reps (k x) (k' y)) ->
-    ss'_gen L R Reps (BrD a k) (BrD b k').
-  Proof.
-    split; intros. { now apply productive_brD in H0. }
-    inv_equ. setoid_rewrite EQ in H. destruct (H x).
-    eexists. split; [| eassumption]. eright. eleft. reflexivity.
-  Qed.
-
-  Lemma step_ss'_brD_id {Z} (c: C Z) (d: D Z)
-        (k : Z -> ctree E C X) (k' : Z -> ctree F D Y) :
-    (forall x, Reps (k x) (k' x)) ->
-    ss'_gen L R Reps (BrD c k) (BrD d k').
-  Proof.
-   intros. apply step_ss'_brD; eauto.
-  Qed.
-
-  Lemma step_ss'_guard_l `{HasTau: B1 -< C}
-        (t: ctree E C X) (t': ctree F D Y) :
-    Reps t t' ->
-    ss'_gen L R Reps (Guard t) t'.
-  Proof.
-    intros. apply step_ss'_brD_l; auto.
-  Qed.
-
-  Lemma step_ss'_guard `{HasTau: B1 -< C} `{HasTau': B1 -< D}
-        (t: ctree E C X) (t': ctree F D Y) :
-    Reps t t' ->
-    ss'_gen L R Reps (Guard t) (Guard t').
-  Proof.
-    intros. apply step_ss'_brD_id; auto.
-  Qed.
-
-  Lemma step_ss'_guard_r `{HasB1: B1 -< D} :
-    forall t u,
-    ss'_gen L R Reps t u ->
-    ss'_gen L R Reps t (Guard u).
-  Proof.
-    intros. eapply step_ss'_epsilon_r.
-    - apply H.
-    - apply epsilon_br; auto.
+    - eapply step_ss'_br_r, IHepsilon_; eauto.
+    - eapply step_ss'_guard_r, IHepsilon_; eauto.
   Qed.
 
   Lemma ss'_gen_epsilon_l :
@@ -537,49 +515,321 @@ Section Proof_Rules.
     revert u H0. induction H1; intros.
     - now subs.
     - apply IHepsilon_. rewrite <- ctree_eta.
-      eapply ss'_gen_brD in H0 as (? & ? & ?).
+      eapply ss'_gen_br in H0 as (? & ? & ?).
       apply H in H2. eapply step_ss'_epsilon_r in H2; eauto.
+    - apply IHepsilon_. rewrite <- ctree_eta.
+      eapply ss'_gen_guard in H0 as (? & ? & ?).
+      apply H in H2. eapply step_ss'_epsilon_r in H2; eauto.
+   Qed.
+
+
+  (*|
+    Same goes for visible τ nodes.
+    |*)
+  Lemma step_ss'_step
+        (t : ctree E C X) (t': ctree F D Y) :
+    L τ τ ->
+    R t t' ->
+    ss'_gen L R Reps (Step t) (Step t').
+  Proof.
+    split; [| split]; intros; inv_equ.
+    inv_trans; subst.
+    cbn; do 3 eexists; intuition; subs; eauto.
   Qed.
+
+(*|
+    When matching visible brs one against another, in general we need to explain how
+    we map the branches from the left to the branches to the right.
+    A useful special case is the one where the arity coincide and we simply use the identity
+    in both directions. We can in this case have [n] rather than [2n] obligations.
+|*)
+
+  Lemma step_ss'_brS {Z Z'} (c : C Z) (d : D Z')
+        (k : Z -> ctree E C X) (k' : Z' -> ctree F D Y) :
+    (forall x, exists y, R (k x) (k' y)) ->
+    (forall x, exists y, Reps (Step (k x)) (Step (k' y))) ->
+    L τ τ ->
+    ss'_gen L R Reps (BrS c k) (BrS d k').
+  Proof.
+    ssplit.
+    - intros HP * TR.
+      inv_trans. subst.
+      destruct (H x0).
+      do 2 eexists; ssplit.
+      etrans.
+      rewrite EQ; eauto.
+      auto.
+    - intros * EQ *.
+      inv_equ.
+      specialize (H0 x); specialize (EQ0 x).
+      destruct H0.
+      exists (Step (k' x0)).
+      split.
+      eapply epsilon_br; reflexivity.
+      rewrite <- EQ0. auto.
+    - intros; inv_equ.
+  Qed.
+
+  Lemma step_ss'_brS_id {Z} (c : C Z) (d: D Z)
+    (k: Z -> ctree E C X) (k': Z -> ctree F D Y) :
+    (forall x, R (k x) (k' x)) ->
+    (forall x, Reps (Step (k x)) (Step (k' x))) ->
+    L τ τ ->
+    ss'_gen L R Reps (BrS c k) (BrS d k').
+  Proof.
+    intros; apply step_ss'_brS; eauto.
+  Qed.
+
+  (* Lemma step_ss'_brS_l {Z} : *)
+  (*   forall (c : C Z) (k : Z -> ctree E C X) (u : ctree F D Y), *)
+  (*   (forall x, exists l' u', trans l' u u' /\ R (k x) u' /\ L τ l') -> *)
+  (*   ss'_gen L R Reps (BrS c k) u. *)
+  (* Proof. *)
+  (*   intros. ssplit; intros. *)
+  (*   - inv_trans. subst. destruct (H x0) as (? & ? & ? & ? & ?). *)
+  (*     eexists _, _. rewrite <- EQ in H2. etrans. *)
+  (*   - inv_equ. *)
+  (*     destruct (H x) as (? & ? & ? & ? & ?). *)
+  (*     eexists; split. *)
+
+  (*     split. *)
+
+  (* Qed. *)
 
 End Proof_Rules.
 
 (* Specialized proof rules *)
 
-Lemma step_ssbt'_ret {E F C D X Y} `{HasB0: B0 -< C} `{HasB0': B0 -< D}
-  (x : X) (y : Y) (L R : rel _ _) :
+Lemma step_ssbt'_stuck {E F C D X Y}
+  (L : rel _ _)
+  {R : Chain (@ss' E F C D X Y L)} :
+  ` R Stuck Stuck.
+Proof.
+  apply (b_chain R).
+  apply step_ss'_stuck; eauto.
+Qed.
+
+Lemma ssim'_stuck' {E F C D X Y}
+  (L : rel _ _) :
+  ssim' L (Stuck : ctree E C X) (Stuck : ctree F D Y).
+Proof.
+  apply step_ssbt'_stuck.
+Qed.
+
+Lemma step_ssbt'_ret {E F C D X Y}
+  (x : X) (y : Y) (L : rel _ _)
+  {R : Chain (@ss' E F C D X Y L)} :
   L (val x) (val y) ->
-  ssbt' L R (Ret x : ctree E C X) (Ret y : ctree F D Y).
+  ` R (Ret x : ctree E C X) (Ret y : ctree F D Y).
 Proof.
   intros.
-  apply step_ss'_ret.
-  - step. intros. red. red. cbn.
-    apply ss'_stuck.
-  - apply H.
+  apply (b_chain R).
+  unshelve eapply step_ss'_ret; eauto.
+  apply step_ssbt'_stuck.
 Qed.
 
-Lemma step_ssbt'_br {E F C D X Y Z Z'} `{HasB0: B0 -< C} `{HasB0': B0 -< D} {L R}
-  (vis : bool) (c: C Z) (d: D Z')
+Lemma ssim'_ret {E F C D X Y}
+  (x : X) (y : Y) (L : rel _ _) :
+  L (val x) (val y) ->
+  ssim' L (Ret x : ctree E C X) (Ret y : ctree F D Y).
+Proof.
+  now intros; apply step_ssbt'_ret.
+Qed.
+
+Lemma step_ssbt'_step {E F C D X Y}
+  t u (L : rel _ _)
+  {R : Chain (@ss' E F C D X Y L)} :
+  L τ τ  ->
+  ` R t u ->
+  ` R (Step t) (Step u).
+Proof.
+  intros.
+  apply (b_chain R).
+  eapply step_ss'_step; eauto.
+Qed.
+
+Lemma ssim'_step {E F C D X Y}
+  (t : ctree E C X) (u : ctree F D Y) (L : rel _ _) :
+  L τ τ  ->
+  ssim' L t u ->
+  ssim' L (Step t) (Step u).
+Proof.
+  now intros; apply step_ssbt'_step.
+Qed.
+
+Lemma step_ssbt'_guard {E F C D X Y}
+  t u (L : rel _ _)
+  {R : Chain (@ss' E F C D X Y L)} :
+  ` R t u ->
+  ` R (Guard t) (Guard u).
+Proof.
+  intros.
+  apply (b_chain R).
+  eapply step_ss'_guard; eauto.
+Qed.
+
+Lemma ssim'_guard {E F C D X Y}
+  (t : ctree E C X) (u : ctree F D Y) (L : rel _ _) :
+  ssim' L t u ->
+  ssim' L (Guard t) (Guard u).
+Proof.
+  now intros; apply step_ssbt'_guard.
+Qed.
+
+Lemma step_ssbt'_br {E F C D X Y Z Z'} {L}
+  {R : Chain (@ss' E F C D X Y L)}
+  (c: C Z) (d: D Z')
   (k : Z -> ctree E C X) (k' : Z' -> ctree F D Y) :
-  (forall x, exists y, sst' L R (k x) (k' y)) ->
-  L tau tau ->
-  ssbt' L R (Br vis c k) (Br vis d k').
+  (forall x, exists y, ` R (k x) (k' y)) ->
+  ` R (Br c k) (Br d k').
 Proof.
   intros.
-  destruct vis; [apply step_ss'_brS | apply step_ss'_brD];
-    eauto; typeclasses eauto.
+  apply (b_chain R), step_ss'_br; auto.
 Qed.
 
-Lemma step_ssbt'_br_id {E F C D X Y Z} `{HasB0: B0 -< C} `{HasB0': B0 -< D} {L R}
-  (vis : bool) (c: C Z) (d: D Z)
-  (k : Z -> ctree E C X) (k': Z -> ctree F D Y) :
-  (forall x, sst' L R (k x) (k' x)) ->
-  L tau tau ->
-  ssbt' L R (Br vis c k) (Br vis d k').
+Lemma ssim'_br {E F C D X Y Z Z'} {L}
+  (c: C Z) (d: D Z')
+  (k : Z -> ctree E C X) (k' : Z' -> ctree F D Y) :
+  (forall x, exists y, ssim' L (k x) (k' y)) ->
+  ssim' L (Br c k) (Br d k').
 Proof.
-  intros. apply step_ssbt'_br; eauto.
+  now intros; apply step_ssbt'_br.
 Qed.
 
-Lemma ssim'_epsilon_l {E F C D X Y} `{HasB0: B0 -< C} `{HasB0': B0 -< D} {L} :
+Lemma step_ssbt'_br_id {E F C D X Y Z} {L}
+  {R : Chain (@ss' E F C D X Y L)}
+  (c: C Z) (d: D Z)
+  (k : Z -> ctree E C X) (k' : Z -> ctree F D Y) :
+  (forall x, ` R (k x) (k' x)) ->
+  ` R (Br c k) (Br d k').
+Proof.
+  intros.
+  apply (b_chain R), step_ss'_br_id; auto.
+Qed.
+
+Lemma ssim'_br_id {E F C D X Y Z} {L}
+  (c: C Z) (d: D Z)
+  (k : Z -> ctree E C X) (k' : Z -> ctree F D Y) :
+  (forall x, ssim' L (k x) (k' x)) ->
+  ssim' L (Br c k) (Br d k').
+Proof.
+  now intros; apply step_ssbt'_br_id.
+Qed.
+
+Lemma step_ssbt'_brS {E F C D X Y Z Z'} {L}
+  {R : Chain (@ss' E F C D X Y L)}
+  (c: C Z) (d: D Z')
+  (k : Z -> ctree E C X) (k' : Z' -> ctree F D Y) :
+  L τ τ  ->
+  (forall x, exists y, ` R (k x) (k' y)) ->
+  ` R (BrS c k) (BrS d k').
+Proof.
+  intros.
+  apply (b_chain R), step_ss'_br; auto.
+  intros x; destruct (H0 x) as (y & ?); exists y.
+  apply (b_chain R), step_ss'_step; auto.
+Qed.
+
+Lemma ssim'_brS {E F C D X Y Z Z'} {L}
+  (c: C Z) (d: D Z')
+  (k : Z -> ctree E C X) (k' : Z' -> ctree F D Y) :
+  L τ τ  ->
+  (forall x, exists y, ssim' L (k x) (k' y)) ->
+  ssim' L (BrS c k) (BrS d k').
+Proof.
+  now intros; apply step_ssbt'_brS.
+Qed.
+
+Lemma step_ssbt'_brS_id {E F C D X Y Z} {L}
+  {R : Chain (@ss' E F C D X Y L)}
+  (c: C Z) (d: D Z)
+  (k : Z -> ctree E C X) (k' : Z -> ctree F D Y) :
+  L τ τ  ->
+  (forall x, ` R (k x) (k' x)) ->
+  ` R (BrS c k) (BrS d k').
+Proof.
+  intros.
+  apply (b_chain R), step_ss'_br_id; auto.
+  intros; apply (b_chain R), step_ss'_step; auto.
+Qed.
+
+Lemma ssim'_brS_id {E F C D X Y Z} {L}
+  (c: C Z) (d: D Z)
+  (k : Z -> ctree E C X) (k' : Z -> ctree F D Y) :
+  L τ τ  ->
+  (forall x, ssim' L (k x) (k' x)) ->
+  ssim' L (BrS c k) (BrS d k').
+Proof.
+  now intros; apply step_ssbt'_brS_id.
+Qed.
+
+Lemma step_ssbt'_vis
+  {E F C D X Y Z Z'} {L}
+  (e: E Z) (f: F Z')
+  (k : Z -> ctree E C X) (k' : Z' -> ctree F D Y)
+  {R : Chain (@ss' E F C D X Y L)} :
+  (forall x, exists y, ` R (k x) (k' y) /\ L (obs e x) (obs f y)) ->
+  ` R (Vis e k) (Vis f k').
+Proof.
+  intros.
+  apply (b_chain R), step_ss'_vis; auto.
+Qed.
+
+Lemma ssim'_vis
+  {E F C D X Y Z Z'} {L}
+  (e: E Z) (f: F Z')
+  (k : Z -> ctree E C X) (k' : Z' -> ctree F D Y) :
+  (forall x, exists y, ssim' L (k x) (k' y) /\ L (obs e x) (obs f y)) ->
+  ssim' L (Vis e k) (Vis f k').
+Proof.
+  now intros; apply step_ssbt'_vis.
+Qed.
+
+Lemma step_ssbt'_vis_id
+  {E F C D X Y Z} {L}
+  (e: E Z) (f: F Z)
+  (k : Z -> ctree E C X) (k' : Z -> ctree F D Y)
+  {R : Chain (@ss' E F C D X Y L)} :
+  (forall x,` R (k x) (k' x) /\ L (obs e x) (obs f x)) ->
+  ` R (Vis e k) (Vis f k').
+Proof.
+  intros.
+  apply (b_chain R), step_ss'_vis_id; auto.
+Qed.
+
+Lemma ssim'_vis_id
+  {E F C D X Y Z} {L}
+  (e: E Z) (f: F Z)
+  (k : Z -> ctree E C X) (k' : Z -> ctree F D Y) :
+  (forall x, ssim' L (k x) (k' x) /\ L (obs e x) (obs f x)) ->
+  ssim' L (Vis e k) (Vis f k').
+Proof.
+  now intros; apply step_ssbt'_vis_id.
+Qed.
+
+Lemma step_ssbt'_vis_l
+  {E F C D X Y Z} {L}
+  (e: E Z)
+  (k : Z -> ctree E C X) (u : ctree F D Y)
+  {R : Chain (@ss' E F C D X Y L)} :
+  (forall x, exists l' u', trans l' u u' /\ ` R (k x) u' /\ L (obs e x) l') ->
+  ` R (Vis e k) u.
+Proof.
+  intros.
+  apply (b_chain R), step_ss'_vis_l; auto.
+Qed.
+
+Lemma ssim'_vis_l
+  {E F C D X Y Z} {L}
+  (e: E Z)
+  (k : Z -> ctree E C X) (u : ctree F D Y) :
+  (forall x, exists l' u', trans l' u u' /\ ssim' L (k x) u' /\ L (obs e x) l') ->
+  ssim' L (Vis e k) u.
+Proof.
+  now intros; apply step_ssbt'_vis_l.
+Qed.
+
+Lemma ssim'_epsilon_l {E F C D X Y} {L} :
   forall (t t' : ctree E C X) (u : ctree F D Y),
   ssim' L t u ->
   epsilon t t' ->
@@ -606,29 +856,28 @@ Section Inversion_Rules.
     intros. apply H; etrans.
   Qed.
 
-  Lemma ss'_brS_l_inv {Z} :
-    forall (c : C Z) (k : Z -> ctree E C X) (u : ctree F D Y) x,
-    ss'_gen L R Reps (BrS c k) u ->
-    exists l' u', trans l' u u' /\ R (k x) u' /\ L tau l'.
+  Lemma ss'_step_l_inv :
+    forall (t : ctree E C X) (u : ctree F D Y),
+    ss'_gen L R Reps (Step t) u ->
+    exists l' u', trans l' u u' /\ R t u' /\ L τ l'.
   Proof.
-    intros. apply H; etrans.
+    intros * (HA & HB & HC).
+    apply HA; etrans.
   Qed.
 
 End Inversion_Rules.
 
-Definition epsilon_ctx {E C X} `{HasB1: B1 -< C} (R : ctree E C X -> Prop)
+Definition epsilon_ctx {E C X} (R : ctree E C X -> Prop)
   (t : ctree E C X) :=
   exists t', epsilon t t' /\ R t'.
 
-Definition epsilon_det_ctx {E C X} `{HasB1: B1 -< C} (R : ctree E C X -> Prop)
+Definition epsilon_det_ctx {E C X} (R : ctree E C X -> Prop)
   (t : ctree E C X) :=
   exists t', epsilon_det t t' /\ R t'.
 
 Section upto.
 
   Context {E F C D: Type -> Type} {X Y: Type}
-          `{HasB0 : B0 -< C} `{HasB0' : B0 -< D}
-          `{HasB1 : B1 -< C} `{HasB1' : B1 -< D}
           (L : hrel (@label E) (@label F)).
 
   (* Up-to epsilon *)
@@ -639,36 +888,74 @@ Section upto.
     destruct H0 as (? & ? & ?). red. eauto.
   Qed.
 
-  Lemma epsilon_ctx_r_ssim' :
-      epsilon_ctx_r <= t (@ss' E F C D X Y L).
+  Lemma epsilon_ctx_r_sst' {c: Chain (ss' L)}:
+    forall x y, epsilon_ctx_r `c x y -> `c x y.
   Proof.
-    apply Coinduction. cbn -[ss']. intros.
-    destruct H as (? & ? & ?).
-    eapply step_ss'_epsilon_r in H0.
-    eapply (Hbody (ss' L)). 2: apply H0; auto. 2: auto.
-    intros ???. apply (id_T (ss' L)). apply H1.
+    apply tower.
+    - intros ? INC x y (? & ? & ?) ??; red.
+      apply INC; auto.
+      eexists; split; eauto.
+      apply leq_infx in H1.
+      now apply H1.
+    - clear.
+      intros R IH t u (u' & Heps & (HA & HB & HC)).
+      ssplit.
+      + intros HP l t' TR.
+        eapply HA in TR as (l'' & u'' & TR' & ? & ?); auto.
+        do 2 eexists; ssplit.
+        eapply epsilon_trans; eauto.
+        all: auto.
+      + intros * EQ ?.
+        eapply HB in EQ as (? & ? & ?).
+        eexists; split; [| eauto].
+        etransitivity; eauto.
+      + intros * EQ.
+        eapply HC in EQ as (? & ? & ?).
+        eexists; split; [| eauto].
+        etransitivity; eauto.
   Qed.
 
   (* Up-to ss. *)
   (* This principle holds because an ss step always corresponds
      to one or more ss' steps. *)
-  Lemma ss_sst' : @ss E F C D X Y L <= t (ss' L).
+  Lemma ss_sst' {c : Chain (ss' L)} :
+    forall x y, @ss E F C D X Y L ` c x y -> `c x y.
   Proof.
-    intro. apply Coinduction. cbn. intros. split; intros.
-    - apply H in H1 as (? & ? & ? & ? & ?).
-      exists x, x0. split; auto. split; auto.
-      intros. apply (b_T (ss' L)). apply H2.
-    - exists a2. split; auto.
-      apply (fTf_Tf (ss' L)). cbn. intros.
-      eapply trans_brD in H1; auto. rewrite <- H0 in H1.
-      apply H in H1 as (? & ? & ? & ? & ?).
-      exists x0, x1. split; auto. split; auto.
-      apply (b_T (ss' L)). apply H2.
+    apply tower.
+    - intros ? INC x y HSS ??; red.
+      apply INC; auto.
+      intros ?? TR; apply HSS in TR as (?& ?& ? &? &?).
+      do 2 eexists; ssplit; eauto.
+      apply leq_infx in H.
+      now apply H.
+    - clear.
+      intros R IH t u HSS.
+      ssplit.
+      + intros HP l t' TR.
+        apply HSS in TR as (l'' & u'' & TR' & ? & ?).
+        do 2 eexists; ssplit; eauto.
+        now apply (b_chain R).
+      + intros * EQ ?.
+        eexists; split; eauto.
+        apply IH.
+        intros ?? TR.
+        edestruct HSS as (l'' & u'' & TR' & ? & ?).
+        rewrite EQ; econstructor; apply TR.
+        do 2 eexists; ssplit; eauto.
+        now apply (b_chain R).
+      + intros * EQ.
+        eexists; split; eauto.
+        apply IH.
+        intros ?? TR.
+        edestruct HSS as (l'' & u'' & TR' & ? & ?).
+        rewrite EQ; econstructor; apply TR.
+        do 2 eexists; ssplit; eauto.
+        now apply (b_chain R).
   Qed.
 
 End upto.
 
-Arguments ss_sst' {E F C D X Y HasB0 HasB0'} L.
+Arguments ss_sst' {E F C D X Y} L.
 
 (*|
 Up-to [bind] context simulations
@@ -683,71 +970,98 @@ Section bind.
   Obligation Tactic := idtac.
 
   Context {E F C D: Type -> Type} {X X' Y Y': Type}
-          `{HasStuck : B0 -< C} `{HasStuck' : B0 -< D}
           (L : hrel (@label E) (@label F)) (R0 : rel X Y).
 
 (*|
     The resulting enhancing function gives a valid up-to technique
 |*)
-  Lemma bind_ctx_ssim'_t L0 (*{RV: Respects_val L}*):
-    is_update_val_rel L R0 L0 -> @bind_ctx_ssim E F C D X X' Y Y' R0 L0 <= (t (ss' L)).
+
+  Lemma bind_chain_gen L0
+    (ISVR : is_update_val_rel L R0 L0)
+    {R : Chain (@ss' E F C D X' Y' L)} :
+    forall (t : ctree E C X) (t' : ctree F D Y) (k : X -> ctree E C X') (k' : Y -> ctree F D Y'),
+      ssim L0 t t' ->
+      (forall x x', R0 x x' -> elem R (k x) (k' x')) ->
+      ` R (bind t k) (bind t' k').
   Proof.
-    intro HL0. apply Coinduction.
-    intros R. apply (leq_bind_ctx _).
-    intros t1 t2 tt k1 k2 kk.
-    step in tt. split.
-    - simpl; intros PROD l u STEP.
-      apply trans_bind_inv in STEP as [(H & t' & STEP & EQ) | (v & STEPres & STEP)].
-      apply tt in STEP as (l' & u' & STEP & EQ' & ?).
-      do 2 eexists. split; [| split].
-      apply trans_bind_l; eauto.
-      + intro Hl. destruct Hl.
-        apply HL0 in H0; etrans.
-        inversion H0; subst. apply H. constructor. apply H2. constructor.
-      + apply (fT_T equ_clos_sst').
-        econstructor; [exact EQ | | reflexivity].
-        apply (fTf_Tf (ss' L)).
-        apply in_bind_ctx; [apply EQ' |].
-        intros ? ? ?.
-        apply (b_T (ss' L)).
-        red in kk; cbn; apply kk. eassumption.
-      + apply HL0 in H0; etrans.
-        destruct H0. exfalso. apply H. constructor. apply H2.
-      + assert (t1 ≅ Ret v).
-        { apply productive_bind in PROD. apply trans_val_epsilon in STEPres as [? _].
-          now apply productive_epsilon. } subs.
-        apply tt in STEPres as (l' & u' & STEPres & EQ' & ?).
-        apply HL0 in H; etrans.
-        dependent destruction H. 2: { exfalso. apply H. constructor. }
-        pose proof (trans_val_inv STEPres) as EQ.
-        rewrite EQ in STEPres.
-        specialize (kk v v2 H).
-        rewrite bind_ret_l in PROD.
-        apply kk in STEP as (? & u''' & STEP & EQ'' & ?); auto.
-        do 2 eexists; split.
-        eapply trans_bind_r; eauto.
-        split; auto.
-        eapply (id_T (ss' L)); auto.
-    - intros Z c k EQ z.
-      apply br_equ_bind in EQ as EQ'. destruct EQ' as [(v & EQ') | (k0 & EQ' & EQ'')].
-      + subs.
-        edestruct tt as (l & t'' & STEPres & _ & ?). etrans.
-        apply HL0 in H; etrans.
-        apply update_val_rel_val_l in H as (v' & -> & EQ').
-        rewrite bind_ret_l in EQ.
-        specialize (kk v v' EQ'). apply kk with (x := z) in EQ. destruct EQ as (u' & EPS & EQ).
-        exists u'.
-        apply trans_val_epsilon in STEPres as [? _]. split.
-        * eapply epsilon_bind; eassumption.
-        * now apply (id_T (ss' L)).
-      + subs. eexists. split; [now left |].
-        rewrite EQ''.
-        apply (fTf_Tf (ss' L)). apply in_bind_ctx.
-        eapply ssim_brD_l_inv. step. apply tt.
-        red. intros. apply (b_T (ss' L)). now apply kk.
+    apply tower.
+    - intros ? INC ? ? ? ? tt' kk' ? ?.
+      apply INC. apply H. apply tt'.
+      intros x x' xx'. apply leq_infx in H. apply H. now apply kk'.
+    - clear R; intros R IH ? ? ? ? tt kk.
+      step in tt. ssplit.
+      + simpl; intros PROD l u STEP.
+        apply trans_bind_inv in STEP as [(?H & ?t' & STEP & EQ) | (v & STEPres & STEP)].
+        apply tt in STEP as (l' & u' & STEP & EQ' & ?).
+        do 2 eexists. ssplit.
+        apply trans_bind_l; eauto.
+        * intro Hl. destruct Hl.
+          apply ISVR in H0; etrans.
+          inversion H0; subst. apply H. constructor. apply H2.
+          constructor.
+        * rewrite EQ; apply IH.
+          eauto.
+          intros.
+          apply (b_chain R); auto.
+        * apply ISVR in H0; etrans.
+          destruct H0. exfalso. apply H. constructor. apply H2.
+        * assert (t ≅ Ret v).
+          { apply productive_bind in PROD. apply trans_val_epsilon in STEPres as [? _].
+            now apply productive_epsilon. } subs.
+          apply tt in STEPres as (l' & u' & STEPres & EQ' & ?).
+          apply ISVR in H; etrans.
+          dependent destruction H. 2: { exfalso. apply H. constructor. }
+                                 pose proof (trans_val_inv STEPres) as EQ.
+          rewrite EQ in STEPres.
+          specialize (kk v v2 H).
+          rewrite bind_ret_l in PROD.
+          apply kk in STEP as (? & u''' & STEP & EQ'' & ?); auto.
+          do 2 eexists; split.
+          eapply trans_bind_r; eauto.
+          split; auto.
+      + intros * EQ ?.
+        apply br_equ_bind in EQ as EQ'.
+        destruct EQ' as [(v & EQ' & EQ'') | (?k0 & EQ' & EQ'')].
+        * subs.
+          edestruct tt as (l & t'' & STEPres & _ & ?). etrans.
+          apply ISVR in H; etrans.
+          apply update_val_rel_val_l in H as (v' & -> & EQ').
+          rewrite bind_ret_l in EQ.
+          specialize (kk v v' EQ').
+          apply kk with (x := x) in EQ. destruct EQ as (u' & EPS & EQ).
+          exists u'.
+          apply trans_val_epsilon in STEPres as [? _]. split; eauto.
+          eapply epsilon_bind; eassumption.
+        * subs. eexists. split; [now constructor |].
+          rewrite EQ''.
+          apply IH.
+          eapply ssim_br_l_inv. step. apply tt.
+          intros.
+          apply (b_chain R); eauto.
+      + intros * EQ.
+        apply guard_equ_bind in EQ as EQ'.
+        destruct EQ' as [(v & EQ' & EQ'') | (?k0 & EQ' & EQ'')].
+        * subs.
+          edestruct tt as (l & t'' & STEPres & _ & ?). etrans.
+          apply ISVR in H; etrans.
+          apply update_val_rel_val_l in H as (v' & -> & EQ').
+          rewrite bind_ret_l in EQ.
+          specialize (kk v v' EQ').
+          apply kk in EQ. destruct EQ as (u' & EPS & EQ).
+          exists u'.
+          apply trans_val_epsilon in STEPres as [? _]. split; eauto.
+          eapply epsilon_bind; eassumption.
+        * subs. eexists. split; [now constructor |].
+          rewrite <- EQ''.
+          apply IH.
+          eapply ssim_guard_l_inv. step. apply tt.
+          intros.
+          apply (b_chain R); eauto.
   Qed.
 
 End bind.
+
+(* CHECKPOINT *)
 
 (*|
 Expliciting the reasoning rule provided by the up-to principles.
@@ -779,7 +1093,6 @@ Proof.
 Qed.
 
 Lemma sst'_clo_bind_eq {E C D: Type -> Type} {X X': Type}
-      `{HasStuck: B0 -< C} `{HasStuck': B0 -< D}
       (t1 : ctree E C X) (t2: ctree E D X)
       (k1 : X -> ctree E C X') (k2 : X -> ctree E D X') RR:
   t1 ≲ t2 ->
@@ -794,7 +1107,6 @@ Proof.
 Qed.
 
 Lemma ssbt'_clo_bind_gen {E F C D: Type -> Type} {X Y X' Y': Type} {L : rel (@label E) (@label F)}
-      `{HasStuck: B0 -< C} `{HasStuck': B0 -< D}
       (R0 : rel X Y) L0
       (HL0 : is_update_val_rel L R0 L0)
       (t1 : ctree E C X) (t2: ctree F D Y)
@@ -809,7 +1121,6 @@ Proof.
 Qed.
 
 Lemma ssbt'_clo_bind {E F C D: Type -> Type} {X Y X' Y': Type} {L : rel (@label E) (@label F)}
-      `{HasStuck: B0 -< C} `{HasStuck': B0 -< D}
       (R0 : rel X Y)
       (t1 : ctree E C X) (t2: ctree F D Y)
       (k1 : X -> ctree E C X') (k2 : Y -> ctree F D Y') RR:
@@ -822,7 +1133,6 @@ Proof.
 Qed.
 
 Lemma ssbt'_clo_bind_eq {E C D: Type -> Type} {X X': Type}
-      `{HasStuck: B0 -< C} `{HasStuck': B0 -< D}
       (t1 : ctree E C X) (t2: ctree E D X)
       (k1 : X -> ctree E C X') (k2 : X -> ctree E D X') RR:
   t1 ≲ t2 ->
@@ -855,9 +1165,9 @@ Tactic Notation "__upto_bind_eq_ssim'" uconstr(R0) :=
 Theorem ssim_ssim' {E F C D X Y} :
   forall L (t : ctree E C X) (t' : ctree F D Y), ssim L t t' <-> ssim' L t t'.
 Proof.
-  split; intro.
+  ssplitntro.
   - red. revert t t' H. coinduction R CH. intros.
-    split; intros.
+    ssplitntros.
     + step in H. apply H in H1 as (? & ? & ? & ? & ?). eauto 6.
     + subs. apply ssim_brD_l_inv with (x := x) in H. eauto.
   - revert t t' H. coinduction R CH.

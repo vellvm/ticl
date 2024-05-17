@@ -1227,6 +1227,25 @@ Inversion principles
     intros. step. step in H. eapply ss_br_l_inv. apply H.
   Qed.
 
+  Lemma ss_guard_l_inv {F D Y} {L: rel (label E) (label F)}
+    (t : ctree E C X) (u : ctree F D Y) R:
+    ss L R (Guard t) u ->
+    ss L R t u.
+  Proof.
+    cbn. intros.
+    eapply trans_guard in H0.
+    apply H in H0 as (? & ? & ? & ? & ?); subst.
+    eauto.
+  Qed.
+
+  Lemma ssim_guard_l_inv {F D Y} {L: rel (label E) (label F)}
+    (t : ctree E C X) (u : ctree F D Y):
+    ssim L (Guard t) u ->
+    ssim L t u.
+  Proof.
+    intros. step. step in H. eapply ss_guard_l_inv. apply H.
+  Qed.
+
   (* This one isn't very convenient... *)
   Lemma ssim_br_r_inv {F D Y} {L: rel (label E) (label F)}
         n (c: D n) (t : ctree E C X) (k : n -> ctree F D Y):

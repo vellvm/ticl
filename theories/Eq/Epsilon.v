@@ -148,8 +148,20 @@ Helper inductive: [epsilon t t'] judges that [t'] is reachable from [t] by a pat
       right; left; eauto 8.
     Qed.
 
+    Lemma productive_guard : forall {E C X} (t : ctree E C X),
+      ~ productive (Guard t).
+    Proof.
+      intros ** ?. inversion H; inv_equ.
+    Qed.
+
     Lemma productive_br : forall {E C X Y} (c : C Y) (k : Y -> ctree E C X),
       ~ productive (Br c k).
+    Proof.
+      intros ** ?. inversion H; inv_equ.
+    Qed.
+
+    Lemma productive_stuck : forall {E C X},
+      ~ productive (Stuck : ctree E C X).
     Proof.
       intros ** ?. inversion H; inv_equ.
     Qed.
@@ -204,6 +216,14 @@ Helper inductive: [epsilon t t'] judges that [t'] is reachable from [t] by a pat
       unfold epsilon. split; intros.
       - now rewrite <- H, <- H0.
       - now rewrite H, H0.
+    Qed.
+
+    #[global] Instance epsilon__refl {E C X} :
+      Reflexive (@epsilon_ E C X).
+    Proof.
+      intros ?.
+      change x with (observe (go x)).
+      now apply epsilon_id.
     Qed.
 
     #[global] Instance epsilon_refl {E C X} :
