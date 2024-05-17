@@ -182,56 +182,39 @@ Section SecurityEx.
      label [al ≺ ml], or there does not exist a low intruction that reads from
      high-security memory *)
   Typeclasses Transparent equ.
-  Arguments br2 /.
   Theorem ag_safety_sec: forall (secret: nat) (σ: St),
       (forall i, even_noleak i σ) ->
       <( {interp_state h_secE_instr (sec_system secret) σ},
          {Obs (Log initG) tt} |= AG visW \s, s.(ml) ⪯ s.(al) )>.
   Proof.
     intros.    
-    unfold sec_system, forever, σ0.
-    apply ag_iter_state_vis with (R:=fun '(i, σ) => noleak i σ).
+    unfold sec_system, forever.
+    apply ag_iter_state_vis with (R:=fun '(i, σ) => even_noleak i σ).
     - now specialize (H0 0).
     - unfold initG.
-      econstructor; cbn. reflexivity.
+      econstructor; cbn.
+      reflexivity.
     - intros.
-      ddestruction e.
-      red in v.
-      destruct v.
-      next.
-      split.
-      + rewrite map_bind, interp_state_bind.
-        eapply can_step_bind_l.
-        unfold br2.
-        rewrite interp_state_br.
-        apply ktrans_br.
-        exists Fin.F1; intuition.
-        constructor.
-      + intros  t' w' TR.
-        Search interp_state.        
-        rewrite map_bind, interp_state_bind in TR.
-        unfold br2 in TR.
-        apply ktrans_bind_inv in TR as [(? & ? & ? & ?) | (? & ? & ? & ?)].
-        * (* The head steps *)
-          rewrite H5.
-          rewrite interp_state_br in H3.
-          apply ktrans_br in H3 as (i & Heqx0 & <- & ?).
-          clear H3 H4.
-          ddestruction i.
-          -- 
-             clear H5 t'.
-             rewrite Heqx0.
-             clear Heqx0 x0.
-             rewrite bind_guard.
-             unfold sec_alice1.
-             destruct (Nat.Even_Odd_dec x) eqn:Hx.
-             ++ unfold write. setoid_rewrite interp_state_trigger.
-
-               apply au_guard.
-        rewrite unfold_interp_state.
-      ddestruction v.
-      destruct p.
-    unfold t_w, sec_system.
+      rewrite map_bind, interp_state_bind.
+      unfold br2.
+      destruct e, v.
+      rewrite interp_state_br.
+      rewrite bind_br.
+      apply ax_br; split; auto with ctl.
+      intro i.
+      rewrite bind_guard.
+      apply au_guard.       
+      ddestruction i; unfold sec_alice1, sec_bob1; destruct (Nat.Even_Odd_dec x).
+      + (* Alice runs, [x] is even *)
+        rewrite <- interp_state_bind.
+        setoid_rewrite map_ret.
+        admit.
+      + (* Alice runs, [x] is odd *)
+        admit.
+      + (* Bob runs, [x] is even *)
+        admit.
+      + (* Bob runs, [x] is odd *)
+        admit.
   Admitted.
                 
 End SecurityEx.

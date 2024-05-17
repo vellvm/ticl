@@ -5,8 +5,9 @@ From Coq Require Import
 From CTree Require Import
   Events.Core
   CTree.Core
+  Events.Core
   CTree.Logic.Trans
-  CTree.Equ
+  CTree.Interp.State
   CTree.Equ
   Logic.Ctl
   Logic.Kripke.
@@ -240,5 +241,6 @@ Section CanStepCtrees.
     intros k i t' w w' TR Hd.
     rewrite unfold_iter.
     apply can_step_bind_l with t' w'; auto.   
-  Qed.    
+  Qed.
+
 End CanStepCtrees.

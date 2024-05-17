@@ -32,9 +32,9 @@ Local Open Scope ctree_scope.
 Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
-  Lemma af_done: forall (t: ctree E X) φ w,
+  Lemma au_done: forall (t: ctree E X) ψ φ w,
       is_done w ->
-      <( t, w |= AF now φ )> ->
+      <( t, w |= ψ AU now φ )> ->
       φ w.
   Proof.
     intros * Hret Hcontra.
@@ -55,22 +55,16 @@ Section BasicLemmas.
       now apply can_step_stuck in H1.
     - now next; left.
   Qed.
-  
-  Lemma af_stuck: forall w φ,
-      <( {Ctree.stuck: ctree E X}, w |= AF φ )> <->
-      <( {Ctree.stuck: ctree E X}, w |= φ )>.
-  Proof.
-    intros.
-    apply au_stuck.
-  Qed.
 
-  Lemma af_ret: forall r w (Rr: rel X (World E)),      
+  Lemma au_ret: forall r w (Rr: rel X (World E)) ψ,      
       Rr r w ->
       not_done w ->
-      <( {Ret r}, w |= AF done Rr )>.
+      <( {Ret r}, w |= ψ )> ->
+      <( {Ret r}, w |= ψ AU done Rr )>.
   Proof.
-    intros * Hr Hd.
-    next; right; next; split.
+    intros * Hr Hd Hw.
+    next; right; split; auto.
+    split.
     - now apply can_step_ret.
     - intros t_ w_ TR_.
       inv Hd.
@@ -84,25 +78,25 @@ Section BasicLemmas.
         now constructor.       
   Qed.
 
-  Lemma not_done_vis_af: forall (t: ctree E X) φ w,
-      <( t, w |= AF vis φ )> ->
+  Lemma not_done_vis_au: forall (t: ctree E X) φ ψ w,
+      <( t, w |= ψ AU vis φ )> ->
       not_done w.
-  Proof with eauto with ctl.
+  Proof.
     intros * Hf.
     next in Hf ; destruct Hf.
-    - inv H... 
-    - destruct H.
+    - inv H; constructor.
+    - destruct H, H0.
       now apply can_step_not_done with t.
   Qed.
 
-  Lemma not_done_pure_af: forall (t: ctree E X) w,
-      <( t, w |= AF pure )> ->
+  Lemma not_done_pure_au: forall (t: ctree E X) w ψ,
+      <( t, w |= ψ AU pure )> ->
       not_done w.
-  Proof with eauto with ctl.
+  Proof.
     intros * Hf.
     next in Hf ; destruct Hf.
     - subst; constructor. 
-    - destruct H.
+    - destruct H, H0.
       now apply can_step_not_done with t.
   Qed.
 
@@ -137,23 +131,24 @@ Section BasicLemmas.
           apply ktrans_br in TR as (i & -> & -> & ?); auto.
   Qed.
 
-  Lemma af_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ,
-      (φ w \/ (not_done w /\ forall (x: encode e),
-                 <( {k x}, {Obs e x} |= AF now φ )>)) ->
-      <( {Vis e k}, w |= AF now φ )>.        
+  Lemma au_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ ψ,
+      (φ w \/ (ψ w /\ not_done w /\
+                forall (x: encode e), <( {k x}, {Obs e x} |= now ψ AU now φ )>)) ->
+      <( {Vis e k}, w |= now ψ AU now φ )>.        
   Proof.
     intros.
     destruct H as [H | [Hd H]].
     - now next; left.
-    - next; right; next; split.
+    - next; right; split; auto.
+      next; split.
       + now apply can_step_vis.
       + intros t' w' TR'.
         apply ktrans_vis in TR' as (? & -> & ? & ?).
         now rewrite <- H0.
   Qed.
 
-  Lemma af_ret_inv: forall (x: X) w R,
-      <( {Ret x}, w |= AF (AX done R) )> ->
+  Lemma au_ret_inv: forall (x: X) ψ w R,
+      <( {Ret x}, w |= ψ AU (AX done R) )> ->
       R x w.
   Proof.
     intros.
@@ -163,13 +158,14 @@ Section BasicLemmas.
       specialize (H _ _ TR).
       inv TR; rewrite unfold_entailsF in H; now ddestruction H. 
     - cdestruct H.
+      cdestruct H0.
       destruct Hs as (tstuck & w' & TR).
-      specialize (H _ _ TR).
-      inv TR; observe_equ H1; rewrite <- Eqt, H3 in H.
-      all: rewrite af_stuck in H;
-        apply ax_stuck in H;
-        rewrite ctl_done in H;
-        now ddestruction H.
+      specialize (H0 _ _ TR).
+      inv TR; observe_equ H2; rewrite <- Eqt, H4 in H0.
+      all: rewrite au_stuck in H0;
+        apply ax_stuck in H0;
+        rewrite ctl_done in H0;
+        now ddestruction H0.
   Qed.
 
 End BasicLemmas.
@@ -178,7 +174,7 @@ Section AfDoneIndLemma.
   Context {E: Type} {HE: Encode E} {X: Type}
     (φ: X -> World E -> Prop).
 
-  (* t |= AF AX done R *)
+  (* t |= now ψ AU AX done R *)
   Inductive AFDoneInd: ctree E X -> World E -> Prop :=
   | AFDoneDoneBase: forall t (x: X),
       observe t = RetF x ->
@@ -364,7 +360,7 @@ Section CtlAfBind.
       + (* can_step *)
         destruct H1 as (t' & w' & TR').
         eapply can_step_bind_l with t' w'; auto.
-        eapply not_done_vis_af with (t:=t').
+        eapply not_done_vis_au with (t:=t') (ψ:=<( ⊤ )>).
         rewrite !unfold_entailsF.        
         now apply H2.
       + (* AX AF *)
@@ -397,7 +393,7 @@ Section CtlAfBind.
       + (* can_step *)
         destruct H1 as (t' & w' & TR').
         eapply can_step_bind_l with t' w'; auto.
-        eapply not_done_pure_af with (t:=t').
+        eapply not_done_pure_au with (t:=t') (ψ:=<( ⊤)>).
         rewrite unfold_entailsF.
         now apply H2.
       + (* AX AF *)
@@ -434,7 +430,7 @@ Section CtlAfBind.
       apply au_guard; eauto with ctl.
     - (* Vis *)
       rewrite bind_vis.
-      apply af_vis; eauto with ctl.
+      apply au_vis; eauto with ctl.
     - (* Br *)
       rewrite bind_br.
       apply au_br; eauto with ctl.
@@ -502,7 +498,7 @@ Section CtlAfIter.
       replace i' with (fst y) by now subst.
       replace w' with (snd y) by now subst.      
       apply HindWf; inv Heqy; auto.
-    - apply af_ret. 
+    - intros; apply au_ret; auto.
   Qed.
 
   (*| Instead of a WF relation [Rv] provide a "ranking" function [f] |*)
@@ -655,7 +651,7 @@ Section CtlAfState.
       replace w' with (snd (fst y)) by now subst.
       replace s' with (snd y) by now subst.      
       apply HindWf; inv Heqy; auto.
-    - intros; apply af_ret; auto.
+    - intros; apply au_ret; auto.
   Qed.
     
   (*| Instead of a WF relation [Rv] provide a "ranking" function [f] |*)
