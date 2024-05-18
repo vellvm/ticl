@@ -37,7 +37,7 @@ Section StrongSimAlt.
     (productive t ->
      forall l t', trans l t t' ->
              exists l' u', trans l' u u' /\ R t' u' /\ L l l')
-    /\ (forall {Z} (c : C Z) k,
+    /\ (forall Z (c : C Z) k,
           t ≅ Br c k ->
           forall x, exists u', epsilon u u' /\ Reps (k x) u')
     /\ (forall t',
@@ -1066,114 +1066,58 @@ End bind.
 (*|
 Expliciting the reasoning rule provided by the up-to principles.
 |*)
-Lemma sst'_clo_bind_gen {E F C D: Type -> Type} {X Y X' Y': Type} {L : rel (@label E) (@label F)}
+Lemma ssim'_clo_bind_gen {E F C D: Type -> Type} {X Y X' Y': Type}  {L : rel (@label E) (@label F)}
       (R0 : rel X Y) L0
       (HL0 : is_update_val_rel L R0 L0)
       (t1 : ctree E C X) (t2: ctree F D Y)
-      (k1 : X -> ctree E C X') (k2 : Y -> ctree F D Y') RR:
+      (k1 : X -> ctree E C X') (k2 : Y -> ctree F D Y'):
   ssim L0 t1 t2 ->
-  (forall x y, R0 x y -> (sst' L RR) (k1 x) (k2 y)) ->
-  sst' L RR (t1 >>= k1) (t2 >>= k2).
+  (forall x y, R0 x y -> ssim' L (k1 x) (k2 y)) ->
+  ssim' L (t1 >>= k1) (t2 >>= k2).
 Proof.
-  intros ? ?.
-  apply (ft_t (@bind_ctx_ssim'_t E F C D X X' Y Y' L R0 L0 HL0)).
-  apply in_bind_ctx; eauto.
+  intros.
+  eapply bind_chain_gen; eauto.
 Qed.
 
-Lemma sst'_clo_bind {E F C D: Type -> Type} {X Y X' Y': Type} {L : rel (@label E) (@label F)}
+Lemma ssim'_clo_bind {E F C D: Type -> Type} {X Y X' Y': Type} {L : rel (@label E) (@label F)}
       (R0 : rel X Y)
       (t1 : ctree E C X) (t2: ctree F D Y)
-      (k1 : X -> ctree E C X') (k2 : Y -> ctree F D Y') RR:
+      (k1 : X -> ctree E C X') (k2 : Y -> ctree F D Y'):
   t1 (≲update_val_rel L R0) t2 ->
-  (forall x y, R0 x y -> (sst' L RR) (k1 x) (k2 y)) ->
-  sst' L RR (t1 >>= k1) (t2 >>= k2).
+  (forall x y, R0 x y -> ssim' L (k1 x) (k2 y)) ->
+  ssim' L (t1 >>= k1) (t2 >>= k2).
 Proof.
-  intros ? ?.
-  eapply sst'_clo_bind_gen; eauto. apply update_val_rel_correct.
+  intros.
+  eapply bind_chain_gen; eauto using update_val_rel_correct.
 Qed.
 
-Lemma sst'_clo_bind_eq {E C D: Type -> Type} {X X': Type}
+Lemma ssim'_clo_bind_eq {E C D: Type -> Type} {X X': Type}
       (t1 : ctree E C X) (t2: ctree E D X)
-      (k1 : X -> ctree E C X') (k2 : X -> ctree E D X') RR:
+      (k1 : X -> ctree E C X') (k2 : X -> ctree E D X'):
   t1 ≲ t2 ->
-  (forall x, sst' eq RR (k1 x) (k2 x)) ->
-  sst' eq RR (t1 >>= k1) (t2 >>= k2).
+  (forall x, ssim' eq (k1 x) (k2 x)) ->
+  ssim' eq (t1 >>= k1) (t2 >>= k2).
 Proof.
-  intros ? ?.
-  eapply sst'_clo_bind_gen.
+  intros.
+  eapply bind_chain_gen; eauto.
   - apply update_val_rel_eq.
-  - apply H.
-  - intros. now subst.
+  - intros; subst. apply H0.
 Qed.
-
-Lemma ssbt'_clo_bind_gen {E F C D: Type -> Type} {X Y X' Y': Type} {L : rel (@label E) (@label F)}
-      (R0 : rel X Y) L0
-      (HL0 : is_update_val_rel L R0 L0)
-      (t1 : ctree E C X) (t2: ctree F D Y)
-      (k1 : X -> ctree E C X') (k2 : Y -> ctree F D Y') RR:
-  ssim L0 t1 t2 ->
-  (forall x y, R0 x y -> (ssbt' L RR) (k1 x) (k2 y)) ->
-  ssbt' L RR (t1 >>= k1) (t2 >>= k2).
-Proof.
-  intros ? ?.
-  apply (fbt_bt (@bind_ctx_ssim'_t E F C D X X' Y Y' L R0 L0 HL0)).
-  apply in_bind_ctx; eauto.
-Qed.
-
-Lemma ssbt'_clo_bind {E F C D: Type -> Type} {X Y X' Y': Type} {L : rel (@label E) (@label F)}
-      (R0 : rel X Y)
-      (t1 : ctree E C X) (t2: ctree F D Y)
-      (k1 : X -> ctree E C X') (k2 : Y -> ctree F D Y') RR:
-  t1 (≲update_val_rel L R0) t2 ->
-  (forall x y, R0 x y -> (ssbt' L RR) (k1 x) (k2 y)) ->
-  ssbt' L RR (t1 >>= k1) (t2 >>= k2).
-Proof.
-  intros ? ?.
-  eapply ssbt'_clo_bind_gen; eauto. apply update_val_rel_correct.
-Qed.
-
-Lemma ssbt'_clo_bind_eq {E C D: Type -> Type} {X X': Type}
-      (t1 : ctree E C X) (t2: ctree E D X)
-      (k1 : X -> ctree E C X') (k2 : X -> ctree E D X') RR:
-  t1 ≲ t2 ->
-  (forall x, ssbt' eq RR (k1 x) (k2 x)) ->
-  ssbt' eq RR (t1 >>= k1) (t2 >>= k2).
-Proof.
-  intros ? ?.
-  eapply ssbt'_clo_bind_gen.
-  - apply update_val_rel_eq.
-  - apply H.
-  - intros. now subst.
-Qed.
-
-Tactic Notation "__upto_bind_ssim'" uconstr(R0) :=
-  match goal with
-  | |- body (t (@ss' ?E ?F ?C ?D ?X ?Y ?L)) ?R (CTree.bind (T := ?T) _ _) (CTree.bind (T := ?T') _ _) =>
-      apply (ft_t (@bind_ctx_ssim'_t E F C D T X T' Y L R0
-        (update_val_rel L R0) (update_val_rel_correct L R0))), in_bind_ctx
-  | |- body (bt (@ss' ?E ?F ?C ?D ?X ?Y ?L)) ?R (CTree.bind (T := ?T) _ _) (CTree.bind (T := ?T') _ _) =>
-      apply (fbt_bt (@bind_ctx_ssim'_t E F C D T X T' Y L R0
-        (update_val_rel L R0) (update_val_rel_correct L R0))), in_bind_ctx
-  end.
-
-Tactic Notation "__upto_bind_eq_ssim'" uconstr(R0) :=
-  match goal with
-  | _ => __upto_bind_ssim' R0; [reflexivity | intros ? ? ?EQl]
-   end.
 
 (* This alternative notion of simulation is equivalent to [ssim] *)
 Theorem ssim_ssim' {E F C D X Y} :
   forall L (t : ctree E C X) (t' : ctree F D Y), ssim L t t' <-> ssim' L t t'.
 Proof.
-  ssplitntro.
+  split; intros.
   - red. revert t t' H. coinduction R CH. intros.
-    ssplitntros.
+    ssplit; intros.
     + step in H. apply H in H1 as (? & ? & ? & ? & ?). eauto 6.
-    + subs. apply ssim_brD_l_inv with (x := x) in H. eauto.
+    + subs. apply ssim_br_l_inv with (x := x) in H. eauto.
+    + subs. apply ssim_guard_l_inv in H. eauto.
   - revert t t' H. coinduction R CH.
-    do 3 red. cbn. intros.
-    apply trans_epsilon in H0 as (? & ? & ? & ?).
-    apply ssim'_epsilon_l with (t' := x) in H; auto.
-    step in H. apply (proj1 H) in H2 as (? & ? & ? & ? & ?); auto.
+    intros * HSS ?? TR.
+    apply trans_epsilon in TR as (? & ? & ? & ?).
+    apply ssim'_epsilon_l with (t' := x) in HSS; auto.
+    step in HSS. apply (proj1 HSS) in H1 as (? & ? & ? & ? & ?); auto.
     eauto 6.
 Qed.
