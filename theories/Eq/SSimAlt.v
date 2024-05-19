@@ -537,6 +537,16 @@ Section Proof_Rules.
     cbn; do 3 eexists; intuition; subs; eauto.
   Qed.
 
+  Lemma step_ss'_step_l :
+    forall (t : ctree E C X) (u : ctree F D Y),
+    (exists l' u', trans l' u u' /\ R t u' /\ L τ l') ->
+    ss'_gen L R Reps (Step t) u.
+  Proof.
+    intros. ssplit; intros; inv_equ.
+    inv_trans. subst. destruct H as (? & ? & ? & ? & ?).
+    eexists _, _. rewrite <- EQ in H1. etrans.
+  Qed.
+
 (*|
     When matching visible brs one against another, in general we need to explain how
     we map the branches from the left to the branches to the right.
@@ -580,21 +590,16 @@ Section Proof_Rules.
     intros; apply step_ss'_brS; eauto.
   Qed.
 
-  (* Lemma step_ss'_brS_l {Z} : *)
-  (*   forall (c : C Z) (k : Z -> ctree E C X) (u : ctree F D Y), *)
-  (*   (forall x, exists l' u', trans l' u u' /\ R (k x) u' /\ L τ l') -> *)
-  (*   ss'_gen L R Reps (BrS c k) u. *)
-  (* Proof. *)
-  (*   intros. ssplit; intros. *)
-  (*   - inv_trans. subst. destruct (H x0) as (? & ? & ? & ? & ?). *)
-  (*     eexists _, _. rewrite <- EQ in H2. etrans. *)
-  (*   - inv_equ. *)
-  (*     destruct (H x) as (? & ? & ? & ? & ?). *)
-  (*     eexists; split. *)
-
-  (*     split. *)
-
-  (* Qed. *)
+  Lemma step_ss'_brS_l {Z} :
+    forall (c : C Z) (k : Z -> ctree E C X) (u : ctree F D Y),
+    (forall x, Reps (Step (k x)) u) ->
+    (forall x, exists l' u', trans l' u u' /\ R (k x) u' /\ L τ l') ->
+    ss'_gen L R Reps (BrS c k) u.
+  Proof.
+    intros.
+    apply step_ss'_br_l.
+    auto.
+  Qed.
 
 End Proof_Rules.
 
@@ -773,6 +778,18 @@ Lemma step_ssbt'_vis
 Proof.
   intros.
   apply (b_chain R), step_ss'_vis; auto.
+Qed.
+
+Lemma step_sst'_brS_l
+  {E F C D X Y Z} {L}
+  {R : Chain (@ss' E F C D X Y L)} :
+  forall (c : C Z) (k : Z -> ctree E C X) (u : ctree F D Y),
+    (forall x, `R (Step (k x)) u) ->
+    (forall x, exists l' u', trans l' u u' /\ ` R (k x) u' /\ L τ l') ->
+    `R (BrS c k) u.
+Proof.
+  intros.
+  apply (b_chain R). apply step_ss'_brS_l; auto.
 Qed.
 
 Lemma ssim'_vis
