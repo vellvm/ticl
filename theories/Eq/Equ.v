@@ -687,6 +687,48 @@ Proof.
   apply Equ_clos with u' t'; intuition.
 Qed.
 
+Lemma equ_clos_equ {E C X L} {c: Chain (fequ L)}:
+  forall x y, @equ_clos E E C C X X (elem c) x y -> (elem c) x y.
+Proof.
+  apply tower.
+  - intros ? INC x y [x' y' x'' y'' EQ' EQ''] ??. red.
+    apply INC; auto.
+    econstructor; eauto.
+    apply leq_infx in H.
+    now apply H.
+  - clear; intros c IH ?? [].
+    step in Equt; step in Equu; cbn in *.
+    inv Equt; rewrite <- H in HR; clear H H0 t t'.
+    all:inv HR; rewrite <- H in Equu.
+    all:try now inv Equu; eauto.
+    inv Equu; constructor; apply IH; econstructor; eauto.
+    inv Equu; constructor; apply IH; econstructor; eauto.
+    dependent induction H1; dependent induction H2. inv Equu.
+    dependent induction H2; dependent induction H3.
+    econstructor; intros. apply IH; econstructor; eauto.
+    dependent induction H1; dependent induction H2. inv Equu.
+    dependent induction H2; dependent induction H3.
+    econstructor; intros. apply IH; econstructor; eauto.
+Qed.
+
+#[global] Instance equ_eq_equ_goal_gen {E C R L} (r : Chain (@fequ E C R R L)) :
+  Proper (equ eq ==> equ eq ==> flip impl)
+	  (elem r).
+Proof.
+  repeat intro.
+  apply equ_clos_equ; econstructor; eauto; now symmetry.
+Qed.
+
+#[global] Instance equ_eq_equ_hyp_gen {E C R L} (r : Chain (@fequ E C R R L)) :
+  Proper (equ eq ==> equ eq ==> impl)
+	  (elem r).
+Proof.
+  repeat intro.
+  apply equ_clos_equ; econstructor; [| eassumption |]; eauto; now symmetry.
+Qed.
+
+
+
 (* Ltac __upto_bind_equ' SS := *)
 (*   match goal with *)
 (*     (* Out of a coinductive proof --- terminology abuse, this is simply using the congruence of the relation, not a upto *) *)
