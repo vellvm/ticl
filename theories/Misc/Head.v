@@ -8,7 +8,7 @@ From the traditional perspective of a LTS, this corresponds
 to computing all possible finite trees justifying a transition.
 From the perspective of [ctree]s, it corresponds to prefix of the
 tree only made of invisible br nodes.
-We develop in this file the [get_head] function to compute this prefix.
+We develop in this file the [head] function to compute this prefix.
 
 .. coq:: none
 |*)
@@ -34,13 +34,13 @@ The [haction] data structure captures trivially this data.
 
 Variant haction {E B X} :=
 	| ARet    (r : X)
-	| ABr     (Y : Type) (c : B Y) (k : Y -> ctree E B X)
+	| AStep   (t : ctree E B X)
 	| AVis    (Y : Type) (e : E Y) (k : Y -> ctree E B X).
 
 
 (*|
 The [head] computation simply scrolls the tree until it reaches
-a none invisible br node.
+a visible node.
 Notice that this computation may loop if the original computation
 admits a infinite branch of invisible brs.
 |*)
@@ -48,17 +48,21 @@ Definition head {E F B C X} `{HasB: B -< C} : ctree E B X -> ctree F C (@haction
   cofix head (t : ctree E B X) :=
     match observe t with
     | RetF x          => Ret (ARet x)
+    | StuckF          => Stuck
+    | StepF t         => Ret (AStep t)
+    | GuardF t        => Guard (head t)
     | VisF e k        => Ret (AVis e k)
-    | BrSF c k        => Ret (ABr c k)
-    | BrDF c k        => br false c (fun x => head (k x))
+    | BrF c k         => br c (fun x => head (k x))
     end.
 
 Notation head_ t :=
   match observe t with
-  | RetF x            => Ret (ARet x)
-  | VisF e k          => Ret (AVis e k)
-  | BrSF c k      => Ret (ABr c k)
-  | BrDF c k      => br false c (fun x => head (k x))
+    | RetF x          => Ret (ARet x)
+    | StuckF          => Stuck
+    | StepF t         => Ret (AStep t)
+    | GuardF t        => Guard (head t)
+    | VisF e k        => Ret (AVis e k)
+    | BrF c k         => br c (fun x => head (k x))
   end.
 
 Lemma unfold_head {E F B C X} `{HasB: B -< C} : forall (t : ctree E B X),
@@ -68,10 +72,12 @@ Proof.
   now step.
 Qed.
 
+Unset Universe Checking.
+
 Section trans_head.
 
 Context {E F B C : Type -> Type} {X : Type}.
-Context `{B0 -< B} `{B0 -< C} `{B -< C}.
+Context `{B -< C}.
 
 (*|
 Transitions in a tree can always be reflected in their head-tree.
@@ -81,7 +87,7 @@ We wrap them together in [trans_head].
 Lemma trans_head_obs {Y} : forall (t u : ctree E B X) (e : E Y) v,
     trans (obs e v) t u ->
     exists (k : Y -> ctree E B X),
-      trans (val (AVis e k)) (head t : ctree F C _) stuckD /\ u ≅ k v.
+      trans (val (AVis e k)) (head t : ctree F C _) Stuck /\ u ≅ k v.
 Proof.
   intros * TR.
   remember (obs e v) as ob.
@@ -92,9 +98,14 @@ Proof.
     exists kf; split; [| exact EQ].
     rename x into y.
     rewrite <- unfold_head in IHTR.
-    eapply trans_brD with (x := y).
+    eapply trans_br with (x := y).
     apply IHTR.
     reflexivity.
+  - destruct IHTR as (kf & IHTR & EQ); auto.
+    exists kf; split; [| exact EQ].
+    rewrite <- unfold_head in IHTR.
+    eapply trans_guard.
+    apply IHTR.
   - dependent induction Heqob.
     exists k; split.
     constructor.
@@ -103,32 +114,34 @@ Qed.
 
 Lemma trans_head_tau :
   forall (t u : ctree E B X),
-    trans tau t u ->
-    exists Y (c : B Y) (k : Y -> ctree E B X) x,
-      trans (val (ABr c k)) (head t : ctree F C _) stuckD /\ u ≅ k x.
+    trans τ t u ->
+    exists u',
+      trans (val (AStep u')) (head t : ctree F C _) Stuck /\ u' ≅ u.
 Proof.
   intros * TR.
-  unfold trans in *.
-  remember tau as ob.
+  remember τ as ob.
   setoid_rewrite (ctree_eta u).
   setoid_rewrite unfold_head.
   induction TR; try now inv Heqob; subst.
-  - destruct IHTR as (m & kf & z & i & IHTR & EQ); auto.
-    exists m, kf, z, i. split; [| exact EQ].
+  - destruct IHTR as (u' & IHTR & EQ); auto.
+    exists u'. split; auto.
     rename x into y.
     rewrite <- unfold_head in IHTR.
-    eapply trans_brD with (x := y).
+    eapply trans_br with (x := y); auto.
     apply IHTR.
-    reflexivity.
-  - exists X0,c,k,x; split.
-    constructor.
+  - destruct IHTR as (u' & IHTR & EQ); auto.
+    exists u'. split; auto.
+    rewrite <- unfold_head in IHTR.
+    eapply trans_guard.
+    apply IHTR; auto.
+  - exists t0. split. apply trans_ret.
     rewrite <- ctree_eta; symmetry; assumption.
 Qed.
 
 Lemma trans_head_ret :
   forall (t u : ctree E B X) (v : X),
     trans (val v) t u ->
-    trans (val (@ARet E B X v)) (head t : ctree F C _) stuckD /\ u ≅ stuckD.
+    trans (val (@ARet E B X v)) (head t : ctree F C _) Stuck /\ u ≅ Stuck.
 Proof.
   intros * TR.
   unfold trans in *.
@@ -140,23 +153,28 @@ Proof.
     split; [| exact EQ].
     rewrite <- unfold_head in IHTR.
     rename x into y.
-    eapply trans_brD with (x := y).
+    eapply trans_br with (x := y).
     apply IHTR.
     reflexivity.
+  - destruct IHTR as (IHTR & EQ); auto.
+    split; [| exact EQ].
+    rewrite <- unfold_head in IHTR.
+    eapply trans_guard.
+    apply IHTR.
   - dependent induction Heqob.
     split.
     constructor.
-    symmetry; rewrite brD0_always_stuck; reflexivity.
+    reflexivity.
 Qed.
 
 Lemma trans_head : forall (t u : ctree E B X) l,
     trans l t u ->
     match l with
-    | tau => exists Y (c: B Y) (k : Y -> ctree E B X) x,
-        trans (val (ABr c k)) (head t : ctree F C _) stuckD /\ u ≅ k x
+    | τ => exists (u' : ctree E B X),
+        trans (val (AStep u')) (head t : ctree F C _) Stuck /\ u' ≅ u
     | obs e v => exists (k : _ -> ctree E B X),
-        trans (val (AVis e k)) (head t : ctree F C _) stuckD /\ u ≅ k v
-    | val v => trans (val (@ARet E B _ v)) (head t : ctree F C _) stuckD /\ u ≅ stuckD
+        trans (val (AVis e k)) (head t : ctree F C _) Stuck /\ u ≅ k v
+    | val v => trans (val (@ARet E B _ v)) (head t : ctree F C _) Stuck /\ u ≅ Stuck
     end.
 Proof.
   intros *; destruct l.
@@ -181,29 +199,28 @@ Proof.
   induction TR; intros; subst.
   - rewrite unfold_head in EQ.
     desobs P; try now (step in EQ; inv EQ).
-    destruct vis.
-    + step in EQ; inv EQ.
-    + step in EQ; destruct (equb_br_invT _ _ _ _ EQ) as [-> _].
-      eapply equb_br_invE in EQ as [].
-      setoid_rewrite <- ctree_eta in IHTR.
-      eapply IHTR; eauto.
+    step in EQ. destruct (equb_br_invT _ _ _ _ EQ).
+    eapply equb_br_invE in EQ as [].
+    setoid_rewrite <- ctree_eta in IHTR.
+    eapply IHTR; eauto.
+  - rewrite unfold_head in EQ.
+    desobs P; try now (step in EQ; inv EQ).
+    apply equ_guard_inv in EQ.
+    rewrite (ctree_eta t) in EQ.
+    now apply IHTR in EQ.
   - exfalso.
     rewrite unfold_head in EQ.
-    desobs P; try now (step in EQ; inv EQ).
-    destruct vis.
-    + step in EQ; inv EQ.
-    + step in EQ; apply equb_br_invT in EQ as [_ abs]; inv abs.
+    desobs P; step in EQ; inv EQ.
   - exfalso.
     rewrite unfold_head in EQ.
-    desobs P; try now (step in EQ; inv EQ).
-    destruct vis; step in EQ; inv EQ.
+    desobs P; step in EQ; inv EQ.
   - constructor.
 Qed.
 
 Lemma trans_ARet :
   forall r (p: ctree E B X) q,
     trans (val (@ARet E B X r)) (head p : ctree F C _) q ->
-    trans (val r) p stuckD.
+    trans (val r) p Stuck.
 Proof.
   intros * TR.
   remember (head p) as Ap.
@@ -216,57 +233,62 @@ Proof.
     unfold trans.
     cbn; red.
     desobs p; try now (step in EQ; inv EQ).
-    destruct vis.
-    + step in EQ; inv EQ.
-    + step in EQ; destruct (equb_br_invT _ _ _ _ EQ) as [-> _].
-      setoid_rewrite <- ctree_eta in IHTR.
-      econstructor.
-      apply IHTR; eauto.
-      now apply equb_br_invE in EQ.
+    step in EQ; destruct (equb_br_invT _ _ _ _ EQ).
+    setoid_rewrite <- ctree_eta in IHTR.
+    econstructor.
+    apply IHTR; eauto.
+    now apply equb_br_invE in EQ.
+  - rewrite unfold_head in EQ.
+    unfold trans.
+    cbn; red.
+    desobs p; try now (step in EQ; inv EQ).
+    apply equ_guard_inv in EQ.
+    setoid_rewrite <- ctree_eta in IHTR.
+    econstructor.
+    apply IHTR; eauto.
   - unfold trans.
     apply val_eq_inv in Heql; inv Heql.
     rewrite unfold_head in EQ.
     cbn; red.
     desobs p; try now (step in EQ; inv EQ).
     step in EQ; inv EQ. inv REL; constructor.
-    destruct vis.
-    + step in EQ. inv EQ. inv REL.
-    + step in EQ; inv EQ.
 Qed.
 
 Lemma trans_ABr :
-  forall (c : B X) k (p: ctree E B X) q,
-    trans (val (ABr c k)) (head p : ctree F C _) q ->
-    forall i, trans tau p (k i).
+  forall u (p: ctree E B X) q,
+    trans (val (AStep u)) (head p : ctree F C _) q ->
+    trans τ p u.
 Proof.
   intros * TR.
   remember (head p) as Hp.
-  remember (val (ABr c k)) as l.
+  remember (val (AStep u)) as l.
   eq2equ HeqHp.
   rewrite ctree_eta in EQ.
-  revert p EQ k Heql.
+  revert p EQ u Heql.
   induction TR; intros; subst; try now inv Heql.
   - rewrite unfold_head in EQ.
     unfold trans.
     cbn; red.
     desobs p; try now (step in EQ; inv EQ).
-    destruct vis.
-    + step in EQ; inv EQ.
-    + step in EQ; destruct (equb_br_invT _ _ _ _ EQ) as [-> _].
-      eapply equb_br_invE in EQ as [].
-      setoid_rewrite <- ctree_eta in IHTR.
-      econstructor.
-      apply IHTR; eauto.
+    step in EQ; destruct (equb_br_invT _ _ _ _ EQ).
+    eapply equb_br_invE in EQ as [].
+    setoid_rewrite <- ctree_eta in IHTR.
+    econstructor.
+    apply IHTR; eauto.
+  - rewrite unfold_head in EQ.
+    unfold trans.
+    cbn; red.
+    desobs p; try now (step in EQ; inv EQ).
+    apply equ_guard_inv in EQ.
+    setoid_rewrite <- ctree_eta in IHTR.
+    econstructor.
+    apply IHTR; eauto.
   - apply val_eq_inv in Heql; inv Heql.
     rewrite unfold_head in EQ.
     unfold trans.
     cbn; red.
-    desobs p; try now (step in EQ; inv EQ).
-    destruct vis.
-    + step in EQ; inv EQ.
-      dependent induction REL.
-      apply trans_brS.
-    + step in EQ; inv EQ.
+    desobs p; inv_equ.
+    inv EQ. apply trans_step.
 Qed.
 
 Lemma trans_AVis :
@@ -285,23 +307,27 @@ Proof.
     unfold trans.
     cbn; red.
     desobs p; try now (step in EQ; inv EQ).
-    destruct vis.
-    + step in EQ; inv EQ.
-    + step in EQ; destruct (equb_br_invT _ _ _ _ EQ) as [-> _].
-      eapply equb_br_invE in EQ as [].
-      setoid_rewrite <- ctree_eta in IHTR.
-      econstructor.
-      apply IHTR; eauto.
+    step in EQ; destruct (equb_br_invT _ _ _ _ EQ).
+    eapply equb_br_invE in EQ as [].
+    setoid_rewrite <- ctree_eta in IHTR.
+    econstructor.
+    apply IHTR; eauto.
+  - rewrite unfold_head in EQ.
+    unfold trans.
+    cbn; red.
+    desobs p; try now (step in EQ; inv EQ).
+    apply equ_guard_inv in EQ.
+    setoid_rewrite <- ctree_eta in IHTR.
+    econstructor.
+    apply IHTR; eauto.
   - apply val_eq_inv in Heql; inv Heql.
     rewrite unfold_head in EQ.
     unfold trans.
     cbn; red.
     desobs p; try now (step in EQ; inv EQ).
-    + step in EQ; inv EQ.
-      dependent induction REL.
-      constructor; reflexivity.
-    + destruct vis; step in EQ; inv EQ.
-      inv REL.
+    step in EQ; inv EQ.
+    dependent induction REL.
+    constructor; reflexivity.
 Qed.
 
 End trans_head.
@@ -314,9 +340,9 @@ actions.
 |*)
 Variant eq_haction {E C R} : @haction E C R -> haction -> Prop :=
 | eq_haction_ret : forall r, eq_haction (ARet r) (ARet r)
-| eq_haction_br : forall X (c : C X) (k1 k2 : X -> _),
-    (forall x, k1 x ≅ k2 x) ->
-    eq_haction (ABr c k1) (ABr c k2)
+| eq_haction_br : forall t u,
+    t ≅ u ->
+    eq_haction (AStep t) (AStep u)
 | eq_haction_vis : forall X (e : E X) k1 k2,
     (forall x, k1 x ≅ k2 x) ->
     eq_haction (AVis e k1) (AVis e k2).
@@ -339,9 +365,9 @@ Qed.
   Proper (equ eq ==> equ (eq_haction)) (@head E F B C X _).
 Proof.
   unfold Proper, respectful.
-  unfold equ; coinduction S CIH.
+  coinduction S CIH.
   intros.
-  rewrite 2 unfold_head.
+  rewrite 2 unfold_head. (* FIXME *)
   step in H.
   inv H.
   - do 2 constructor.
