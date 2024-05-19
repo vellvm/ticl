@@ -143,9 +143,11 @@ Helper inductive: [epsilon t t'] judges that [t'] is reachable from [t] by a pat
       \/ (exists u, t ≅ Guard u)
       \/ t ≅ Stuck.
     Proof.
-      intros. setoid_rewrite (ctree_eta t).
-      desobs t; etrans.
-      right; left; eauto 8.
+      intros.
+      rewrite ctree_eta.
+      destruct (observe t) eqn:EQ; etrans.
+      right; right; left; setoid_rewrite (ctree_eta t); rewrite EQ; etrans.
+      right; left; setoid_rewrite (ctree_eta t); rewrite EQ; etrans.
     Qed.
 
     Lemma productive_guard : forall {E C X} (t : ctree E C X),
@@ -408,7 +410,8 @@ Helper inductive: [epsilon t t'] judges that [t'] is reachable from [t] by a pat
           rewrite bind_ret_l in H0. rewrite <- H0. apply epsilon_br with (x := x). apply H.
         + rewrite bind_br in H0.
           inv_equ.
-          setoid_rewrite <- ctree_eta in IHepsilon_.
+          specialize (IHepsilon_ (k1 x)).
+          rewrite <- ctree_eta in IHepsilon_.
           apply IHepsilon_ in EQ. destruct EQ as [(? & ? & ?) | (? & ? & ?)].
           * left. exists x0. split; auto. eapply epsilon_br; eassumption.
           * right. exists x0. split; auto. eapply epsilon_br; eassumption.
@@ -417,8 +420,8 @@ Helper inductive: [epsilon t t'] judges that [t'] is reachable from [t] by a pat
           rewrite bind_ret_l in H0. rewrite <- H0. apply epsilon_guard, H.
         + rewrite bind_guard in H0.
           inv_equ.
-          setoid_rewrite <- ctree_eta in IHepsilon_.
-          apply IHepsilon_ in H0. destruct H0 as [(? & ? & ?) | (? & ? & ?)].
+          rewrite (ctree_eta u) in H0; apply IHepsilon_ in H0.
+          destruct H0 as [(? & ? & ?) | (? & ? & ?)].
           * left. exists x. split; auto. eapply epsilon_guard; eassumption.
           * right. exists x. split; auto. eapply epsilon_guard; eassumption.
     Qed.
