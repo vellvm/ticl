@@ -367,20 +367,15 @@ Proof.
   unfold Proper, respectful.
   coinduction S CIH.
   intros.
-  rewrite 2 unfold_head. (* FIXME *)
+  rewrite 2 unfold_head.
   step in H.
-  inv H.
-  - do 2 constructor.
-  - do 2 constructor; auto.
-  - destruct b.
-    + do 2 constructor; auto.
-    + constructor; intros ?; auto.
+  inv H; repeat constructor; auto.
 Qed.
 
 Definition run_haction {E C X} (hd : @haction E C X) : ctree E C X :=
   match hd with
   | ARet r => Ret r
-  | @ABr _ _ _ _ n k => BrS n k
+  | AStep t => Step t
   | AVis e k => Vis e k
   end.
 
@@ -393,12 +388,10 @@ Proof.
   rewrite unfold_head.
   desobs t.
   - rewrite bind_ret_l; reflexivity.
+  - rewrite bind_stuck; reflexivity.
   - rewrite bind_ret_l; reflexivity.
-  - destruct vis.
-    + rewrite bind_ret_l; reflexivity.
-    + rewrite bind_br; constructor; intros.
-      apply cih.
+  - rewrite bind_guard. constructor. apply cih.
+  - rewrite bind_ret_l; reflexivity.
+  - rewrite bind_br. constructor.
+    intros. apply cih.
 Qed.
-
-
-
