@@ -64,7 +64,6 @@ Ltac __eupto_bind_equ :=
 Ltac __upto_bind_equ_eq :=
   first [apply equ_clo_bind_eq | apply equ_clo_bind_gen_eq].
 
-
 Lemma sbisim_bind_eq {E C: Type -> Type} {X X': Type}
   (t : ctree E C X)
   (k1 : X -> ctree E C X') (k2 : X -> ctree E C X') :

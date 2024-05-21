@@ -4,8 +4,7 @@ From Coq Require Import
      Program.Equality
      Logic.Eqdep.
 
-From Coinduction Require Import
-     coinduction rel tactics.
+From Coinduction Require Import all.
 
 From ITree Require Import
      Core.Subevent.
