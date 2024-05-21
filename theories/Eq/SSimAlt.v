@@ -1078,8 +1078,6 @@ Section bind.
 
 End bind.
 
-(* CHECKPOINT *)
-
 (*|
 Expliciting the reasoning rule provided by the up-to principles.
 |*)
