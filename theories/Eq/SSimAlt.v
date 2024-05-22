@@ -234,43 +234,6 @@ Section ssim'_homogenous_theory.
       rewrite H0; eapply epsilon_guard, epsilon_id; reflexivity.
   Qed.
 
-  (* #[global] Instance square_ss' {LT: Transitive L} {C: Chain (ss' L)}: Transitive `C. *)
-  (* Proof. *)
-  (*   apply Transitive_chain. *)
-  (*   cbn; intros * IH * (xy & xy' & xy'') (yz & yz' & yz''); split; [| split]. *)
-  (*   - intros HP * TR. *)
-  (*     apply xy in TR as (? & ? & ? & ? & ?); auto. *)
-  (*     rewrite (ctree_eta y) in H. *)
-  (*     destruct (observe y) eqn:eqoy. *)
-  (*     + edestruct yz as (? & ? & ? & ? & ?). *)
-  (*       rewrite ctree_eta, eqoy; econstructor; reflexivity. *)
-  (*       rewrite ctree_eta, eqoy; apply H. *)
-  (*       eauto 8. *)
-  (*     + exfalso; eapply trans_stuck_inv; eauto. *)
-  (*     + edestruct yz as (? & ? & ? & ? & ?). *)
-  (*       rewrite ctree_eta, eqoy; econstructor; reflexivity. *)
-  (*       rewrite ctree_eta, eqoy; apply H. *)
-  (*       eauto 8. *)
-  (*     + inv_trans. *)
-  (*       rename z into foo. *)
-  (*       edestruct yz'' as (? & ? & ?). *)
-  (*       rewrite ctree_eta, eqoy; reflexivity. *)
-  (*       do 2 eexists; split. *)
-
-  (*       rewrite ctree_eta, eqoy; apply H. *)
-  (*       eauto 8. *)
-
-
-  (*   intros ?? xx'. *)
-  (*   destruct (xy _ _ xx') as (l' & y' & yy' & ? & ?). *)
-  (*   destruct (yz _ _ yy') as (l'' & z' & zz' & ? & ?). *)
-  (*   eauto 8. *)
-  (* Qed. *)
-
-  (* (*| PreOrder |*) *)
-  (* #[global] Instance PreOrder_sst {LPO: PreOrder L} {C: Chain (ss L)}: PreOrder `C. *)
-  (* Proof. ssplitypeclasses eauto. Qed. *)
-
 End ssim'_homogenous_theory.
 
 (*|
@@ -605,32 +568,22 @@ End Proof_Rules.
 
 (* Specialized proof rules *)
 
-Lemma step_ssbt'_stuck {E F C D X Y}
-  (L : rel _ _)
-  {R : Chain (@ss' E F C D X Y L)} :
-  ` R Stuck Stuck.
-Proof.
-  apply (b_chain R).
-  apply step_ss'_stuck; eauto.
-Qed.
-
 Lemma ssim'_stuck' {E F C D X Y}
   (L : rel _ _) :
   ssim' L (Stuck : ctree E C X) (Stuck : ctree F D Y).
 Proof.
-  apply step_ssbt'_stuck.
+  step. apply step_ss'_stuck.
 Qed.
 
 Lemma step_ssbt'_ret {E F C D X Y}
   (x : X) (y : Y) (L : rel _ _)
   {R : Chain (@ss' E F C D X Y L)} :
   L (val x) (val y) ->
-  ` R (Ret x : ctree E C X) (Ret y : ctree F D Y).
+  ss' L `R (Ret x : ctree E C X) (Ret y : ctree F D Y).
 Proof.
   intros.
-  apply (b_chain R).
   unshelve eapply step_ss'_ret; eauto.
-  apply step_ssbt'_stuck.
+  apply (b_chain R). apply ss'_stuck.
 Qed.
 
 Lemma ssim'_ret {E F C D X Y}
@@ -638,19 +591,7 @@ Lemma ssim'_ret {E F C D X Y}
   L (val x) (val y) ->
   ssim' L (Ret x : ctree E C X) (Ret y : ctree F D Y).
 Proof.
-  now intros; apply step_ssbt'_ret.
-Qed.
-
-Lemma step_ssbt'_step {E F C D X Y}
-  t u (L : rel _ _)
-  {R : Chain (@ss' E F C D X Y L)} :
-  L τ τ  ->
-  ` R t u ->
-  ` R (Step t) (Step u).
-Proof.
-  intros.
-  apply (b_chain R).
-  eapply step_ss'_step; eauto.
+  now intros; step; apply step_ssbt'_ret.
 Qed.
 
 Lemma ssim'_step {E F C D X Y}
@@ -659,18 +600,7 @@ Lemma ssim'_step {E F C D X Y}
   ssim' L t u ->
   ssim' L (Step t) (Step u).
 Proof.
-  now intros; apply step_ssbt'_step.
-Qed.
-
-Lemma step_ssbt'_guard {E F C D X Y}
-  t u (L : rel _ _)
-  {R : Chain (@ss' E F C D X Y L)} :
-  ` R t u ->
-  ` R (Guard t) (Guard u).
-Proof.
-  intros.
-  apply (b_chain R).
-  eapply step_ss'_guard; eauto.
+  now intros; step; apply step_ss'_step.
 Qed.
 
 Lemma ssim'_guard {E F C D X Y}
@@ -678,18 +608,7 @@ Lemma ssim'_guard {E F C D X Y}
   ssim' L t u ->
   ssim' L (Guard t) (Guard u).
 Proof.
-  now intros; apply step_ssbt'_guard.
-Qed.
-
-Lemma step_ssbt'_br {E F C D X Y Z Z'} {L}
-  {R : Chain (@ss' E F C D X Y L)}
-  (c: C Z) (d: D Z')
-  (k : Z -> ctree E C X) (k' : Z' -> ctree F D Y) :
-  (forall x, exists y, ` R (k x) (k' y)) ->
-  ` R (Br c k) (Br d k').
-Proof.
-  intros.
-  apply (b_chain R), step_ss'_br; auto.
+  now intros; step; apply step_ss'_guard.
 Qed.
 
 Lemma ssim'_br {E F C D X Y Z Z'} {L}
@@ -698,18 +617,7 @@ Lemma ssim'_br {E F C D X Y Z Z'} {L}
   (forall x, exists y, ssim' L (k x) (k' y)) ->
   ssim' L (Br c k) (Br d k').
 Proof.
-  now intros; apply step_ssbt'_br.
-Qed.
-
-Lemma step_ssbt'_br_id {E F C D X Y Z} {L}
-  {R : Chain (@ss' E F C D X Y L)}
-  (c: C Z) (d: D Z)
-  (k : Z -> ctree E C X) (k' : Z -> ctree F D Y) :
-  (forall x, ` R (k x) (k' x)) ->
-  ` R (Br c k) (Br d k').
-Proof.
-  intros.
-  apply (b_chain R), step_ss'_br_id; auto.
+  now intros; step; apply step_ss'_br.
 Qed.
 
 Lemma ssim'_br_id {E F C D X Y Z} {L}
@@ -718,7 +626,7 @@ Lemma ssim'_br_id {E F C D X Y Z} {L}
   (forall x, ssim' L (k x) (k' x)) ->
   ssim' L (Br c k) (Br d k').
 Proof.
-  now intros; apply step_ssbt'_br_id.
+  now intros; step; apply step_ss'_br_id.
 Qed.
 
 Lemma step_ssbt'_brS {E F C D X Y Z Z'} {L}
@@ -726,11 +634,11 @@ Lemma step_ssbt'_brS {E F C D X Y Z Z'} {L}
   (c: C Z) (d: D Z')
   (k : Z -> ctree E C X) (k' : Z' -> ctree F D Y) :
   L τ τ  ->
-  (forall x, exists y, ` R (k x) (k' y)) ->
-  ` R (BrS c k) (BrS d k').
+  (forall x, exists y, `R (k x) (k' y)) ->
+  ss' L `R (BrS c k) (BrS d k').
 Proof.
   intros.
-  apply (b_chain R), step_ss'_br; auto.
+  apply step_ss'_brS; auto.
   intros x; destruct (H0 x) as (y & ?); exists y.
   apply (b_chain R), step_ss'_step; auto.
 Qed.
@@ -742,7 +650,7 @@ Lemma ssim'_brS {E F C D X Y Z Z'} {L}
   (forall x, exists y, ssim' L (k x) (k' y)) ->
   ssim' L (BrS c k) (BrS d k').
 Proof.
-  now intros; apply step_ssbt'_brS.
+  now intros; step; apply step_ssbt'_brS.
 Qed.
 
 Lemma step_ssbt'_brS_id {E F C D X Y Z} {L}
@@ -751,10 +659,10 @@ Lemma step_ssbt'_brS_id {E F C D X Y Z} {L}
   (k : Z -> ctree E C X) (k' : Z -> ctree F D Y) :
   L τ τ  ->
   (forall x, ` R (k x) (k' x)) ->
-  ` R (BrS c k) (BrS d k').
+  ss' L `R (BrS c k) (BrS d k').
 Proof.
   intros.
-  apply (b_chain R), step_ss'_br_id; auto.
+  apply step_ss'_brS_id; auto.
   intros; apply (b_chain R), step_ss'_step; auto.
 Qed.
 
@@ -765,31 +673,7 @@ Lemma ssim'_brS_id {E F C D X Y Z} {L}
   (forall x, ssim' L (k x) (k' x)) ->
   ssim' L (BrS c k) (BrS d k').
 Proof.
-  now intros; apply step_ssbt'_brS_id.
-Qed.
-
-Lemma step_ssbt'_vis
-  {E F C D X Y Z Z'} {L}
-  (e: E Z) (f: F Z')
-  (k : Z -> ctree E C X) (k' : Z' -> ctree F D Y)
-  {R : Chain (@ss' E F C D X Y L)} :
-  (forall x, exists y, ` R (k x) (k' y) /\ L (obs e x) (obs f y)) ->
-  ` R (Vis e k) (Vis f k').
-Proof.
-  intros.
-  apply (b_chain R), step_ss'_vis; auto.
-Qed.
-
-Lemma step_sst'_brS_l
-  {E F C D X Y Z} {L}
-  {R : Chain (@ss' E F C D X Y L)} :
-  forall (c : C Z) (k : Z -> ctree E C X) (u : ctree F D Y),
-    (forall x, `R (Step (k x)) u) ->
-    (forall x, exists l' u', trans l' u u' /\ ` R (k x) u' /\ L τ l') ->
-    `R (BrS c k) u.
-Proof.
-  intros.
-  apply (b_chain R). apply step_ss'_brS_l; auto.
+  now intros; step; apply step_ssbt'_brS_id.
 Qed.
 
 Lemma ssim'_vis
@@ -799,19 +683,7 @@ Lemma ssim'_vis
   (forall x, exists y, ssim' L (k x) (k' y) /\ L (obs e x) (obs f y)) ->
   ssim' L (Vis e k) (Vis f k').
 Proof.
-  now intros; apply step_ssbt'_vis.
-Qed.
-
-Lemma step_ssbt'_vis_id
-  {E F C D X Y Z} {L}
-  (e: E Z) (f: F Z)
-  (k : Z -> ctree E C X) (k' : Z -> ctree F D Y)
-  {R : Chain (@ss' E F C D X Y L)} :
-  (forall x,` R (k x) (k' x) /\ L (obs e x) (obs f x)) ->
-  ` R (Vis e k) (Vis f k').
-Proof.
-  intros.
-  apply (b_chain R), step_ss'_vis_id; auto.
+  now intros; step; apply step_ss'_vis.
 Qed.
 
 Lemma ssim'_vis_id
@@ -821,19 +693,7 @@ Lemma ssim'_vis_id
   (forall x, ssim' L (k x) (k' x) /\ L (obs e x) (obs f x)) ->
   ssim' L (Vis e k) (Vis f k').
 Proof.
-  now intros; apply step_ssbt'_vis_id.
-Qed.
-
-Lemma step_ssbt'_vis_l
-  {E F C D X Y Z} {L}
-  (e: E Z)
-  (k : Z -> ctree E C X) (u : ctree F D Y)
-  {R : Chain (@ss' E F C D X Y L)} :
-  (forall x, exists l' u', trans l' u u' /\ ` R (k x) u' /\ L (obs e x) l') ->
-  ` R (Vis e k) u.
-Proof.
-  intros.
-  apply (b_chain R), step_ss'_vis_l; auto.
+  now intros; step; apply step_ss'_vis_id.
 Qed.
 
 Lemma ssim'_vis_l
@@ -843,7 +703,7 @@ Lemma ssim'_vis_l
   (forall x, exists l' u', trans l' u u' /\ ssim' L (k x) u' /\ L (obs e x) l') ->
   ssim' L (Vis e k) u.
 Proof.
-  now intros; apply step_ssbt'_vis_l.
+  now intros; step; apply step_ss'_vis_l.
 Qed.
 
 Lemma ssim'_epsilon_l {E F C D X Y} {L} :
