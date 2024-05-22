@@ -594,10 +594,9 @@ Section Proof_Rules.
   Lemma step_ss_ret {Y F D} (x : X) (y : Y) (L : rel _ _)
     {R : Chain (@ss E F C D X Y L)} :
     L (val x) (val y) ->
-    `R (Ret x : ctree E C X) (Ret y : ctree F D Y).
+    ss L `R (Ret x : ctree E C X) (Ret y : ctree F D Y).
   Proof.
     intros.
-    apply (b_chain R).
     apply step_ss_ret_gen.
     - apply (b_chain R).
       apply is_stuck_ss; apply Stuck_is_stuck.
@@ -622,10 +621,9 @@ Section Proof_Rules.
     {R : Chain (@ss E F C D X Y L)} :
     L (val x) (val y) ->
     trans (val y) u u' ->
-    ` R (Ret x : ctree E C X) u.
+    ss L ` R (Ret x : ctree E C X) u.
   Proof.
     intros.
-    apply (b_chain R).
     eapply step_ss_ret_l_gen; eauto.
     - apply (b_chain R).
       apply is_stuck_ss; apply Stuck_is_stuck.
@@ -662,10 +660,9 @@ Section Proof_Rules.
         (k : Z -> ctree E C X) (k' : Z' -> ctree F D Y) (L : rel _ _)
     {R : Chain (@ss E F C D X Y L)} :
     (forall x, exists y, ` R (k x) (k' y) /\ L (obs e x) (obs f y)) ->
-    ` R (Vis e k) (Vis f k').
+    ss L ` R (Vis e k) (Vis f k').
   Proof.
     intros * EQ.
-    apply (b_chain R).
     apply step_ss_vis_gen; auto.
     typeclasses eauto.
   Qed.
@@ -675,7 +672,7 @@ Section Proof_Rules.
     (forall x, exists y, ssim L (k x) (k' y) /\ L (obs e x) (obs f y)) ->
     ssim L (Vis e k) (Vis f k').
   Proof.
-    intros. apply step_ss_vis; auto.
+    intros. step. apply step_ss_vis; auto.
   Qed.
 
   Lemma step_ss_vis_id_gen {Y Z F D} (e : E Z) (f: F Z)
@@ -692,10 +689,9 @@ Section Proof_Rules.
         (k : Z -> ctree E C X) (k' : Z -> ctree F D Y) (L : rel _ _)
     {R : Chain (@ss E F C D X Y L)} :
     (forall x, ` R (k x) (k' x) /\ L (obs e x) (obs f x)) ->
-    ` R (Vis e k) (Vis f k').
+    ss L ` R (Vis e k) (Vis f k').
   Proof.
     intros * EQ.
-    apply (b_chain R).
     apply step_ss_vis_id_gen; auto.
     typeclasses eauto.
   Qed.
@@ -705,7 +701,7 @@ Section Proof_Rules.
     (forall x, ssim L (k x) (k' x) /\ L (obs e x) (obs f x)) ->
     ssim L (Vis e k) (Vis f k').
   Proof.
-    intros. now apply step_ss_vis_id.
+    intros. step. now apply step_ss_vis_id.
   Qed.
 
 (*|
@@ -728,10 +724,9 @@ Section Proof_Rules.
         {R : Chain (@ss E F C D X Y L)} :
     (` R t t') ->
     L τ τ ->
-    ` R (Step t) (Step t').
+    ss L ` R (Step t) (Step t').
   Proof.
     intros.
-    apply (b_chain R).
     apply step_ss_step_gen; auto.
     typeclasses eauto.
   Qed.
@@ -743,7 +738,7 @@ Section Proof_Rules.
     ssim L (Step t) (Step t').
   Proof.
     intros.
-    apply step_ss_step; auto.
+    step. apply step_ss_step; auto.
   Qed.
 
 (*|
@@ -764,11 +759,10 @@ Section Proof_Rules.
   Lemma step_ss_br_l {Y F D Z} (c : C Z)
         (k : Z -> ctree E C X) (t: ctree F D Y) (L: rel _ _)
         {R : Chain (@ss E F C D X Y L)} :
-    (forall x,  ss L (elem R) (k x) t) ->
-    ` R (Br c k) t.
+    (forall x,  ss L `R (k x) t) ->
+    ss L `R (Br c k) t.
   Proof.
     intros.
-    apply (b_chain R).
     intros ? ? TR; inv_trans; subst.
     apply H in TR as (? & ? & ?).
     eauto.
@@ -796,17 +790,10 @@ Section Proof_Rules.
   Lemma step_ss_br_r {Y F D Z} (c : D Z) x
         (k : Z -> ctree F D Y) (t: ctree E C X) (L: rel _ _)
         {R : Chain (@ss E F C D X Y L)} :
-    ss L (elem R) t (k x) ->
-    ` R t (Br c k).
+    ss L `R t (k x) ->
+    ss L `R t (Br c k).
   Proof.
-    intros.
-    apply (b_chain R).
-    intros ???.
-    apply H in H0 as (?&?&?&?&?).
-    do 2 eexists; split.
-    econstructor.
-    apply H0.
-    auto.
+    apply step_ss_br_r_gen.
   Qed.
 
   Lemma ssim_br_r {Y F D Z} (c : D Z) x
@@ -831,19 +818,10 @@ Section Proof_Rules.
   Lemma step_ss_br {Y F D n m} (cn: C n) (cm: D m)
     (k : n -> ctree E C X) (k' : m -> ctree F D Y) (L : rel _ _)
     {R : Chain (@ss E F C D X Y L)} :
-    (forall x, exists y, ss L (elem R) (k x) (k' y)) ->
-    `R (Br cn k) (Br cm k').
+    (forall x, exists y, ss L `R (k x) (k' y)) ->
+    ss L `R (Br cn k) (Br cm k').
   Proof.
-    intros.
-    apply (b_chain R).
-    intros ???.
-    inv_trans.
-    specialize (H x) as (? & SIM).
-    apply SIM in TR; destruct TR as (?&?&?&?&?).
-    do 2 eexists; split.
-    econstructor.
-    apply H.
-    auto.
+    apply step_ss_br_gen.
   Qed.
 
   Lemma ssim_br {Y F D n m} (cn: C n) (cm: D m)
@@ -868,8 +846,8 @@ Section Proof_Rules.
   Lemma step_ss_br_id {Y F D n} (c: C n) (d: D n)
     (k : n -> ctree E C X) (k': n -> ctree F D Y) (L: rel _ _)
     {R : Chain (@ss E F C D X Y L)} :
-    (forall x, ss L (elem R) (k x) (k' x)) ->
-    ` R (Br c k) (Br d k').
+    (forall x, ss L `R (k x) (k' x)) ->
+    ss L `R (Br c k) (Br d k').
   Proof.
     intros; apply step_ss_br; eauto.
   Qed.
@@ -922,11 +900,10 @@ Section Proof_Rules.
   Lemma step_ss_guard_l {Y F D}
     (t: ctree E C X) (t': ctree F D Y) (L: rel _ _)
     {R : Chain (@ss E F C D X Y L)} :
-    ss L (elem R) t t' ->
-    ` R (Guard t) t'.
+    ss L `R t t' ->
+    ss L `R (Guard t) t'.
   Proof.
     intros.
-    apply (b_chain R).
     intros ? ? TR; inv_trans; subst.
     apply H in TR as (? & ? & TR' & ?).
     eauto.
@@ -935,11 +912,10 @@ Section Proof_Rules.
   Lemma step_ss_guard_r {Y F D}
     (t: ctree E C X) (t': ctree F D Y) (L: rel _ _)
     {R : Chain (@ss E F C D X Y L)} :
-    ss L (elem R) t t' ->
-    ` R t (Guard t').
+    ss L `R t t' ->
+    ss L `R t (Guard t').
   Proof.
     intros.
-    apply (b_chain R).
     intros ? ? TR; inv_trans; subst.
     apply H in TR as (? & ? & TR' & ?).
     do 2 eexists; split; [constructor; apply TR' |]; eauto.
@@ -948,11 +924,10 @@ Section Proof_Rules.
   Lemma step_ss_guard {Y F D}
     (t: ctree E C X) (t': ctree F D Y) (L: rel _ _)
     {R : Chain (@ss E F C D X Y L)} :
-    ss L (elem R) t t' ->
-    ` R (Guard t) (Guard t').
+    ss L `R t t' ->
+    ss L `R (Guard t) (Guard t').
   Proof.
     intros.
-    apply (b_chain R).
     intros ? ? TR; inv_trans; subst.
     apply H in TR as (? & ? & TR' & ?).
     do 2 eexists; split; [constructor; apply TR' |]; eauto.
@@ -963,7 +938,7 @@ Section Proof_Rules.
     ssim L t t' ->
     ssim L (Guard t) t'.
   Proof.
-    intros; apply step_ss_guard_l; step in H; auto.
+    intros; step; apply step_ss_guard_l; step in H; auto.
   Qed.
 
   Lemma ssim_guard_r {Y F D}
@@ -971,7 +946,7 @@ Section Proof_Rules.
     ssim L t t' ->
     ssim L t (Guard t').
   Proof.
-    intros; apply step_ss_guard_r; step in H; auto.
+    intros; step; apply step_ss_guard_r; step in H; auto.
   Qed.
 
   Lemma ssim_guard {Y F D}
@@ -979,7 +954,7 @@ Section Proof_Rules.
     ssim L t t' ->
     ssim L (Guard t) (Guard t').
   Proof.
-    intros; apply step_ss_guard; step in H; auto.
+    intros; step; apply step_ss_guard; step in H; auto.
   Qed.
 
 (*|
@@ -1006,9 +981,9 @@ Section Proof_Rules.
   Lemma step_ss_brS {Z Z' Y F D} (c : C Z) (c' : D Z')
         (k : Z -> ctree E C X) (k' : Z' -> ctree F D Y) (L: rel _ _)
         {R : Chain (@ss E F C D X Y L)} :
-    (forall x, exists y, ss L (elem R) (k x) (k' y)) ->
+    (forall x, exists y, (elem R) (k x) (k' y)) ->
     L τ τ ->
-    ` R (BrS c k) (BrS c' k').
+    ss L ` R (BrS c k) (BrS c' k').
   Proof.
     intros.
     eapply step_ss_br.
@@ -1042,9 +1017,9 @@ Section Proof_Rules.
   Lemma step_ss_brS_id {Z Y D F} (c : C Z) (d : D Z)
         (k: Z -> ctree E C X) (k': Z -> ctree F D Y) (L : rel _ _)
         {R : Chain (@ss E F C D X Y L)} :
-    (forall x, ss L (elem R) (k x) (k' x)) ->
+    (forall x, `R (k x) (k' x)) ->
     L τ τ ->
-    ` R (BrS c k) (BrS d k').
+    ss L ` R (BrS c k) (BrS d k').
   Proof.
     intros.
     apply step_ss_brS; eauto.
@@ -1178,6 +1153,16 @@ Inversion principles
   Proof.
     intros. step in H.
     now simple apply ss_vis_l_inv with (x := x) in H.
+  Qed.
+
+  Lemma ssbt_brS_inv {F D Y} {L: rel (label E) (label F)} {R : Chain (@ss E F C D X Y L)}
+        n m (cn: C n) (cm: D m) (k1 : n -> ctree E C X) (k2 : m -> ctree F D Y) :
+    ss L (elem R) (BrS cn k1) (BrS cm k2) ->
+    (forall i1, exists i2, elem R (k1 i1) (k2 i2)).
+  Proof.
+    intros EQ i1.
+    edestruct EQ as (l & t & TR & REL & HL); etrans.
+    inv_trans. subst. eauto.
   Qed.
 
   Lemma ssim_brS_inv {F D Y} {L: rel (label E) (label F)}
