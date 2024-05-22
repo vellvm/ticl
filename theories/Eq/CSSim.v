@@ -436,10 +436,9 @@ Section Proof_Rules.
   Lemma step_css_ret {Y F D} (x : X) (y : Y) (L : rel _ _)
     {R : Chain (@css E F C D X Y L)} :
     L (val x) (val y) ->
-    `R (Ret x : ctree E C X) (Ret y : ctree F D Y).
+    css L `R (Ret x : ctree E C X) (Ret y : ctree F D Y).
   Proof.
     intros.
-    apply (b_chain R).
     apply step_css_ret_gen.
     - apply (b_chain R).
       split.
@@ -472,10 +471,9 @@ Section Proof_Rules.
     {R : Chain (@css E F C D X Y L)} :
     L (val x) (val y) ->
     trans (val y) u u' ->
-    ` R (Ret x : ctree E C X) u.
+    css L ` R (Ret x : ctree E C X) u.
   Proof.
     intros.
-    apply (b_chain R).
     eapply step_css_ret_l_gen; eauto.
     - apply (b_chain R).
       split.
@@ -517,10 +515,9 @@ Section Proof_Rules.
     {R : Chain (@css E F C D X Y L)} :
     inhabited Z ->
     (forall x, exists y, ` R (k x) (k' y) /\ L (obs e x) (obs f y)) ->
-    ` R (Vis e k) (Vis f k').
+    css L ` R (Vis e k) (Vis f k').
   Proof.
     intros * INH EQ.
-    apply (b_chain R).
     apply step_css_vis_gen; auto.
     typeclasses eauto.
   Qed.
@@ -531,7 +528,7 @@ Section Proof_Rules.
     (forall x, exists y, cssim L (k x) (k' y) /\ L (obs e x) (obs f y)) ->
     cssim L (Vis e k) (Vis f k').
   Proof.
-    intros. apply step_css_vis; auto.
+    intros. step. apply step_css_vis; auto.
   Qed.
 
   Lemma step_css_vis_id_gen {Y Z F D} (e : E Z) (f: F Z)
@@ -552,10 +549,9 @@ Section Proof_Rules.
         (k : Z -> ctree E C X) (k' : Z -> ctree F D Y) (L : rel _ _)
     {R : Chain (@css E F C D X Y L)} :
     (forall x, ` R (k x) (k' x) /\ L (obs e x) (obs f x)) ->
-    ` R (Vis e k) (Vis f k').
+    css L ` R (Vis e k) (Vis f k').
   Proof.
     intros * EQ.
-    apply (b_chain R).
     apply step_css_vis_id_gen; auto.
     typeclasses eauto.
   Qed.
@@ -565,7 +561,7 @@ Section Proof_Rules.
     (forall x, cssim L (k x) (k' x) /\ L (obs e x) (obs f x)) ->
     cssim L (Vis e k) (Vis f k').
   Proof.
-    intros. now apply step_css_vis_id.
+    intros. step. now apply step_css_vis_id.
   Qed.
 
 (*|
@@ -589,10 +585,9 @@ Section Proof_Rules.
         {R : Chain (@css E F C D X Y L)} :
     (` R t t') ->
     L τ τ ->
-    ` R (Step t) (Step t').
+    css L ` R (Step t) (Step t').
   Proof.
     intros.
-    apply (b_chain R).
     apply step_css_step_gen; auto.
     typeclasses eauto.
   Qed.
@@ -604,7 +599,7 @@ Section Proof_Rules.
     cssim L (Step t) (Step t').
   Proof.
     intros.
-    apply step_css_step; auto.
+    step. apply step_css_step; auto.
   Qed.
 
 (*|
@@ -632,10 +627,9 @@ Section Proof_Rules.
     {R : Chain (@css E F C D X Y L)} :
     inhabited Z ->
     (forall x,  css L (elem R) (k x) t) ->
-    ` R (Br c k) t.
+    css L ` R (Br c k) t.
   Proof.
     intros [? _] EQs.
-    apply (b_chain R).
     split.
     - apply step_ss_br_l_gen; auto. apply EQs.
     - intros * TR.
@@ -676,10 +670,9 @@ Section Proof_Rules.
     {R : Chain (@css E F C D X Y L)} :
     (exists l t', trans l t t') ->
     css L (elem R) t (k x) ->
-    ` R t (Br c k).
+    css L ` R t (Br c k).
   Proof.
     intros TR SIM.
-    apply (b_chain R).
     split.
     - eapply step_ss_br_r_gen; apply SIM.
     - auto.
@@ -716,10 +709,9 @@ Section Proof_Rules.
     {R : Chain (@css E F C D X Y L)} :
     (exists x l t', trans l (k x) t') ->
     (forall x, exists y, css L (elem R) (k x) (k' y)) ->
-    `R (Br cn k) (Br cm k').
+    css L `R (Br cn k) (Br cm k').
   Proof.
     intros.
-    apply (b_chain R).
     apply step_css_br_gen; auto.
   Qed.
 
@@ -729,7 +721,7 @@ Section Proof_Rules.
     (forall x, exists y, cssim L (k x) (k' y)) ->
     cssim L (Br cn k) (Br cm k').
   Proof.
-    intros. step. apply step_css_br_gen; auto.
+    intros. step. apply step_css_br; auto.
     intros. destruct (H0 x). step in H1. exists x0. apply H1.
   Qed.
 
@@ -753,9 +745,9 @@ Section Proof_Rules.
     (k : n -> ctree E C X) (k': n -> ctree F D Y) (L: rel _ _)
     {R : Chain (@css E F C D X Y L)} :
     (forall x, css L (elem R) (k x) (k' x)) ->
-    ` R (Br c k) (Br d k').
+    css L ` R (Br c k) (Br d k').
   Proof.
-    intros. apply (b_chain R).
+    intros.
     apply step_css_br_id_gen; eauto.
   Qed.
 
@@ -764,7 +756,7 @@ Section Proof_Rules.
     (forall x, cssim L (k x) (k' x)) ->
     cssim L (Br c k) (Br d k').
   Proof.
-    intros. apply step_css_br_id; eauto.
+    intros. step. apply step_css_br_id; eauto.
     intros. apply (gfp_pfp (css L)). apply H.
   Qed.
 
@@ -785,11 +777,10 @@ Section Proof_Rules.
   Lemma step_css_guard_l {Y F D}
     (t: ctree E C X) (t': ctree F D Y) (L: rel _ _)
     {R : Chain (@css E F C D X Y L)} :
-    css L (elem R) t t' ->
-    ` R (Guard t) t'.
+    css L `R t t' ->
+    css L `R (Guard t) t'.
   Proof.
     intros EQ.
-    apply (b_chain R).
     split.
     - intros ? ? TR; inv_trans; subst.
       apply EQ in TR as (? & ? & TR' & ?).
@@ -802,11 +793,10 @@ Section Proof_Rules.
   Lemma step_css_guard_r {Y F D}
         (t: ctree E C X) (t': ctree F D Y) (L: rel _ _)
         {R : Chain (@css E F C D X Y L)} :
-    css L (elem R) t t' ->
-    ` R t (Guard t').
+    css L `R t t' ->
+    css L `R t (Guard t').
   Proof.
     intros EQ.
-    apply (b_chain R).
     split.
     - intros ? ? TR; inv_trans; subst.
       apply EQ in TR as (? & ? & TR' & ?).
@@ -821,11 +811,10 @@ Section Proof_Rules.
   Lemma step_css_guard {Y F D}
         (t: ctree E C X) (t': ctree F D Y) (L: rel _ _)
         {R : Chain (@css E F C D X Y L)} :
-    css L (elem R) t t' ->
-    ` R (Guard t) (Guard t').
+    css L `R t t' ->
+    css L `R (Guard t) (Guard t').
   Proof.
     intros.
-    apply (b_chain R).
     now apply step_css_guard_gen.
   Qed.
 
@@ -834,7 +823,7 @@ Section Proof_Rules.
     cssim L t t' ->
     cssim L (Guard t) t'.
   Proof.
-    intros; apply step_css_guard_l; step in H; auto.
+    intros; step; apply step_css_guard_l; step in H; auto.
   Qed.
 
   Lemma cssim_guard_r {Y F D}
@@ -842,7 +831,7 @@ Section Proof_Rules.
     cssim L t t' ->
     cssim L t (Guard t').
   Proof.
-    intros; apply step_css_guard_r; step in H; auto.
+    intros; step; apply step_css_guard_r; step in H; auto.
   Qed.
 
   Lemma cssim_guard {Y F D}
@@ -850,7 +839,7 @@ Section Proof_Rules.
     cssim L t t' ->
     cssim L (Guard t) (Guard t').
   Proof.
-    intros; apply step_css_guard; step in H; auto.
+    intros; step; apply step_css_guard; step in H; auto.
   Qed.
 
 (*|
@@ -881,9 +870,9 @@ Section Proof_Rules.
     (k : Z -> ctree E C X) (k' : Z' -> ctree F D Y) (L: rel _ _)
     {R : Chain (@css E F C D X Y L)} :
     inhabited Z ->
-    (forall x, exists y, css L (elem R) (k x) (k' y)) ->
+    (forall x, exists y, `R (k x) (k' y)) ->
     L τ τ ->
-    ` R (BrS c k) (BrS c' k').
+    css L `R (BrS c k) (BrS c' k').
   Proof.
     intros INH REL HL.
     destruct INH as [z _].
@@ -925,14 +914,13 @@ Section Proof_Rules.
   Lemma step_css_brS_id {Z Y D F} (c : C Z) (d : D Z)
     (k: Z -> ctree E C X) (k': Z -> ctree F D Y) (L : rel _ _)
     {R : Chain (@css E F C D X Y L)} :
-    (forall x, css L (elem R) (k x) (k' x)) ->
+    (forall x, `R (k x) (k' x)) ->
     L τ τ ->
-    ` R (BrS c k) (BrS d k').
+    css L `R (BrS c k) (BrS d k').
   Proof.
-    intros REL HL. apply (b_chain R).
+    intros REL HL.
     apply step_css_brS_id_gen; auto.
-    - typeclasses eauto.
-    - intros. apply (b_chain R). apply REL.
+    typeclasses eauto.
   Qed.
 
   Lemma cssim_brS_id {Z Y D F} (c : C Z) (d : D Z)
@@ -941,8 +929,7 @@ Section Proof_Rules.
     L τ τ ->
     cssim L (BrS c k) (BrS d k').
   Proof.
-    intros. apply step_css_brS_id; auto.
-    intros. apply (gfp_pfp (css L)). apply H.
+    intros. step. apply step_css_brS_id; auto.
   Qed.
 
 End Proof_Rules.

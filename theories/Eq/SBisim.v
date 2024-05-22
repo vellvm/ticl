@@ -665,10 +665,9 @@ Section Proof_Rules.
   Lemma step_sb_ret (x: X) (y: Y)
     {R : Chain (@sb E F C D X Y L)} :
     L (val x) (val y) ->
-    ` R (Ret x) (Ret y).
+    sb L `R (Ret x) (Ret y).
   Proof.
     intros LH; subst.
-    apply (b_chain R).
     apply step_sb_ret_gen; eauto.
     - apply (b_chain R); split; apply is_stuck_sb; apply Stuck_is_stuck.
     - typeclasses eauto.
@@ -678,7 +677,7 @@ Section Proof_Rules.
     L (val x) (val y) ->
     @sbisim E F C D _ _ L (Ret x) (Ret y).
   Proof.
-    now apply step_sb_ret.
+    intros. step. now apply step_sb_ret.
   Qed.
 
 (*|
@@ -702,10 +701,9 @@ Section Proof_Rules.
     {R : Chain (@sb E F C D X Y L)} :
     (forall x, exists y, ` R (k x) (k' y) /\ L (obs e x) (obs f y)) ->
     (forall y, exists x, ` R (k x) (k' y) /\ L (obs e x) (obs f y)) ->
-    ` R (Vis e k) (Vis f k').
+    sb L `R (Vis e k) (Vis f k').
   Proof.
     intros EQs EQs'.
-    apply (b_chain R).
     apply step_sb_vis_gen; eauto.
     typeclasses eauto.
   Qed.
@@ -716,7 +714,7 @@ Section Proof_Rules.
     (forall y, exists x, sbisim L (k x) (k' y) /\ L (obs e x) (obs f y)) ->
     sbisim L (Vis e k) (Vis f k').
   Proof.
-    now apply step_sb_vis.
+    intros. step. now apply step_sb_vis.
   Qed.
 
   Lemma step_sb_vis_id_gen {X'} (e: E X') (f: F X')
@@ -732,7 +730,7 @@ Section Proof_Rules.
     (e: E X') (f: F X') (k: X' -> ctree E C X) (k': X' -> ctree F D Y)
     {R : Chain (@sb E F C D X Y L)} :
     (forall x, ` R (k x) (k' x) /\ L (obs e x) (obs f x)) ->
-    ` R (Vis e k) (Vis f k').
+    sb L `R (Vis e k) (Vis f k').
   Proof.
     intros; eapply step_sb_vis; eauto.
   Qed.
@@ -742,7 +740,7 @@ Section Proof_Rules.
     (forall x, sbisim L (k x) (k' x) /\ L (obs e x) (obs f x)) ->
     sbisim L (Vis e k) (Vis f k').
   Proof.
-    now apply step_sb_vis_id.
+    intros. step. now apply step_sb_vis_id.
   Qed.
 
   (*|
@@ -776,46 +774,46 @@ Section Proof_Rules.
   Lemma step_sb_guard (t : ctree E C X) (u : ctree F D Y)
     {R : Chain (@sb E F C D X Y L)} :
     sb L (` R) t u ->
-    ` R (Guard t) (Guard u).
+    sb L `R (Guard t) (Guard u).
   Proof.
-    intros; apply (b_chain R), step_sb_guard_gen; auto.
+    intros; apply step_sb_guard_gen; auto.
   Qed.
 
   Lemma step_sb_guard_l (t : ctree E C X) (u : ctree F D Y)
     {R : Chain (@sb E F C D X Y L)} :
     sb L (` R) t u ->
-    ` R (Guard t) u.
+    sb L `R (Guard t) u.
   Proof.
-    intros; apply (b_chain R), step_sb_guard_l_gen; auto.
+    intros; apply step_sb_guard_l_gen; auto.
   Qed.
 
   Lemma step_sb_guard_r (t : ctree E C X) (u : ctree F D Y)
     {R : Chain (@sb E F C D X Y L)} :
     sb L (` R) t u ->
-    ` R t (Guard u).
+    sb L `R t (Guard u).
   Proof.
-    intros; apply (b_chain R), step_sb_guard_r_gen; auto.
+    intros; apply step_sb_guard_r_gen; auto.
   Qed.
 
   Lemma sbisim_guard (t : ctree E C X) (u : ctree F D Y) :
     sbisim L t u ->
     sbisim L (Guard t) (Guard u).
   Proof.
-    intros * EQ; apply step_sb_guard; step in EQ; auto.
+    intros * EQ; step; apply step_sb_guard; step in EQ; auto.
   Qed.
 
   Lemma sbisim_guard_l (t : ctree E C X) (u : ctree F D Y) :
     sbisim L t u ->
     sbisim L (Guard t) u.
   Proof.
-    intros * EQ; apply step_sb_guard_l; step in EQ; auto.
+    intros * EQ; step; apply step_sb_guard_l; step in EQ; auto.
   Qed.
 
   Lemma sbisim_guard_r (t : ctree E C X) (u : ctree F D Y) :
     sbisim L t u ->
     sbisim L t (Guard u).
   Proof.
-    intros * EQ; apply step_sb_guard_r; step in EQ; auto.
+    intros * EQ; step; apply step_sb_guard_r; step in EQ; auto.
   Qed.
 
 (*|
@@ -877,9 +875,9 @@ br
     {R : Chain (@sb E F C D X Y L)} :
     (forall x, exists y, sb L (` R) (k x) (k' y)) ->
     (forall y, exists x, sb L (` R) (k x) (k' y)) ->
-    `R  (Br c k) (Br d k').
+    sb L `R (Br c k) (Br d k').
   Proof.
-    intros; apply (b_chain R), step_sb_br_gen; auto.
+    intros; apply step_sb_br_gen; auto.
   Qed.
 
   Lemma step_sb_br_id {X'}
@@ -887,9 +885,9 @@ br
     (k : X' -> ctree E C X) (k' : X' -> ctree F D Y)
     {R : Chain (@sb E F C D X Y L)} :
     (forall x, sb L (` R) (k x) (k' x)) ->
-    `R  (Br c k) (Br d k').
+    sb L `R (Br c k) (Br d k').
   Proof.
-    intros; apply (b_chain R), step_sb_br_id_gen; auto.
+    intros; apply step_sb_br_id_gen; auto.
   Qed.
 
   Lemma step_sb_br_l {X'}
@@ -898,9 +896,9 @@ br
     {R : Chain (@sb E F C D X Y L)} :
     X' ->
     (forall x, sb L (` R) (k x) u) ->
-    `R  (Br c k) u.
+    sb L `R (Br c k) u.
   Proof.
-    intros; apply (b_chain R), step_sb_br_l_gen; auto.
+    intros; apply step_sb_br_l_gen; auto.
   Qed.
 
   Lemma step_sb_br_r {Y'}
@@ -909,9 +907,9 @@ br
     {R : Chain (@sb E F C D X Y L)} :
     Y' ->
     (forall x, sb L (` R) t (k' x)) ->
-    `R  t (Br d k').
+    sb L `R t (Br d k').
   Proof.
-    intros; apply (b_chain R), step_sb_br_r_gen; auto.
+    intros; apply step_sb_br_r_gen; auto.
   Qed.
 
   Lemma sbisim_br {X' Y'}
@@ -921,7 +919,7 @@ br
     (forall y, exists x, sbisim L (k x) (k' y)) ->
     sbisim L (Br c k) (Br d k').
   Proof.
-    intros H1 H2; apply step_sb_br; eauto.
+    intros H1 H2; step; apply step_sb_br; eauto.
     intros x; destruct (H1 x); eexists; step in H; eauto.
     intros x; destruct (H2 x); eexists; step in H; eauto.
   Qed.
@@ -932,7 +930,7 @@ br
     (forall x, sbisim L (k x) (k' x)) ->
     sbisim L (Br c k) (Br d k').
   Proof.
-    intros; apply step_sb_br_id; eauto.
+    intros; step; apply step_sb_br_id; eauto.
     intros x; specialize (H x); step in H; auto.
   Qed.
 
@@ -943,7 +941,7 @@ br
     (forall x, sbisim L (k x) u) ->
     sbisim L (Br c k) u.
   Proof.
-    intros ; apply step_sb_br_l; eauto.
+    intros; step; apply step_sb_br_l; eauto.
     intros x; specialize (H x); step in H; auto.
   Qed.
 
@@ -954,7 +952,7 @@ br
     (forall x, sbisim L t (k' x)) ->
     sbisim L t (Br d k').
   Proof.
-    intros ; apply step_sb_br_r; eauto.
+    intros; step; apply step_sb_br_r; eauto.
     intros x; specialize (H x); step in H; auto.
   Qed.
 
@@ -977,10 +975,9 @@ br
     {R : Chain (@sb E F C D X Y L)} :
     L τ τ ->
     ` R t u ->
-    ` R (Step t) (Step u).
+    sb L `R (Step t) (Step u).
   Proof.
     intros.
-    apply (b_chain R).
     apply step_sb_step_gen; eauto.
     split; intros HR.
     now rewrite <- H1, <- H2.
@@ -992,7 +989,7 @@ br
     sbisim L t u ->
     sbisim L (Step t) (Step u).
   Proof.
-    apply step_sb_step.
+    intros. step. apply step_sb_step; auto.
   Qed.
 
 (*|
@@ -1035,10 +1032,9 @@ BrS
     L τ τ ->
     (forall x, exists y, ` R (k x) (k' y)) ->
     (forall y, exists x, ` R (k x) (k' y)) ->
-    ` R (BrS c k) (BrS d k').
+    sb L `R (BrS c k) (BrS d k').
   Proof.
     intros.
-    apply (b_chain R).
     apply step_sb_brS_gen; eauto.
     split; intros HR.
     now rewrite <- H3, <- H2.
@@ -1051,7 +1047,7 @@ BrS
     {R : Chain (@sb E F C D X Y L)} :
     L τ τ ->
     (forall x, ` R (k x) (k' x)) ->
-    ` R (BrS c k) (BrS d k').
+    sb L `R (BrS c k) (BrS d k').
   Proof.
     intros.
     apply step_sb_br_id.
@@ -1069,7 +1065,7 @@ BrS
     (forall y, exists x, sbisim L (k x) (k' y)) ->
     sbisim L (BrS c k) (BrS d k').
   Proof.
-    apply step_sb_brS.
+    intros. step. now apply step_sb_brS.
   Qed.
 
   Lemma sbisim_brS_id
@@ -1079,7 +1075,7 @@ BrS
     (forall x, sbisim L (k x) (k' x)) ->
     sbisim L (BrS c k) (BrS d k').
   Proof.
-    apply step_sb_brS_id.
+    intros. step. now apply step_sb_brS_id.
   Qed.
 
 End Proof_Rules.
@@ -1534,8 +1530,8 @@ Section StrongSimulations.
 (*|
   Instances for rewriting [sbisim] under all [ss]-related contexts
 |*)
-    #[global] Instance sbisim_eq_clos_ssim_goal:
-      Proper (sbisim eq ==> sbisim eq ==> flip impl) (ssim L).
+    #[global] Instance sbisim_eq_clos_ss_goal `{R : Chain (ss L)}:
+      Proper (sbisim eq ==> sbisim eq ==> flip impl) `R.
     Proof.
       repeat intro.
       apply sbisim_clos_ss.
@@ -1543,10 +1539,22 @@ Section StrongSimulations.
       eauto.
     Qed.
 
+    #[global] Instance sbisim_eq_clos_ss_ctx `{R : Chain (ss L)} :
+      Proper (sbisim eq ==> sbisim eq ==> impl) `R.
+    Proof.
+      repeat intro. symmetry in H, H0. eapply sbisim_eq_clos_ss_goal; eauto.
+    Qed.
+
+    #[global] Instance sbisim_eq_clos_ssim_goal:
+      Proper (sbisim eq ==> sbisim eq ==> flip impl) (ssim L).
+    Proof.
+      apply sbisim_eq_clos_ss_goal.
+    Qed.
+
     #[global] Instance sbisim_eq_clos_ssim_ctx :
       Proper (sbisim eq ==> sbisim eq ==> impl) (ssim L).
     Proof.
-      repeat intro. symmetry in H, H0. eapply sbisim_eq_clos_ssim_goal; eauto.
+      apply sbisim_eq_clos_ss_ctx.
     Qed.
 
     Lemma ss_sb : forall RR (t : ctree E C X) (t' : ctree F D Y),
@@ -1698,8 +1706,8 @@ A bisimulation trivially gives a simulation.
 (*|
   Instances for rewriting [sbisim] under all [css]-related contexts
 |*)
-  #[global] Instance sbisim_eq_clos_cssim_goal:
-    Proper (sbisim eq ==> sbisim eq ==> flip impl) (cssim L).
+  #[global] Instance sbisim_eq_clos_css_goal `{R : Chain (css L)}:
+    Proper (sbisim eq ==> sbisim eq ==> flip impl) `R.
   Proof.
     repeat intro.
     apply sbisim_clos_css.
@@ -1707,17 +1715,24 @@ A bisimulation trivially gives a simulation.
     eauto.
   Qed.
 
+  #[global] Instance sbisim_eq_clos_css_ctx `{R : Chain (css L)} :
+    Proper (sbisim eq ==> sbisim eq ==> impl) `R.
+  Proof.
+    repeat intro. symmetry in H, H0. eapply sbisim_eq_clos_css_goal; eauto.
+  Qed.
+
+  #[global] Instance sbisim_eq_clos_cssim_goal:
+    Proper (sbisim eq ==> sbisim eq ==> flip impl) (cssim L).
+  Proof.
+    apply sbisim_eq_clos_css_goal.
+  Qed.
+
   #[global] Instance sbisim_eq_clos_cssim_ctx :
     Proper (sbisim eq ==> sbisim eq ==> impl) (cssim L).
   Proof.
-    repeat intro. symmetry in H, H0. eapply sbisim_eq_clos_cssim_goal; eauto.
+    apply sbisim_eq_clos_css_ctx.
   Qed.
 
-(*|
-    Aggressively providing instances for rewriting hopefully faster
-    [sbisim] under all [ss1]-related contexts (consequence of the transitivity
-    of the companion).
-|*)
   #[global] Instance sbisim_clos_cssim_goal:
     Proper (sbisim eq ==> sbisim eq ==> flip impl) (cssim L).
   Proof.
