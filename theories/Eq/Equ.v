@@ -727,42 +727,51 @@ Proof.
   apply equ_clos_equ; econstructor; [| eassumption |]; eauto; now symmetry.
 Qed.
 
+Lemma equ_clo_bind_gen_eq (E B: Type -> Type) (X Y1 Y2 : Type)
+  (RR : rel Y1 Y2) (R : Chain (@fequ E B Y1 Y2 RR)) :
+	forall (t : ctree E B X) (k1 : X -> ctree E B Y1) (k2 : X -> ctree E B Y2),
+    (forall x, elem R (k1 x) (k2 x)) ->
+    elem R (bind t k1) (bind t k2).
+Proof.
+  intros * EQ.
+  apply equ_bind_chain_gen with (SS := eq); auto.
+  intros ?? <-; auto.
+Qed.
 
+Lemma fequ_bind_chain_gen
+  {E B: Type -> Type} {X X' Y Y': Type} (SS : X -> X' -> Prop) (RR : Y -> Y' -> Prop)
+  {R : Chain (@fequ E B Y Y' RR)} :
+  forall (t : ctree E B X) (t' : ctree E B X') (k : X -> ctree E B Y) (k' : X' -> ctree E B Y'),
+    equ SS t t' ->
+    (forall x x', SS x x' -> fequ RR (elem R) (k x) (k' x')) ->
+    fequ RR (elem R) (bind t k) (bind t' k').
+Proof.
+  intros.
+  apply equ_bind_chain_gen with (SS := SS); auto.
+Qed.
 
-(* Ltac __upto_bind_equ' SS := *)
-(*   match goal with *)
-(*     (* Out of a coinductive proof --- terminology abuse, this is simply using the congruence of the relation, not a upto *) *)
-(*     |- @equ ?E ?B ?R1 ?R2 ?RR (CTree.bind (T := ?T1) _ _) (CTree.bind (T := ?T2) _ _) => *)
-(*       apply (@equ_clo_bind E B T1 T2 R1 R2 _ _ _ _ SS RR) *)
+Lemma fequ_bind_chain_eq
+  {E B: Type -> Type} {X Y Y': Type} (RR : Y -> Y' -> Prop)
+  {R : Chain (@fequ E B Y Y' RR)} :
+  forall (t : ctree E B X) (k : X -> ctree E B Y) (k' : X -> ctree E B Y'),
+    (forall x, fequ RR (elem R) (k x) (k' x)) ->
+    fequ RR (elem R) (bind t k) (bind t k').
+Proof.
+  intros.
+  apply fequ_bind_chain_gen with (SS := eq); auto.
+  intros ?? <-; auto.
+Qed.
 
-(*     (* Upto when unguarded *) *)
-(*   | |- body (t (@fequ ?E ?B ?R1 ?R2 ?RR)) ?R (CTree.bind (T := ?T1) _ _) (CTree.bind (T := ?T2) _ _) => *)
-(*         apply (ft_t (@bind_ctx_equ_t E B T1 T2 R1 R2 SS RR)), in_bind_ctx *)
+Ltac __upto_bind_equ' R :=
+  first [apply equ_clo_bind_eq with (SS := R) |
+          apply equ_bind_chain_gen with (SS := R)].
+Tactic Notation "__upto_bind_equ" uconstr(t) := __upto_bind_equ' t.
 
-(*     (* Upto when guarded *) *)
-(*   | |- body (bt (@fequ ?E ?B ?R1 ?R2 ?RR)) ?R (CTree.bind (T := ?T1) _ _) (CTree.bind (T := ?T2) _ _) => *)
-(*       apply (fbt_bt (@bind_ctx_equ_t E B T1 T2 R1 R2 SS RR)), in_bind_ctx *)
-(*   end. *)
-(* Tactic Notation "__upto_bind_equ" uconstr(eq) := __upto_bind_equ' eq. *)
+Ltac __eupto_bind_equ :=
+  first [eapply equ_clo_bind | eapply equ_bind_chain_gen].
 
-(* Ltac __eupto_bind_equ := *)
-(*   match goal with *)
-(*     (* Out of a coinductive proof --- terminology abuse, this is simply using the congruence of the relation, not a upto *) *)
-(*     |- @equ ?E ?B ?R1 ?R2 ?RR (CTree.bind (T := ?T1) _ _) (CTree.bind (T := ?T2) _ _) => *)
-(*       eapply (@equ_clo_bind E B T1 T2 R1 R2 _ _ _ _ _ RR) *)
-
-(*     (* Upto when unguarded *) *)
-(*   | |- body (t (@fequ ?E ?B ?R1 ?R2 ?RR)) ?R (CTree.bind (T := ?T1) _ _) (CTree.bind (T := ?T2) _ _) => *)
-(*         eapply (ft_t (@bind_ctx_equ_t E B T1 T2 R1 R2 _ RR)), in_bind_ctx *)
-
-(*     (* Upto when guarded *) *)
-(*   | |- body (bt (@fequ ?E ?B ?R1 ?R2 ?RR)) ?R (CTree.bind (T := ?T1) _ _) (CTree.bind (T := ?T2) _ _) => *)
-(*       eapply (fbt_bt (@bind_ctx_equ_t E B T1 T2 R1 R2 _ RR)), in_bind_ctx *)
-(*   end. *)
-
-(* Ltac __upto_bind_eq_equ := *)
-(*   __upto_bind_equ eq; [reflexivity | intros ? ? <-]. *)
-
+Ltac __upto_bind_equ_eq :=
+  first [apply equ_clo_bind_eq | apply equ_clo_bind_gen_eq].
 
 (*|
 Elementary equational theory

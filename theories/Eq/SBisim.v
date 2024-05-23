@@ -554,19 +554,52 @@ Proof.
   cbn; intros; eapply sb_clo_bind_eq; auto.
 Qed.
 
-Ltac __upto_bind_sbisim :=
-  match goal with
-    |- @sbisim ?E ?F ?C ?D ?X ?Y ?L
-        (CTree.bind (T := ?T) _ _) (CTree.bind (T := ?T) _ _) => apply sbisim_clo_bind_eq
-  end.
+Lemma sbisim_bind_eq {E C: Type -> Type} {X X': Type}
+  (t : ctree E C X)
+  (k1 : X -> ctree E C X') (k2 : X -> ctree E C X') :
+  (forall x, k1 x ~ k2 x) ->
+  t >>= k1 ~ t >>= k2.
+Proof.
+  intros; eapply sbisim_clo_bind_gen with (R0 := eq); eauto.
+  apply update_val_rel_eq.
+  now intros ??->.
+Qed.
 
-Ltac __upto_bind_eq_sbisim :=
-  match goal with
-  | |- @sbisim ?E ?F ?C ?D ?X ?Y _ _ eq (CTree.bind (T := ?Z) _ _) (CTree.bind (T := ?Z) _ _) =>
-      __upto_bind_sbisim; [reflexivity | intros ?]
-  | _ =>
-      __upto_bind_sbisim; [reflexivity | intros ? ? EQl]
-  end.
+Lemma sb_chain_bind_eq {E C} {X Y}
+  (t : ctree E C X) k1 k2
+  {R : Chain (@sb E E C C Y Y eq)} :
+  (forall x, elem R (k1 x) (k2 x)) ->
+  elem R (t >>= k1) (t >>= k2).
+Proof.
+  intros; eapply SBisim.bind_chain_gen with (R0 := eq); eauto.
+  apply update_val_rel_eq.
+  now intros ??->.
+Qed.
+
+Lemma sb_chain_bind
+  {E F C D: Type -> Type} {X Y X' Y': Type} {L : rel (@label E) (@label F)}
+  (R0 : rel X Y)
+  {R : Chain (@sb E F C D X' Y' L)} :
+  forall (t : ctree E C X) (t' : ctree F D Y) (k : X -> ctree E C X') (k' : Y -> ctree F D Y'),
+    t (~update_val_rel L R0) t' ->
+    (forall x x', R0 x x' -> elem R (k x) (k' x')) ->
+    elem R (bind t k) (bind t' k').
+Proof.
+  intros.
+  eapply SBisim.bind_chain_gen; eauto.
+  apply update_val_rel_correct.
+Qed.
+
+Ltac __upto_bind_sbisim' R :=
+  first [apply sbisim_clo_bind with (R0 := R) |
+          apply sb_chain_bind with (R0 := R)].
+Tactic Notation "__upto_bind_sbisim" uconstr(t) := __upto_bind_sbisim' t.
+
+Ltac __eupto_bind_sbisim :=
+  first [eapply sbisim_clo_bind | eapply sb_chain_bind].
+
+Ltac __upto_bind_sbisim_eq :=
+  first [apply sbisim_bind_eq | apply sb_chain_bind_eq].
 
 Lemma vis_chain_gen {E F C D: Type -> Type} {X X' Y Y': Type} L
   {R : Chain (@sb E F C D X' Y' L)} :

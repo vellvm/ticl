@@ -10,6 +10,15 @@ Notation fin := Fin.t.
 Polymorphic Class MonadTrigger (E : Type -> Type) (M : Type -> Type) : Type :=
   mtrigger : forall {X}, E X -> M X.
 
+Polymorphic Class MonadBr (B : Type -> Type) (M : Type -> Type) : Type :=
+  mbr : forall X (b: B X), M X.
+
+Polymorphic Class MonadStep (M : Type -> Type) : Type :=
+  mstep : M unit.
+
+Polymorphic Class MonadStuck (M : Type -> Type) : Type :=
+  mstuck : forall X, M X.
+
 Notation rel X Y := (X -> Y -> Prop).
 
 Ltac invert :=

@@ -69,7 +69,7 @@ Section Combinators.
     trigger (Act a);; P.
 
   Definition plus (P Q : ccs) : ccs := brD2 P Q.
-  
+
   (* Stuck? Failure event? *)
   Definition h_new (c : chan) : ActionE ~> ctree ccsE ccsC :=
     fun _ e => let '(Act a) := e in
@@ -324,7 +324,7 @@ Proof.
 Qed.
 
 Lemma new_guard : forall c t, new c (Guard t) ≅ Guard (Guard (new c t)).
-Proof.  
+Proof.
   intros; unfold new; now rewrite interp_guard.
 Qed.
 
@@ -376,7 +376,7 @@ Proof.
       eapply trans_vis'.
       reflexivity.
       rewrite bind_ret_l, sb_guard, H.
-      unfold new. 
+      unfold new.
       rewrite unfold_interp.
       rewrite <- Heqop', <- unfold_interp.
       reflexivity.
@@ -501,7 +501,7 @@ Proof.
   destruct (proj1 Hpq _ _ tr) as (? & ? & TR & ? & ->).
   eapply trans_new in TR as (q' & tr' & eq'); eauto.
   eexists; exists q'; eauto.
-  split; [|split]; eauto.  
+  split; [|split]; eauto.
   rewrite EQ.
   rewrite eq'.
   rewrite sb_guard.
@@ -1306,7 +1306,7 @@ Proof.
     now apply (id_T (sb eq)).
     now apply (b_T (sb eq)).
     reflexivity.
-Qed.     
+Qed.
 
 #[global] Instance parabang_t: forall R, Proper (st eq R ==> st eq R ==> st eq R) parabang := binary_proper_t ctx_parabang_t.
 #[global] Instance parabang_T f: forall R, Proper (sT eq f R ==> sT eq f R ==> sT eq f R) parabang := binary_proper_T ctx_parabang_t.

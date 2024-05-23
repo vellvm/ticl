@@ -40,8 +40,7 @@ answered by [wtrans].
 
 .. coq::none
 |*)
-From Coinduction Require Import
-     coinduction rel tactics.
+From Coinduction Require Import all.
 
 From ITree Require Import Core.Subevent.
 
