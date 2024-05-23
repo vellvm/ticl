@@ -66,6 +66,7 @@ Module SSimNotations.
   Infix "≲" := (ssim eq) (at level 70).
   Notation "t (≲ Q ) u" := (ssim Q t u) (at level 79).
   Notation "t '[≲' R ']' u" := (ss R (` _) t u) (at level 90, only printing).
+  Notation "t '[≲]' u" := (ss eq (` _) t u) (at level 90, only printing).
 
 End SSimNotations.
 
@@ -539,7 +540,6 @@ And in particular, we can justify rewriting [≲] to the left of a [bind].
 NOTE: we shouldn't have to impose [eq] to the right.
 |*)
 #[global] Instance ssim_bind_chain {E C X Y}
-  (RR : X -> X -> Prop)
   {R : Chain (@ss E E C C Y Y eq)} :
   Proper (ssim eq ==>
             (pointwise_relation _ (elem R)) ==>

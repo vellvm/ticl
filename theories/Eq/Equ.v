@@ -837,7 +837,6 @@ Hint Constants Transparent : core.
 Ltac desobs' t := cbn; desobs t; cbn; eauto.
 Tactic Notation "desobs" "*" ident(t) := desobs' t.
 
-Infix "≡ᵣ" := (elem _) (at level 90, only printing).
 Notation "t '[≡' R ']' u" := (fequ R (elem _) t u) (at level 90, only printing).
 
 (*|
@@ -1009,7 +1008,7 @@ Proof.
   - rewrite (ctree_eta t), Heqc, bind_guard in H. sinv H.
   - rewrite (ctree_eta t), Heqc, bind_vis in H. step in H. inv H.
   - rewrite (ctree_eta t), Heqc, bind_br in H.
-    apply equ_br_invT in H as ?. destruct H0 as [-> ->].
+    apply equ_br_invT in H as ?. subst.
     pose proof (equ_br_invE _ _ _ _ H) as [<- ?].
     right. exists k0. split.
     + rewrite (ctree_eta t), Heqc. reflexivity.

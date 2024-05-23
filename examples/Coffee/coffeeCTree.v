@@ -32,7 +32,7 @@ Notation state := (ctree E (B0 +' B2) void).
 Definition vending : state :=
   cofix F :=
     trigger Coin;;
-    brD2
+    br2
       (trigger ReqTea;;
        vis Tea (fun _ => F))
       (trigger ReqCoffee;;
@@ -41,7 +41,7 @@ Definition vending : state :=
 
 Definition reapoff : state :=
   cofix F :=
-    brD2
+    br2
     (trigger Coin;;
      trigger ReqTea;;
      vis Tea (fun _ => F))
@@ -55,9 +55,9 @@ Proof.
   intros H.
   setoid_rewrite ctree_eta in H. play in H.
   setoid_rewrite bind_ret_l in EQ.
-  apply trans_brD_inv in TR as (? & TR). destruct x1. inv_trans.
+  apply trans_br_inv in TR as (? & TR). destruct x1. inv_trans.
   - play in EQ. inv_trans. subst. discriminate.
-  - eapply ssim_brD_l_inv with (x := true) in EQ.
+  - eapply ssim_br_l_inv with (x := true) in EQ.
     play in EQ. inv_trans. subst; discriminate.
   Unshelve. all: auto.
 Qed.
@@ -66,18 +66,18 @@ Theorem coffee_ssim : reapoff ≲ vending.
 Proof.
   coinduction R CH.
   setoid_rewrite ctree_eta. cbn. setoid_rewrite bind_ret_l.
-  apply step_ss_brD_l. intros.
+  apply step_ss_br_l. intros.
   destruct x.
   - rewrite bind_trigger. apply step_ss_vis; auto. intros [].
     exists tt. split; auto.
-    step. apply step_ss_brD_r with (x := true).
-    apply ssbt_clo_bind_eq. reflexivity. intros _.
+    step. apply step_ss_br_r with (x := true).
+    eapply ssim_bind_chain. reflexivity. cbn. intros _.
     apply step_ss_vis_id. auto.
   - rewrite bind_trigger.
     apply step_ss_vis; auto; intros []; exists tt; split; auto.
     step.
-    apply step_ss_brD_r with (x := false).
-    apply ssbt_clo_bind_eq. reflexivity. intros _.
+    apply step_ss_br_r with (x := false).
+    apply ssim_bind_chain. reflexivity. intros _.
     apply step_ss_vis_id. auto.
 Qed.
 
@@ -93,16 +93,16 @@ Theorem coffee_traceq : traceq vending reapoff.
 Proof.
   split; red; intros.
   - red. revert s H. coinduction R CH. intros.
-    do 3 red. cbn.
+    do 2 red. cbn.
     destruct s; auto. play in H.
     destruct s.
     2: play; now step.
     setoid_rewrite bind_ret_l in H.
     play in H. destruct x1; inv_trans; subst.
-    + play using (apply trans_brD21; etrans).
+    + play using (apply trans_br21; etrans).
       step. play.
       step. destruct s; auto. play in H. play.
-    + play using (apply trans_brD22; etrans).
+    + play using (apply trans_br22; etrans).
       step. play.
       step. destruct s; auto.
       play in H. play.

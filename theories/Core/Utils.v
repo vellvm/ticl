@@ -46,8 +46,11 @@ Ltac break_match_in H :=
 Ltac step_ :=
   match goal with
   | |- gfp ?b ?x ?y ?z => apply (proj1 (gfp_fp b x y z))
+  | |- elem ?R ?x ?y ?z => apply (b_chain R x y z)
   | |- gfp ?b ?x ?y => apply (proj1 (gfp_fp b x y))
+  | |- elem ?R ?x ?y => apply (b_chain R x y)
   | |- gfp ?b ?x => apply (proj1 (gfp_fp b x))
+  | |- elem ?R ?x => apply (b_chain R x)
   end.
 
 Ltac step := first [step_ | red; step_].
