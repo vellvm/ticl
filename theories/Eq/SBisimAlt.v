@@ -467,18 +467,6 @@ Section Proof_Rules.
     - cbn. intros. specialize (H3 side). now subs.
   Qed.
 
-  Lemma step_sbt'_vis
-    {R : Chain (sb' L)}
-    {Z Z'} (e : E Z) (f: F Z')
-        (k : Z -> ctree E C X) (k' : Z' -> ctree F D Y) :
-    (forall x, exists y, (forall side, `R side (k x) (k' y)) /\ L (obs e x) (obs f y)) ->
-    (forall y, exists x, (forall side, `R side (k x) (k' y)) /\ L (obs e x) (obs f y)) ->
-    forall side, `R side (Vis e k) (Vis f k').
-  Proof.
-    intros.
-    cstep. apply step_sb'_vis; auto.
-  Qed.
-
   Lemma step_sb'_vis_id
     {R : _ -> rel _ _} {HR: Proper (eq ==> equ eq ==> equ eq ==> impl) R}
     {Z} (e : E Z) (f: F Z)
@@ -487,16 +475,6 @@ Section Proof_Rules.
     forall side, sb' L R side (Vis e k) (Vis f k').
   Proof.
     intros. apply step_sb'_vis; eauto.
-  Qed.
-
-  Lemma step_sbt'_vis_id
-    {R : Chain (sb' L)}
-    {Z} (e : E Z) (f: F Z)
-    (k : Z -> ctree E C X) (k' : Z -> ctree F D Y) :
-    (forall x, (forall side, ` R side (k x) (k' x)) /\ L (obs e x) (obs f x)) ->
-    forall side, `R side (Vis e k) (Vis f k').
-  Proof.
-    intros. cstep; apply step_sb'_vis_id; eauto.
   Qed.
 
   Lemma step_sb'_vis_l
@@ -511,15 +489,6 @@ Section Proof_Rules.
     - apply H.
   Qed.
 
-  Lemma step_sbt'_vis_l
-    {R : Chain (sb' L)} {Z} :
-    forall (e : E Z) (k : Z -> ctree E C X) (u : ctree F D Y),
-    (forall x, exists l' u', trans l' u u' /\ (forall side, ` R side (k x) u') /\ L (obs e x) l') ->
-    `R true (Vis e k) u.
-  Proof.
-    intros. cstep; apply step_sb'_vis_l; eauto.
-  Qed.
-
 (*|
   With this definition [sb'] of bisimulation, delayed nodes allow to perform a coinductive step.
 |*)
@@ -532,56 +501,47 @@ Section Proof_Rules.
     split; intros; subst; apply step_ss'_guard; auto.
   Qed.
 
-  Lemma step_sbt'_guard
-    {R : Chain (sb' L)}
-    (t: ctree E C X) (t': ctree F D Y) side :
-    `R side t t' ->
-    `R side (Guard t) (Guard t').
-  Proof.
-    intros. cstep; apply step_sb'_guard; auto.
-  Qed.
-
-  Lemma step_sbt'_guard_l
+  Lemma step_sb'_true_guard_l
     {R : Chain (sb' L)}
     (t: ctree E C X) (t': ctree F D Y) :
     ` R true t t' ->
-    ` R true (Guard t) t'.
+    sb' L `R true (Guard t) t'.
   Proof.
-    intros. cstep.
+    intros.
     split; intros; subst; try discriminate.
     now apply step_ss'_guard_l.
   Qed.
 
-  Lemma step_sbt'_guard_l'
+  Lemma step_sb'_guard_l
     {R : Chain (sb' L)}
     (t: ctree E C X) (t': ctree F D Y) side :
     sb' L (` R) side t t' ->
-    ` R side (Guard t) t'.
+    sb' L `R side (Guard t) t'.
   Proof.
-    intros. cstep.
+    intros.
     split; intros; subst.
     - apply step_ss'_guard_l; now cstep.
     - apply step_ss'_guard_r; now apply H.
   Qed.
 
-  Lemma step_sb'_guard_r
+  Lemma step_sb'_false_guard_r
     {R : Chain (sb' L)}
     (t: ctree E C X) (t': ctree F D Y) :
     ` R false t t' ->
-    ` R false t (Guard t').
+    sb' L `R false t (Guard t').
   Proof.
-    intros; cstep.
+    intros.
     split; intros; subst; try discriminate.
     now apply step_ss'_guard_l.
   Qed.
 
-  Lemma step_sb'_guard_r'
+  Lemma step_sb'_guard_r
     {R : Chain (sb' L)}
     (t: ctree E C X) (t': ctree F D Y) side :
     sb' L (` R) side t t' ->
-    ` R side t (Guard t').
+    sb' L `R side t (Guard t').
   Proof.
-    intros; cstep.
+    intros.
     split; intros; subst.
     - apply step_ss'_guard_r; auto. now apply H.
     - apply step_ss'_guard_l; red; now cstep.
@@ -600,17 +560,6 @@ Section Proof_Rules.
     - intros. destruct (H0 x). cbn. eauto.
   Qed.
 
-  Lemma step_sbt'_br
-    {R : Chain (sb' L)}
-    {Z Z'} (a: C Z) (b: D Z')
-    (k : Z -> ctree E C X) (k' : Z' -> ctree F D Y) side :
-    (forall x, exists y, `R side (k x) (k' y)) ->
-    (forall y, exists x, `R side (k x) (k' y)) ->
-    ` R side (Br a k) (Br b k').
-  Proof.
-    intros; cstep; apply step_sb'_br; auto.
-  Qed.
-
   Lemma step_sb'_br_id
     {R : _ -> rel _ _} {HR: Proper (eq ==> equ eq ==> equ eq ==> impl) R}
     {Z} (c: C Z) (d: D Z)
@@ -621,42 +570,23 @@ Section Proof_Rules.
     intros. apply step_sb'_br; eauto.
   Qed.
 
-  Lemma step_sbt'_br_id
-    {R : Chain (sb' L)}
-    {Z} (c: C Z) (d: D Z)
-    (k : Z -> ctree E C X) (k' : Z -> ctree F D Y) side :
-    (forall x, `R side (k x) (k' x)) ->
-    `R side (Br c k) (Br d k').
-  Proof.
-    intros. cstep; apply step_sb'_br_id; eauto.
-  Qed.
-
-  Lemma step_sb'_br_l {R : Chain (sb' L)} {Z} :
+  Lemma step_sb'_true_br_l {R : Chain (sb' L)} {Z} :
     forall (c : C Z) (k : Z -> ctree E C X) (u : ctree F D Y),
     (forall x, `R true (k x) u) ->
-    `R true (Br c k) u.
+    sb' L `R true (Br c k) u.
   Proof.
-    intros; cstep; split; intros; subst; try discriminate.
+    intros; split; intros; subst; try discriminate.
     now apply step_ss'_br_l.
   Qed.
 
   Lemma step_sb'_br_l' {R : Chain (sb' L)} {Z} :
     forall (c : C Z) (z : Z) (k : Z -> ctree E C X) (u : ctree F D Y) side,
     (forall x, sb' L `R side (k x) u) ->
-    `R side (Br c k) u.
+    sb' L `R side (Br c k) u.
   Proof.
-    intros; cstep; split; intros; subst.
+    intros; split; intros; subst.
     - apply step_ss'_br_l; intros; now cstep.
     - apply step_ss'_br_r with z; now apply H.
-  Qed.
-
-  Lemma step_sbisim'_br_l {Z} :
-    forall (c : C Z) (z : Z) (k : Z -> ctree E C X) (u : ctree F D Y),
-    (forall x, sbisim' L (k x) u) ->
-    sbisim' L (Br c k) u.
-  Proof.
-    red; intros; apply step_sb'_br_l'; auto.
-    intros. apply (gfp_pfp (sb' L)), H.
   Qed.
 
 (*|
@@ -676,16 +606,6 @@ Section Proof_Rules.
     repeat intro; eapply HR; eauto.
   Qed.
 
-  Lemma step_sbt'_step
-    {R : Chain (sb' L)}
-    (t : ctree E C X) (t': ctree F D Y) :
-    L τ τ ->
-    (forall side, `R side t t') ->
-    forall side, `R side (Step t) (Step t').
-  Proof.
-    intros. cstep; apply step_sb'_step; auto.
-  Qed.
-
   (* Lemma step_sb'_brS_l *)
   (*   {R : Chain (sb' L)} : *)
   (*   forall (t : ctree E C X) (u : ctree F D Y), *)
@@ -696,7 +616,6 @@ Section Proof_Rules.
   (*   cstep; split; intros. *)
   (*   - eapply step_ss'_step_l. apply step_ss'_gen_step_l. *)
   (*   apply step_sb'_br_l; intros. *)
-
 
 End Proof_Rules.
 
@@ -713,14 +632,14 @@ Lemma step_sb'_brS {E F C D X Y L}
   (forall x, exists y, forall side, `R side (k x) (k' y)) ->
   (forall y, exists x, forall side, `R side (k x) (k' y)) ->
   L τ τ ->
-  forall side, `R side (BrS c k) (BrS d k').
+  forall side, sb' L `R side (BrS c k) (BrS d k').
 Proof.
   intros.
-  eapply step_sbt'_br; auto.
+  eapply step_sb'_br; auto.
   intros x; destruct (H x) as [z ?]; exists z.
-  apply step_sbt'_step; auto.
+  cstep. apply step_sb'_step; auto.
   intros x; destruct (H0 x) as [z ?]; exists z.
-  apply step_sbt'_step; auto.
+  cstep. apply step_sb'_step; auto.
 Qed.
 
 Lemma step_sb'_brS_id {E F C D X Y L}
@@ -729,10 +648,10 @@ Lemma step_sb'_brS_id {E F C D X Y L}
   (k: Z -> ctree E C X) (k': Z -> ctree F D Y) :
   L τ τ ->
   (forall x side, `R side (k x) (k' x)) ->
-  forall side, `R side (BrS c k) (BrS d k').
+  forall side, sb' L `R side (BrS c k) (BrS d k').
 Proof.
-  intros; apply step_sbt'_br_id; eauto.
-  intros; apply step_sbt'_step; auto.
+  intros; apply step_sb'_br_id; eauto.
+  intros; cstep; apply step_sb'_step; auto.
 Qed.
 
 (* Lemma step_ss'_step_l: *)
@@ -743,29 +662,29 @@ Qed.
 (*   (Reps t t') -> ss'_gen L R Reps (Step t) t'. *)
 (* Admitted. *)
 
-Lemma step_sb'_step_l {E F C D X Y L}
+Lemma step_sb'_true_step_l {E F C D X Y L}
   {R : Chain (sb' L)} :
   forall (t : ctree E C X) (u : ctree F D Y),
     (exists l' u', trans l' u u' /\ (forall side, `R side t u') /\ L τ l') ->
-    `R true (Step t) u.
+    sb' L `R true (Step t) u.
 Proof.
   intros.
-  cstep; split; intros; try congruence.
+  split; intros; try congruence.
   - unshelve eapply step_ss'_step_l; eauto.
     repeat intro; eauto.
     now rewrite <-H1,<-H2.
 Qed.
 
-Lemma step_sb'_brS_l {E F C D X Y L}
+Lemma step_sb'_true_brS_l {E F C D X Y L}
   {R : Chain (sb' L)}
   {Z} :
   forall (c : C Z) (k : Z -> ctree E C X) (u : ctree F D Y),
     (forall x, exists l' u', trans l' u u' /\ (forall side, `R side (k x) u') /\ L τ l') ->
-    `R true (BrS c k) u.
+    sb' L `R true (BrS c k) u.
 Proof.
   intros.
-  apply step_sb'_br_l; intros.
-  apply step_sb'_step_l; intros.
+  apply step_sb'_true_br_l; intros.
+  cstep. apply step_sb'_true_step_l; intros.
   eauto.
 Qed.
 
@@ -1520,7 +1439,7 @@ Proof.
   eexists; eauto.
 Qed.
 
-Lemma step_sb'_guard_r'' {E F C D X Y L}
+Lemma step_sb'_guard_r' {E F C D X Y L}
   (t: ctree E C X) (t': ctree F D Y) (R : Chain (sb' L)) :
   (forall side, `R side t t') ->
   forall side, `R side t (Guard t').

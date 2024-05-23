@@ -148,18 +148,6 @@ Proof.
     reflexivity.
 Qed.
 
-  Lemma step_sb'_guard_r' {E F C D X Y L}
-    {R : Chain (sb' L)}
-    (t: ctree E C X) (t': ctree F D Y) side :
-    sb' L (elem R) side t t' ->
-    sb' L (elem R) side t (Guard t').
-  Proof.
-    intros.
-    split; intros; subst.
-    - apply step_ss'_guard_r; auto. now apply H.
-    - apply step_ss'_guard_l; red; now cstep.
-  Qed.
-
 Lemma iter_dinatural_ctree_inner {E C X Y Z} :
   forall (f : X -> ctree E C (Y + Z)) (g : Y -> ctree E C (X + Z)) (x : X),
   iter
@@ -197,7 +185,7 @@ Proof.
       setoid_rewrite unfold_iter at 2.
       rewrite (ctree_eta (g y)), Heqc, bind_ret_l.
       apply CH.
-    + apply step_sb'_guard_r'.
+    + apply step_sb'_guard_r.
       rewrite unfold_iter, bind_bind.
       rewrite (ctree_eta (g y)), Heqc, !bind_ret_l. reflexivity.
 
@@ -218,7 +206,7 @@ Proof.
   - setoid_rewrite (ctree_eta (g y)). rewrite Heqc, bind_guard.
     rewrite unfold_iter, bind_bind, (ctree_eta (g y)), Heqc, bind_guard.
     apply step_sb'_guard.
-    apply step_sb'_guard_r''.
+    apply step_sb'_guard_r'.
     intros.
     apply st'_clo_bind_eq; auto.
     intros. destruct x0.
@@ -226,7 +214,7 @@ Proof.
     + rewrite bind_ret_l. reflexivity.
 
   - setoid_rewrite (ctree_eta (g y)). rewrite Heqc, bind_vis.
-    apply step_sb'_guard_r'.
+    apply step_sb'_guard_r.
     rewrite unfold_iter, bind_bind, (ctree_eta (g y)), Heqc, bind_vis.
     apply step_sb'_vis_id. intros.
     split; auto. intros.
