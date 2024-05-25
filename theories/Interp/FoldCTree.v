@@ -146,6 +146,10 @@ Section FoldCTree.
       interp h (Ret x : ctree E C X) ≅ Ret x.
     Proof. now rewrite unfold_interp. Qed.
 
+    Lemma interp_stuck `{C -< D} :
+      interp h (Stuck : ctree E C X) ≅ Stuck.
+    Proof. now rewrite unfold_interp. Qed.
+
     Lemma interp_vis `{C -< D} {U} (e: E U) (k: U -> ctree E C X) :
       interp h (Vis e k) ≅ x <- h _ e;; Guard (interp h (k x)).
     Proof. now rewrite unfold_interp. Qed.

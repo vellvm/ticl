@@ -378,6 +378,14 @@ Proof.
 	now inv EQ.
 Qed.
 
+Lemma equ_step_inv {E B S S'} {Q : rel S S'} (t : ctree E B S) u :
+  Step t (≅Q) Step u ->
+  t (≅Q) u.
+Proof.
+  intros EQ; step in EQ.
+	now inv EQ.
+Qed.
+
 (*|
 Proper Instances
 ----------------
@@ -1176,7 +1184,9 @@ Ltac inv_equ h :=
       subst
   | Guard _ (≅?Q) Guard _ =>
       apply equ_guard_inv in h
-  end.
+  | Step _ (≅?Q) Step _ =>
+      apply equ_step_inv in h
+   end.
 
 Ltac inv_equ_one :=
   multimatch goal with
