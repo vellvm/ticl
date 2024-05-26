@@ -941,7 +941,7 @@ End bind.
 (*|
 Expliciting the reasoning rule provided by the up-to principles.
 |*)
-Lemma ssim'_clo_bind_gen {E F C D: Type -> Type} {X Y X' Y': Type}  {L : rel (@label E) (@label F)}
+Lemma ss'_clo_bind_gen {E F C D: Type -> Type} {X Y X' Y': Type}  {L : rel (@label E) (@label F)}
       (R0 : rel X Y) L0
       (HL0 : is_update_val_rel L R0 L0)
       (t1 : ctree E C X) (t2: ctree F D Y)
@@ -954,6 +954,18 @@ Proof.
   eapply bind_chain_gen; eauto.
 Qed.
 
+Lemma ss'_clo_bind {E F C D: Type -> Type} {X Y X' Y': Type} {L : rel (@label E) (@label F)}
+  (R0 : rel X Y)
+  {R : Chain (@ss' E F C D X' Y' L)} :
+  forall (t : ctree E C X) (t' : ctree F D Y) (k : X -> ctree E C X') (k' : Y -> ctree F D Y'),
+    t (≲update_val_rel L R0) t' ->
+    (forall x x', R0 x x' -> elem R (k x) (k' x')) ->
+    ` R (bind t k) (bind t' k').
+Proof.
+  intros.
+  eapply bind_chain_gen; eauto using update_val_rel_correct.
+Qed.
+
 Lemma ssim'_clo_bind {E F C D: Type -> Type} {X Y X' Y': Type} {L : rel (@label E) (@label F)}
       (R0 : rel X Y)
       (t1 : ctree E C X) (t2: ctree F D Y)
@@ -962,8 +974,20 @@ Lemma ssim'_clo_bind {E F C D: Type -> Type} {X Y X' Y': Type} {L : rel (@label 
   (forall x y, R0 x y -> ssim' L (k1 x) (k2 y)) ->
   ssim' L (t1 >>= k1) (t2 >>= k2).
 Proof.
+  intros. eapply ss'_clo_bind; eauto.
+Qed.
+
+Lemma ss'_clo_bind_eq {E C D: Type -> Type} {X X': Type}
+  {R : Chain (@ss' E E C D X' X' eq)} :
+  forall (t : ctree E C X) (t' : ctree E D X) (k : X -> ctree E C X') (k' : X -> ctree E D X'),
+    t ≲ t' ->
+    (forall x, elem R (k x) (k' x)) ->
+    ` R (bind t k) (bind t' k').
+Proof.
   intros.
-  eapply bind_chain_gen; eauto using update_val_rel_correct.
+  eapply bind_chain_gen; eauto.
+  - apply update_val_rel_eq.
+  - intros; subst. apply H0.
 Qed.
 
 Lemma ssim'_clo_bind_eq {E C D: Type -> Type} {X X': Type}
@@ -973,10 +997,7 @@ Lemma ssim'_clo_bind_eq {E C D: Type -> Type} {X X': Type}
   (forall x, ssim' eq (k1 x) (k2 x)) ->
   ssim' eq (t1 >>= k1) (t2 >>= k2).
 Proof.
-  intros.
-  eapply bind_chain_gen; eauto.
-  - apply update_val_rel_eq.
-  - intros; subst. apply H0.
+  apply ss'_clo_bind_eq.
 Qed.
 
 (* This alternative notion of simulation is equivalent to [ssim] *)
@@ -995,4 +1016,14 @@ Proof.
     apply ssim'_epsilon_l with (t' := x) in HSS; auto.
     step in HSS. apply (proj1 HSS) in H1 as (? & ? & ? & ? & ?); auto.
     eauto 6.
+Qed.
+
+#[local] Example ssim'_spin {E B X} : forall (t : ctree E B X), (spin : ctree E B X) ≲ t.
+Proof.
+  intros.
+  apply ssim_ssim'.
+  coinduction R CH.
+  rewrite unfold_spin.
+  apply step_ss'_guard_l.
+  apply CH.
 Qed.

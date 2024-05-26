@@ -129,7 +129,7 @@ Definition sbisim' {E F C D X Y} L t u :=
   forall side, gfp (@sb' E F C D X Y L) side t u.
 
 Program Definition lift_rel3 {A B} : mon (rel A B) -> mon (bool -> rel A B) :=
-    fun f => {| body R side t u := f (R side) t u |}.
+    fun f => {| body R side := f (R side) |}.
 Next Obligation.
   destruct f. cbn. cbn in H0. eapply Hbody in H0. 2: { cbn. apply H. } apply H0.
 Qed.
@@ -579,7 +579,7 @@ Section Proof_Rules.
     now apply step_ss'_br_l.
   Qed.
 
-  Lemma step_sb'_br_l' {R : Chain (sb' L)} {Z} :
+  Lemma step_sb'_br_l {R : Chain (sb' L)} {Z} :
     forall (c : C Z) (z : Z) (k : Z -> ctree E C X) (u : ctree F D Y) side,
     (forall x, sb' L `R side (k x) u) ->
     sb' L `R side (Br c k) u.
