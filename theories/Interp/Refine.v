@@ -1,3 +1,5 @@
+Unset Universe Checking.
+
 From ExtLib Require Import
      Structures.Functor
      Structures.Monad.
@@ -15,22 +17,6 @@ From CTree Require Import
 Import ITree.Basics.Basics.Monads.
 Import MonadNotation.
 Open Scope monad_scope.
-
-(*Definition refine' {E C M : Type -> Type}
-           {FM : Functor M} {MM : Monad M}
-           {IM : MonadIter M} {FoM : MonadTrigger E M}
-           {CM : MonadBr void1 M}
-           (h : C ~> M) :
-  ctree E (B01 +' C) ~> M :=
-  refine (fun b X (c: C X) =>
-    match c, X return M X with
-    | inl1 c, X => mbr b (inl1 c)
-    | inr1 c, X => r <- h X c;; mbr b (inl1 (inr1 branch1));; ret r
-    end).
-
-Definition refine'_state {E C D St} (f : C ~> stateT St (ctree E (B01 +' D))) :
-  ctree E (B01 +' C) ~> stateT St (ctree E (B01 +' D)) :=
-  refine' (CM := MonadBr_stateT) f.*)
 
 Theorem ssim_pure {E F B C X} : forall (L : rel _ _) (t : ctree E B X),
   pure_finite t ->
