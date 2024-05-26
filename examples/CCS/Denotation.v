@@ -5,6 +5,7 @@ Denotation of [ccs] into [ctree]s
 
 .. coq:: none
 |*)
+Unset Universe Checking.
 
 From Coq Require Export
      List
@@ -24,8 +25,8 @@ From RelationAlgebra Require Import
 
 From CTreeCCS Require Import
      Syntax.
-
 From CTree Require Import Head.
+
 From CTree Require Import
      CTree
      Eq
@@ -50,7 +51,7 @@ Variant ActionE : Type -> Type :=
   | Act (a : action) : ActionE unit.
 
 Notation ccsE := ActionE.
-Notation ccsC := (B0 +' B1 +' B2 +' B3 +' B4).
+Notation ccsC := (B2 +' B3 +' B4).
 
 Definition ccsT' T := ctree' ccsE ccsC T.
 Definition ccsT := ctree ccsE ccsC.
@@ -63,20 +64,19 @@ Definition comm a : label := obs (Act a) tt.
 (*| Process algebra |*)
 Section Combinators.
 
-  Definition nil : ccs := stuckS.
+  Definition nil : ccs := Stuck.
 
   Definition prefix (a : action) (P: ccs) : ccs :=
     trigger (Act a);; P.
 
-  Definition plus (P Q : ccs) : ccs := brD2 P Q.
+  Definition plus (P Q : ccs) : ccs := br2 P Q.
 
-  (* Stuck? Failure event? *)
   Definition h_new (c : chan) : ActionE ~> ctree ccsE ccsC :=
     fun _ e => let '(Act a) := e in
             match a with
             | Send c'
             | Rcv c' =>
-                if (c =? c')%string then stuckD else trigger e
+                if (c =? c')%string then Stuck else trigger e
             end.
   #[global] Arguments h_new c [T] _.
 
@@ -85,18 +85,18 @@ Section Combinators.
 
   Definition para : ccs -> ccs -> ccs :=
     cofix F (P : ccs) (Q : ccs) :=
-      brD3
+      br3
         (rP <- head P;;
          match rP with
          | ARet rP => match rP with end
-         | ABr c kP => BrS c (fun i => F (kP i) Q)
+         | AStep t => Step (F t Q)
          | AVis e kP => Vis e (fun i => F (kP i) Q)
          end)
 
         (rQ <- head Q;;
          match rQ with
          | ARet rQ => match rQ with end
-         | ABr c kQ => BrS c (fun i => F P (kQ i))
+         | AStep t => Step (F P t)
          | AVis e kQ => Vis e (fun i => F P (kQ i))
          end)
 
@@ -110,9 +110,9 @@ Section Combinators.
                  then
                    Step (F (kP tt) (kQ tt))
                  else
-                   stuckD
+                   Stuck
              end
-         | _, _ => stuckD
+         | _, _ => Stuck
          end).
 
 (*|
@@ -128,20 +128,20 @@ The usual [bang p] is then defined as [parabang p p].
 
   Definition parabang : ccs -> ccs -> ccs :=
     cofix pB (p : ccs) (q:ccs) : ccs :=
-      brD4
+      br4
         (* Communication by p *)
         (rp <- head p;;
          match rp with
          | ARet rp => match rp with end
-         | ABr c kp => BrS c (fun i =>  pB (kp i) q )
+         | AStep t => Step (pB t q)
          | AVis e kp => Vis e (fun i => pB (kp i) q)
          end)
 
         (* Communication by a fresh copy of q *)
         (rq <- head q;;
          match rq with
-         | ARet rq => match rq with end
-         | ABr c kq => BrS c (fun i => (pB  (para p (kq i)) q))
+         | ARet rq  => match rq with end
+         | AStep t  => Step (pB  (para p t) q)
          | AVis e kq => Vis e (fun i => (pB  (para p (kq i)) q))
          end)
 
@@ -156,10 +156,10 @@ The usual [bang p] is then defined as [parabang p p].
                  then
                    Step (pB (para (kp tt) (kq tt)) q)
                  else
-                   stuckD
+                   Stuck
              end
 
-         | _, _ => stuckD
+         | _, _ => Stuck
          end)
 
         (* Communication between two fresh copies of q *)
@@ -173,10 +173,10 @@ The usual [bang p] is then defined as [parabang p p].
                  then
                    Step (pB (para p (para (kq1 tt) (kq2 tt))) q)
                  else
-                   stuckD
+                   Stuck
              end
 
-         | _, _ => stuckD
+         | _, _ => Stuck
          end).
 
   Definition bang (P : ccs) : ccs := parabang P P.
@@ -201,7 +201,7 @@ Open Scope ccs_scope.
 (** TODO: Move these to [SSim.v] ? *)
 #[global] Instance equ_clos_sb_goal {E X} RR :
   Proper (equ eq ==> equ eq ==> flip impl)
-         (@sb E E ccsC ccsC X X _ _ eq RR).
+         (@sb E E ccsC ccsC X X eq RR).
 Proof.
   cbn; unfold Proper, respectful; intros * eq1 * eq2 bis.
   destruct bis as [F B]; cbn in *.
@@ -220,7 +220,7 @@ Qed.
 
 #[global] Instance equ_clos_sb_ctx {E X} RR :
   Proper (gfp (@fequ E ccsC X X eq) ==> equ eq ==> impl)
-         (@sb E E ccsC ccsC X X _ _ eq RR).
+         (@sb E E ccsC ccsC X X eq RR).
 Proof.
   cbn; unfold Proper, respectful; intros * eq1 * eq2 bis.
   destruct bis as [F B]; cbn in *.
@@ -252,41 +252,46 @@ Proof.
   intros; eapply trans_trigger.
 Qed.
 
-(** TODO: Hm should probably recover [Symmetric] for [st eq] *)
-(** ** prefix *)
-Lemma ctx_prefix_st a: unary_ctx (prefix a) <= st eq.
+(* TO MOVE *)
+Ltac ssplit := split; [| split].
+Ltac eex := do 2 eexists.
+Lemma trans_trigger_inv' : forall {E C X} (e : E X) l u,
+		trans l (trigger e : ctree E C X) u ->
+    exists x, u ≅ Ret x /\ l = obs e x.
 Proof.
-  apply Coinduction, by_Symmetry. apply unary_sym.
-  rewrite <-b_T.
-  intro R. apply (leq_unary_ctx (prefix a)). intros p q Hpq.
-  intros l p' pp'.
-  apply trans_prefix_inv in pp' as (EQ & ->).
-  do 2 eexists; split.
-  apply trans_prefix.
-  rewrite EQ; auto.
+  intros * TR.
+  unfold trigger in TR.
+  now apply trans_vis_inv in TR.
+Qed.
+Lemma trans_vis' {E C R X} : forall (e : E X) x (k : X -> ctree E C R) u,
+    u ≅ k x ->
+    trans (obs e x) (Vis e k) u.
+Proof.
+  intros * eq; rewrite eq; apply trans_vis.
 Qed.
 
 (** ** prefix *)
-Lemma ctx_prefix_tequ a: unary_ctx (prefix a) <= (et eq).
+
+Ltac inv_ccs_trans :=
+  match goal with
+  | h : hrel_of (trans _) (prefix _ _) _ |- _ => apply trans_prefix_inv in h as (?EQ & ->)
+  | _ => idtac
+  end.
+Hint Resolve trans_prefix : ccs.
+Ltac ccs_trans := eauto with ccs.
+
+#[global] Instance prefix_st a: forall (R : Chain (sb eq)),
+    Proper (elem R ==> elem R) (prefix a).
 Proof.
-  apply Coinduction.
-  intro R.
-  apply (leq_unary_ctx (prefix a)).
-  intros p q Hpq.
-  cbn in *.
-  constructor.
-  intros [].
-  fold (@bind ccsE _ _ _ (Ret tt) (fun _ => p)).
-  fold (@bind ccsE _ _ _ (Ret tt) (fun _ => q)).
-  rewrite 2 unfold_bind; cbn.
-  apply (b_T (fequ eq)).
-  apply Hpq.
+  apply (Proper_symchain 1).
+  intros R HR p q Hpq l p' pp'.
+  inv_ccs_trans.
+  eex; ssplit; ccs_trans.
+  rewrite EQ.
+  now step.
 Qed.
 
-#[global] Instance prefix_st a: forall R, Proper (st eq R ==> st eq R) (prefix a) := unary_proper_t (@ctx_prefix_st a).
-
-#[global] Instance prefix_tequ a: forall R, Proper (et eq R ==> et eq R) (prefix a) := unary_proper_t (@ctx_prefix_tequ a).
-
+(** ** hnew *)
 Definition can_comm (c : chan) (a : @label ccsE) : bool :=
   match a with
   | obs (Act a) _ =>
@@ -297,33 +302,17 @@ Definition can_comm (c : chan) (a : @label ccsE) : bool :=
   | _ => true
   end.
 
-Lemma trans_trigger_inv' : forall {E C X} `{B0 -< C} (e : E X) l u,
-		trans l (trigger e : ctree E C X) u ->
-    exists x, u ≅ Ret x /\ l = obs e x.
-Proof.
-  intros * TR.
-  unfold trigger in TR.
-  now apply trans_vis_inv in TR.
-Qed.
-
 Lemma trans_hnew_inv : forall a l c p,
     trans l (h_new c (Act a)) p ->
     l = obs (Act a) tt /\ can_comm c l /\ p ≅ Ret tt.
 Proof.
   intros * tr.
   cbn in *; destruct a; cbn in *; destruct (c =? c0) eqn:comm; cbn in *.
-  all : try now eapply stuckD_is_stuck in tr.
+  all : try now eapply Stuck_is_stuck in tr.
   all: unfold can_comm; apply trans_trigger_inv' in tr as ([] & ? & ?); subst; rewrite comm; eauto.
 Qed.
 
-Lemma trans_vis' {E C R X} `{B0 -< C} : forall (e : E X) x (k : X -> ctree E C R) u,
-    u ≅ k x ->
-    trans (obs e x) (Vis e k) u.
-Proof.
-  intros * eq; rewrite eq; apply trans_vis.
-Qed.
-
-Lemma new_guard : forall c t, new c (Guard t) ≅ Guard (Guard (new c t)).
+Lemma new_guard : forall c t, new c (Guard t) ≅ Guard (new c t).
 Proof.
   intros; unfold new; now rewrite interp_guard.
 Qed.
@@ -349,21 +338,22 @@ Proof.
     unfold new; rewrite unfold_interp, <- Heqobsp.
     cbn; unfold Utils.mbr, MonadBr_ctree, branch.
     eapply trans_bind_r with x.
-    eapply trans_brD; [|reflexivity].
+    eapply trans_br; [|reflexivity].
     apply trans_ret.
     apply trans_guard.
     apply tr'.
+  - edestruct IHtr as (q & tr' & eq); eauto.
+    exists q; split; auto.
+    unfold new; rewrite unfold_interp, <- Heqobsp.
+    apply trans_guard; eauto.
   - eexists; split.
     unfold new; rewrite unfold_interp, <- Heqobsp.
-    cbn; unfold Utils.mbr, MonadBr_ctree, branch.
-    eapply trans_bind_l.
-    intros abs; inv abs.
-    apply trans_brS with (x := x).
-    rewrite bind_ret_l, sb_guard.
-    rewrite H.
-    unfold new. rewrite unfold_interp.
-    rewrite <- Heqop', <- unfold_interp.
-    reflexivity.
+    apply trans_step.
+    rewrite sb_guard.
+    unfold new.
+    rewrite <- H.
+    apply observe_equ_eq in Heqop'.
+    now rewrite Heqop'.
   - destruct e, a.
     all: cbn in *; destruct (c =? c0) eqn:comm'; inv comm.
     + eexists; split.
@@ -397,6 +387,17 @@ Proof.
   - tauto.
 Qed.
 
+Lemma trans_new_inv : forall l c p p',
+    trans l (new c p) p' ->
+    exists q, can_comm c l = true /\ trans l p q /\ p' ≅ Guard (new c q).
+Proof.
+  intros.
+  unfold new in H.
+  eapply trans_new_inv_aux. eapply H.
+  all: rewrite <- ctree_eta; auto.
+Qed.
+
+
 Lemma trans_new_inv_aux : forall l T U,
     trans_ l T U ->
     forall c p q,
@@ -410,7 +411,7 @@ Proof.
     + unfold new in EQ1; rewrite unfold_interp in EQ1.
       unfold trans, transR.
       cbn.
-      desobs p; try now step in EQ1; inv EQ1.
+      desobs p; try now (step in EQ1; inv EQ1).
       * destruct e,a; cbn in *.
         ** destruct (c =? c1); cbn in *.
            *** step in EQ1; dependent induction EQ1; inv x0.
@@ -419,26 +420,67 @@ Proof.
            *** step in EQ1; dependent induction EQ1; inv x0.
            *** step in EQ1; inv EQ1.
       * cbn in EQ1.
-        destruct vis; try now step in EQ1; inv EQ1.
         unfold Utils.mbr, MonadBr_ctree, branch in EQ1.
         cbn in * |-.
         rewrite unfold_bind in EQ1; cbn in EQ1.
         inv_equ. rename EQ into eqx.
         specialize (eqx x).
         cbn in * |-; rewrite bind_ret_l in eqx.
-        setoid_rewrite <- ctree_eta in IHtr.
-        setoid_rewrite eqx in IHtr.
-        edestruct (IHtr (k0 x)) as (q' & comm & tr' & EQ); [right; reflexivity | reflexivity |].
+        edestruct (IHtr (k0 x)) as (q' & comm & tr' & EQ).
+        now right; rewrite <- ctree_eta.
+        eauto.
         exists q'; repeat split; auto.
-        eapply trans_brD with (x := x).
+        eapply trans_br with (x := x).
         eauto.
         reflexivity.
-        rewrite <- EQ, EQ2; auto.
-    + inv_equ. rename EQ into eqx.
-      specialize (eqx x).
-      edestruct IHtr as (q' & comm & tr' & EQ); [| eassumption |].
-      left. rewrite eqx, <- ctree_eta; reflexivity.
-      exists q'; repeat split; auto.
+    + inv_equ.
+
+  - destruct EQ1 as [EQ1 | EQ1].
+    + unfold new in EQ1; rewrite unfold_interp in EQ1.
+      unfold trans, transR.
+      cbn.
+      desobs p; try now (step in EQ1; inv EQ1).
+      * inv_equ.
+
+        edestruct (IHtr t) as (q' & comm & tr' & EQ).
+        right; rewrite <- ctree_eta, EQ1.
+        now left; rewrite <- ctree_eta.
+        eauto.
+        exists q'; repeat split; auto.
+        eapply trans_br with (x := x).
+        eauto.
+        reflexivity.
+
+        eauto.
+
+
+        destruct e,a; cbn in *.
+        ** destruct (c =? c1); cbn in *.
+           *** step in EQ1; dependent induction EQ1; inv x0.
+           *** step in EQ1; inv EQ1.
+        ** destruct (c =? c1); cbn in *.
+           *** step in EQ1; dependent induction EQ1; inv x0.
+           *** step in EQ1; inv EQ1.
+      * cbn in EQ1.
+        unfold Utils.mbr, MonadBr_ctree, branch in EQ1.
+        cbn in * |-.
+        rewrite unfold_bind in EQ1; cbn in EQ1.
+        inv_equ. rename EQ into eqx.
+        specialize (eqx x).
+        cbn in * |-; rewrite bind_ret_l in eqx.
+        (* setoid_rewrite <- ctree_eta in IHtr. *)
+        (* setoid_rewrite eqx in IHtr. *)
+        edestruct (IHtr (k0 x)) as (q' & comm & tr' & EQ).
+        now right; rewrite <- ctree_eta.
+        eauto.
+        exists q'; repeat split; auto.
+        eapply trans_br with (x := x).
+        eauto.
+        reflexivity.
+    + inv_equ.
+  -
+
+
   - destruct EQ1 as [EQ1 | EQ1]; [ | step in EQ1; dependent induction EQ1].
     unfold new in EQ1; rewrite unfold_interp in EQ1.
     unfold trans,transR; cbn.
@@ -520,7 +562,7 @@ Proof.
   apply trans_brD_inv in tr as ([|] & tr); eauto.
 Qed.
 
-Lemma trans_brS' {E C X Y} `{B0 -< C} : forall (c : C Y) (k : Y -> ctree E C X) x u,
+Lemma trans_brS' {E C X Y} : forall (c : C Y) (k : Y -> ctree E C X) x u,
     u ≅ k x ->
 		trans tau (BrS c k) u.
 Proof.
@@ -593,9 +635,9 @@ Notation para_ p q :=
               then
                 Step (para (kp tt) (kq tt))
               else
-                stuckD
+                Stuck
           end
-      | _, _ => stuckD
+      | _, _ => Stuck
       end))%ctree.
 
 Lemma unfold_para : forall p q, para p q ≅ para_ p q.
@@ -738,11 +780,11 @@ Proof.
     destruct H as (NOTV & ? & TR & EQ); apply trans_head_inv in TR; easy.
     destruct H as (hdq & TRhdq & TR).
     destruct hdp; try easy.
-    exfalso; eapply stuckD_is_stuck; eassumption.
+    exfalso; eapply Stuck_is_stuck; eassumption.
     destruct hdq; try easy.
-    exfalso; eapply stuckD_is_stuck; eassumption.
+    exfalso; eapply Stuck_is_stuck; eassumption.
     destruct e, e0, (are_opposite a a0) eqn:?.
-    2:exfalso; eapply stuckD_is_stuck; eassumption.
+    2:exfalso; eapply Stuck_is_stuck; eassumption.
     apply trans_step_inv in TR as [? ->].
     eapply trans_AVis in TRhdp.
     eapply trans_AVis in TRhdq.
@@ -959,10 +1001,10 @@ Notation parabang_ p q :=
               then
                 Step (parabang (para (kp tt) (kq tt)) q)
               else
-                stuckD
+                Stuck
           end
 
-      | _, _ => stuckD
+      | _, _ => Stuck
       end)
 
      (* Communication between two fresh copies of q *)
@@ -976,10 +1018,10 @@ Notation parabang_ p q :=
               then
                 Step (parabang (para p (para (kq1 tt) (kq2 tt))) q)
               else
-                stuckD
+                Stuck
           end
 
-      | _, _ => stuckD
+      | _, _ => Stuck
       end))%ctree.
 
 Lemma unfold_parabang : forall p q, parabang p q ≅ parabang_ p q.
@@ -1152,8 +1194,8 @@ Proof.
     apply trans_bind_inv in TR2.
 
     destruct TR2 as [(NV & ? & TR & ?) | (? & TR2 & TR3)]; [apply trans_head_inv in TR; easy|].
-    destruct x, x0; try easy; try now (exfalso; eapply stuckD_is_stuck; eauto).
-    destruct e, e0, (are_opposite a a0) eqn:?; try easy; try now (exfalso; eapply stuckD_is_stuck; eauto).
+    destruct x, x0; try easy; try now (exfalso; eapply Stuck_is_stuck; eauto).
+    destruct e, e0, (are_opposite a a0) eqn:?; try easy; try now (exfalso; eapply Stuck_is_stuck; eauto).
     apply trans_step_inv in TR3 as (? & ->).
     pose proof trans_AVis TR1 (i := tt).
     pose proof trans_AVis TR2 (i := tt).
@@ -1163,8 +1205,8 @@ Proof.
     destruct TR as [(NV & ? & TR & ?) | (? & TR1 & TR2)]; [apply trans_head_inv in TR; easy|].
     apply trans_bind_inv in TR2.
     destruct TR2 as [(NV & ? & TR & ?) | (? & TR2 & TR3)]; [apply trans_head_inv in TR; easy|].
-    destruct x, x0; try easy; try now (exfalso; eapply stuckD_is_stuck; eauto).
-    destruct e, e0, (are_opposite a a0) eqn:?; try easy; try now (exfalso; eapply stuckD_is_stuck; eauto).
+    destruct x, x0; try easy; try now (exfalso; eapply Stuck_is_stuck; eauto).
+    destruct e, e0, (are_opposite a a0) eqn:?; try easy; try now (exfalso; eapply Stuck_is_stuck; eauto).
     apply trans_step_inv in TR3 as (? & ->).
     pose proof trans_AVis TR1 (i := tt).
     pose proof trans_AVis TR2 (i := tt).

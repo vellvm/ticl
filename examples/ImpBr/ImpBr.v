@@ -1,3 +1,5 @@
+Unset Universe Checking.
+
 From Coq Require Import
      Arith.PeanoNat
      Lists.List
@@ -20,8 +22,7 @@ From ITree Require Import
      Events.State
      Events.MapDefault.
 
-From Coinduction Require Import
-	coinduction rel tactics.
+From Coinduction Require Import all.
 
 From CTree Require Import
      CTree
@@ -72,7 +73,7 @@ Variant MemE : Type -> Type :=
 
 Section Semantics.
 
-  Notation computation := (ctree MemE (B01 +' B2)).
+  Notation computation := (ctree MemE B2).
 
   Fixpoint denote_expr (e : expr) : computation value :=
     match e with
@@ -102,11 +103,11 @@ Section Semantics.
              then denote_imp b ;; ret (inl tt)
              else ret (inr tt))
 
-    | Branch a b => brD2 (denote_imp a) (denote_imp b)
+    | Branch a b => br2 (denote_imp a) (denote_imp b)
 
     | Skip => ret tt
 
-    | Block => stuckD
+    | Block => Stuck
 
     end.
 
@@ -138,20 +139,20 @@ Section Theory.
   Lemma branch_commut : forall (a b : stmt),
       ⟦Branch a b⟧ ~ ⟦Branch b a⟧.
   Proof.
-    intros; apply brD2_commut.
+    intros; apply br2_commut.
   Qed.
 
   Lemma branch_assoc : forall (a b c : stmt),
       ⟦Branch a (Branch b c)⟧ ~ ⟦Branch (Branch a b) c⟧.
   Proof.
     intros; cbn.
-    now rewrite brD2_assoc.
+    now rewrite br2_assoc.
   Qed.
 
   Lemma branch_idem : forall a : stmt,
       ⟦Branch a a⟧ ~ ⟦a⟧.
   Proof.
-    intros; apply brD2_idem.
+    intros; apply br2_idem.
   Qed.
 
   Lemma branch_congr : forall a a' b b',
@@ -159,20 +160,20 @@ Section Theory.
       ⟦b⟧ ~ ⟦b'⟧ ->
       ⟦Branch a b⟧ ~ ⟦Branch a' b'⟧.
   Proof.
-    intros. cbn. apply sb_brD_id.
+    intros. cbn. apply sb_br_id.
     intro; destruct x; rewrite ?H, ?H0; reflexivity.
   Qed.
 
   Lemma branch_block_l : forall a : stmt,
       ⟦Branch Block a⟧ ~ ⟦a⟧.
   Proof.
-    intros; apply brD2_stuckD_l.
+    intros; apply br2_stuck_l.
   Qed.
 
   Lemma branch_block_r : forall a : stmt,
       ⟦Branch a Block⟧ ~ ⟦a⟧.
   Proof.
-    intros; apply brD2_stuckD_r.
+    intros; apply br2_stuck_r.
   Qed.
 
 (*|

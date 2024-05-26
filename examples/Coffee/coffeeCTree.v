@@ -27,7 +27,7 @@ Variant E : Type -> Type :=
   | Coffee    : E unit
 .
 
-Notation state := (ctree E (B0 +' B2) void).
+Notation state := (ctree E B2 void).
 
 Definition vending : state :=
   cofix F :=
