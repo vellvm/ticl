@@ -4,7 +4,7 @@
   )
 (coq.extraction
   (prelude Extract)
-  (theories ImpBrEx)
+  (theories CTree CTreeImp ImpBrEx)
   (extracted_modules
     Applicative
     Ascii
@@ -21,6 +21,7 @@
     Consider
     CTreeDefinitions
     Datatypes
+    DecidableClass
     Decimal
     EitherMonad
     Extras
@@ -52,7 +53,6 @@
     MonadZero
     Monoid
     Nat
-    NPeano
     Number
     OptionMonad
     PeanoNat
