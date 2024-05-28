@@ -70,7 +70,7 @@ Relation relaxing [equ] to become insensible to:
 
 Section WeakBisim.
 
-  Context {E C : Type -> Type} {X : Type} `{HasTau : B0 -< C}.
+  Context {E C : Type -> Type} {X : Type}.
   Notation S := (ctree E C X).
 
   (*|
@@ -85,7 +85,7 @@ Section WeakBisim.
   Next Obligation. destruct (H0 _ _ H1). eauto. Qed.
 
   (*| Heterogenous version TODO: make ws |*)
-  Program Definition hws {E F C D: Type -> Type} {X Y: Type} `{Stuck: B0 -< C} `{Stuck': B0 -< D}
+  Program Definition hws {E F C D: Type -> Type} {X Y: Type}
           (L: rel (@label E) (@label F)) : mon (rel (ctree E C X) (ctree F D Y)) :=
     {| body R p q :=
       forall l p', trans l p p' -> exists q' l', wtrans l' q q' /\ R p' q' /\ L l l' |}.
@@ -100,7 +100,7 @@ Section WeakBisim.
   Definition wb := (Coinduction.lattice.cap ws (comp converse (comp ws converse))).
 
   (*| Heterogenous version TODO: make wb |*)
-  Program Definition hwb {E F C D: Type -> Type} {X Y: Type} `{Stuck: B0 -< C} `{Stuck': B0 -< D}
+  Program Definition hwb {E F C D: Type -> Type} {X Y: Type}
           (L: rel (@label E) (@label F)) : mon (rel (ctree E C X) (ctree F D Y)) :=
     {| body R p q :=
       hws L R p q /\ hws (flip L) (flip R) q p
@@ -140,19 +140,14 @@ End WeakBisim.
 (*|
 The relation itself
 |*)
-Definition wbisim {E C X} `{HasStuck : B0 -< C} := (gfp (@wb E C X _): hrel _ _).
+Definition wbisim {E C X} := (gfp (@wb E C X): hrel _ _).
 
 Module WBisimNotations.
 
   Notation "p ≈ q" := (wbisim p q) (at level 70).
-  Notation wt := (coinduction.t wb).
-  Notation wT := (coinduction.T wb).
-  Notation wbt := (coinduction.bt wb).
   (*|
     Notations  for easing readability in proofs by enhanced coinduction
     |*)
-  Notation "x [≈] y" := (wt _ x y) (at level 80).
-  Notation "x {≈} y" := (wbt _ x y) (at level 80).
   Notation "t {{≈}} u" := (wb _ t u) (at level 79).
 
 End WBisimNotations.
@@ -162,19 +157,21 @@ Import WBisimNotations.
 Ltac fold_wbisim :=
   repeat
     match goal with
-    | h: context[@wb ?E ?C ?X ?HS ] |- _ => fold (@wbisim E C X HS) in h
-    | |- context[@wb ?E ?C ?X ?HS ]      => fold (@wbisim E C X HS)
+    | h: context[@wb ?E ?C ?X] |- _ => fold (@wbisim E C X) in h
+    | |- context[@wb ?E ?C ?X]      => fold (@wbisim E C X)
     end.
 
-Ltac __coinduction_wbisim R H :=
-  unfold wbisim; apply_coinduction; fold_wbisim; intros R H.
+Tactic Notation "__coinduction_wbisim" simple_intropattern(r) simple_intropattern(cih) :=
+  first [unfold wbisim at 4 | unfold wbisim at 3 | unfold wbisim at 2 | unfold wbisim at 1]; coinduction r cih.
+#[local] Tactic Notation "coinduction" simple_intropattern(r) simple_intropattern(cih) :=
+  __coinduction_wbisim r cih.
 
 Tactic Notation "__step_wbisim" :=
   match goal with
-  | |- context[@wbisim ?E ?C ?X ?HasStuck ] =>
+  | |- context[@wbisim ?E ?C ?X ] =>
       unfold wbisim;
       step;
-      fold (@wbisim E C X HasStuck)
+      fold (@wbisim E C X)
   | |- _ => step
   end.
 
@@ -185,17 +182,17 @@ Tactic Notation "__step_wbisim" :=
 
 Ltac __step_in_wbisim H :=
   match type of H with
-  | context [@wbisim ?E ?C ?X ?HasStuck ] =>
+  | context [@wbisim ?E ?C ?X ] =>
       unfold wbisim in H;
       step in H;
-      fold (@wbisim E C X HasStuck) in H
+      fold (@wbisim E C X) in H
   end.
 
 #[local] Tactic Notation "step" "in" ident(H) := __step_in_wbisim H.
 
 Ltac twplayL_ tac :=
   match goal with
-  | h : @wbisim ?E ?C ?X _ _ _ |- _ =>
+  | h : @wbisim ?E ?C ?X _ _ |- _ =>
       step in h;
       let Hf := fresh "Hf" in
       destruct h as [Hf _];
@@ -209,7 +206,7 @@ Ltac ewplayL := twplayL etrans.
 
 Ltac twplayR_ tac :=
   match goal with
-  | h : @wbisim ?E ?F ?C ?D ?X ?Y _ _ ?L |- _ =>
+  | h : @wbisim ?E ?F ?C ?D ?X ?Y _ ?L |- _ =>
       step in h;
       let Hb := fresh "Hb" in
       destruct h as [_ Hb];
@@ -223,13 +220,10 @@ Ltac ewplayR := twplayR etrans.
 
 Section wbisim_theory.
 
-  Context {E C : Type -> Type} {X : Type} `{HasStuck : B0 -< C}.
-  Notation ws := (@ws E C X HasStuck).
-  Notation wb := (@wb E C X HasStuck).
-  Notation wbisim  := (@wbisim E C X HasStuck).
-  Notation wt  := (coinduction.t wb).
-  Notation wbt := (coinduction.bt wb).
-  Notation wT  := (coinduction.T wb).
+  Context {E C : Type -> Type} {X : Type}.
+  Notation ws := (@ws E C X).
+  Notation wb := (@wb E C X).
+  Notation wbisim  := (@wbisim E C X).
 
 (*|
 Elementary properties of [wbisim]
@@ -251,7 +245,7 @@ on both arguments.
 We also get [wbisim] closed under [sbism] on both arguments, but need first to
 establish [wbisim]'s transitivity for that.
 |*)
-  Lemma s_e: @ss E E C C X X _ _ eq  <= es.
+  Lemma s_e: @ss E E C C X X eq <= es.
   Proof.
     intros R p q H l p' pp'. destruct (H _ _ pp').
     destruct H0 as (? & ? & ? & <-).
@@ -267,10 +261,17 @@ establish [wbisim]'s transitivity for that.
   Corollary sbisim_wbisim: sbisim eq <= wbisim.
   Proof.
     apply gfp_leq.
-    (* apply Coinduction.lattice.cap_leq. apply s_w.
-    intros R p q. apply (@s_w (R°) q p).
-     *)
-  Admitted.
+    intros r x y [F B].
+    split.
+    - intros l x' TR.
+      apply F in TR as (? & ? & ? & ? & ->).
+      econstructor; eauto.
+      now apply trans_wtrans.
+    - intros l x' TR.
+      apply B in TR as (? & ? & ? & ? & ->).
+      econstructor; eauto.
+      now apply trans_wtrans.
+  Qed.
 
   #[global] Instance sbisim_wbisim_subrelation : subrelation (sbisim eq) wbisim.
   Proof.
@@ -281,20 +282,16 @@ establish [wbisim]'s transitivity for that.
 Since [wt R] contains [wbisim] that contains [sbisim] which is known to be reflexive,
 it is reflexive as well
 |*)
-    #[global] Instance Reflexive_wt R: Reflexive (wt R).
-    Proof. intro. apply (gfp_t wb). now apply sbisim_wbisim. Qed.
+  #[global] Instance refl_t {c: Chain wb}: Reflexive (elem c).
+  Proof.
+    intro. apply (gfp_chain c). now apply sbisim_wbisim.
+  Qed.
 
 (*|
 [converse] is compatible
 |*)
-    Lemma converse_wt: converse <= wt.
-    Proof. apply invol_t. Qed.
-
-(*|
-Hence [wt R] is always symmetric
-|*)
-    #[global] Instance Symmetric_wt R: Symmetric (wt R).
-    Proof. intros ??. apply (ft_t converse_wt). Qed.
+  #[global] Instance sym_t {c: Chain wb}: Symmetric (elem c).
+  Proof. apply Symmetric_symchain. Qed.
 
 (*|
 [wbism] is closed under [equ]
@@ -303,7 +300,7 @@ Hence [wt R] is always symmetric
     Proof.
       intros t t' eqt u u' equ; cbn.
       revert t t' u u' eqt equ.
-      unfold wbisim; coinduction ? CIH; fold wbisim in *.
+      coinduction r CIH; fold wbisim in *.
       intros * eqt equ eqtu.
       step in eqtu.
       destruct eqtu as [ftu btu].
@@ -324,7 +321,7 @@ Hence [wt R] is always symmetric
     Proof.
       intros t t' eqt u u' equ; cbn.
       revert t t' u u' eqt equ.
-      unfold wbisim; coinduction ? CIH; fold wbisim in *.
+      coinduction r CIH; fold wbisim in *.
       intros * eqt equ eqtu.
       step in eqtu.
       destruct eqtu as [ftu btu].
@@ -389,8 +386,10 @@ on the setoid side.
     Qed.
     Lemma wbisim_trans_back' l: wbisim ⋅ transR l ≦ (wtrans l : hrel _ _) ⋅ wbisim.
     Proof.
-      intros p q' [q pq qq']. (*apply (gfp_pfp wb) in pq as [_ pq]. now apply pq.
-    Qed.*) Admitted. (* FIXME *)
+      intros p q' [q pq qq'].
+      apply (gfp_pfp wb) in pq as [_ pq].
+      now apply pq.
+    Qed.
     Lemma wbisim_etrans_back l: wbisimT ⋅ etrans l ≦ wtrans l ⋅ wbisimT.
     Proof.
       unfold etrans; destruct l.
@@ -398,7 +397,7 @@ on the setoid side.
       ra_normalise. rewrite wbisim_trans_back.
       unfold wtrans, etrans. ka.
     Qed.
-    Lemma wbisim_taus_back: wbisimT ⋅ (trans tau)^* ≦ (trans tau)^* ⋅ wbisimT.
+    Lemma wbisim_τs_back: wbisimT ⋅ (trans τ)^* ≦ (trans τ)^* ⋅ wbisimT.
     Proof.
       rewrite <-str_invol at 2.
       apply str_move_l. rewrite wbisim_trans_back. unfold wtrans, etrans. ka.
@@ -406,14 +405,14 @@ on the setoid side.
     Lemma wbisim_wtrans_back l: wbisimT ⋅ wtrans l ≦ wtrans l ⋅ wbisimT.
     Proof.
       unfold wtrans.
-      mrewrite wbisim_taus_back.
+      mrewrite wbisim_τs_back.
       mrewrite wbisim_etrans_back.
-      mrewrite wbisim_taus_back.
+      mrewrite wbisim_τs_back.
       unfold wtrans, etrans. ka.
     Qed.
 
-    Lemma cnv_wt R: (wt R: hrel _ _)° ≡ wt R.
-    Proof. apply RelationAlgebra.lattice.antisym; intros ???; now apply Symmetric_wt. Qed.
+    Lemma cnv_wt (R : Chain wb) : (elem R: hrel _ _)° ≡ elem R.
+    Proof. apply RelationAlgebra.lattice.antisym; intros ???; apply sym_t,H. Qed.
     Lemma cnv_gfp: RelationAlgebra.lattice.weq ((gfp wb: hrel _ _)°) (gfp wb).
     Proof. apply cnv_wt. Qed.
     Lemma cnv_wbisim: wbisimT° ≡ wbisimT.
@@ -435,7 +434,7 @@ By symmetry, similar results for left-to-right game
 (*|
 Explicit, non-algebraic version
 |*)
-    Lemma wbisim_wtrans_front_ p q l p': wtrans l p p' -> p ≈ q -> exists2 q', p' ≈ q' & @wtrans E C X _ l q q'.
+    Lemma wbisim_wtrans_front_ p q l p': wtrans l p p' -> p ≈ q -> exists2 q', p' ≈ q' & @wtrans E C X l q q'.
     Proof. intros pp' pq. apply wbisim_wtrans_front. now exists p. Qed.
 
 (*|
@@ -448,12 +447,12 @@ Finally, the proof of transitivity
       rewrite converse_square.
       apply square. simpl. apply cnv_gfp.
       intros x z [y xy yz] l x' xx'.
-      (*apply (gfp_pfp wb) in xy as [xy _].
+      apply (gfp_pfp wb) in xy as [xy _].
       destruct (xy _ _ xx') as [y' yy' x'y'].
       destruct (wbisim_wtrans_front_ _ _ _ _ yy' yz) as [z' y'z' zz'].
       exists z'. assumption. now exists y'.
       intros x y z xy yz. apply H. now exists y.
-    Qed.*) Admitted.
+    Qed.
 
     #[global] Instance Equivalence_wbisim: Equivalence wbisim.
     Proof.
@@ -482,50 +481,56 @@ We can now easily derive that [wbisim] is closed under [sbisim]
 (*|
 Weak bisimulation up-to [equ] is valid
 |*)
-    Lemma equ_clos_wt : @equ_clos E E C C X X <= wt.
+    Lemma equ_clos_wt (r : Chain wb) : @equ_clos E E C C X X (elem r) <= elem r.
     Proof.
-      apply Coinduction, by_Symmetry; [apply equ_clos_sym |].
-      intros R t u EQ l t1 TR; inv EQ.
-      destruct HR as [F _]; cbn in *.
-      rewrite Equt in TR.
-      apply F in TR.
-      destruct TR as [? ? ?].
-      eexists.
-      rewrite <- Equu; eauto.
-      apply (f_Tf wb).
-      econstructor; intuition.
-      auto.
+      apply tower.
+      - intros ? INC ? ? EQ ? ?; red.
+        apply INC. apply H.
+        inv EQ; econstructor; eauto.
+        apply leq_infx in H. apply H. eauto.
+      - intros ? IH.
+        cbn.
+        (* Unfortunately the bug in the reification prevents us from using the symmetry argument here *)
+        intros?? EQ; inv EQ; split.
+        + intros ?? TR.
+          rewrite Equt in TR; apply HR in TR as [? ? ?].
+          eexists; eauto.
+          now rewrite <- Equu.
+        + intros ?? TR.
+          rewrite <- Equu in TR; apply HR in TR as [? ? ?].
+          eexists; eauto.
+          now rewrite Equt.
     Qed.
 
 (*|
 We can therefore rewrite [equ] in the middle of bisimulation proofs
 |*)
-    #[global] Instance equ_clos_wt_proper_goal RR :
-      Proper (equ eq ==> equ eq ==> flip impl) (wt RR).
+    #[global] Instance equ_clos_wt_proper_goal (r : Chain wb) :
+      Proper (equ eq ==> equ eq ==> flip impl) (elem r).
     Proof.
       cbn; unfold Proper, respectful; intros.
-      apply (ft_t equ_clos_wt).
+      apply equ_clos_wt.
       econstructor; [eauto | | symmetry; eauto]; auto.
     Qed.
 
-    #[global] Instance equ_clos_wt_proper_ctx RR :
-      Proper (equ eq ==> equ eq ==> impl) (wt RR).
+    #[global] Instance equ_clos_wt_proper_ctx (r : Chain wb) :
+      Proper (equ eq ==> equ eq ==> impl) (elem r).
     Proof.
       cbn; unfold Proper, respectful; intros.
-      apply (ft_t equ_clos_wt).
+      apply equ_clos_wt.
       econstructor; [symmetry; eauto | | eauto]; auto.
     Qed.
 
 (*|
-Contrary to what happens with [sbisim], weak bisimulation ignores both kinds of taus
+Contrary to what happens with [sbisim], weak bisimulation ignores both kinds of τs
 |*)
-    Lemma guard_wb `{B1 -< C} : forall (t : ctree E C X),
+    Lemma guard_wb : forall (t : ctree E C X),
         Guard t ≈ t.
     Proof.
       intros. now rewrite sb_guard.
     Qed.
 
-    Lemma step_wb `{HasTau : B1 -< C} : forall (t : ctree E C X),
+    Lemma step_wb : forall (t : ctree E C X),
         Step t ≈ t.
     Proof.
       intros t; step; split.
@@ -545,7 +550,7 @@ Disproving the transitivity of [wt R]
 -------------------------------------
 |*)
 
-    Lemma not_Transitive_wt `{HasTau : B1 -< C} Z: X -> Z -> E Z -> ~ forall R, Transitive (wt R).
+    Lemma not_Transitive_wt Z: X -> Z -> E Z -> ~ forall (R : Chain wb), Transitive (elem R).
     Proof.
       intros x z e H.
       cut (Vis e (fun _ => Ret x) ≈ (Ret x : ctree E C X)).
@@ -553,41 +558,26 @@ Disproving the transitivity of [wt R]
         destruct (abs (obs e z) (Ret x)) as [? step EQ].
         constructor; reflexivity.
         apply wtrans_ret_inv in step as [[abs' ?] | [abs' ?]]; inv abs'.
-      - rewrite <- step_wb.
-        rewrite <- (step_wb (Ret x)).
-        unfold wbisim; coinduction ? CIH; fold wbisim in *.
+      - coinduction r CIH; fold wbisim in *.
+        rewrite <- step_wb.
+        symmetry; rewrite <- step_wb; symmetry.
         split.
         + intros l t' tt'.
           apply trans_step_inv in tt' as [EQ ->].
           exists (Ret x); auto.
-          apply trans_wtrans; constructor; [exact tt | reflexivity].
-          apply equ_wbisim_subrelation in EQ.
-          rewrite EQ.
-          rewrite <- (subrelation_gfp_t _ (step_wb _)).
-          rewrite <- (subrelation_gfp_t _ (step_wb (Ret x))).
-          assumption.  (* Here clearly some instances are missing, the rewrite do not work in the other order, and should not require such an explicit low level call *)
-        + intros ? ? ?.
-          apply trans_step_inv in H0 as [EQ ->].
+          apply trans_wtrans; constructor; reflexivity.
+          now rewrite EQ.
+        + intros l t' tt'.
+          apply trans_step_inv in tt' as [EQ ->].
           eexists.
-          apply trans_wtrans; constructor; [exact tt | reflexivity].
+          apply trans_wtrans; constructor; reflexivity.
           cbn.
-          apply equ_wbisim_subrelation in EQ.
-          rewrite <- (subrelation_gfp_t _ (step_wb _)).
-          symmetry.
-          rewrite EQ.
-          rewrite <- (subrelation_gfp_t _ (step_wb _)).
-          symmetry.
-          assumption.
-    Qed.
-
-    Lemma not_square_wt `{HasTau : B1 -< C} Z: X -> Z -> E Z -> ~ square <= wt.
-    Proof.
-      intros x z e H. elim (not_Transitive_wt _ x z e). intro R.
-      intros ? y ???. apply (ft_t H). now exists y.
+          rewrite EQ; auto.
     Qed.
 
 End wbisim_theory.
 
+(*
 Section bind.
 
   Obligation Tactic := idtac.
@@ -647,7 +637,7 @@ The resulting enhancing function gives a valid up-to technique
         rewrite EQ' in STEPres.
         pose proof wtrans_bind_r _ STEPres STEP as [EQ'' | ?].
         + rewrite EQ'' in STEP.
-          assert (l = tau) by admit.
+          assert (l = τ) by admit.
           subst.
           exists (k2 v).
           admit.
@@ -657,7 +647,6 @@ The resulting enhancing function gives a valid up-to technique
     Admitted.
 
 End bind.
-
 (*|
 Expliciting the reasoning rule provided by the up-to principles.
 |*)
@@ -684,6 +673,8 @@ and [≈] to the left of a [bind].
 Proof.
   repeat red; intros; eapply wbisim_clo_bind; eauto.
 Qed.
+
+*)
 
 Lemma wbisim_ret_inv {E C R} `{B0 -< C} : forall (x y : R),
     Ret x ≈ (Ret y : ctree E C R) ->
@@ -714,7 +705,7 @@ Ltac wcase :=
       |- _] =>
       let EQ := fresh "EQ" in
       match l with
-      | tau => apply wtrans_case' in h as [EQ|(? & ?TR & ?WTR)];
+      | τ => apply wtrans_case' in h as [EQ|(? & ?TR & ?WTR)];
               [rewrite <- EQ in bis; clear EQ |]
       | _   => apply wtrans_case' in h as [(? & ?TR & ?WTR)|(? & ?TR & ?WTR)]
       end
@@ -723,6 +714,7 @@ Ltac wcase :=
 #[local] Arguments trans_brS21 [_ _].
 #[local] Arguments trans_brS22 [_ _].
 #[local] Arguments trans_ret [_ _] _.
+
 
 (*|
 With brS2 however they don't even hold up-to weak bisimulation.
