@@ -1,3 +1,5 @@
+Unset Universe Checking.
+
 From CTree Require Import
      CTree
      Eq
@@ -36,19 +38,19 @@ Qed.
 
 Lemma trans_nil_inv : forall l p, ~ trans l nil p.
 Proof.
-  intros * abs; eapply stuckS_is_stuck; apply abs.
+  intros * abs; eapply Stuck_is_stuck; apply abs.
 Qed.
 
 Definition ι : option action -> @label ccsE :=
   fun a => match a with
-        | None => tau
+        | None => τ
         | Some a => comm a
         end.
 
 Definition γ : @label ccsE -> option action :=
   fun l => match l with
         | val x => None
-        | tau   => None
+        | τ   => None
         | obs (Act a) _ => Some a
         end.
 
@@ -257,11 +259,6 @@ Proof.
   exists bisim_model; split; red; auto using correct,complete.
 Qed.
 
-(* We depend currently on
-   - [Eqdep.Eq_rect_eq.eq_rect_eq]
- *)
-Print Assumptions term_model_bisimilar.
-
 Definition forward_inv (R : ccs -> term -> Prop) : Prop :=
   forall p p' Q l,
     R p Q ->
@@ -326,7 +323,7 @@ Lemma cross_model_compose : forall T t u U,
     bisimilar u U ->
     T ~ U.
 Proof.
-  coinduction ? ?.
+  coinduction r cih.
   intros * EQtT EQtu EQuU.
   pose proof bisimilar_bisim as [F B].
   step in EQtu; destruct EQtu as [F' B'].
@@ -350,7 +347,8 @@ Lemma cross_model_compose' : forall T t u U,
     bisimilar u U ->
     Operational.bisim t u.
 Proof.
-  coinduction ? ?.
+  unfold Operational.bisim.
+  coinduction r cih.
   intros * EQtT EQtu EQuU.
   pose proof bisimilar_bisim as [F B].
   step in EQtu; destruct EQtu as [F' B'].

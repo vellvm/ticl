@@ -1,3 +1,5 @@
+Unset Universe Checking.
+
 From Coq Require Import
      Strings.String.
 From ExtLib Require Import
@@ -18,7 +20,7 @@ Definition ex_prog :=
       (Assign "x" (Lit 2)))
     Block.
 
-Definition ex_prog' : ctree void1 (B01 +' B2) nat :=
+Definition ex_prog' : ctree void1 B2 nat :=
   r <- interp_imp (denote_imp ex_prog) nil;; Ret (
     match alist_find _ "x" (fst r) with
     | Some x => x

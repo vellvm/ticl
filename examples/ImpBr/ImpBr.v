@@ -114,14 +114,14 @@ Section Semantics.
   (* list of key value pairs *)
   Definition env := alist var value.
 
-  Definition handle_imp : MemE ~> Monads.stateT env (ctree void1 (B01 +' B2)) :=
+  Definition handle_imp : MemE ~> Monads.stateT env (ctree void1 B2) :=
     fun _ e s =>
       match e with
       | rd x => Ret (s, lookup_default x 0 s)
       | wr x v => Ret (Maps.add x v s, tt)
       end.
 
-  Definition interp_imp (t : computation _) : Monads.stateT env (ctree void1 (B01 +' B2)) unit :=
+  Definition interp_imp (t : computation _) : Monads.stateT env (ctree void1 B2) unit :=
     interp_state handle_imp t.
 
 End Semantics.

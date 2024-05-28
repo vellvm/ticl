@@ -89,7 +89,7 @@ Section Example.
 End Example.
 
 From RelationAlgebra Require Import monoid kat prop rel comparisons kat_tac rewriting normalisation.
-From Coinduction Require Import lattice coinduction rel tactics.
+From Coinduction Require Import all.
 
 (** the function defining (strong) simulations and similarity *)
 Program Definition s: mon (term -> term -> Prop) :=
@@ -100,7 +100,7 @@ Next Obligation. cbv. firstorder. Qed.
 (** the symmetrised version, defining (strong) bisimulations and bisimilarity *)
 Notation b := (cap s (comp converse (comp s converse))).
 
-Notation bisim := (gfp b: hrel _ _).
+Definition bisim := (gfp b: hrel _ _).
 (* Notation "p ~ q" := (gfp b p q) (at level 70). *)
 (* Notation t := (t b). *)
 (* Notation T := (T b). *)
