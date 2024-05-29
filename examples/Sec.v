@@ -62,6 +62,11 @@ Proof.
   - left; reflexivity.
 Qed.
 
+Lemma sec_lte_H(l: Sec): l ⪯ H.
+Proof.
+  destruct l; repeat econstructor.
+Qed.
+
 (*| Both values and addresses are nat |*)
 Notation Addr := nat.
 
@@ -204,11 +209,35 @@ Section SecurityEx.
       intro i.
       rewrite bind_guard.
       apply au_guard.       
-      ddestruction i; unfold sec_alice1, sec_bob1; destruct (Nat.Even_Odd_dec x).
+      ddestruction i; unfold sec_alice1, sec_bob1; destruct (Nat.Even_Odd_dec x);
+        rewrite <- interp_state_bind;
+        setoid_rewrite map_ret;
+        rewrite interp_state_bind.
       + (* Alice runs, [x] is even *)
-        rewrite <- interp_state_bind.
-        setoid_rewrite map_ret.
-        admit.
+        eapply au_bind_r_eq.
+        * rewrite (@interp_state_trigger _ _ _ _ _
+                     h_secE_instr (Write H (x+1) secret)); cbn.
+          rewrite bind_bind.          
+          destruct (lookup (x+1)%nat s) eqn:Hlook.
+          -- destruct p.
+             destruct (sec_lte_dec s0 H); inv s1;
+               rewrite resumCtree_ret', ?bind_ret_l;
+               apply au_guard.
+             ++ right; apply ax_done; intuition.
+                eexists; split; [|split]; auto.
+             ++ right; apply ax_done; intuition.
+                eexists; split; [|split]; auto.
+          -- rewrite resumCtree_ret', ?bind_ret_l.
+             apply au_guard.
+             right; apply ax_done; intuition.
+             eexists; split; [|split]; auto.
+        * cbn.
+          rewrite interp_state_ret.
+          right; apply ax_done; intuition.
+          eexists; intuition.
+          exists (Log r), tt; intuition.
+          do 2 eexists; intuition.
+          admit.
       + (* Alice runs, [x] is odd *)
         admit.
       + (* Bob runs, [x] is even *)
