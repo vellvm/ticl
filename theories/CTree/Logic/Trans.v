@@ -585,7 +585,52 @@ Proof.
       apply TRr'.
     + ddestruction TRr; ddestruction H1; auto.
 Qed.
-  
+
+Local Opaque Ctree.stuck.
+Lemma ktrans_to_done `{Encode E} {X Y}:
+  forall (t: ctree E X) (k: X -> ctree E Y) (x: X) w,
+    [t, w] ↦ [Ctree.stuck, Done x] ->
+    (t ~ Ret x /\ w = Pure).
+Proof.
+  intros.
+  cbn in H0.
+  rewrite (ctree_eta t).
+  remember (observe t) as T.
+  remember (observe stuck) as S.
+  remember (Done x) as D.
+  clear HeqT t.
+  induction H0; subst.
+  - rewrite sb_guard.
+    rewrite (ctree_eta t).
+    apply IHktrans_; auto.
+  - inv H0.
+  - inv HeqD.
+  - ddestruction HeqD; auto.
+  - ddestruction HeqD.
+Qed.
+
+Lemma ktrans_to_finish `{Encode E} {X Y}:
+  forall (t: ctree E X) (k: X -> ctree E Y) (e: E) (v: encode e) (x: X) w,
+    [t, w] ↦ [Ctree.stuck, Finish e v x] ->
+    (t ~ Ret x /\ w = Obs e v).
+Proof.
+  intros.
+  cbn in H0.
+  rewrite (ctree_eta t).
+  remember (observe t) as T.
+  remember (observe stuck) as S.
+  remember (Finish e v x) as D.
+  clear HeqT t.
+  induction H0; subst.
+  - rewrite sb_guard.
+    rewrite (ctree_eta t).
+    apply IHktrans_; auto.
+  - inv H0.
+  - inv HeqD.
+  - ddestruction HeqD. 
+  - ddestruction HeqD; auto.
+Qed.
+
 Global Instance KripkeSetoidSBisim{E} {HE: Encode E} {X}:
     @KripkeSetoid (ctree E) E HE ctree_kripke X (sbisim eq) _.
 Proof.    
@@ -615,5 +660,4 @@ Proof.
     pose proof trans_val_inv H0.
     exists e, v, x; intuition.
 Defined.
-
 
