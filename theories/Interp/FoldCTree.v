@@ -166,6 +166,12 @@ Section FoldCTree.
       interp h (Br c k) ≅ x <- branch c;; Guard (interp h (k x)).
     Proof. now rewrite unfold_interp. Qed.
 
+    Lemma interp_br' `{C -< D} {U} (c : C U) (k: _ -> ctree E C X) :
+      interp h (Br c k) ≅ br c (fun x => Guard (interp h (k x))).
+    Proof. rewrite interp_br; unfold branch; rewrite bind_br; setoid_rewrite bind_ret_l.
+           reflexivity.
+    Qed.
+
     #[global] Instance interp_equ `{C -< D} {R} :
       Proper (equ R ==> equ R) (interp (B := C) (M := ctree F D) h (T := X)).
     Proof.
