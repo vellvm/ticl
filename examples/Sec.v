@@ -156,7 +156,7 @@ Section SecurityEx.
   Definition sec_alice1(secret: nat)(i: Addr): ctree secE unit :=
     if Nat.Even_Odd_dec i then
       (* [i] even, write to [i+1] *)
-      write H (i+1) secret
+      write H (S i) secret
     else
       (* [i] odd, write to [i] *)
       write H i secret.
@@ -168,7 +168,7 @@ Section SecurityEx.
       read L i;; Ret tt
     else
       (* [i] odd, read [i+1] *)
-      read L (i+1) ;; Ret tt.
+      read L (S i) ;; Ret tt.
 
   (* The (unfair) infinite interleaving of Alice/Bob *)
   Definition sec_system(secret: nat): ctree secE void :=
@@ -180,21 +180,39 @@ Section SecurityEx.
          (* Increase counter by 1 *)
          Ret (S i)) 0.
   
-  Definition even_noleak(i: Addr) (σ: St) : Prop :=
-      Nat.Even_Odd_dec i -> exists v, lookup i σ = Some (L, v).
-          
+  Definition noleak(i: Addr) (σ: St) secret : Prop :=
+    if Nat.Even_Odd_dec i then
+      exists v, lookup i σ = Some (L, v)
+    else
+      lookup i σ = Some (H, secret).
+
+
+  Ltac even_odd :=
+    match goal with
+    | [H: Nat.Even ?x, H': Nat.Even (S ?x) |- _] =>
+        exfalso;
+        apply Nat.Even_succ in H';
+        apply Nat.Even_Odd_False with x; [apply H | apply H']
+    | [H: Nat.Odd ?x, H': Nat.Odd (S ?x) |- _] =>
+        exfalso;
+        apply Nat.Odd_succ in H';
+        apply Nat.Even_Odd_False with x; [apply H' | apply H]          
+    end.
+
+  From Coq Require Import Lia.
+
   (* Safety property: there does not exist a memory label [ml] accessed by
      label [al ≺ ml], or there does not exist a low intruction that reads from
      high-security memory *)
   Typeclasses Transparent equ.
   Theorem ag_safety_sec: forall (secret: nat) (σ: St),
-      (forall i, even_noleak i σ) ->
+      (forall i, noleak i σ secret) ->
       <( {interp_state h_secE_instr (sec_system secret) σ},
          {Obs (Log initG) tt} |= AG visW \s, s.(ml) ⪯ s.(al) )>.
   Proof.
     intros.    
     unfold sec_system, forever.
-    apply ag_iter_state_vis with (R:=fun '(i, σ) => even_noleak i σ).
+    apply ag_iter_state_vis with (R:=fun '(i, σ) => noleak i σ secret).
     - now specialize (H0 0).
     - unfold initG.
       econstructor; cbn.
@@ -216,9 +234,39 @@ Section SecurityEx.
       + (* Alice runs, [x] is even *)
         eapply au_bind_r_eq.
         * rewrite (@interp_state_trigger _ _ _ _ _
-                     h_secE_instr (Write H (x+1) secret)); cbn.
+                     h_secE_instr (Write H (S x) secret)); cbn.
           rewrite bind_bind.          
-          destruct (lookup (x+1)%nat s) eqn:Hlook.
+          destruct (lookup (S x)%nat s) eqn:Hlook.
+          -- destruct p.
+             destruct (sec_lte_dec s0 H); inv s1;
+               rewrite resumCtree_ret', ?bind_ret_l;
+               apply au_guard.
+             ++ right; apply ax_done; intuition.
+                eexists; split; [|split]; auto.
+             ++ right; apply ax_done; intuition.
+                eexists; split; [|split]; auto.
+          -- rewrite resumCtree_ret', ?bind_ret_l.
+             apply au_guard.
+             right; apply ax_done; intuition.
+             eexists; split; [|split]; auto.
+        * cbn.
+          rewrite interp_state_ret.
+          right; apply ax_done; intuition.
+          eexists; intuition.
+          exists (Log r), tt; intuition.
+          do 2 eexists; intuition.          
+          unfold noleak in H1 |- *; intros.
+          destruct (Nat.Even_Odd_dec (S x));
+            destruct (Nat.Even_Odd_dec x); try even_odd;
+            destruct H1 as (v & Hv).
+          rewrite mapsto_lookup.
+          apply mapsto_add_eq.
+      + (* Alice runs, [x] is odd *)
+        eapply au_bind_r_eq.
+        * rewrite (@interp_state_trigger _ _ _ _ _
+                     h_secE_instr (Write H x secret)); cbn.
+          rewrite bind_bind.          
+          destruct (lookup x s) eqn:Hlook.
           -- destruct p.
              destruct (sec_lte_dec s0 H); inv s1;
                rewrite resumCtree_ret', ?bind_ret_l;
@@ -237,13 +285,60 @@ Section SecurityEx.
           eexists; intuition.
           exists (Log r), tt; intuition.
           do 2 eexists; intuition.
+          unfold noleak in H1 |- *; intros.
+          destruct (Nat.Even_Odd_dec (S x));
+            destruct (Nat.Even_Odd_dec x); try even_odd.
           admit.
-      + (* Alice runs, [x] is odd *)
-        admit.
       + (* Bob runs, [x] is even *)
-        admit.
+        rewrite interp_state_bind, bind_bind.
+        eapply au_bind_r_eq.        
+        * rewrite (@interp_state_trigger _ _ _ _ _
+                     h_secE_instr (Read L x)); cbn.
+          rewrite bind_bind.          
+          destruct (lookup x s) eqn:Hlook.
+          -- destruct p.
+             destruct (sec_lte_dec s0 L); inv s1;
+               rewrite resumCtree_ret', ?bind_ret_l, ?Hlook.
+             ++ admit. (* A custom lemma for [trigger Log] might be useful *)
+             ++ admit.
+          -- rewrite resumCtree_ret', bind_ret_l, Hlook, bind_ret_l.
+             apply au_guard.
+             right.
+             apply ax_done; intuition.
+             eexists; split; auto.
+        * cbn.
+          rewrite interp_state_ret, bind_ret_l, interp_state_ret.
+          right.
+          apply ax_done; intuition.
+          eexists; split; auto.
+          exists (Log r), tt; intuition.
+          do 2 eexists; intuition.
+          admit.
       + (* Bob runs, [x] is odd *)
-        admit.
+        rewrite interp_state_bind, bind_bind.
+        eapply au_bind_r_eq.        
+        * rewrite (@interp_state_trigger _ _ _ _ _
+                     h_secE_instr (Read L (S x))); cbn.
+          rewrite bind_bind.          
+          destruct (lookup (S x) s) eqn:Hlook.
+          -- destruct p.
+             destruct (sec_lte_dec s0 L); inv s1;
+               rewrite resumCtree_ret', ?bind_ret_l, ?Hlook.
+             ++ admit. (* A custom lemma for [trigger Log] might be useful *)
+             ++ admit.
+          -- rewrite resumCtree_ret', bind_ret_l, Hlook, bind_ret_l.
+             apply au_guard.
+             right.
+             apply ax_done; intuition.
+             eexists; split; auto.
+        * cbn.
+          rewrite interp_state_ret, bind_ret_l, interp_state_ret.
+          right.
+          apply ax_done; intuition.
+          eexists; split; auto.
+          exists (Log r), tt; intuition.
+          do 2 eexists; intuition.
+          admit.
   Admitted.
                 
 End SecurityEx.
