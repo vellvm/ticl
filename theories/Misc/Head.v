@@ -41,6 +41,8 @@ Variant haction {E B X} :=
 (*|
 The [head] computation simply scrolls the tree until it reaches
 a visible node.
+The resulting ctree does not contain any Vis node, thus its unconstrained
+event signature.
 Notice that this computation may loop if the original computation
 admits a infinite branch of invisible brs.
 |*)

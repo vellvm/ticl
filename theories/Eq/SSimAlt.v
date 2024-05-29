@@ -517,53 +517,6 @@ Section Proof_Rules.
     in both directions. We can in this case have [n] rather than [2n] obligations.
 |*)
 
-  Lemma step_ss'_brS {Z Z'} (c : C Z) (d : D Z')
-        (k : Z -> ctree E C X) (k' : Z' -> ctree F D Y) :
-    (forall x, exists y, R (k x) (k' y)) ->
-    (forall x, exists y, Reps (Step (k x)) (Step (k' y))) ->
-    L τ τ ->
-    ss'_gen L R Reps (BrS c k) (BrS d k').
-  Proof.
-    ssplit.
-    - intros HP * TR.
-      inv_trans. subst.
-      destruct (H x0).
-      do 2 eexists; ssplit.
-      etrans.
-      rewrite EQ; eauto.
-      auto.
-    - intros * EQ *.
-      inv_equ.
-      specialize (H0 x); specialize (EQ0 x).
-      destruct H0.
-      exists (Step (k' x0)).
-      split.
-      eapply epsilon_br; reflexivity.
-      rewrite <- EQ0. auto.
-    - intros; inv_equ.
-  Qed.
-
-  Lemma step_ss'_brS_id {Z} (c : C Z) (d: D Z)
-    (k: Z -> ctree E C X) (k': Z -> ctree F D Y) :
-    (forall x, R (k x) (k' x)) ->
-    (forall x, Reps (Step (k x)) (Step (k' x))) ->
-    L τ τ ->
-    ss'_gen L R Reps (BrS c k) (BrS d k').
-  Proof.
-    intros; apply step_ss'_brS; eauto.
-  Qed.
-
-  Lemma step_ss'_brS_l {Z} :
-    forall (c : C Z) (k : Z -> ctree E C X) (u : ctree F D Y),
-    (forall x, Reps (Step (k x)) u) ->
-    (forall x, exists l' u', trans l' u u' /\ R (k x) u' /\ L τ l') ->
-    ss'_gen L R Reps (BrS c k) u.
-  Proof.
-    intros.
-    apply step_ss'_br_l.
-    auto.
-  Qed.
-
 End Proof_Rules.
 
 (* Specialized proof rules *)
@@ -638,7 +591,7 @@ Lemma step_ssbt'_brS {E F C D X Y Z Z'} {L}
   ss' L `R (BrS c k) (BrS d k').
 Proof.
   intros.
-  apply step_ss'_brS; auto.
+  apply step_ss'_br; auto.
   intros x; destruct (H0 x) as (y & ?); exists y.
   apply (b_chain R), step_ss'_step; auto.
 Qed.
@@ -662,7 +615,7 @@ Lemma step_ssbt'_brS_id {E F C D X Y Z} {L}
   ss' L `R (BrS c k) (BrS d k').
 Proof.
   intros.
-  apply step_ss'_brS_id; auto.
+  apply step_ss'_br_id; auto.
   intros; apply (b_chain R), step_ss'_step; auto.
 Qed.
 
