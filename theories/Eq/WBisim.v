@@ -577,104 +577,58 @@ Disproving the transitivity of [wt R]
 
 End wbisim_theory.
 
-(*
-Section bind.
+Import CoindNotations.
 
-  Obligation Tactic := idtac.
-  Context {E C : Type -> Type} {X Y: Type} `{HasStuck : B0 -< C}.
-
-(*|
-Specialization of [bind_ctx] to a function acting with [sbisim] on the bound value,
-and with the argument (pointwise) on the continuation.
-|*)
-  Program Definition bind_ctx_wbisim :  mon (rel (ctree E C Y) (ctree E C Y)) :=
-    {|body := fun R => @bind_ctx E E C C X X Y Y wbisim (pointwise eq R) |}.
-  Next Obligation.
-    intros ???? H. apply leq_bind_ctx. intros ?? H' ?? H''.
-    apply in_bind_ctx. apply H'. intros t t' HS. apply H0, H'', HS.
-  Qed.
-
-(*|
-Sufficient condition to exploit symmetry
-|*)
-    Lemma bind_ctx_wbisim_sym: compat converse bind_ctx_wbisim.
-    Proof.
-      intro R. simpl. apply leq_bind_ctx. intros. apply in_bind_ctx.
-      symmetry; auto.
-      intros ? ? ->.
-      apply H0; auto.
-    Qed.
-
-(*|
-The resulting enhancing function gives a valid up-to technique
-|*)
-    Lemma bind_ctx_wbisim_t : bind_ctx_wbisim <= wt.
-    Proof.
-      apply Coinduction, by_Symmetry.
-      apply bind_ctx_wbisim_sym.
-      intros R. apply (leq_bind_ctx _).
-      intros t1 t2 tt k1 k2 kk.
-      step in tt; destruct tt as (F & B); cbn in *.
-      cbn in *; intros l u STEP.
-      apply trans_bind_inv in STEP as [(H & t' & STEP & EQ) | (v & STEPres & STEP)]; cbn in *.
-      - apply F in STEP as [u' STEP EQ'].
-        eexists.
-        apply wtrans_bind_l; eauto.
-        apply (fT_T equ_clos_wt).
-        econstructor; [exact EQ | | reflexivity].
-        apply (fTf_Tf wb).
-        apply in_bind_ctx; auto.
-        intros ? ? ->.
-        apply (b_T wb).
-        apply kk; auto.
-      - clear B.
-        (* Things are tricky, the bind inversion rule is messy *)
-        specialize (kk v v eq_refl).
-        destruct kk as [F' _].
-        apply F  in STEPres as [x STEPres EQ].
-        apply F' in STEP    as [u' STEP HR].
-        pose proof (wtrans_val_inv' STEPres) as (? & wtr & ? & EQ').
-        rewrite EQ' in STEPres.
-        pose proof wtrans_bind_r _ STEPres STEP as [EQ'' | ?].
-        + rewrite EQ'' in STEP.
-          assert (l = τ) by admit.
-          subst.
-          exists (k2 v).
-          admit.
-          admit.
-        + admit.
-
-    Admitted.
-
-End bind.
-(*|
-Expliciting the reasoning rule provided by the up-to principles.
-|*)
-Lemma wbisim_clo_bind (E C: Type -> Type) (X Y : Type) `(HasStuck : B0 -< C) :
-	forall (t1 t2 : ctree E C X) (k1 k2 : X -> ctree E C Y) RR,
-		t1 ≈ t2 ->
-    (forall x, (wt RR) (k1 x) (k2 x)) ->
-    wt RR (t1 >>= k1) (t2 >>= k2)
-.
+Lemma wb_step_inv {E C X}
+  {R : Chain (@wb E C X)} :
+  forall (t u : ctree E C X),
+    wb `R (Step t) (Step u) ->
+    `R t u.
 Proof.
-  intros.
-  apply (ft_t (@bind_ctx_wbisim_t E C X Y _)).
-  apply in_bind_ctx; auto.
-  intros ? ? <-; auto.
-Qed.
+  intros ?? STEP. destruct STEP as [STEP STEPb].
+  specialize (STEP τ t ltac:(etrans)). destruct STEP as [u' STEP EQ].
+  apply wtrans_τ in STEP. destruct STEP as (n & STEP).
+Abort.
 
-(*|
-And in particular, we get the proper instance justifying rewriting [~]
-and [≈] to the left of a [bind].
-|*)
-#[global] Instance bind_wbisim_cong :
- forall (E C : Type -> Type) (X Y : Type) `{B0 -< C} (R : rel Y Y) RR,
-   Proper (wbisim ==> pointwise_relation X (wt RR) ==> wt RR) (@bind E C X Y).
+Lemma bind_chain_gen {E C X X'}
+  {R : Chain (@wb E C X')} :
+  forall (t u : ctree E C X) (k k' : X -> ctree E C X'),
+    wbisim t u ->
+    (forall x, ` R (k x) (k' x)) ->
+    ` R (bind t (fun x => Step (k x))) (bind u (fun x => Step (k' x))).
 Proof.
-  repeat red; intros; eapply wbisim_clo_bind; eauto.
+  apply tower. {
+    intros ? INC ? ? ? ? tt' kk' ? ?.
+    apply INC. apply H. apply tt'.
+    intros x. apply leq_infx in H. apply H. now apply kk'.
+  }
+  clear R. intros R.
+  symmetric using idtac. {
+    intros. apply H; intros; try now symmetry.
+    apply H0; auto.
+  }
+  intros ? ? ? ? ? tt' kk'.
+  step in tt'; destruct tt' as [fwd bwd].
+  cbn; intros * STEP.
+  - apply trans_bind_inv in STEP as [(?H & ?t' & STEP & EQ) | (v & STEPres & STEP)].
+    + apply fwd in STEP as [u' STEP EQl].
+      eexists.
+      * apply wtrans_bind_l; eauto.
+      * rewrite EQ.
+        apply H; auto. intros. step. apply kk'.
+    + exists (k' v).
+      * inv_trans. subst.
+        apply wtrans_bind_r' with (x := v); auto.
+        apply fwd in STEPres as [u' STEPres EQ].
+        apply wtrans_val_inv' in STEPres as ?. destruct H0 as (_ & _ & _ & ?).
+        subs. clear EQ. apply STEPres.
+        apply pwtrans_τ. esplit. apply trans_step.
+        exists O. reflexivity.
+      * inv_trans. subst.
+        specialize (kk' v).
+        (*now apply wb_step_inv in kk'.*)
+        step. apply kk'.
 Qed.
-
-*)
 
 Lemma wbisim_ret_inv {E C R} `{B0 -< C} : forall (x y : R),
     Ret x ≈ (Ret y : ctree E C R) ->
