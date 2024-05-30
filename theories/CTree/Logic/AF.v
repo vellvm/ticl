@@ -146,26 +146,54 @@ Section BasicLemmas.
         apply ktrans_vis in TR' as (? & -> & ? & ?).
         now rewrite <- H0.
   Qed.
-
-  Lemma au_ret_inv: forall (x: X) ψ w R,
-      <( {Ret x}, w |= ψ AU (AX done R) )> ->
-      R x w.
+  
+  Lemma au_vis_done: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w (R: X -> World E -> Prop) ψ,
+      ψ w ->
+      not_done w ->
+      (forall (x: encode e), <( {k x}, {Obs e x} |= now ψ AU AX done R )>) ->
+      <( {Vis e k}, w |= now ψ AU AX done R )>.        
   Proof.
     intros.
-    next in H; cdestruct H.
-    - cdestruct H.
-      destruct Hs as (tstuck & w' & TR).
-      specialize (H _ _ TR).
-      inv TR; rewrite unfold_entailsF in H; now ddestruction H. 
-    - cdestruct H.
-      cdestruct H0.
-      destruct Hs as (tstuck & w' & TR).
-      specialize (H0 _ _ TR).
-      inv TR; observe_equ H2; rewrite <- Eqt, H4 in H0.
-      all: rewrite au_stuck in H0;
-        apply ax_stuck in H0;
-        rewrite ctl_done in H0;
-        now ddestruction H0.
+    next; right.
+    split.
+    - apply H.
+    - split.
+      + now apply can_step_vis.
+      + intros t' w' TR'.
+        apply ktrans_vis in TR' as (? & -> & <- & ?).
+        apply H1.
+  Qed.
+
+  Lemma au_ret_done: forall (x: X) ψ w R,
+      <( {Ret x}, w |= now ψ AU (AX done R) )> <->
+      (R x w /\ not_done w).
+  Proof.
+    split; intros H.
+    - remember (Ret x); cdestruct H; subst.
+      + apply ax_done in H as (? & ? & ? & ?).
+        now apply sbisim_ret_inv in H0 as ->.
+      + apply ctl_now in H.
+        destruct H0 as ((t' & w' & TR) & ?).
+        specialize (H0 _ _ TR).
+        pose proof (ktrans_not_done (Ret x) t' w w' TR) as Hinv; inv Hinv.
+        * apply ktrans_done in TR as (-> & ?).
+          rewrite H1 in H0.
+          assert (H0': <( {Ctree.stuck: ctree E X}, {Done x} |= now ψ AU AX done R )>) by
+            now rewrite unfold_entailsF.
+          apply au_stuck, ax_stuck, ctl_done in H0'.
+          ddestruction H0'.
+          split; auto with ctl.
+        * apply ktrans_finish in TR as (-> & ?).
+          rewrite H1 in H0.
+          assert (H0': <( {Ctree.stuck: ctree E X}, {Finish e v x} |= now ψ AU AX done R )>) by
+            now rewrite unfold_entailsF.
+          apply au_stuck, ax_stuck, ctl_done in H0'.
+          ddestruction H0'.
+          split; auto with ctl.
+    - right.
+      destruct H.
+      apply ax_done.
+      split; eauto.
   Qed.
 
 End BasicLemmas.
