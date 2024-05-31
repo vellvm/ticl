@@ -85,12 +85,24 @@ Section EquivSetoid.
 
   (*| Start building the proof that
       [entailsF] is a congruence with regards to [meq] |*)
+  Global Add Parametric Morphism: <( |- ⊤ )>
+         with signature meq ==> eq ==> iff as meq_proper_top.
+  Proof. intros; split; auto. Qed.
+
+  Global Add Parametric Morphism: <( |- ⊥ )>
+         with signature meq ==> eq ==> iff as meq_proper_bot.
+  Proof. intros; split; auto. Qed.
+
   Global Add Parametric Morphism {φ: World W -> Prop}: (fun _ => φ)
-      with signature meq ==> eq ==> iff as fun_proper_now.
+      with signature meq ==> eq ==> iff as meq_proper_fun.
   Proof. intros; split; auto. Qed.
   
-  Global Add Parametric Morphism p : <( |- {CBase p} )>
-        with signature meq ==> eq ==> iff as now_proper_equ.
+  Global Add Parametric Morphism p : <( |- {CNow p} )>
+        with signature meq ==> eq ==> iff as meq_proper_now.
+  Proof. intros; now rewrite unfold_entailsF. Qed.
+
+  Global Add Parametric Morphism p : <( |- {CDone p} )>
+        with signature meq ==> eq ==> iff as meq_proper_done.
   Proof. intros; now rewrite unfold_entailsF. Qed.
 
   Context {P: MP} {HP: Proper (meq ==> eq ==> iff) P}.
@@ -272,11 +284,20 @@ Section EquivSetoid.
   Qed.
 End EquivSetoid.
 
-Global Add Parametric Morphism `{KS: KripkeSetoid M W X meq} φ : <( |- φ )>
+Global Add Parametric Morphism `{KS: KripkeSetoid M W X meq} {b} (φ: ctlf W X b) : <( |- φ )>
        with signature (meq ==> eq  ==> iff) as proper_entailsF_.
 Proof.
-  induction φ; intros * Heq w. 
+  induction φ; intros * Heq w.
+  - (* Top *) rewrite Heq; reflexivity.
+  - (* Bot *) rewrite Heq; reflexivity.
   - (* Now *) rewrite Heq; reflexivity.
+  - (* Done *) rewrite Heq; reflexivity.
+  - (* ax *)
+    refine (@proper_ax_equ W HW M K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl).
+    unfold Proper, respectful; intros; subst; now apply IHφ.
+  - (* ex *)
+    refine (@proper_ex_equ W HW M K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl).
+    unfold Proper, respectful; intros; subst; now apply IHφ.
   - (* /\ *) split; intros [Ha Hb]; split.
     + now rewrite <- (IHφ1 _ _ Heq).
     + now rewrite <- (IHφ2 _ _ Heq).
@@ -291,12 +312,6 @@ Proof.
     split; intros * H; rewrite unfold_entailsF in H |- *; intro HI;
       apply (IHφ1 _ _ Heq) in HI;
       apply (IHφ2 _ _ Heq); auto.
-  - (* ax *)
-    refine (@proper_ax_equ W HW M K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl).
-    unfold Proper, respectful; intros; subst; now apply IHφ.
-  - (* ex *)
-    refine (@proper_ex_equ W HW M K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl).
-    unfold Proper, respectful; intros; subst; now apply IHφ.
   - (* au *)
     refine (@proper_au_equ W HW M K X meq Eqm KS (entailsF φ1) _ (entailsF φ2) _ _ _ Heq _ _ eq_refl);
       unfold Proper, respectful; intros; subst; auto.

@@ -24,18 +24,18 @@ Generalizable All Variables.
 Section EquivCtlFormulas.
   Context `{K: Kripke M W} {X: Type}.  
   Notation MP := (M X -> World W -> Prop).
-  Notation equiv_ctl := (@equiv_ctl M W HE K X).
+  Notation equiv_ctl b := (@equiv_ctl M W HE K X b).
 
   (*| Rewriting [equiv_ctl] over [entailsF] |*)
-  Global Add Parametric Morphism: (entailsF (X:=X))
-         with signature (equiv_ctl ==> eq ==> eq ==> iff)
+  Global Add Parametric Morphism{b}: (entailsF (X:=X))
+         with signature (equiv_ctl b ==> eq ==> eq ==> iff)
            as proper_equiv_ctl_entailsF.
   Proof. intro x; induction x; intros y EQφ; apply EQφ. Qed.
 
-  Arguments CAnd {W} {HW}.
+  Arguments CAnd {W} {HW} {X} {a b}.
   (*| Congruences over equiv_ctl |*)
-  Global Add Parametric Morphism: CAnd
-         with signature equiv_ctl ==> equiv_ctl ==> equiv_ctl
+  Global Add Parametric Morphism{a b}: CAnd
+         with signature equiv_ctl a ==> equiv_ctl b ==> equiv_ctl (a||b)
            as equiv_ctl_equiv_and.
   Proof.
     intros p q EQpq p' q' EQpq'; split;
@@ -46,9 +46,9 @@ Section EquivCtlFormulas.
     + now apply EQpq' in H0.
   Qed.
 
-  Arguments COr {W} {HW}.
-  Global Add Parametric Morphism: COr
-         with signature equiv_ctl  ==> equiv_ctl ==> equiv_ctl
+  Arguments COr {W} {HW} {X} {a b}.
+  Global Add Parametric Morphism{a b}: COr
+         with signature equiv_ctl a  ==> equiv_ctl b ==> equiv_ctl (a||b)
            as equiv_ctl_equiv_or.
   Proof.
     intros p q EQpq p' q' EQpq'; split;
@@ -59,9 +59,9 @@ Section EquivCtlFormulas.
     + right; now apply EQpq' in H.
   Qed.
 
-  Arguments CImpl {W} {HW}.
-  Global Add Parametric Morphism: CImpl
-         with signature equiv_ctl ==> equiv_ctl ==> equiv_ctl
+  Arguments CImpl {W} {HW} {X} {a b}.
+  Global Add Parametric Morphism{a b}: CImpl
+         with signature equiv_ctl a ==> equiv_ctl b ==> equiv_ctl (a||b)
            as equiv_ctl_equiv_impl.
   Proof.
     intros p q EQpq p' q' EQpq'; split; rewrite unfold_entailsF;
@@ -69,9 +69,9 @@ Section EquivCtlFormulas.
       now apply EQpp'.
   Qed.
 
-  Arguments CAX {W} {HW}.
-  Global Add Parametric Morphism: CAX
-      with signature equiv_ctl ==> equiv_ctl as equiv_ctl_equiv_ax.
+  Arguments CAX {W} {HW} {X} {b}.
+  Global Add Parametric Morphism{b}: CAX
+      with signature equiv_ctl b ==> equiv_ctl b as equiv_ctl_equiv_ax.
   Proof.
     intros p q EQpq; split; intros; rewrite unfold_ax in *;
       destruct H; split; auto; intros.
@@ -79,9 +79,9 @@ Section EquivCtlFormulas.
     - rewrite EQpq; auto.
   Qed.
 
-  Arguments CEX {W} {HW}.
-  Global Add Parametric Morphism: CEX
-      with signature equiv_ctl ==> equiv_ctl as equiv_ctl_equiv_ex.
+  Arguments CEX {W} {HW} {X} {b}.
+  Global Add Parametric Morphism{b}: CEX
+      with signature equiv_ctl b ==> equiv_ctl b as equiv_ctl_equiv_ex.
   Proof.
     intros p q EQpq; split; intros; rewrite unfold_ex in *;
       destruct H as (t' & w' & TR & Hdone); exists t', w'; split; auto.
@@ -89,9 +89,9 @@ Section EquivCtlFormulas.
     - now rewrite EQpq. 
   Qed.
 
-  Arguments CAU {W} {HW}.
-  Global Add Parametric Morphism: CAU
-         with signature equiv_ctl ==> equiv_ctl ==> equiv_ctl
+  Arguments CAU {W} {HW} {X} {b}.
+  Global Add Parametric Morphism{b}: CAU
+         with signature equiv_ctl false ==> equiv_ctl b ==> equiv_ctl b
            as equiv_ctl_equiv_au.
   Proof.
     intros p q EQpq p' q' EQpq'.
@@ -102,9 +102,9 @@ Section EquivCtlFormulas.
     - cleft; auto; now rewrite EQpq.
   Qed.
 
-  Arguments CEU {W} {HW}.
-  Global Add Parametric Morphism: CEU
-         with signature equiv_ctl ==> equiv_ctl ==> equiv_ctl
+  Arguments CEU {W} {HW} {X} {b}.
+  Global Add Parametric Morphism{b}: CEU
+         with signature equiv_ctl false ==> equiv_ctl b ==> equiv_ctl b
            as equiv_ctl_equiv_eu.
   Proof.
     intros p q EQpq p' q' EQpq'.
@@ -119,36 +119,69 @@ Section EquivCtlFormulas.
       + exact H1.
   Qed.
 
-  Arguments CAR {W} {HW}.
-  Global Add Parametric Morphism: CAR with signature
-         (equiv_ctl ==> equiv_ctl ==> equiv_ctl)
+  Arguments CAR {W} {HW} {X} {b}.
+  Global Add Parametric Morphism{b}: CAR with signature
+         (equiv_ctl false ==> equiv_ctl b ==> equiv_ctl b)
            as proper_equivctl_ar.
   Proof.
     intros.
     unfold equiv_ctl.
-    split; revert t w; coinduction R CIH; intros.
-    
-  Admitted.
+    split; revert t w; coinduction R CIH; intros; step in H1; cbn in H1; inv H1.
+    - apply RMatchA.
+      + now rewrite <- H0.
+      + now rewrite <- H.
+    - apply RStepA.
+      + now rewrite <- H.
+      + destruct H3; split; auto.
+        intros t' w' TR.
+        apply CIH.
+        rewrite unfold_entailsF.
+        now apply H3.
+    - apply RMatchA.
+      + now rewrite H0.
+      + now rewrite H.
+    - apply RStepA.
+      + now rewrite H.
+      + destruct H3; split; auto.
+        intros t' w' TR.
+        apply CIH.
+        rewrite unfold_entailsF.
+        now apply H3.
+  Qed.
   
-  Arguments CER {W} {HW}.
-  Global Add Parametric Morphism: CER with signature
-         (equiv_ctl ==> equiv_ctl ==> equiv_ctl)
+  Arguments CER {W} {HW} {X} {b}.
+  Global Add Parametric Morphism {b}: CER with signature
+         (equiv_ctl false ==> equiv_ctl b ==> equiv_ctl b)
            as proper_equivctl_er.
   Proof.
     intros.
     unfold equiv_ctl.
-    split; revert t w; coinduction R CIH; intros.
-  Admitted.
+    split; revert t w; coinduction R CIH; intros; step in H1; cbn in H1; inv H1.
+    - apply RMatchE.
+      + now rewrite <- H0.
+      + now rewrite <- H.
+    - apply RStepE.
+      + now rewrite <- H.
+      + destruct H3 as (t' & w' & TR & H').
+        exists t', w'; intuition.
+    - apply RMatchE.
+      + now rewrite H0.
+      + now rewrite H.
+    - apply RStepE.
+      + now rewrite H.
+      + destruct H3 as (t' & w' & TR & H').
+        exists t', w'; intuition.
+  Qed.
   
 End EquivCtlFormulas.
 
 (*| Equations of CTL |*)
 Section CtlEquations.
-  Context `{KMS: Kripke M W} {X: Type}.
+  Context `{KMS: Kripke M W} {X: Type} {b: bool}.
   Notation MP := (M X * World W -> Prop).  
   Infix "⩸" := (equiv_ctl (K:=KMS) (X:=X)) (at level 58, left associativity).
   
-  Lemma ctl_au_ax: forall p q,
+  Lemma ctl_au_ax: forall (p: ctlf W X false) (q: ctlf W X b),
       <( p AU q )> ⩸ <( q \/ (p /\ AX (p AU q)) )>.
   Proof.
     intros p q; split; intro Hind.

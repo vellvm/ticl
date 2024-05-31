@@ -119,25 +119,10 @@ Section SecurityEx.
      [ml: Security-level of the instruction]
      [al: Security-level of the address cell previously written]
    *)
-  Record readG :=
-    {
-      m : Addr;
-      ml: Sec;
-      al: Sec;
-    }.
-
-  Definition initG :=
-    {| m := 0; ml:= L; al:= L |}.
                
   (* Instrumented semantics, simply log every successful read with [readG] *)
-  Definition h_secE_instr: secE ~> stateT St (ctreeW (Addr * St)) :=
-    h_writerA
-      h_secE
-      (fun (e: secE) (_: encode e) (σ: St) =>
-         match e with
-         | Read l addr => Some (addr, σ)
-         | Write l addr v => Some (addr, σ)
-         end).
+  Definition h_secE_instr: secE ~> stateT St (ctreeW St) :=
+    h_writerΣ h_secE.
 
   (* Trigger instructions *)
   Definition read: Sec -> Addr -> ctree secE (option nat) :=
@@ -203,16 +188,16 @@ Section SecurityEx.
   Theorem ag_safety_sec: forall (secret: nat) (σ: St),
       (forall i, noleak i σ) ->
       <( {interp_state h_secE_instr (sec_system secret) σ},
-         {Obs (Log (0, σ)) tt} |= AG visW \'(i, σ), noleak i σ )>.
+         {Obs (Log σ) tt} |= AG visW \ σ, forall i, noleak i σ )>.
   Proof.
     intros.    
     unfold sec_system, forever.
     apply ag_iter_state_vis with (R:=fun '(i, σ) => noleak i σ).
-    - now specialize (H0 0).
-    - unfold initG.
-      econstructor; cbn.
-      apply H0.
-    - intros i σ' [[]] [] Hi Hn.
+    - (* Use precondition on [σ] *)
+      apply H0. 
+    - (* Again use precondition on [σ] for initial observation *)
+      econstructor; apply H0.
+    - intros i σ' [] [].
       rewrite map_bind, interp_state_bind.
       unfold br2.
       rewrite interp_state_br.
@@ -228,8 +213,7 @@ Section SecurityEx.
         rewrite interp_state_bind.
       + (* Alice runs, [i] is even *)
         eapply au_bind_r_eq.
-        * rewrite (@interp_state_trigger _ _ _ _ _
-                     h_secE_instr (Write H (S i) secret)); cbn.
+        * rewrite (@interp_state_trigger _ _ _ _ _ _ (Write H (S i) secret)); cbn.
           rewrite bind_bind.          
           destruct (lookup (S i)%nat σ') eqn:Hlook.
           -- destruct p as (l, a).
@@ -270,8 +254,7 @@ Section SecurityEx.
                 even_odd.
       + (* Alice runs, [i] is odd *)
         eapply au_bind_r_eq.
-        * rewrite (@interp_state_trigger _ _ _ _ _
-                     h_secE_instr (Write H i secret)); cbn.
+        * rewrite (@interp_state_trigger _ _ _ _ _ _ (Write H i secret)); cbn.
           rewrite bind_bind.          
           destruct (lookup i σ') eqn:Hlook.
           -- destruct p as (l, a).
@@ -308,7 +291,9 @@ Section SecurityEx.
                 destruct (Nat.Even_Odd_dec i); inv Heven.
                 even_odd.
              ++ intros Heven.
+                unfold noleak in Hi.
                 destruct (Nat.Even_Odd_dec (S i)); inv Heven.
+                
                 unfold noleak in Hi.
 
                 admit.

@@ -30,7 +30,7 @@ Definition h_state `{Encode E} {Σ} (h:E ~> state Σ):
 
 (*| Intrument by an evaluation [E ~> stateT Σ ctree] and observation function [obs] |*)
 Definition h_writerA `{Encode E} {W Σ} (h:E ~> stateT Σ (ctree void))
-  (obs: forall (e: E), encode e -> Σ -> option W): E ~> stateT Σ (ctree (writerE W)) :=
+  (obs: forall (e: E), encode e -> Σ -> option W): E ~> stateT Σ (ctreeW W) :=
   fun e => mkStateT (fun s =>
                     '(x, σ) <- resumCtree (runStateT (h e) s) ;;
                     match obs e x σ with
@@ -40,7 +40,7 @@ Definition h_writerA `{Encode E} {W Σ} (h:E ~> stateT Σ (ctree void))
 
 (*| Observe all states. The [stateT S (ctree void)] to [stateT S (ctree (writerE S))] |*)
 Definition h_writerΣ `{Encode E} {Σ} (h:E ~> stateT Σ (ctree void)):
-  E ~> stateT Σ (ctree (writerE Σ)) :=
+  E ~> stateT Σ (ctreeW Σ) :=
   h_writerA h (fun _ _ s => Some s).
 
 (*| Lemmas about state |*)

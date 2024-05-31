@@ -18,7 +18,8 @@ From CTree Require Import
   CTree.Logic.AF
   Logic.Ctl
   Logic.Tactics
-  Logic.Kripke.
+  Logic.Kripke
+  Events.WriterE.
 
 Generalizable All Variables.
 
@@ -537,5 +538,43 @@ Section CtlAgState.
         cdestruct HAX.
         now apply can_step_stuck in Hs0.
   Qed.        
-    
 End CtlAgState.
+
+Section CtlAgW.
+  Context {E Σ W: Type} {HE: Encode E} (h:E ~> stateT Σ (ctree void)).  (* State semantics *)
+
+  Theorem ag_iterW{X I}: forall (σ: Σ) (k: I -> ctree E (I + X)) (x: I) φ R,
+      R x ->          (* Iterator invariant [R] *)
+      φ σ ->          (* Initial state precondition [φ] *)
+      (forall (x: I) (σ: Σ),
+          R x ->
+          φ σ ->
+          <( {interp_state (h_writerΣ h) (k x) σ}, {Obs (Log σ) tt} |=
+                                         AX ((visW \ σ, φ σ) AU AX
+                                               (finishW \ σ lr,
+                                                 exists (i : I), lr = @inl _ X i /\ R i /\ φ σ)) )>) ->
+      <( {interp_state (h_writerΣ h) (iter k x) σ}, {Obs (Log σ) tt} |= AG visW \ σ, φ σ )>.
+  Proof.
+    intros.
+    eapply ag_iter_state_vis with (R:=fun '(x, s) => R x /\ φ s).
+    - now split.
+    - now econstructor.
+    - intros i σ' [] [] [? ?] ?.
+      assert(Hf: equiv_ctl (X:=I+X)
+                   <(finishW \ σ0 lr, exists (i : I), lr = @inl _ X i /\ R i /\ φ σ0)>
+                   <(finish {fun (e : writerE Σ) (v : encode e) (lr : (I + X) * Σ) =>
+                              exists (i' : I) (s' : Σ),
+                                lr = (@inl _ X i', s') /\
+                                  (let 'Log σ1 as x0 := e return (encode x0 -> Prop) in fun 'tt => φ σ1) v /\ R i' /\ φ s'})>).
+      {
+        split; intros Hinv; inv Hinv.
+        - destruct H5 as ([] & [] & Hcontra & ?).
+          inv Hcontra.
+        - destruct x0 as ([] & lr), H5 as ([] & [] & Hinv & i' & -> & HR & Hσ1).
+          ddestruction Hinv.
+          rewrite unfold_entailsF.
+          unfold finish_with.
+          constructor.
+          apply H1.
+    
+    
