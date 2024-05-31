@@ -579,6 +579,21 @@ End wbisim_theory.
 
 Import CoindNotations.
 
+Lemma step_wb_brS {E B X Y} {R : Chain (@wb E B X)} :
+  forall (b c : B Y) (k k' : Y -> ctree E B X),
+  (forall x, ` R (k x) (k' x)) ->
+  wb `R (BrS b k) (BrS c k').
+Proof.
+  symmetric using idtac.
+  { intros. apply H. intros. symmetry. apply H0. }
+  intros ** ???. inv_trans. subst.
+  exists (k' x0).
+  - apply wtrans_τ. exists 1%nat. cbn. red.
+    eexists. apply trans_brS.
+    reflexivity.
+  - now subs.
+Qed.
+
 Lemma wb_step_inv {E C X}
   {R : Chain (@wb E C X)} :
   forall (t u : ctree E C X),
