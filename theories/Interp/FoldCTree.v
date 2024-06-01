@@ -39,7 +39,7 @@ Section FoldCTree.
 
     (** ** [interpE] and constructors *)
     Definition fold_ctree : forall [T], ctree E C T -> ctree F D T :=
-      fold mstuck mstep h g.
+      fold h g.
       (* fold (mstuck (M := ctree F D)) (mstep (M := ctree F D)) h (mbr (M := ctree F D)) g. *)
       (* fold (fun T => Stuck: ctree F D T) (Step (Ret tt)) h g. *)
 
@@ -106,7 +106,7 @@ Section FoldCTree.
       inv EQ; auto.
       - constructor; eauto.
       - constructor; eauto.
-        cstep; constructor; eauto.
+        step; constructor; eauto.
       - upto_bind_eq.
         intros ?; constructor; auto.
       - upto_bind_eq.
@@ -183,7 +183,7 @@ Section FoldCTree.
       - constructor; auto.
       - constructor; auto.
       - constructor; auto.
-      - constructor; cstep; constructor; auto.
+      - constructor; step; constructor; auto.
       - upto_bind_eq; intros.
         constructor; eauto.
       - upto_bind_eq; intros.
@@ -246,7 +246,7 @@ Section FoldCTree.
       intros * EQ; step in EQ.
       rewrite 2 unfold_refine.
       inv EQ; try constructor; auto.
-      - cstep; constructor; auto.
+      - step; constructor; auto.
       - upto_bind_eq.
         intros ?; constructor; auto.
       - upto_bind_eq.
@@ -272,7 +272,7 @@ Section FoldCTree.
       - now rewrite bind_ret_l.
       - now rewrite bind_stuck, fold_ctree_stuck.
       - rewrite bind_step, fold_ctree_step, bind_guard.
-        constructor; cstep; constructor.
+        constructor; step; constructor.
         auto.
       - rewrite bind_guard, fold_ctree_guard.
         constructor; auto.

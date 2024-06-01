@@ -180,7 +180,7 @@ Tactic Notation "__step_sbisim" :=
 
 Ltac __step_in_sbisim H :=
   match type of H with
-  | context [@sbisim ?E ?F ?C ?D ?X ?Y ?LR] =>
+  | context [@sbisim ?E ?F ?C ?D ?X ?Y ?L] =>
       unfold sbisim in H;
       step in H;
       fold (@sbisim E F C D X Y L) in H
@@ -349,6 +349,18 @@ Section sbisim_homogenous_theory.
   Proof.
     apply Reflexive_chain.
     cbn; intros; split; intros * TR; do 2 eexists; eauto.
+  Qed.
+
+  #[global] Instance sb_sym {R} :
+    Symmetric L ->
+    Symmetric R ->
+    Symmetric (sb L R).
+  Proof.
+    intros SYM SYM'. split; cbn; intros.
+    - destruct H as [_ ?]. cbn in H.
+      apply H in H0 as (? & ? & ? & ? & ?). eauto 7.
+    - destruct H as [? _]. cbn in H.
+      apply H in H0 as (? & ? & ? & ? & ?). eauto 7.
   Qed.
 
   #[global] Instance sym_sb {LT: Symmetric L} {C: Chain (sb L)}: Symmetric `C.

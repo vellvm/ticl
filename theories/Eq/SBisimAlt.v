@@ -28,11 +28,6 @@ Set Implicit Arguments.
 (* TODO: Decide where to set this *)
 Arguments trans : simpl never.
 
-Ltac cstep :=
-  match goal with
-  |- context[elem ?R] => apply (b_chain R)
-  end.
-
 Section StrongBisimAlt.
 (*|
 An alternative definition [sb'] of strong bisimulation.
@@ -162,12 +157,6 @@ Section sbisim'_theory.
     (* Can this be faster? *)
     econstructor; subs. 2: subst; eassumption.
     now rewrite H0. assumption.
-  Qed.
-
-  Lemma equ_clos3_leq (R : bool -> rel (ctree E C X) (ctree F D Y)) :
-  R <= lift_rel3 equ_clos R.
-  Proof.
-    cbn. intros. econstructor. reflexivity. eassumption. reflexivity.
   Qed.
 
   Lemma equ_clos_sb' {c: Chain (@sb' E F C D X Y L)}:
@@ -444,9 +433,9 @@ Section Proof_Rules.
     L (val x) (val y) ->
     forall side, `R side (Ret x : ctree E C X) (Ret y : ctree F D Y).
   Proof.
-    intros. cstep; apply step_sb'_ret.
+    intros. step; apply step_sb'_ret.
     - exact H.
-    - intros. cstep; apply sb'_stuck.
+    - intros. step; apply sb'_stuck.
   Qed.
 
 (*|
@@ -520,7 +509,7 @@ Section Proof_Rules.
   Proof.
     intros.
     split; intros; subst.
-    - apply step_ss'_guard_l; now cstep.
+    - apply step_ss'_guard_l; now step.
     - apply step_ss'_guard_r; now apply H.
   Qed.
 
@@ -544,7 +533,7 @@ Section Proof_Rules.
     intros.
     split; intros; subst.
     - apply step_ss'_guard_r; auto. now apply H.
-    - apply step_ss'_guard_l; red; now cstep.
+    - apply step_ss'_guard_l; red; now step.
   Qed.
 
   Lemma step_sb'_br
@@ -585,7 +574,7 @@ Section Proof_Rules.
     sb' L `R side (Br c k) u.
   Proof.
     intros; split; intros; subst.
-    - apply step_ss'_br_l; intros; now cstep.
+    - apply step_ss'_br_l; intros; now step.
     - apply step_ss'_br_r with z; now apply H.
   Qed.
 
@@ -613,7 +602,7 @@ Section Proof_Rules.
   (*     `R true (Step t) u. *)
   (* Proof. *)
   (*   intros. *)
-  (*   cstep; split; intros. *)
+  (*   step; split; intros. *)
   (*   - eapply step_ss'_step_l. apply step_ss'_gen_step_l. *)
   (*   apply step_sb'_br_l; intros. *)
 
@@ -637,9 +626,9 @@ Proof.
   intros.
   eapply step_sb'_br; auto.
   intros x; destruct (H x) as [z ?]; exists z.
-  cstep. apply step_sb'_step; auto.
+  step. apply step_sb'_step; auto.
   intros x; destruct (H0 x) as [z ?]; exists z.
-  cstep. apply step_sb'_step; auto.
+  step. apply step_sb'_step; auto.
 Qed.
 
 Lemma step_sb'_brS_id {E F C D X Y L}
@@ -651,7 +640,7 @@ Lemma step_sb'_brS_id {E F C D X Y L}
   forall side, sb' L `R side (BrS c k) (BrS d k').
 Proof.
   intros; apply step_sb'_br_id; eauto.
-  intros; cstep; apply step_sb'_step; auto.
+  intros; step; apply step_sb'_step; auto.
 Qed.
 
 (* Lemma step_ss'_step_l: *)
@@ -684,7 +673,7 @@ Lemma step_sb'_true_brS_l {E F C D X Y L}
 Proof.
   intros.
   apply step_sb'_true_br_l; intros.
-  cstep. apply step_sb'_true_step_l; intros.
+  step. apply step_sb'_true_step_l; intros.
   eauto.
 Qed.
 
@@ -946,21 +935,21 @@ Section upto.
       + apply Hss in H0 as (? & ? & ? & ? & ?).
         do 2 eexists. ssplit; eauto.
         intros.
-        cstep; auto.
+        step; auto.
       + rewrite H in Hss.
         eapply ss_br_l_inv with (x := x0) in Hss.
         exists y; split; auto.
         apply IH.
         constructor; auto.
         eapply (Hbody (ss L)); [| apply Hss].
-        intros ????; now cstep.
+        intros ????; now step.
       + rewrite H in Hss.
         eapply ss_guard_l_inv in Hss.
         exists y; split; auto.
         apply IH.
         constructor; auto.
         eapply (Hbody (ss L)); [| apply Hss].
-        intros ????; now cstep.
+        intros ????; now step.
   Qed.
 
   (* Up-to guard *)
@@ -990,7 +979,7 @@ Section upto.
       intros R IH side x y (? & EQ & HR).
     split; intros; subst; subs.
       + apply step_ss'_guard_l.
-        now cstep.
+        now step.
       + apply step_ss'_guard_r.
         eapply ss'_gen_mon. 3: apply HR; auto.
         all: auto.
@@ -1012,7 +1001,7 @@ Section upto.
         eapply ss'_gen_mon. 3: apply HR; auto.
         all: auto.
       + apply step_ss'_guard_l.
-        now cstep.
+        now step.
   Qed.
 
   (* Up-to epsilon *)
@@ -1062,7 +1051,7 @@ Section upto.
         eapply ss'_gen_mon. 3: apply HR.
         all: auto.
       + subs. apply step_ss'_guard_l.
-        cstep. apply sb'_true_ss'. now apply IHEQ.
+        step. apply sb'_true_ss'. now apply IHEQ.
   Qed.
 
   Lemma pure_bind_ctx3_l_sbisim' {X0} (P : X0 -> Prop) (r : Chain (sb' L)) :
@@ -1111,7 +1100,7 @@ Section upto.
             intros ?? TR. eapply trans_br in TR; [| reflexivity].
             rewrite <- EQt0 in TR. now apply HTR in TR.
           }
-          intros. now cstep; apply HB.
+          intros. now step; apply HB.
       + intros ? EQ.
         apply guard_equ_bind in EQ as ?. destruct H as [(v & EQt0 & _) | (k1 & EQt0 & EQk0)].
         * rewrite EQt0, bind_ret_l in EQ.
@@ -1129,7 +1118,7 @@ Section upto.
             intros ?? TR. eapply trans_guard in TR.
             rewrite <- EQt0 in TR. now apply HTR in TR.
           }
-          intros. now cstep; apply HB.
+          intros. now step; apply HB.
   Qed.
 
   Lemma epsilon_ctx3_r_sbisim' (r : Chain (sb' L)) :
@@ -1214,7 +1203,7 @@ Section bind.
           apply EQ.
           reflexivity.
           apply IH; auto.
-          intros. cstep. now apply kk.
+          intros. step. now apply kk.
         * apply ISVR in H0; etrans.
           destruct H0. exfalso. apply H. constructor. apply H2.
         * assert (t ≅ Ret v).
@@ -1253,7 +1242,7 @@ Section bind.
           step. split; [| intros; discriminate].
           intros _. simple apply sbisim'_br_l_inv with (x := z) in tt.
           step in tt. now apply tt.
-          intros. cstep; eauto.
+          intros. step; eauto.
 
 
       + intros ? EQ.
@@ -1275,7 +1264,7 @@ Section bind.
           step. split; [| intros; discriminate].
           intros _. simple apply sbisim'_guard_l_inv in tt.
           step in tt. now apply tt.
-          intros. cstep; eauto.
+          intros. step; eauto.
 
       + simpl; intros PROD l u STEP.
         apply trans_bind_inv in STEP as [(H & ?t' & STEP & EQ) | (v & STEPres & STEP)].
@@ -1289,7 +1278,7 @@ Section bind.
           inversion H0; subst. apply H. constructor. apply H1. constructor.
         * intros; rewrite EQ.
           apply IH; auto.
-          intros ? ? ? ?; cstep; now apply kk.
+          intros ? ? ? ?; step; now apply kk.
         * apply ISVR in H0; etrans.
           destruct H0. exfalso. apply H. constructor. apply H2.
         * assert (t' ≅ Ret v).
@@ -1327,7 +1316,7 @@ Section bind.
           step. split; [intros; discriminate |].
           intros _. apply sbisim'_br_r_inv with (x := z) in tt.
           step in tt. now apply tt.
-          intros. cstep. now apply kk.
+          intros. step. now apply kk.
 
       + intros ? EQ.
         apply guard_equ_bind in EQ as EQ'. destruct EQ' as [(v & EQ' & EQ'') | (?k0 & EQ' & EQ'')].
@@ -1347,7 +1336,7 @@ Section bind.
           step. split; [intros; discriminate |].
           intros _. apply sbisim'_guard_r_inv in tt.
           step in tt. now apply tt.
-          intros. cstep. now apply kk.
+          intros. step. now apply kk.
   Qed.
 
 End bind.

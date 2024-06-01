@@ -19,12 +19,6 @@ Open Scope ctree_scope.
 
 (* end hide *)
 
-(* TO MOVE *)
-Ltac cstep :=
-  match goal with
-  |- context[elem ?R] => apply (b_chain R)
-  end.
-
 (** ** Fold *)
 
 (** The most general shape of fold over the structure takes two parameters:
@@ -34,8 +28,7 @@ Ltac cstep :=
     for any monad [M] with a loop operator. *)
 Definition fold {E B M : Type -> Type}
            {FM : Functor M} {MM : Monad M} {IM : MonadIter M}
-           (mstuck : forall X, M X)
-           (mstep : M unit)
+           {Mstuck : MonadStuck M} {Mstep : MonadStep M}
            (h : E ~> M)
            (g : B ~> M) :
   ctree E B ~> M :=
@@ -50,7 +43,7 @@ Definition fold {E B M : Type -> Type}
 	          | VisF e k => fmap (fun x => inl (k x)) (h _ e)
 	          end).
 
-Arguments fold {E B M FM MM IM} mstuck mstep h g [T].
+Arguments fold {E B M FM MM IM Mstuck Mstep} h g [T].
 
 (** Implementing simultaneously external events while refining
     the internal non-determinism is somewhat uncommon.
@@ -68,7 +61,7 @@ Definition interp {E B M : Type -> Type}
   {Mstep : MonadStep M}
   {Mbranch : MonadBr B M}
   (h : E ~> M) : ctree E B ~> M :=
-  fold mstuck mstep h mbr.
+  fold h mbr.
 
 Arguments interp {E B M FM MM IM _ _ _} h [T].
 
@@ -78,7 +71,7 @@ Definition refine {E B M : Type -> Type}
   {Mstep : MonadStep M}
   (g : B ~> M)
   :=
-  fold mstuck mstep (fun _ e => mtrigger e) g.
+  fold (fun _ e => mtrigger e) g.
 
 Arguments refine {E B M FM MM IM TM _ _} g [T].
 
@@ -116,7 +109,7 @@ Proof.
   - setoid_rewrite bind_map.
     setoid_rewrite bind_step.
     constructor; rewrite ! bind_ret_l.
-    cstep; constructor.
+    step; constructor.
     eauto.
   - setoid_rewrite bind_bind. setoid_rewrite bind_ret_l.
     upto_bind_eq.
@@ -143,12 +136,12 @@ Proof.
   - setoid_rewrite bind_map.
     setoid_rewrite bind_step.
     constructor; rewrite ! bind_ret_l.
-    cstep; constructor.
+    step; constructor.
     eauto.
   - setoid_rewrite bind_bind. setoid_rewrite bind_trigger.
     constructor. intros.
     setoid_rewrite bind_ret_l.
-    cstep. constructor.
+    step. constructor.
     apply CH. apply REL.
   - setoid_rewrite bind_bind.
     upto_bind_eq.

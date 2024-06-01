@@ -49,7 +49,7 @@ Definition fold_state {E C M} S
   {FM : Functor M} {MM : Monad M} {IM : MonadIter M} {MV : MonadStuck M} {MS : MonadStep M}
   (h : E ~> stateT S M) (g : C ~> stateT S M) :
   ctree E C ~> stateT S M :=
-  fold mstuck mstep h g.
+  fold h g.
 
 Definition interp_state {E C M} S
   `{FM : Functor M, MM : Monad M, IM : MonadIter M, BM : MonadBr C M, MV : MonadStuck M, MS : MonadStep M}
