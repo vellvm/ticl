@@ -85,23 +85,15 @@ Section EquivSetoid.
 
   (*| Start building the proof that
       [entailsF] is a congruence with regards to [meq] |*)
-  Global Add Parametric Morphism: <( |- ⊤ )>
-         with signature meq ==> eq ==> iff as meq_proper_top.
-  Proof. intros; split; auto. Qed.
-
-  Global Add Parametric Morphism: <( |- ⊥ )>
-         with signature meq ==> eq ==> iff as meq_proper_bot.
+  Global Add Parametric Morphism p: <( |- base p )>
+         with signature meq ==> eq ==> iff as meq_proper_base.
   Proof. intros; split; auto. Qed.
 
   Global Add Parametric Morphism {φ: World W -> Prop}: (fun _ => φ)
       with signature meq ==> eq ==> iff as meq_proper_fun.
   Proof. intros; split; auto. Qed.
   
-  Global Add Parametric Morphism p : <( |- {CNow p} )>
-        with signature meq ==> eq ==> iff as meq_proper_now.
-  Proof. intros; now rewrite unfold_entailsF. Qed.
-
-  Global Add Parametric Morphism p : <( |- {CDone p} )>
+  Global Add Parametric Morphism p : <( |- done p )>
         with signature meq ==> eq ==> iff as meq_proper_done.
   Proof. intros; now rewrite unfold_entailsF. Qed.
 
@@ -284,13 +276,11 @@ Section EquivSetoid.
   Qed.
 End EquivSetoid.
 
-Global Add Parametric Morphism `{KS: KripkeSetoid M W X meq} {b} (φ: ctlf W X b) : <( |- φ )>
+Global Add Parametric Morphism `{KS: KripkeSetoid M W X meq} (φ: ctlf W X) : <( |- φ )>
        with signature (meq ==> eq  ==> iff) as proper_entailsF_.
 Proof.
   induction φ; intros * Heq w.
-  - (* Top *) rewrite Heq; reflexivity.
-  - (* Bot *) rewrite Heq; reflexivity.
-  - (* Now *) rewrite Heq; reflexivity.
+  - (* Base *) rewrite Heq; reflexivity.
   - (* Done *) rewrite Heq; reflexivity.
   - (* ax *)
     refine (@proper_ax_equ W HW M K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl).

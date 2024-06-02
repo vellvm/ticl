@@ -39,6 +39,7 @@ Section BasicLemmas.
   Proof.
     intros * Hret Hcontra.
     inv Hcontra; auto.
+    destruct H; auto.
     destruct H0 as (? & ? & ? & ?).
     exfalso.
     eapply done_not_ktrans with (t:=t); eauto.
@@ -79,7 +80,7 @@ Section BasicLemmas.
   Proof with eauto with ctl.
     intros * Hf.
     next in Hf ; destruct Hf.
-    - inv H; constructor.
+    - destruct H; inv H; constructor.
     - destruct H as (? & ? & ? & ?).
       now apply ktrans_not_done with t x x0.
   Qed.
@@ -90,7 +91,7 @@ Section BasicLemmas.
   Proof with eauto with ctl.
     intros * Hf.
     next in Hf ; destruct Hf.
-    - subst; constructor.
+    - destruct H; subst; constructor.
     - destruct H as (? & ? & ? & ?).
       now apply ktrans_not_done with t x x0.
   Qed.

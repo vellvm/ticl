@@ -138,23 +138,12 @@ End BasicLemmas.
 Section BindLemmas.
   Context {E: Type} {HE: Encode E}.
 
-  Theorem ex_bind_vis{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) φ w,
-      <( t, w |= EX vis φ )> ->
-      <( {x <- t ;; k x}, w |= EX vis φ )>.
+  Theorem ex_bind_l{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) φ w,
+      <( t, w |= EX now φ )> ->
+      <( {x <- t ;; k x}, w |= EX now φ )>.
   Proof with auto with ctl.
     intros.
-    destruct H as (t' & w' & TR' & H).
-    exists (x <- t';; k x), w'; split...
-    apply ktrans_bind_l...
-    inv H; constructor.
-  Qed.
-
-  Theorem ex_bind_pure{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w,
-      <( t, w |= EX pure )> ->
-      <( {x <- t ;; k x}, w |= EX pure )>.
-  Proof with auto with ctl.
-    intros.
-    destruct H as (t' & w' & TR' & H).
+    destruct H as (t' & w' & TR' & Hv & Hd).
     exists (x <- t';; k x), w'; split...
     apply ktrans_bind_l...
   Qed.

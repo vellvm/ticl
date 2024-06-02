@@ -369,7 +369,7 @@ Section CTreeTrans.
   Typeclasses Transparent equ.
   Lemma ktrans_bind_r{X Y}: forall (t: ctree E Y) (u: ctree E X) (k: Y -> ctree E X) (y: Y) w w_ w',
       [t, w] ↦ [stuck, w_] ->
-      done_eq Y y w_ ->
+      done_eq y w_ ->
       [k y, w] ↦ [u, w'] ->
       [y <- t ;; k y, w] ↦ [u, w'].
   Proof.
@@ -406,7 +406,7 @@ Section CTreeTrans.
              /\ u ≅ x <- t' ;; k x) \/
         (* [t] returns [x], [t>>=k] steps if [k x] steps *)
         (exists y w_, [t, w] ↦ [stuck, w_]
-                 /\ done_eq X y w_
+                 /\ done_eq y w_
                  /\ [k y, w] ↦ [u, w']).
   Proof with (auto with ctl).
     intros TR.
@@ -506,7 +506,7 @@ Section CTreeTrans.
              /\ u ≅ x <- t' ;; k x) \/
         (* [t] returns [x], [t>>=k] steps if [k x] steps *)
         (exists y w_, [t, w] ↦ [stuck, w_]
-                 /\ done_eq X y w_
+                 /\ done_eq y w_
                  /\ [k y, w] ↦ [u, w']).
   Proof.
     intros * TR.
@@ -660,4 +660,3 @@ Proof.
     pose proof trans_val_inv H0.
     exists e, v, x; intuition.
 Defined.
-

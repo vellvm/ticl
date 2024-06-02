@@ -13,18 +13,18 @@ Generalizable All Variables.
 
 #[global] Tactic Notation "step" "in" ident(H) :=
   (lazymatch type of H with
-   | @entailsF ?M ?W ?HE ?KMS ?X ?b (CAR ?φ ?ψ) ?t ?w =>
+   | @entailsF ?M ?W ?HE ?KMS ?X (CAR ?φ ?ψ) ?t ?w =>
        rewrite unfold_entailsF in H; step_in H
-   | @entailsF ?M ?W ?HE ?KMS ?X ?b (CER ?φ ?ψ) ?t ?w =>
+   | @entailsF ?M ?W ?HE ?KMS ?X (CER ?φ ?ψ) ?t ?w =>
        rewrite unfold_entailsF in H; step_in H
    end || step_in H).
 
 #[global] Ltac step :=
   first [
       lazymatch goal with
-      | |- @entailsF ?M ?W ?HE ?KMS ?X ?b (CAR ?φ ?ψ) ?t ?w =>
+      | |- @entailsF ?M ?W ?HE ?KMS ?X (CAR ?φ ?ψ) ?t ?w =>
           rewrite unfold_entailsF; red; step_
-      | |- @entailsF ?M ?W ?HE ?KMS ?X ?b (CER ?φ ?ψ) ?t ?w =>
+      | |- @entailsF ?M ?W ?HE ?KMS ?X (CER ?φ ?ψ) ?t ?w =>
           rewrite unfold_entailsF; red; step_
       end | red; step_ ].
 
@@ -55,33 +55,33 @@ Generalizable All Variables.
 
 #[global] Ltac cdestruct H0 :=
   match type of H0 with
-  | @entailsF ?M ?W ?HE ?KMS ?X ?b (CAnd ?φ ?ψ) ?t ?w =>
+  | @entailsF ?M ?W ?HE ?KMS ?X (CAnd ?φ ?ψ) ?t ?w =>
       rewrite unfold_entailsF in H0; destruct H0      
-  | @entailsF ?M ?W ?HE ?KMS ?X ?b (COr ?φ ?ψ) ?t ?w =>
+  | @entailsF ?M ?W ?HE ?KMS ?X (COr ?φ ?ψ) ?t ?w =>
       rewrite unfold_entailsF in H0; destruct H0
-  | @entailsF ?M ?W ?HE ?KMS ?X ?b (CAX ?φ) ?t ?w =>
+  | @entailsF ?M ?W ?HE ?KMS ?X (CAX ?φ) ?t ?w =>
       let Hs' := fresh "Hs" in
       rewrite unfold_ax in H0; destruct H0 as (Hs' & H0)
-  | @entailsF ?M ?W ?HE ?KMS ?X ?b (CEX ?φ) ?t ?w =>
+  | @entailsF ?M ?W ?HE ?KMS ?X (CEX ?φ) ?t ?w =>
       let t' := fresh "t" in
       let w' := fresh "w" in
       let TR' := fresh "TR" in
       rewrite unfold_ex in H0; destruct H0 as (t' & w' & TR' & H0)
-  | @entailsF ?M ?W ?HE ?KMS ?X ?b (CAU ?φ ?ψ) ?t ?w =>
+  | @entailsF ?M ?W ?HE ?KMS ?X (CAU ?φ ?ψ) ?t ?w =>
       rewrite unfold_entailsF in H0; destruct H0
-  | @entailsF ?M ?W ?HE ?KMS ?X ?b (CEU ?φ ?ψ) ?t ?w =>
+  | @entailsF ?M ?W ?HE ?KMS ?X (CEU ?φ ?ψ) ?t ?w =>
       rewrite unfold_entailsF in H0; destruct H0
-  | @entailsF ?M ?W ?HE ?KMS ?X ?b (CAR ?φ ?ψ) ?t ?w =>
+  | @entailsF ?M ?W ?HE ?KMS ?X (CAR ?φ ?ψ) ?t ?w =>
       rewrite unfold_entailsF in H0; step in H0; cbn in H0; destruct H0
-  | @entailsF ?M ?W ?HE ?KMS ?X ?b (CER ?φ ?ψ) ?t ?w =>
+  | @entailsF ?M ?W ?HE ?KMS ?X (CER ?φ ?ψ) ?t ?w =>
       rewrite unfold_entailsF in H0; step in H0; cbn in H0; destruct H0
   end.
 
 #[global] Ltac cinduction H0 :=
   match type of H0 with
-  | @entailsF ?M ?W ?HE ?KMS ?X ?b (CAU ?φ ?ψ) ?t ?w =>
+  | @entailsF ?M ?W ?HE ?KMS ?X (CAU ?φ ?ψ) ?t ?w =>
       rewrite unfold_entailsF in H0; induction H0
-  | @entailsF ?M ?W ?HE ?KMS ?X ?b (CEU ?φ ?ψ) ?t ?w =>
+  | @entailsF ?M ?W ?HE ?KMS ?X (CEU ?φ ?ψ) ?t ?w =>
       rewrite unfold_entailsF in H0; induction H0
   end.
 

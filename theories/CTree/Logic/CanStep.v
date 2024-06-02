@@ -95,7 +95,7 @@ Section CanStepCtrees.
       can_step (x <- t ;; k x) w <->        
         (exists t' w', [t, w] ↦ [t', w'] /\ not_done w')
         \/ (exists y w', [t, w] ↦ [Ctree.stuck, w']
-                   /\ done_eq Y y w'
+                   /\ done_eq y w'
                    /\ can_step (k y) w).
   Proof with eauto with ctl.
     unfold can_step; split.
