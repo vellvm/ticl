@@ -9,6 +9,7 @@ From Coinduction Require Import
 
 From CTree Require Import
   Utils.Utils
+  Events.Core
   Logic.Semantics
   Logic.Setoid
   Logic.Tactics.
@@ -22,9 +23,10 @@ Generalizable All Variables.
 
 (*| Equations of CTL |*)
 Section EquivCtlFormulas.
-  Context `{K: Kripke M W} {X: Type}.  
-  Notation MP := (M X -> World W -> Prop).
-  Notation equiv_ctl := (@equiv_ctl M W HE K X).
+  Context `{K: Kripke M E} {X: Type}.
+  Notation MS := (M E HE X).
+  Notation MP := (MS -> World E -> Prop).
+  Notation equiv_ctl := (@equiv_ctl M E HE K X).
 
   (*| Rewriting [equiv_ctl] over [entailsF] |*)
   Global Add Parametric Morphism: (entailsF (X:=X))
@@ -32,7 +34,7 @@ Section EquivCtlFormulas.
            as proper_equiv_ctl_entailsF.
   Proof. intro x; induction x; intros y EQφ; apply EQφ. Qed.
 
-  Arguments CAnd {W} {HW} {X}.
+  Arguments CAnd {E} {HE} {X}.
   (*| Congruences over equiv_ctl |*)
   Global Add Parametric Morphism: CAnd
          with signature equiv_ctl ==> equiv_ctl ==> equiv_ctl
@@ -46,7 +48,7 @@ Section EquivCtlFormulas.
     + now apply EQpq' in H0.
   Qed.
 
-  Arguments COr {W} {HW} {X}.
+  Arguments COr {E} {HE} {X}.
   Global Add Parametric Morphism: COr
          with signature equiv_ctl ==> equiv_ctl ==> equiv_ctl
            as equiv_ctl_equiv_or.
@@ -59,7 +61,7 @@ Section EquivCtlFormulas.
     + right; now apply EQpq' in H.
   Qed.
 
-  Arguments CImpl {W} {HW} {X}.
+  Arguments CImpl {E} {HE} {X}.
   Global Add Parametric Morphism: CImpl
          with signature equiv_ctl ==> equiv_ctl ==> equiv_ctl
            as equiv_ctl_equiv_impl.
@@ -69,7 +71,7 @@ Section EquivCtlFormulas.
       now apply EQpp'.
   Qed.
 
-  Arguments CAX {W} {HW} {X}.
+  Arguments CAX {E} {HE} {X}.
   Global Add Parametric Morphism: CAX
       with signature equiv_ctl ==> equiv_ctl as equiv_ctl_equiv_ax.
   Proof.
@@ -79,7 +81,7 @@ Section EquivCtlFormulas.
     - rewrite EQpq; auto.
   Qed.
 
-  Arguments CEX {W} {HW} {X}.
+  Arguments CEX {E} {HE} {X}.
   Global Add Parametric Morphism: CEX
       with signature equiv_ctl ==> equiv_ctl as equiv_ctl_equiv_ex.
   Proof.
@@ -89,7 +91,7 @@ Section EquivCtlFormulas.
     - now rewrite EQpq. 
   Qed.
 
-  Arguments CAU {W} {HW} {X}.
+  Arguments CAU {E} {HE} {X}.
   Global Add Parametric Morphism: CAU
          with signature equiv_ctl ==> equiv_ctl ==> equiv_ctl
            as equiv_ctl_equiv_au.
@@ -102,7 +104,7 @@ Section EquivCtlFormulas.
     - cleft; auto; now rewrite EQpq.
   Qed.
 
-  Arguments CEU {W} {HW} {X}.
+  Arguments CEU {E} {HE} {X}.
   Global Add Parametric Morphism: CEU
          with signature equiv_ctl ==> equiv_ctl ==> equiv_ctl
            as equiv_ctl_equiv_eu.
@@ -119,7 +121,7 @@ Section EquivCtlFormulas.
       + exact H1.
   Qed.
 
-  Arguments CAR {W} {HW} {X}.
+  Arguments CAR {E} {HE} {X}.
   Global Add Parametric Morphism: CAR with signature
          (equiv_ctl ==> equiv_ctl ==> equiv_ctl)
            as proper_equivctl_ar.
@@ -149,7 +151,7 @@ Section EquivCtlFormulas.
         now apply H3.
   Qed.
   
-  Arguments CER {W} {HW} {X}.
+  Arguments CER {E} {HE} {X}.
   Global Add Parametric Morphism : CER with signature
          (equiv_ctl ==> equiv_ctl ==> equiv_ctl)
            as proper_equivctl_er.
@@ -177,11 +179,58 @@ End EquivCtlFormulas.
 
 (*| Equations of CTL |*)
 Section CtlEquations.
-  Context `{KMS: Kripke M W} {X: Type}.
-  Notation MP := (M X * World W -> Prop).  
+  Context `{KMS: Kripke M E} {X: Type}.
+  Notation MS := (M E HE X).
+  Notation MP := (MS -> World E -> Prop).  
   Infix "⩸" := (equiv_ctl (K:=KMS) (X:=X)) (at level 58, left associativity).
 
-  Lemma ctl_au_ax: forall (p q: ctlf W X),
+  Lemma ctl_now_base: forall φ,
+      <( now φ )> ⩸ <( base {fun w => φ w /\ not_done w} )>.
+  Proof.
+    intros; split; intro Hinv. 
+    - inv Hinv; apply ctl_base; auto.
+    - inv Hinv; apply ctl_now; auto. 
+  Qed.
+  
+  Lemma ctl_vis_base: forall φ,
+      <( vis φ )> ⩸ <( base {fun w =>
+                               exists (e: E) (v: encode e), w = Obs e v /\ φ e v} )>.
+  Proof.
+    intros; split; intro Hinv. 
+    - inv Hinv; apply ctl_base.
+      exists e, v; auto.
+    - destruct Hinv as (e & v & -> & H); apply ctl_vis.
+      now constructor.
+  Qed.
+
+  Lemma ctl_vis_now: forall φ,
+      <( vis φ )> ⩸ <( now {fun w =>
+                              exists (e: E) (v: encode e), w = Obs e v /\ φ e v} )>.
+  Proof.
+    intros.
+    etransitivity.
+    - apply ctl_vis_base.
+    - split; rewrite ctl_base.
+      + intros (e & v & -> & ?).
+        apply ctl_base; split; eauto with ctl.
+      + intros ((e & v & -> & ?) & Hd).
+        apply ctl_base; eauto with ctl.
+  Qed.
+
+  Lemma ctl_finish_done: forall φ,
+      <( finish φ )> ⩸ <( done {fun x w => 
+                                  exists (e: E) (v: encode e), w = Obs e v /\ φ x e v})>.
+  Proof.
+    intros; split; intro Hinv. 
+    - apply ctl_done.
+      apply ctl_finish in Hinv; inv Hinv; constructor;
+        destruct H as (e' & v' & Hinv & ?); ddestruction Hinv; eauto with ctl.
+    - apply ctl_finish.
+      apply ctl_finish in Hinv; inv Hinv; constructor;
+        destruct H as (e' & v' & Hinv & ?); ddestruction Hinv; eauto with ctl.
+  Qed.
+
+  Lemma ctl_au_ax: forall (p q: ctlf E X),
       <( p AU q )> ⩸ <( q \/ (p /\ AX (p AU q)) )>.
   Proof.
     intros p q; split; intro Hind.
@@ -197,7 +246,7 @@ Section CtlEquations.
         split; auto.
   Qed.
 
-  Lemma ctl_eu_ex: forall (p q: ctlf W X),
+  Lemma ctl_eu_ex: forall (p q: ctlf E X),
       <( p EU q )> ⩸ <( q \/ (p /\ EX (p EU q)) )>.
   Proof.
     intros p q; split; intro Hind.
@@ -211,7 +260,7 @@ Section CtlEquations.
         now cleft.
   Qed.
   
-  Lemma ctl_and_idL: forall (p: ctlf W X),
+  Lemma ctl_and_idL: forall (p: ctlf E X),
       <( ⊤ /\ p )> ⩸ <( p )>.
   Proof.
     split; intros * Hp.
@@ -219,7 +268,7 @@ Section CtlEquations.
     - split; auto.
   Qed.
 
-  Lemma ctl_and_idR: forall (p: ctlf W X),
+  Lemma ctl_and_idR: forall (p: ctlf E X),
       <( p /\ ⊤ )> ⩸ <( p )>.
   Proof.
     split; intros * Hp.
@@ -227,7 +276,7 @@ Section CtlEquations.
     - split; auto.
   Qed.
 
-  Lemma ctl_or_idL: forall (p: ctlf W X),
+  Lemma ctl_or_idL: forall (p: ctlf E X),
       <( ⊥ \/ p )> ⩸ <( p )>.
   Proof.
     split; intros * Hp.
@@ -235,7 +284,7 @@ Section CtlEquations.
     - now right. 
   Qed.
 
-  Lemma ctl_or_idR: forall (p: ctlf W X),
+  Lemma ctl_or_idR: forall (p: ctlf E X),
       <( p \/ ⊥ )> ⩸ <( p )>.
   Proof.
     split; intros * Hp.
@@ -243,7 +292,7 @@ Section CtlEquations.
     - now left.
   Qed.
 
-  Lemma ctl_af_ax: forall (p: ctlf W X),
+  Lemma ctl_af_ax: forall (p: ctlf E X),
       <( AF p )> ⩸ <( p \/ AX (AF p) )>.
   Proof.
     intros.
@@ -252,7 +301,7 @@ Section CtlEquations.
     now rewrite ctl_and_idL.
   Qed.
 
-  Lemma ctl_ef_ex: forall (p: ctlf W X),
+  Lemma ctl_ef_ex: forall (p: ctlf E X),
       <( EF p )> ⩸ <( p \/ EX (EF p) )>.
   Proof.
     intros.
@@ -261,7 +310,7 @@ Section CtlEquations.
     now rewrite ctl_and_idL.
   Qed.
 
-  Lemma ctl_ar_ax: forall (p q: ctlf W X),
+  Lemma ctl_ar_ax: forall (p q: ctlf E X),
       <( p AR q )> ⩸ <( p /\ (q \/ AX (p AR q)) )>.
    Proof. 
      split; intros * Hp.
@@ -274,7 +323,7 @@ Section CtlEquations.
        destruct H0; step; now constructor.
    Qed.
 
-   Lemma ctl_er_ex: forall (p q: ctlf W X),
+   Lemma ctl_er_ex: forall (p q: ctlf E X),
       <( p ER q )> ⩸ <( p /\ (q \/ EX (p ER q)) )>.
    Proof. 
      split; intros * Hp.
@@ -287,7 +336,7 @@ Section CtlEquations.
        destruct H0; step; now constructor.
    Qed.
 
-   Lemma ctl_ag_ax: forall (p: ctlf W X),
+   Lemma ctl_ag_ax: forall (p: ctlf E X),
        <( AG p )> ⩸ <( p /\ AX (AG p) )>.
    Proof.
      etransitivity.
@@ -295,7 +344,7 @@ Section CtlEquations.
      - now rewrite ctl_or_idL.
    Qed.
 
-   Lemma ctl_eg_ex: forall (p: ctlf W X),
+   Lemma ctl_eg_ex: forall (p: ctlf E X),
        <( EG p )> ⩸ <( p /\ EX (EG p) )>.
    Proof.
      etransitivity.
@@ -305,7 +354,7 @@ Section CtlEquations.
 
    (* LEF: The opposite direction does not seem provable at this level
       of abstraction. *)
-   Lemma ctl_afax_axaf: forall (p: ctlf W X) (t: M X) w,
+   Lemma ctl_afax_axaf: forall (p: ctlf E X) (t: M HE X) w,
        <( t, w |= AF AX p )> -> <( t, w |= AX AF p )>.
    Proof.
      intros * H.
@@ -326,7 +375,7 @@ Section CtlEquations.
        now apply H3.
    Qed.
 
-   Lemma ctl_af_involutive: forall (p: ctlf W X),
+   Lemma ctl_af_involutive: forall (p: ctlf E X),
        <( AF p )> ⩸ <( AF (AF p) )>.
    Proof.
      split; intros; induction H.
@@ -339,7 +388,7 @@ Section CtlEquations.
        apply ctl_af_ax; right; split; auto.
    Qed.
 
-   Lemma ctl_ef_involutive: forall (p: ctlf W X),
+   Lemma ctl_ef_involutive: forall (p: ctlf E X),
        <( EF p )> ⩸ <( EF (EF p) )>.
    Proof.
      split; intros; cinduction H.
@@ -354,7 +403,7 @@ Section CtlEquations.
        exists t1, w1; auto.
    Qed.
    
-   Lemma ctl_ag_involutive: forall (p: ctlf W X),
+   Lemma ctl_ag_involutive: forall (p: ctlf E X),
        <( AG p )> ⩸ <( AG (AG p) )>.
    Proof.
      split; intros;
@@ -372,7 +421,7 @@ Section CtlEquations.
        split; auto; intros.       
    Qed.
 
-   Lemma ctl_eg_involutive: forall (p: ctlf W X),
+   Lemma ctl_eg_involutive: forall (p: ctlf E X),
        <( EG p )> ⩸ <( EG (EG p) )>.
    Proof.
      split; intros;
@@ -395,29 +444,29 @@ End CtlEquations.
     to a disjunction/conjucntion with ax, ex respectively |*)
 #[global] Tactic Notation "next" :=
   lazymatch goal with
-  | |- context[@entailsF ?M ?W ?HE ?KMS ?X ?φ ?t ?w] =>
+  | |- context[@entailsF ?M ?E ?HE ?KMS ?X ?φ ?t ?w] =>
       lazymatch φ with
-      | CAX ?p => apply (@unfold_ax M W HE KMS X)
-      | CEX ?p => apply (@unfold_ex M W HE KMS X)
+      | CAX ?p => apply (@unfold_ax M E HE KMS X)
+      | CEX ?p => apply (@unfold_ex M E HE KMS X)
       | CAU ?p ?q => lazymatch eval cbv in p with
                     | CBase (fun _ => True) =>
-                        apply (@ctl_af_ax M W HE KMS X)
-                    | _ => apply (@ctl_au_ax M W HE KMS X)
+                        apply (@ctl_af_ax M E HE KMS X)
+                    | _ => apply (@ctl_au_ax M E HE KMS X)
                     end
       | CEU ?p ?q => lazymatch eval cbv in p with
-                    | CDone (fun _ => True) =>
-                        apply (@ctl_ef_ex M W HE KMS X)
-                    | _ => apply (@ctl_eu_ex M W HE KMS X)
+                    | CBase (fun _ => True) =>
+                        apply (@ctl_ef_ex M E HE KMS X)
+                    | _ => apply (@ctl_eu_ex M E HE KMS X)
                     end
       | CAR ?p ?q => lazymatch eval cbv in q with
-                    | CDone (fun _ => False) =>
-                        apply (@ctl_ag_ax M W HE KMS X)
-                    | _ => apply (@ctl_ar_ax M W HE KMS X)
+                    | CBase (fun _ => False) =>
+                        apply (@ctl_ag_ax M E HE KMS X)
+                    | _ => apply (@ctl_ar_ax M E HE KMS X)
                     end
       | CER ?p ?q => lazymatch eval cbv in q with
-                    | CDone (fun _ => False) =>
-                        apply (@ctl_eg_ex M W HE KMS X)
-                    | _ => apply (@ctl_er_ex M W HE KMS X)
+                    | CBase (fun _ => False) =>
+                        apply (@ctl_eg_ex M E HE KMS X)
+                    | _ => apply (@ctl_er_ex M E HE KMS X)
                     end
       | ?ptrivial => fail "Cannot step formula " ptrivial
       end
@@ -425,30 +474,30 @@ End CtlEquations.
 
 #[global] Tactic Notation "next" "in" ident(H) :=
   lazymatch type of H with
-  | context[@entailsF ?M ?W ?HE ?KMS ?X ?φ ?t ?w] =>
+  | context[@entailsF ?M ?E ?HE ?KMS ?X ?φ ?t ?w] =>
       lazymatch φ with
-      | CAX ?p => rewrite (@unfold_ax M W HE KMS X) in H
-      | CEX ?p => rewrite (@unfold_ex M W HE KMS X) in H
+      | CAX ?p => rewrite (@unfold_ax M E HE KMS X) in H
+      | CEX ?p => rewrite (@unfold_ex M E HE KMS X) in H
       | context[CAU ?p ?q] =>
           lazymatch eval cbv in p with
-          | CDone (fun _ => True) =>
-              rewrite (@ctl_af_ax M W HE KMS X q) in H
-          | _ => rewrite (@ctl_au_ax M W HE KMS X p q) in H
+          | CBase (fun _ => True) =>
+              rewrite (@ctl_af_ax M E HE KMS X q) in H
+          | _ => rewrite (@ctl_au_ax M E HE KMS X p q) in H
           end
       | context[CEU ?p ?q] =>
           lazymatch eval cbv in p with
-          | CDone (fun _ => True) => rewrite (@ctl_ef_ex M W HE KMS X q) in H
-          | _ => rewrite (@ctl_eu_ex M W HE KMS X p q) in H
+          | CBase (fun _ => True) => rewrite (@ctl_ef_ex M E HE KMS X q) in H
+          | _ => rewrite (@ctl_eu_ex M E HE KMS X p q) in H
           end
       | context[CAR ?p ?q] =>
           lazymatch eval cbv in q with
-          | CDone (fun _ => False) => rewrite (@ctl_ag_ax M W HE KMS X p) in H
-          | _ => rewrite (@ctl_ar_ax M W HE KMS X p q) in H
+          | CBase (fun _ => False) => rewrite (@ctl_ag_ax M E HE KMS X p) in H
+          | _ => rewrite (@ctl_ar_ax M E HE KMS X p q) in H
           end
       | context[CER ?p ?q] =>
           lazymatch eval cbv in q with
-          | CDone (fun _ => False) => rewrite (@ctl_eg_ex M W HE KMS X p) in H
-          | _ => rewrite (@ctl_er_ex M W HE KMS X p q) in H
+          | CBase (fun _ => False) => rewrite (@ctl_eg_ex M E HE KMS X p) in H
+          | _ => rewrite (@ctl_er_ex M E HE KMS X p q) in H
           end
       | ?ptrivial => fail "Cannot step formula " ptrivial " in " H
       end

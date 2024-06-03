@@ -106,7 +106,7 @@ Section CTreeTrans.
       apply KtransFinish; auto.
   Qed.
 
-  Global Program Instance ctree_kripke: Kripke (ctree E) E := {
+  Global Program Instance ctree_kripke: Kripke ctree E := {
       ktrans X t w t' w' :=
         ktrans_ (X:=X) (observe t) w (observe t') w'
     }.
@@ -200,7 +200,7 @@ Section CTreeTrans.
      of [sbisim eq], I had to delete the subrelation instance and
      duplicate here because instance resolution became extremely slow. *)
   Global Instance KripkeSetoidEqu {X}:
-    @KripkeSetoid (ctree E) E HE ctree_kripke X (equ eq) _.
+    @KripkeSetoid ctree E HE ctree_kripke X (equ eq) _.
   Proof.    
     repeat red; intros.
     rewrite H in H0.
@@ -631,8 +631,8 @@ Proof.
   - ddestruction HeqD; auto.
 Qed.
 
-Global Instance KripkeSetoidSBisim{E} {HE: Encode E} {X}:
-    @KripkeSetoid (ctree E) E HE ctree_kripke X (sbisim eq) _.
+Global Instance KripkeSetoidSBisim `{HE: Encode E} {X}:
+    @KripkeSetoid ctree E HE ctree_kripke X (sbisim eq) _.
 Proof.    
   repeat red; intros.
   apply ktrans_trans in H0 as

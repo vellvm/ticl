@@ -65,11 +65,12 @@ Section BasicLemmas.
   Proof.
     intros * Hr Hd.
     next; right.
-    next; inv Hd.
-    - exists (Ctree.stuck), (Done r); split.
+    next.
+    inv Hd; exists (Ctree.stuck).
+    - exists (Done r); split.
       + apply ktrans_done; auto.
-      + apply ef_stuck. now constructor.
-    - exists (Ctree.stuck), (Finish e v r); split.
+      + apply ef_stuck; now constructor.
+    - exists (Finish e v r); split.
       + apply ktrans_finish; auto.
       + apply ef_stuck; now constructor.
   Qed.
@@ -77,10 +78,10 @@ Section BasicLemmas.
   Lemma not_done_vis_ef: forall (t: ctree E X) φ w,
       <( t, w |= EF vis φ )> ->
       not_done w.
-  Proof with eauto with ctl.
+  Proof.
     intros * Hf.
     next in Hf ; destruct Hf.
-    - destruct H; inv H; constructor.
+    - inv H; constructor.
     - destruct H as (? & ? & ? & ?).
       now apply ktrans_not_done with t x x0.
   Qed.
@@ -88,10 +89,10 @@ Section BasicLemmas.
   Lemma not_done_pure_ef: forall (t: ctree E X) w,
       <( t, w |= EF pure )> ->
       not_done w.
-  Proof with eauto with ctl.
+  Proof.
     intros * Hf.
     next in Hf ; destruct Hf.
-    - destruct H; subst; constructor.
+    - subst; constructor.
     - destruct H as (? & ? & ? & ?).
       now apply ktrans_not_done with t x x0.
   Qed.
@@ -118,30 +119,32 @@ Section BasicLemmas.
         rewrite H in H0.
         now (exists i).
     - destruct H as (i & ?).
-      next in H; destruct H.
+      cdestruct H.
       + next; left.
         now rewrite ctl_now in *.
-      + next; right; next.
-        destruct H as (? & ? & ? & ?).
+      + next; right.
+        destruct H0 as (? & ? & ? & ?).
         exists (k i), w; split; auto with ctl.
         * apply ktrans_br.
           exists i; intuition.
-        * next; right; next.
+        * apply StepE; auto.
           exists x, x0; intuition.
   Qed.
 
   Lemma ef_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ,
-      (φ w \/ (not_done w /\ exists (x: encode e),
+      not_done w ->
+      (φ w \/ (exists (x: encode e),
                  <( {k x}, {Obs e x} |= EF now φ )>)) ->
       <( {Vis e k}, w |= EF now φ )>.        
   Proof.
-    intros.
-    destruct H as [H | [Hd (v & ?)]].
-    - now next; left.
-    - next; right; next.
-      + exists (k v), (Obs e v); split; auto.
-        apply ktrans_vis.
-        exists v; intuition.
+    intros * wit * Hd [Hφ | (v & ?)].
+    - next; left.
+      now apply ctl_now.
+    - next; right.
+      next.
+      exists (k v), (Obs e v); split; auto.
+      apply ktrans_vis.
+      exists v; intuition.
   Qed.
 
   Lemma ef_ret_inv: forall (x: X) w R,

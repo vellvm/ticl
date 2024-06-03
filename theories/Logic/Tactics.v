@@ -68,13 +68,21 @@ Generalizable All Variables.
       let TR' := fresh "TR" in
       rewrite unfold_ex in H0; destruct H0 as (t' & w' & TR' & H0)
   | @entailsF ?M ?W ?HE ?KMS ?X (CAU ?φ ?ψ) ?t ?w =>
-      rewrite unfold_entailsF in H0; destruct H0
+      let t' := fresh "t" in
+      remember t as t';
+      rewrite unfold_entailsF in H0; destruct H0; subst      
   | @entailsF ?M ?W ?HE ?KMS ?X (CEU ?φ ?ψ) ?t ?w =>
-      rewrite unfold_entailsF in H0; destruct H0
+      let t' := fresh "t" in
+      remember t as t';
+      rewrite unfold_entailsF in H0; destruct H0; subst
   | @entailsF ?M ?W ?HE ?KMS ?X (CAR ?φ ?ψ) ?t ?w =>
-      rewrite unfold_entailsF in H0; step in H0; cbn in H0; destruct H0
+      let t' := fresh "t" in
+      remember t as t';
+      rewrite unfold_entailsF in H0; step in H0; cbn in H0; destruct H0; subst
   | @entailsF ?M ?W ?HE ?KMS ?X (CER ?φ ?ψ) ?t ?w =>
-      rewrite unfold_entailsF in H0; step in H0; cbn in H0; destruct H0
+      let t' := fresh "t" in
+      remember t as t';
+      rewrite unfold_entailsF in H0; step in H0; cbn in H0; destruct H0; subst
   end.
 
 #[global] Ltac cinduction H0 :=

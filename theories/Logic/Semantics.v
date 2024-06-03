@@ -28,16 +28,18 @@ Generalizable All Variables.
 
 (*| CTL logic shallow embedding, based on kripke semantics |*)
 Section Shallow.
-  Context `{KMS: Kripke M W} {X: Type}.
-  Notation MP := (M X -> World W -> Prop).
+  Context `{KMS: Kripke M E} {X: Type}.
+
+  Notation MS := (M HE X).
+  Notation MP := (MS -> World E -> Prop).
   Local Open Scope ctl_scope.
 
   (*| Shallow strong/weak forall [next] modality |*)
-  Definition cax (p: MP) (t: M X) (w: World W): Prop :=    
+  Definition cax (p: MP) (t: MS) (w: World E): Prop :=    
     can_step t w /\
       forall t' w', [t,w] ↦ [t', w'] -> p t' w'.
   
-  Definition cex(p: MP) (t: M X) (w: World W): Prop :=
+  Definition cex(p: MP) (t: MS) (w: World E): Prop :=
     exists t' w', [t, w] ↦ [t', w'] /\ p t' w'.
   
   Hint Unfold cax cex: core.
@@ -74,7 +76,7 @@ Section Shallow.
          P t w) ->
       forall t w, cau p q t w -> P t w :=
     fun p q P Hbase Hstep =>
-      fix F (t : M X) (w: World W) (c : cau p q t w) {struct c}: P t w :=
+      fix F (t : MS) (w: World E) (c : cau p q t w) {struct c}: P t w :=
       match c with
       | MatchA _ _ t w y => Hbase t w y
       | @StepA _ _ t w Hp (conj Hs HtrP) =>
@@ -93,7 +95,7 @@ Section Shallow.
          P t w) ->
       forall t w, ceu p q t w -> P t w :=
     fun p q P Hbase Hstep =>
-      fix F (t : M X) (w: World W) (c : ceu p q t w) {struct c}: P t w :=
+      fix F (t : MS) (w: World E) (c : ceu p q t w) {struct c}: P t w :=
       match c with
       | MatchE _ _ t w y => Hbase t w y
       | @StepE _ _ t w y (ex_intro _ t' (ex_intro _ w' (conj tr h))) =>
@@ -152,11 +154,11 @@ Section Shallow.
 End Shallow.
 
 Section Syntax.
-  Context {W: Type} `{HW: Encode W} {X: Type}.
+  Context `{HE: Encode E} {X: Type}.
 
   Inductive ctlf: Type :=
-  | CBase  (p: World W -> Prop): ctlf
-  | CDone (p: X -> World W -> Prop): ctlf
+  | CBase  (p: World E -> Prop): ctlf
+  | CDone (p: X -> World E -> Prop): ctlf
   | CAX   : ctlf -> ctlf
   | CEX   : ctlf -> ctlf
   | CAnd  : ctlf -> ctlf -> ctlf
@@ -169,16 +171,17 @@ Section Syntax.
 
 End Syntax.
 
-Arguments ctlf W {HW} X.
+Arguments ctlf E {HE} X.
 
 Notation car p q := (gfp (car_ p q)).
 Notation cer p q := (gfp (cer_ p q)).
 
 Section Entailment.
-  Context `{KMS: Kripke M W} {X: Type}.
+  Context `{KMS: Kripke M E} {X: Type}.
+  Notation MS := (M HE X).
 
   (* Entailment inductively on formulas *)
-  Fixpoint entailsF(φ: ctlf W X): M X -> World W -> Prop :=
+  Fixpoint entailsF(φ: ctlf E X): MS -> World E -> Prop :=
     match φ with
     | CBase p => fun _ => p
     | CDone p => fun _ => done_with p
@@ -193,7 +196,7 @@ Section Entailment.
     | CER φ ψ => cer (entailsF φ) (entailsF ψ)
     end.
 
-  Lemma unfold_entailsF: forall (φ: ctlf W X),
+  Lemma unfold_entailsF: forall (φ: ctlf E X),
       entailsF φ = match φ with
                    | CBase p => fun _ => p
                    | CDone p => fun _ => done_with p
@@ -258,22 +261,17 @@ Module CtlNotations.
     (CDone (finish_with R))
       (in custom ctl at level 74): ctl_scope.
   
-  Notation "'visW' \ v , y " :=
+  Notation "'visW' R" :=
     (CBase (vis_with (fun pat : writerE _ =>
                        let 'Log v as x := pat return (encode x -> Prop) in
-                       fun 'tt => y)))
-      (in custom ctl at level 75,
-          v binder,
-          y constr, left associativity): ctl_scope.
+                       fun 'tt => R v)))
+      (in custom ctl at level 75): ctl_scope.
 
-  Notation "'finishW' \ v x , y " :=
-    (CDone (finish_with (fun x (pat : writerE _) =>
+  Notation "'finishW' R" :=
+    (CDone (finish_with (fun '(x, s) (pat : writerE _) =>
                            let 'Log v as u := pat return (encode u -> Prop) in
-                           fun 'tt => y)))
-      (in custom ctl at level 75,
-          v binder,
-          x binder,
-          y constr, left associativity): ctl_scope.
+                           fun 'tt => R x s v)))
+      (in custom ctl at level 75): ctl_scope.
 
   Notation "⊤" := (CBase (fun _ => True)) (in custom ctl at level 76): ctl_scope.
   Notation "⊥" := (CBase (fun _ => False)) (in custom ctl at level 76): ctl_scope.
@@ -318,20 +316,20 @@ Import CtlNotations.
 Local Open Scope ctl_scope.
 
 (*| Base constructors of logical formulas |*)
-Lemma ctl_base `{KMS: Kripke M W} X:
-  forall (t: M X) (w: World W) (φ: World W -> Prop),
+Lemma ctl_base `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) (φ: World E -> Prop),
     <( t, w |= base φ )> <-> φ w.
 Proof. intros; now rewrite unfold_entailsF. Qed.
 Global Hint Resolve ctl_base: ctl.
 
-Lemma ctl_now `{KMS: Kripke M W} X:
-  forall (t: M X) (w: World W) (φ: World W -> Prop),
+Lemma ctl_now `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) (φ: World E -> Prop),
     <( t, w |= now φ )> <-> φ w /\ not_done w.
 Proof. intros; now rewrite unfold_entailsF. Qed.
 Global Hint Resolve ctl_now: ctl.
 
-Lemma ctl_pure `{KMS: Kripke M W} X:
-  forall (t: M X) (w: World W),
+Lemma ctl_pure `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E),
     <( t, w |= pure )> <-> w = Pure.
 Proof.
   intros; rewrite unfold_entailsF; split; intros.
@@ -340,8 +338,8 @@ Proof.
 Qed.
 Global Hint Resolve ctl_pure: ctl.
 
-Lemma ctl_vis `{KMS: Kripke M W} X:
-  forall (t: M X) (w: World W) φ,
+Lemma ctl_vis `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) φ,
     <( t, w |= vis φ )> <-> vis_with φ w. 
 Proof.
   intros; rewrite unfold_entailsF; split; intros.
@@ -350,39 +348,39 @@ Proof.
 Qed.
 Global Hint Resolve ctl_vis: ctl.
 
-Lemma ctl_done `{KMS: Kripke M W} X:
-  forall (t: M X) (w: World W) (φ: X -> World W -> Prop),
+Lemma ctl_done `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) (φ: X -> World E -> Prop),
     <( t, w |= done φ )> <-> done_with φ w.
 Proof. intros; now rewrite unfold_entailsF. Qed.
 Global Hint Resolve ctl_done: ctl.
 
-Lemma ctl_done_eq `{KMS: Kripke M W} X:
-  forall (t: M X) (w: World W) (r:X),
+Lemma ctl_done_eq `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) (r:X),
     <( t, w |= done= r w )> <-> done_with (fun r' w' => r=r' /\ w=w') w.
 Proof. intros; now rewrite unfold_entailsF. Qed.
 Global Hint Resolve ctl_done_eq: ctl.
 
-Lemma ctl_finish `{KMS: Kripke M W} X:
-  forall (t: M X) (w: World W) φ,
+Lemma ctl_finish `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) φ,
     <( t, w |= finish φ )> <-> done_with (finish_with φ) w.
 Proof. intros; now rewrite unfold_entailsF. Qed.
 Global Hint Resolve ctl_finish: ctl.
 
 (*| AX, WX, EX unfold |*)
-Lemma unfold_ax `{KMS: Kripke M W} X:
-  forall (t: M X) (w: World W) (p: ctlf W X),
+Lemma unfold_ax `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) (p: ctlf E X),
     <( t, w |= AX p )> <-> can_step t w /\ forall t' w', [t, w] ↦ [t',w'] -> <( t',w' |= p )>.
 Proof. intros; now rewrite unfold_entailsF. Qed.
 
-Lemma unfold_ex `{KMS: Kripke M W} X:
-  forall (t: M X) (w: World W) (p: ctlf W X),
+Lemma unfold_ex `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) (p: ctlf E X),
     <( t,w |= EX p )> <-> exists t' w', [t,w] ↦ [t',w'] /\ <( t',w' |= p )>.
 Proof. intros; now rewrite unfold_entailsF. Qed.
 Global Hint Resolve unfold_ax unfold_ex: ctl.
 
 (* [AX φ] is stronger than [EX φ] *)
-Lemma ctl_ax_ex `{KMS: Kripke M W} X:
-  forall (t: M X) (w: World W) (p: ctlf W X),
+Lemma ctl_ax_ex `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) (p: ctlf E X),
     <( t, w |= AX p )> -> <( t, w |= EX p )>.
 Proof.
   intros.
@@ -392,8 +390,8 @@ Proof.
 Qed.
 
 (* [AF φ] is stronger than [EF φ] *)
-Lemma ctl_af_ef `{KMS: Kripke M W} X:
-  forall (t: M X) (w: World W) (p: ctlf W X),
+Lemma ctl_af_ef `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) (p: ctlf E X),
     <( t, w |= AF p )> -> <( t, w |= EF p )>.
 Proof.
   intros.
@@ -407,22 +405,22 @@ Proof.
 Qed.
 
 (*| Bot is false |*)
-Lemma ctl_sound `{KMS: Kripke M W} X: forall (t: M X) (w: World W),
+Lemma ctl_sound `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
     ~ <( t, w |= ⊥ )>.
 Proof. intros * []. Qed.
 
 (*| Ex-falso |*)
-Lemma ctl_ex_falso `{KMS: Kripke M W} X: forall (t: M X) (w: World W) (p: ctlf W X),
+Lemma ctl_ex_falso `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E) (p: ctlf E X),
     <( t, w |= ⊥ -> p )>.
 Proof. intros; rewrite unfold_entailsF; intro CONTRA; contradiction. Qed.
 
 (*| Top is True |*)
-Lemma ctl_top `{KMS: Kripke M W} X: forall (t: M X) (w: World W),
+Lemma ctl_top `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
     <( t, w |= ⊤ )>.
 Proof. reflexivity. Qed. 
 
 (*| Cannot exist path such that eventually Bot |*)
-Lemma ctl_sound_ef `{KMS: Kripke M W} X: forall (t: M X) (w: World W),
+Lemma ctl_sound_ef `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
     ~ <( t, w |= EF ⊥ )>.
 Proof.
   intros * Contra.
@@ -433,7 +431,7 @@ Proof.
 Qed.
 
 (*| Cannot have all paths such that eventually always Bot |*)
-Lemma ctl_sound_af `{KMS: Kripke M W} X: forall (t: M X) (w: World W),
+Lemma ctl_sound_af `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
     ~ <( t, w |= AF ⊥ )>.
 Proof.
   intros * Contra.
@@ -443,14 +441,14 @@ Proof.
 Qed.
 
 (*| Semantic equivalence of formulas |*)
-Definition equiv_ctl {M} `{HE: Encode W} {K: Kripke M W}{X}: relation (ctlf W X) :=
-  fun p q => forall (t: M X) (w: World W), entailsF p t w <-> entailsF q t w.
+Definition equiv_ctl {M} `{HE: Encode E} {K: Kripke M E}{X}: relation (ctlf E X) :=
+  fun p q => forall (t: M E HE X) (w: World E), entailsF p t w <-> entailsF q t w.
 
 Infix "⩸" := equiv_ctl (at level 58, left associativity): ctl_scope.
 
 Section EquivCtlEquivalence.
-  Context {M: Type -> Type} `{HE: Encode W} {K: Kripke M W} {X: Type}.
-  Notation equiv_ctl := (@equiv_ctl M W HE K X).
+  Context `{K: Kripke M E} {X: Type}.
+  Notation equiv_ctl := (@equiv_ctl M E HE K X).
 
   Global Instance Equivalence_equiv_ctl:
     Equivalence equiv_ctl.

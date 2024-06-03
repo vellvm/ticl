@@ -22,9 +22,9 @@ Local Open Scope ctree_scope.
 Section CanStepCtrees.
   Context {E: Type} {HE: Encode E}.
   Notation encode := (@encode E HE).
-  Notation equiv_ctl X := (equiv_ctl (X:=X) (M:= ctree E)).
+  Notation equiv_ctl X := (equiv_ctl (X:=X) (M:= ctree)).
 
-  Global Add Parametric Morphism{X}: (can_step (M:=ctree E) (X:=X))
+  Global Add Parametric Morphism{X}: (can_step (M:=ctree) (X:=X))
          with signature (equ eq ==> eq ==> iff)
            as proper_ctree_can_step.
   Proof.

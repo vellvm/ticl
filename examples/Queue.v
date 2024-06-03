@@ -1,5 +1,6 @@
 From CTree Require Import
   CTree.Core
+  Events.Writer
   Logic.Ctl
   CTree.Equ
   CTree.Logic.Trans
@@ -108,6 +109,7 @@ Section QueueEx.
   (*| Eventually we get [s] |*)
   Typeclasses Transparent equ.
   Opaque entailsF.
+
   Theorem drain_af_pop: forall (s: S) q,
       <( {interp_state h_queueE drain (q ++ [s])}, Pure |=
          AF finishW \v l, v = s /\ l = @nil S )>.

@@ -34,9 +34,9 @@ Generalizable All Variables.
      v             v
    [t, w]   ↦   [t', w']
 |*)  
-Class KripkeSetoid M W {HW: Encode W} {K: Kripke M W}
-  X (meq: relation (M X)) {Eqm: Equivalence meq} :=
-  ktrans_semiproper : forall (t s s': M X) w w',
+Class KripkeSetoid (M: forall E, Encode E -> Type -> Type) (E: Type) {HE: Encode E}
+  {K: Kripke M E} X (meq: relation (M E HE X)) {Eqm: Equivalence meq} :=
+  ktrans_semiproper : forall (t s s': M E HE X) w w',
     meq s t ->
     ktrans s w s' w' ->
     exists t', ktrans t w t' w' /\ meq s' t'.
@@ -64,11 +64,11 @@ Ltac ktrans_equ TR :=
 
 (*| Models are setoids over CTL |*)
 Section EquivSetoid.
-  Context `{HW: Encode W} {M: Type -> Type} {K: Kripke M W}
-    {X} {meq: relation (M X)} {Eqm: Equivalence meq}
-    {KS: KripkeSetoid M W X meq}.
+  Context `{K: Kripke M E} {X} {meq: relation (M E HE X)} {Eqm: Equivalence meq}
+    {KS: KripkeSetoid M E X meq}.
 
-  Notation MP := (M X -> World W -> Prop).
+  Notation MS := (M E HE X).
+  Notation MP := (MS -> World E -> Prop).
   Notation equiv_ctl := (equiv_ctl (K:=K) (X:=X)).
 
   Global Add Parametric Morphism: can_step
@@ -89,7 +89,7 @@ Section EquivSetoid.
          with signature meq ==> eq ==> iff as meq_proper_base.
   Proof. intros; split; auto. Qed.
 
-  Global Add Parametric Morphism {φ: World W -> Prop}: (fun _ => φ)
+  Global Add Parametric Morphism {φ: World E -> Prop}: (fun _ => φ)
       with signature meq ==> eq ==> iff as meq_proper_fun.
   Proof. intros; split; auto. Qed.
   
@@ -276,17 +276,17 @@ Section EquivSetoid.
   Qed.
 End EquivSetoid.
 
-Global Add Parametric Morphism `{KS: KripkeSetoid M W X meq} (φ: ctlf W X) : <( |- φ )>
+Global Add Parametric Morphism `{KS: KripkeSetoid M E X meq} (φ: ctlf E X) : <( |- φ )>
        with signature (meq ==> eq  ==> iff) as proper_entailsF_.
 Proof.
   induction φ; intros * Heq w.
   - (* Base *) rewrite Heq; reflexivity.
   - (* Done *) rewrite Heq; reflexivity.
   - (* ax *)
-    refine (@proper_ax_equ W HW M K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl).
+    refine (@proper_ax_equ M E HE K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl).
     unfold Proper, respectful; intros; subst; now apply IHφ.
   - (* ex *)
-    refine (@proper_ex_equ W HW M K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl).
+    refine (@proper_ex_equ M E HE K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl).
     unfold Proper, respectful; intros; subst; now apply IHφ.
   - (* /\ *) split; intros [Ha Hb]; split.
     + now rewrite <- (IHφ1 _ _ Heq).
@@ -303,15 +303,15 @@ Proof.
       apply (IHφ1 _ _ Heq) in HI;
       apply (IHφ2 _ _ Heq); auto.
   - (* au *)
-    refine (@proper_au_equ W HW M K X meq Eqm KS (entailsF φ1) _ (entailsF φ2) _ _ _ Heq _ _ eq_refl);
+    refine (@proper_au_equ M E HE K X meq Eqm KS (entailsF φ1) _ (entailsF φ2) _ _ _ Heq _ _ eq_refl);
       unfold Proper, respectful; intros; subst; auto.
   - (* eu *)
-    refine (@proper_eu_equ W HW M K X meq Eqm KS (entailsF φ1) _ (entailsF φ2) _ _ _ Heq _ _ eq_refl);
+    refine (@proper_eu_equ M E HE K X meq Eqm KS (entailsF φ1) _ (entailsF φ2) _ _ _ Heq _ _ eq_refl);
       unfold Proper, respectful; intros; subst; auto.
   - (* ar *)
-    refine (@proper_ar_equ W HW M K X meq Eqm KS (entailsF φ1) _ (entailsF φ2) _ _ _ Heq _ _ eq_refl);
+    refine (@proper_ar_equ M E HE K X meq Eqm KS (entailsF φ1) _ (entailsF φ2) _ _ _ Heq _ _ eq_refl);
       unfold Proper, respectful; intros; subst; auto.
   - (* er *)
-    refine (@proper_er_equ W HW M K X meq Eqm KS (entailsF φ1) _ (entailsF φ2) _ _ _ Heq _ _ eq_refl);
+    refine (@proper_er_equ M E HE K X meq Eqm KS (entailsF φ1) _ (entailsF φ2) _ _ _ Heq _ _ eq_refl);
       unfold Proper, respectful; intros; subst; auto.
 Qed.

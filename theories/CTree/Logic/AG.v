@@ -43,14 +43,14 @@ Section BasicLemmas.
       + inv Hd.
         * apply ctl_now...
         * apply ctl_now...          
-      + cright; apply ax_vis...
-    - next in H.
-      destruct H as ((? & ?) & [? | ?]); try contradiction. 
-      destruct H1.
+      + apply ax_vis... 
+    - cdestruct H; try contradiction.
+      destruct H0 as (Hs & Ht').
+      apply ctl_now in H as (? & ?).
       split; [|split]...
       intro v'.
       rewrite unfold_entailsF.
-      apply H2, ktrans_vis...
+      apply Ht', ktrans_vis...
   Qed.
   
   Lemma ag_br: forall n (k: fin' n -> ctree E X) w φ,
@@ -65,28 +65,21 @@ Section BasicLemmas.
         next in H.
         destruct H.
         now cbn in *.
-      + right.
-        split.
-        * now apply can_step_br.
-        * intros.
-          apply ktrans_br in H0 as (i & ? & <- & ?).        
-          now rewrite H0.
-    - next in H.
-      destruct H as ((? & ?) & [? | ?]); try contradiction. 
-      destruct H1.
+      + apply ax_br... 
+    - cdestruct H; try contradiction.
+      destruct H0 as (Hs & Ht').
+      apply ctl_now in H as (? & ?).
       split...
       intro i.
       rewrite unfold_entailsF.
-      apply H2.
-      apply ktrans_br.
-      exists i; auto.
+      apply Ht', ktrans_br.
+      exists i...
   Qed.
 
   Lemma ag_stuck: forall w φ,
       <( {stuck: ctree E X}, w |= AG φ )> -> False.
   Proof.
     intros.
-    remember (stuck) as S.
     cdestruct H; try contradiction; subst.
     destruct H0.
     now apply can_step_stuck in H0.
@@ -96,16 +89,13 @@ Section BasicLemmas.
       <( {Ret x}, w |= AG φ )> -> False.
   Proof.
     intros. 
-    next in H.
-    cdestruct H.
-    next in H0; cdestruct H0; try contradiction.
-    cdestruct H0.
-    destruct Hs as (S & w' & TR).
-    cbn in TR.
+    cdestruct H; try contradiction.
+    destruct H0 as ((S & w' & TR) & H0).
     specialize (H0 _ _ TR).
+    cbn in TR.
     dependent destruction TR; observe_equ x;
-      rewrite <- Eqt, H0 in H1; cdestruct H1; cdestruct H2; try contradiction;
-      now apply ax_stuck, ag_stuck in H2.
+      rewrite <- Eqt, H in H0; eapply ag_stuck;
+      rewrite unfold_entailsF; apply H0.
   Qed.
 
   Lemma ag_guard: forall w φ (t: ctree E X),
@@ -276,9 +266,9 @@ Section BindLemmas.
         rewrite sb_unfold_iter.
         specialize (HAX _ _ TR); cdestruct HAX.
         * apply ax_done in H3 as (Hd & y & Hy & i & -> & ? & _ & ?).
-          apply can_step_bind_l with t w0... 
+          apply can_step_bind_l with k' w0... 
         * destruct H4.
-          apply can_step_bind_l with t w0...
+          apply can_step_bind_l with k' w0...
           apply ctl_now in H3 as (? & ?)...
       + (* coinductive step *)
         intros t' w' TR.
@@ -395,22 +385,77 @@ Section CtlAgState.
 End CtlAgState.
 
 Section CtlAgW.
-  Context {E Σ W: Type} {HE: Encode E} (h:E ~> stateT Σ (ctree void)).  (* State semantics *)
+  Context {E Σ W: Type} {HE: Encode E} (h:E ~> stateT Σ (ctree void)). 
 
-  Theorem ag_iterW{X I}: forall (σ: Σ) (k: I -> ctree E (I + X)) (x: I) φ R,
-      R x ->          (* Iterator invariant [R] *)
+  Theorem ag_iterW{X I}: forall (σ: Σ) (k: I -> ctree E (I + X)) (i: I) (φ: Σ -> Prop) R,
+      R i ->          (* Iterator invariant [R] *)
       φ σ ->          (* Initial state precondition [φ] *)
       (forall (x: I) (σ: Σ),
           R x ->
           φ σ ->
           <( {interp_state (h_writerΣ h) (k x) σ}, {Obs (Log σ) tt} |=
-                                         AX ((visW \ σ, φ σ) AU AX
-                                               (finishW \ σ lr,
-                                                 exists (i : I), lr = @inl _ X i /\ R i /\ φ σ)) )>) ->
-      <( {interp_state (h_writerΣ h) (iter k x) σ}, {Obs (Log σ) tt} |= AG visW \ σ, φ σ )>.
+              AX (visW φ AU AX
+                    (finishW {fun (lr: I + X) (σ _: Σ) => 
+                                exists (i: I), lr = inl i /\ R i /\ φ σ})))>) ->
+      <( {interp_state (h_writerΣ h) (iter k i) σ}, {Obs (Log σ) tt} |= AG visW φ )>.
+  Proof with eauto with ctl.
+    setoid_rewrite ctl_vis_now.
+    setoid_rewrite ctl_finish_done.
+    intros.
+    rewrite interp_state_unfold_iter.
+    generalize dependent i.
+    generalize dependent σ.
+    coinduction RR CIH; intros.
+    apply RStepA; [apply ctl_now; eauto with ctl |].
+    split.
+    - (* can_step *)
+      specialize (H1 _ _ H H0).
+      cdestruct H1.
+      destruct Hs as (t' & w' & TR).
+      specialize (H1 _ _ TR).
+      apply can_step_bind_l with t' w'...
+      cdestruct H1.
+      + apply ax_done in H1 as (? & ?)...
+      + apply ctl_now in H1; destruct H1...
+    - intros t' w' TR.
+      apply ktrans_bind_inv in TR as
+          [(t0' & TR0 & Hd_ & Heq) | (x' & w0 & TRt0 & Hd & TRk)].
+      + (* [k x] steps *)
+        rewrite Heq; clear Heq t'.
+        apply (ft_t (ag_bind_now_ag
+                       (fun w => (exists (e : writerE Σ) (v : encode e),
+                                  w = Obs e v /\
+                                    (let 'Log v0 as x := e return (encode x -> Prop) in
+                                     fun 'tt => φ v0) v))
+                       (fun (lr: (I+X) * Σ) (w: World (writerE Σ)) =>
+                          exists (i: I) (σ: Σ), lr = (inl i, σ) /\
+                                             φ σ /\ not_done w /\ R i))); cbn.
+        apply in_bind_ctx1.
+        * specialize (H1 _ _ H H0) as HAX.
+          cdestruct HAX.
+          specialize (HAX _ _ TR0).
+          apply HAX.
+        * intros (lr' & s_) w_ (i & s' & Hinv & Hφ & Hd' & HR'); inv Hinv.
+          rewrite sb_guard.
+          setoid_rewrite interp_state_unfold_iter.
+          apply CIH...
+      + (* [k x] returns *)        
+        specialize (H2 _ _ _ H H0 H1) as HAX.        
+        cdestruct HAX.
+        specialize (HAX _ _ TRt0).
+        apply au_stuck in HAX.
+        cdestruct HAX.
+        now apply can_step_stuck in Hs0.
+  Qed.        
   Proof.
     intros.
-    eapply ag_iter_state_vis with (R:=fun '(x, s) => R x /\ φ s).
+    rewrite ctl_vis_now.
+    eapply ag_state_iter with (R:=fun i σ => R i /\ φ σ); auto with ctl.
+    - eexists (Log σ), tt; auto.
+    - intros j σ' w [HR Hφ] ([] & [] & -> & ?) _.
+      setoid_rewrite ctl_vis_base in H1.
+      setoid_rewrite ctl_finish_done in H1.
+      apply H1.
     - now split.
     - now econstructor.
     - intros i σ' [] [] [? ?] ?.

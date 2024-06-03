@@ -89,18 +89,18 @@ Proof.
 Qed.
 
 (*| Polymorphic Kripke model over family M |*)
-Class Kripke (M: Type -> Type) (E: Type) `{HE: Encode E} := {
+Class Kripke (M: forall E, Encode E -> Type -> Type) (E: Type) `{HE: Encode E} := {
 
     (* - [ktrans] the transition relation over [M X * W] *)
-    ktrans {X}: M X -> World E -> M X -> World E -> Prop;
+    ktrans {X}: M E HE X -> World E -> M E HE X -> World E -> Prop;
 
     (* - [ktrans] only if [not_done] *)
-    ktrans_not_done {X}: forall (t t': M X) (w w': World E),
+    ktrans_not_done {X}: forall (t t': M E HE X) (w w': World E),
       ktrans t w t' w' ->
       not_done w;
 
     (* - [ktrans] preserves impure effects *)
-    ktrans_not_pure {X}: forall (t t': M X) (w w': World E),
+    ktrans_not_pure {X}: forall (t t': M E HE X) (w w': World E),
       ktrans t w t' w' ->
       not_pure w ->
       not_pure w'
@@ -116,10 +116,10 @@ Notation "[ t , w ]  ↦ [ t' , w' ]" :=
       right associativity): ctl_scope.
 Local Open Scope ctl_scope.
 
-Definition can_step `{Kripke M W} {X} (m: M X) (w: World W): Prop :=
+Definition can_step `{Kripke M W} {X} (m: M W _ X) (w: World W): Prop :=
   exists m' w', [m,w] ↦ [m',w'].
 
-Lemma can_step_not_done `{Kripke M W} {X}: forall (t: M X) w,
+Lemma can_step_not_done `{Kripke M W} {X}: forall (t: M W _ X) w,
     can_step t w ->
     not_done w.
 Proof.
