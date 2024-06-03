@@ -395,7 +395,8 @@ Section CtlAgW.
           φ σ ->
           <( {interp_state (h_writerΣ h) (k x) σ}, {Obs (Log σ) tt} |=
               AX (visW φ AU AX
-                    (finishW {fun (lr: I + X) (σ _: Σ) => 
+                    (finishW {fun (lr: I + X) (σ σ': Σ) =>
+                                σ = σ' /\ (* A property of [h_writerΣ h] is it logs σ and then returns it [σ'] *)
                                 exists (i: I), lr = inl i /\ R i /\ φ σ})))>) ->
       <( {interp_state (h_writerΣ h) (iter k i) σ}, {Obs (Log σ) tt} |= AG visW φ )>.
   Proof with eauto with ctl.
@@ -427,53 +428,38 @@ Section CtlAgW.
                                   w = Obs e v /\
                                     (let 'Log v0 as x := e return (encode x -> Prop) in
                                      fun 'tt => φ v0) v))
-                       (fun (lr: (I+X) * Σ) (w: World (writerE Σ)) =>
-                          exists (i: I) (σ: Σ), lr = (inl i, σ) /\
-                                             φ σ /\ not_done w /\ R i))); cbn.
+                       (fun (x : (I + X) * Σ) (w : World (writerE Σ)) =>
+                        exists (e : writerE Σ) (v : encode e),
+                          w = Obs e v /\
+                          (let
+                           '(x0, s) := x in
+                            fun pat0 : writerE Σ =>
+                            let
+                              'Log v0 as u := pat0 return (encode u -> Prop) in fun 'tt =>
+                                                                              s = v0 /\
+                                                                              exists i : I, x0 = inl i /\ R i /\ φ s)
+                            e v))); cbn.
         apply in_bind_ctx1.
         * specialize (H1 _ _ H H0) as HAX.
           cdestruct HAX.
           specialize (HAX _ _ TR0).
           apply HAX.
-        * intros (lr' & s_) w_ (i & s' & Hinv & Hφ & Hd' & HR'); inv Hinv.
+        * intros (lr' & s_) w ([σ'] & [] & ? & ? & i' & -> & ? & ?); subst.
+          unfold Classes.iter, MonadIter_ctree.          
+          apply (ft_t (mequ_clos_car (KS:=KripkeSetoidSBisim))); cbn.
+          econstructor.
           rewrite sb_guard.
-          setoid_rewrite interp_state_unfold_iter.
+          rewrite interp_state_unfold_iter.
+          reflexivity.
+          reflexivity.
           apply CIH...
       + (* [k x] returns *)        
-        specialize (H2 _ _ _ H H0 H1) as HAX.        
+        specialize (H1 _ _ H H0) as HAX.        
         cdestruct HAX.
         specialize (HAX _ _ TRt0).
         apply au_stuck in HAX.
         cdestruct HAX.
         now apply can_step_stuck in Hs0.
   Qed.        
-  Proof.
-    intros.
-    rewrite ctl_vis_now.
-    eapply ag_state_iter with (R:=fun i σ => R i /\ φ σ); auto with ctl.
-    - eexists (Log σ), tt; auto.
-    - intros j σ' w [HR Hφ] ([] & [] & -> & ?) _.
-      setoid_rewrite ctl_vis_base in H1.
-      setoid_rewrite ctl_finish_done in H1.
-      apply H1.
-    - now split.
-    - now econstructor.
-    - intros i σ' [] [] [? ?] ?.
-      assert(Hf: equiv_ctl (X:=I+X)
-                   <(finishW \ σ0 lr, exists (i : I), lr = @inl _ X i /\ R i /\ φ σ0)>
-                   <(finish {fun (e : writerE Σ) (v : encode e) (lr : (I + X) * Σ) =>
-                              exists (i' : I) (s' : Σ),
-                                lr = (@inl _ X i', s') /\
-                                  (let 'Log σ1 as x0 := e return (encode x0 -> Prop) in fun 'tt => φ σ1) v /\ R i' /\ φ s'})>).
-      {
-        split; intros Hinv; inv Hinv.
-        - destruct H5 as ([] & [] & Hcontra & ?).
-          inv Hcontra.
-        - destruct x0 as ([] & lr), H5 as ([] & [] & Hinv & i' & -> & HR & Hσ1).
-          ddestruction Hinv.
-          rewrite unfold_entailsF.
-          unfold finish_with.
-          constructor.
-          apply H1.
-    
-    
+
+End CtlAgW.
