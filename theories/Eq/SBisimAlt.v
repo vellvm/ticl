@@ -1464,21 +1464,35 @@ Proof.
   - apply H0.
 Qed.
 
+Lemma ss_sb'_l_chain {E F C D X Y L} {R : Chain (sb' L)} :
+  forall (t : ctree E C X) (u : ctree F D Y),
+  ss L (fun t u => forall b, `R b t u) t u ->
+  sb' L `R true t u.
+Proof.
+    intros. revert t u H. intros. split.
+    2: intros; discriminate. intros _; ssplit; intros.
+    + apply H in H1. destruct H1 as (? & ? & ? & ? & ?).
+      eexists _, _. split; [apply H1 |]. split; [| apply H3].
+      intro. destruct side; auto.
+    + subs. apply ss_br_l_inv with (x := x) in H.
+      exists u. split; eauto. now apply ss_st'_l.
+    + subs. apply ss_guard_l_inv in H.
+      exists u. split; eauto. now apply ss_st'_l.
+Qed.
+
 Theorem gfp_sb'_ss_sbisim {E F C D X Y} :
   forall L (t : ctree E C X) (u : ctree F D Y),
   (ss L (sbisim L) t u -> gfp (sb' L) true t u) /\
   (ss (flip L) (flip (sbisim L)) u t -> gfp (sb' L) false t u).
 Proof.
-    intros. revert t u. coinduction R CH. intros. split; split.
-    2, 3: intros; discriminate. all: intros _; ssplit; intros.
-    + apply H in H1. destruct H1 as (? & ? & ? & ? & ?).
-      eexists _, _. split; [apply H1 |]. split; [| apply H3].
-      step in H2. intro. destruct side; apply CH; apply H2.
-    + subs. apply ss_br_l_inv with (x := x) in H.
-      exists u. split; eauto. now apply CH.
-    + subs. apply ss_guard_l_inv in H.
-      exists u. split; eauto. now apply CH.
-
+  intros. revert t u. coinduction R CH. intros. split; split.
+  2, 3: intros; discriminate.
+  - intros _. apply ss_sb'_l_chain; auto.
+    cbn. intros.
+    apply H in H0. destruct H0 as (? & ? & ? & ? & ?).
+    eexists _, _. split; [apply H0 |]. split; [| apply H2].
+    step in H1. intro. destruct b; apply CH; apply H1.
+  - intros _; ssplit; intros.
     + apply H in H1. destruct H1 as (? & ? & ? & ? & ?).
       eexists _, _. split; [apply H1 |]. split; [| apply H3].
       step in H2. destruct side; apply CH; apply H2.
@@ -1516,6 +1530,22 @@ Corollary sbisim_gfp_sb' {E F C D X Y} :
   forall L side (t : ctree E C X) (t' : ctree F D Y), sbisim L t t' -> gfp (sb' L) side t t'.
 Proof.
   intros. apply sbisim_sbisim' in H. apply H.
+Qed.
+
+Theorem ss_sbisim_gfp_sb' {E F C D X Y} :
+  forall L (t : ctree E C X) (u : ctree F D Y),
+  (gfp (sb' L) true t u -> ss L (sbisim L) t u) /\
+  (gfp (sb' L) false t u -> ss (flip L) (flip (sbisim L)) u t).
+Proof.
+  intros. revert t u. intros. split; cbn; intros.
+  - apply trans_epsilon in H0 as (? & ? & ? & ?).
+    apply sbisim'_epsilon_l with (t' := x) in H; auto.
+    step in H. apply (proj1 H) in H2 as (? & ? & ? & ? & ?); auto.
+    exists x0, x1. ssplit; auto. now apply sbisim_sbisim'.
+  - apply trans_epsilon in H0 as (? & ? & ? & ?).
+    apply sbisim'_epsilon_r with (u' := x) in H; auto.
+    step in H. apply (proj2 H) in H2 as (? & ? & ? & ? & ?); auto.
+    exists x0, x1. ssplit; auto. now apply sbisim_sbisim'.
 Qed.
 
 (*

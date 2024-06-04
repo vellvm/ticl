@@ -953,6 +953,20 @@ Proof.
   apply ss'_clo_bind_eq.
 Qed.
 
+Lemma ss_ss'_chain {E F C D X Y L} {R : Chain (ss' L)} :
+  forall (t : ctree E C X) (u : ctree F D Y),
+  ss L `R t u ->
+  ss' L `R t u.
+Proof.
+  - intros.
+    ssplit; intros.
+    + apply H in H1 as (? & ? & ? & ? & ?). eauto 6.
+    + subs. apply ss_br_l_inv with (x := x) in H.
+      apply ss_sst' in H. eauto.
+    + subs. apply ss_guard_l_inv in H. apply ss_sst' in H.
+      eauto.
+Qed.
+
 (* This alternative notion of simulation is equivalent to [ssim] *)
 Theorem ssim_ssim' {E F C D X Y} :
   forall L (t : ctree E C X) (t' : ctree F D Y), ssim L t t' <-> ssim' L t t'.
