@@ -105,50 +105,21 @@ Section Shallow.
                   (conj tr h))) (ex_intro _  t' (ex_intro _ w' (conj tr (F t' w' h))))
       end.
   Set Elimination Schemes.
-  
-  (* Forall release *)
-  Variant carF (p q R: MP): MP :=
-  | RMatchA: forall t w,       
-      q t w ->  (* Matches [q] now; done *)
-      p t w ->  (* Matches [p] as well *)
-      carF p q R t w
-  | RStepA:  forall t w,
-      p t w ->    (* Matches [p] now; steps to (t', s') *)
-      cax R t w ->
-      carF p q R t w.
 
-  (* Exists release *)
-  Variant cerF (p q R: MP): MP :=
-  | RMatchE: forall t w,
-      q t w ->       (* Matches [q] now; done *)
-      p t w ->       (* Matches [p] as well *)
-      cerF p q R t w
-  | RStepE: forall t w,
-      p t w ->    (* Matches [p] now; steps to (t', s') *)
-      cex R t w ->
-      cerF p q R t w.
-
-  Hint Constructors cau ceu carF cerF: core.
-
-  (*| Global (coinductives) |*)
-  Program Definition car_ p q: mon MP :=
-    {| body := fun R m => carF p q R m |}.
+  Arguments impl /.  
+  (* Always globally *)
+  (* Matches [p] now; all paths step to (t', s') *)
+  Program Definition cagF p: mon MP :=
+    {| body := fun R t w => p t w /\ cax R t w |}.
   Next Obligation.
-    repeat red; unfold impl; intros.
-    destruct H0; auto; cbn in H0.
-    apply RStepA; unfold cax in *; intuition.
+    repeat red; intros; destruct H0; split; destruct H1; auto.
   Qed.
   
-  Program Definition cer_ p q: mon MP :=
-    {| body := fun R m => cerF p q R m |}.
+  Program Definition cegF p: mon MP :=
+    {| body := fun R t w => p t w /\ cex R t w |}.
   Next Obligation.
-    repeat red; unfold impl.
-    intros.
-    destruct H0.
-    - now apply RMatchE.
-    - destruct H1 as (t' & w' & TR' & H').
-      apply RStepE; auto.
-      exists t', w'; auto.
+    repeat red; intros; destruct H0 as [H0 (t' & w' & TR & Hx)]; split; auto.
+    exists t', w'; auto.
   Qed.      
 
 End Shallow.
@@ -166,15 +137,15 @@ Section Syntax.
   | CImpl : ctlf -> ctlf -> ctlf
   | CAU   : ctlf -> ctlf -> ctlf
   | CEU   : ctlf -> ctlf -> ctlf
-  | CAR   : ctlf -> ctlf -> ctlf
-  | CER   : ctlf -> ctlf -> ctlf.
+  | CAG   : ctlf -> ctlf
+  | CEG   : ctlf -> ctlf.
 
 End Syntax.
 
 Arguments ctlf E {HE} X.
 
-Notation car p q := (gfp (car_ p q)).
-Notation cer p q := (gfp (cer_ p q)).
+Notation cag p := (gfp (cagF p)).
+Notation ceg p := (gfp (cegF p)).
 
 Section Entailment.
   Context `{KMS: Kripke M E} {X: Type}.
@@ -192,8 +163,8 @@ Section Entailment.
     | CEX φ => cex (entailsF φ)
     | CAU φ ψ => cau (entailsF φ) (entailsF ψ)
     | CEU φ ψ => ceu (entailsF φ) (entailsF ψ)
-    | CAR φ ψ => car (entailsF φ) (entailsF ψ)
-    | CER φ ψ => cer (entailsF φ) (entailsF ψ)
+    | CAG φ => cag (entailsF φ)
+    | CEG φ => ceg (entailsF φ)
     end.
 
   Lemma unfold_entailsF: forall (φ: ctlf E X),
@@ -207,8 +178,8 @@ Section Entailment.
                    | CEX φ => cex (entailsF φ)
                    | CAU φ ψ => cau (entailsF φ) (entailsF ψ)
                    | CEU φ ψ => ceu (entailsF φ) (entailsF ψ)
-                   | CAR φ ψ => car (entailsF φ) (entailsF ψ)
-                   | CER φ ψ => cer (entailsF φ) (entailsF ψ)
+                   | CAG φ => cag (entailsF φ)
+                   | CEG φ => ceg (entailsF φ)
                    end.
   Proof. destruct φ; reflexivity. Qed.
   Global Opaque entailsF.
@@ -283,13 +254,12 @@ Module CtlNotations.
   Notation "p 'EU' q" := (CEU p q) (in custom ctl at level 75): ctl_scope.
   Notation "p 'AU' q" := (CAU p q) (in custom ctl at level 75): ctl_scope.
   
-  Notation "p 'ER' q" := (CER p q) (in custom ctl at level 75): ctl_scope.
-  Notation "p 'AR' q" := (CAR p q) (in custom ctl at level 75): ctl_scope.
+  Notation "'EG' p" := (CEG p) (in custom ctl at level 75): ctl_scope.
+  Notation "'AG' p" := (CAG p) (in custom ctl at level 75): ctl_scope.
   
+  (* Syntactic sugar [AF, EF] is finally *)
   Notation "'EF' p" := (CEU <( ⊤ )> p) (in custom ctl at level 74): ctl_scope.
   Notation "'AF' p" := (CAU <( ⊤ )> p) (in custom ctl at level 74): ctl_scope.
-  Notation "'EG' p" := (CER p <( ⊥ )>) (in custom ctl at level 74): ctl_scope.
-  Notation "'AG' p" := (CAR p <( ⊥ )>) (in custom ctl at level 74): ctl_scope.
   
   (* Propositional syntax *)
   Notation "p '/\' q" := (CAnd p q) (in custom ctl at level 77, left associativity): ctl_scope.
@@ -300,15 +270,15 @@ Module CtlNotations.
   Notation "p '<->' q" := (CAnd (CImpl p q) (CImpl q p)) (in custom ctl at level 77): ctl_scope.
 
   (* Companion notations *)
-  Notation cart p q := (t (car_ p q)).
-  Notation cert p q := (t (cer_ p q)).
-  Notation carbt p q := (bt (car_ p q)).
-  Notation cerbt p q:= (bt (cer_ p q)).
-  Notation carT p q := (T (car_ p q)).
-  Notation cerT p q := (T (cer_ p q)).
-  Notation carbT p q := (bT (car_ p q)).
-  Notation cerbT p q := (bT (cer_ p q)).
-  #[global] Hint Constructors ceu cau carF cerF: ctl.
+  Notation cagt p  := (t (cagF p)).
+  Notation cegt p  := (t (cegF p)).
+  Notation cagbt p := (bt (cagF p)).
+  Notation cegbt p := (bt (cegF p)).
+  Notation cagT p  := (T (cagF p)).
+  Notation cegT p  := (T (cegF p)).
+  Notation cagbT p := (bT (cagF p)).
+  Notation cegbT p := (bT (cegF p)).
+  #[global] Hint Constructors ceu cau: ctl.
   
 End CtlNotations.
 

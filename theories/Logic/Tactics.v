@@ -13,18 +13,18 @@ Generalizable All Variables.
 
 #[global] Tactic Notation "step" "in" ident(H) :=
   (lazymatch type of H with
-   | @entailsF ?M ?W ?HE ?KMS ?X (CAR ?φ ?ψ) ?t ?w =>
+   | @entailsF ?M ?W ?HE ?KMS ?X (CAG ?φ) ?t ?w =>
        rewrite unfold_entailsF in H; step_in H
-   | @entailsF ?M ?W ?HE ?KMS ?X (CER ?φ ?ψ) ?t ?w =>
+   | @entailsF ?M ?W ?HE ?KMS ?X (CEG ?φ) ?t ?w =>
        rewrite unfold_entailsF in H; step_in H
    end || step_in H).
 
 #[global] Ltac step :=
   first [
       lazymatch goal with
-      | |- @entailsF ?M ?W ?HE ?KMS ?X (CAR ?φ ?ψ) ?t ?w =>
+      | |- @entailsF ?M ?W ?HE ?KMS ?X (CAG ?φ) ?t ?w =>
           rewrite unfold_entailsF; red; step_
-      | |- @entailsF ?M ?W ?HE ?KMS ?X (CER ?φ ?ψ) ?t ?w =>
+      | |- @entailsF ?M ?W ?HE ?KMS ?X (CEG ?φ) ?t ?w =>
           rewrite unfold_entailsF; red; step_
       end | red; step_ ].
 
@@ -40,8 +40,8 @@ Generalizable All Variables.
   | |- <( ?t, ?w |= ?φ \/ ?ψ )> => rewrite unfold_entailsF; left
   | |- <( ?t, ?w |= ?φ AU ?ψ )> => rewrite unfold_entailsF; apply StepA
   | |- <( ?t, ?w |= ?φ EU ?ψ )> => rewrite unfold_entailsF; apply StepE
-  | |- <( ?t, ?w |= ?φ AR ?ψ )> => step; cbn; apply RStepA
-  | |- <( ?t, ?w |= ?φ ER ?ψ )> => step; cbn; apply RStepE
+  | |- <( ?t, ?w |= AG ?φ )> => step; cbn
+  | |- <( ?t, ?w |= EG ?φ )> => step; cbn
   end.
 
 #[global] Ltac cright :=
@@ -49,8 +49,8 @@ Generalizable All Variables.
   | |- <( ?t, ?w |= ?φ \/ ?ψ )> => rewrite unfold_entailsF; right
   | |- <( ?t, ?w |= ?φ AU ?ψ )> => rewrite unfold_entailsF; apply MatchA
   | |- <( ?t, ?w |= ?φ EU ?ψ )> => rewrite unfold_entailsF; apply MatchE
-  | |- <( ?t, ?w |= ?φ AR ?ψ )> => step; cbn; apply RMatchA
-  | |- <( ?t, ?w |= ?φ ER ?ψ )> => step; cbn; apply RMatchE
+  | |- <( ?t, ?w |= AG ?φ )> => step; cbn
+  | |- <( ?t, ?w |= EG ?φ )> => step; cbn
   end.
 
 #[global] Ltac cdestruct H0 :=
@@ -75,14 +75,14 @@ Generalizable All Variables.
       let t' := fresh "t" in
       remember t as t';
       rewrite unfold_entailsF in H0; destruct H0; subst
-  | @entailsF ?M ?W ?HE ?KMS ?X (CAR ?φ ?ψ) ?t ?w =>
+  | @entailsF ?M ?W ?HE ?KMS ?X (CAG ?φ) ?t ?w =>
       let t' := fresh "t" in
       remember t as t';
-      rewrite unfold_entailsF in H0; step in H0; cbn in H0; destruct H0; subst
-  | @entailsF ?M ?W ?HE ?KMS ?X (CER ?φ ?ψ) ?t ?w =>
+      rewrite unfold_entailsF in H0; step in H0; cbn in H0; subst
+  | @entailsF ?M ?W ?HE ?KMS ?X (CEG ?φ) ?t ?w =>
       let t' := fresh "t" in
       remember t as t';
-      rewrite unfold_entailsF in H0; step in H0; cbn in H0; destruct H0; subst
+      rewrite unfold_entailsF in H0; step in H0; cbn in H0; subst
   end.
 
 #[global] Ltac cinduction H0 :=
@@ -95,11 +95,11 @@ Generalizable All Variables.
 
 #[global] Ltac coinduction_g R CIH :=
   let R' := fresh R in
-  try change (<( ?t, ?w |= ?p AR ?q )>) with (car (entailsF p) (entailsF q) t w);
-  try change (<( ?t, ?w |= ?p ER ?q )>) with (cer (entailsF p) (entailsF q) t w);
+  try change (<( ?t, ?w |= AG ?p )>) with (cag (entailsF p) t w);
+  try change (<( ?t, ?w |= EG ?p )>) with (ceg (entailsF p) t w);
   coinduction R' CIH;
-  try change (car (entailsF ?p) (entailsF ?q) ?t ?w) with <( t, w |= p AR q )> in *;
-  try change (cer (entailsF ?p) (entailsF ?q) ?t ?w) with <( t, w |= p ER q )> in *.
+  try change (cag (entailsF ?p) ?t ?w) with <( t, w |= AG p )> in *;
+  try change (ceg (entailsF ?p) ?t ?w) with <( t, w |= EG p )> in *.
 
 #[global] Tactic Notation "destruct" ident_list(H) :=
   (cdestruct H || destruct H).

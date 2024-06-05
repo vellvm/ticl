@@ -44,7 +44,7 @@ Section BasicLemmas.
         * apply ctl_now...
         * apply ctl_now...          
       + apply ax_vis... 
-    - cdestruct H; try contradiction.
+    - next in H; cdestruct H.  
       destruct H0 as (Hs & Ht').
       apply ctl_now in H as (? & ?).
       split; [|split]...
@@ -66,7 +66,7 @@ Section BasicLemmas.
         destruct H.
         now cbn in *.
       + apply ax_br... 
-    - cdestruct H; try contradiction.
+    - next in H; cdestruct H.       
       destruct H0 as (Hs & Ht').
       apply ctl_now in H as (? & ?).
       split...
@@ -80,22 +80,22 @@ Section BasicLemmas.
       <( {stuck: ctree E X}, w |= AG φ )> -> False.
   Proof.
     intros.
-    cdestruct H; try contradiction; subst.
-    destruct H0.
-    now apply can_step_stuck in H0.
+    cdestruct H; subst. 
+    destruct H as (? & (Hs & ?)).
+    now apply can_step_stuck in Hs.
   Qed.
 
   Lemma ag_ret: forall (x: X) w φ,      
       <( {Ret x}, w |= AG φ )> -> False.
   Proof.
     intros. 
-    cdestruct H; try contradiction.
-    destruct H0 as ((S & w' & TR) & H0).
+    cdestruct H.
+    destruct H as (? & ((t' & w' & TR) & ?)). 
     specialize (H0 _ _ TR).
     cbn in TR.
     dependent destruction TR; observe_equ x;
-      rewrite <- Eqt, H in H0; eapply ag_stuck;
-      rewrite unfold_entailsF; apply H0.
+      rewrite <- Eqt, H0 in H1; eapply ag_stuck;
+      rewrite unfold_entailsF; apply H1.
   Qed.
 
   Lemma ag_guard: forall w φ (t: ctree E X),
@@ -117,8 +117,7 @@ Section BindLemmas.
     intros.
     generalize dependent t.
     revert k w.
-    coinduction R CIH; intros; apply RStepA;
-      step in H; cbn in H; destruct H; intuition.
+    coinduction R CIH; intros; constructor; step in H; destruct H; intuition.
     destruct H0 as ((t' & w' & TR) & ?).
     split.
     - apply can_step_bind.
@@ -127,7 +126,7 @@ Section BindLemmas.
       specialize (H0 t' w' TR).
       step in H0; ddestruction H0; intuition.
       destruct H1.
-      now apply can_step_not_done with t0.
+      now apply can_step_not_done with t'.
     - intros k_ w_ TR_.
       apply ktrans_bind_inv in TR_ as
           [(t_ & TRt & Hd & ->) |
@@ -168,35 +167,33 @@ Section BindLemmas.
   Qed.
 
   Lemma ag_bind_now_ag{X Y} φ Post:
-      ag_bind_now_clos (X:=X) (Y:=Y) φ Post <= cart <( |- now φ )> <( |- ⊥ )>.
+      ag_bind_now_clos (X:=X) (Y:=Y) φ Post <= cagt <( |- now φ )>.
   Proof.    
     apply Coinduction.
     intros R t w; cbn.
     apply (leq_bind_ctx1 _ _
-             (fun t => carF (entailsF <( now φ )>) (entailsF <( ⊥ )>)
-                      (carT (entailsF <( now φ )>) (entailsF <( ⊥ )>)
+             (fun t => cagF (entailsF <( now φ )>)
+                      (cagT (entailsF <( now φ )>)
                          (ag_bind_now_clos φ Post) R) t w)). 
     intros x Hx k Hk.
     cinduction Hx.
     - (* AX done R *)
       apply ax_done in H as (Hw & x & Heq & HPost).
       specialize (Hk _ _ HPost); remember (k x) as K;
-        destruct Hk; try contradiction; subst.
-      apply RStepA.
+        destruct Hk; subst; split.      
       + rewrite Heq, bind_ret_l; try (exact (equ eq)); auto.
       + split.
         * rewrite Heq, bind_ret_l.
           now destruct H0.
         * intros t' w' TR.
-          apply (id_T (car_ (entailsF <( now φ )>) (entailsF <( ⊥ )>))); cbn.
+          apply (id_T (cagF (entailsF <( now φ )>))); cbn.
           destruct H0.
           apply H1.
           eapply ktrans_sbisim_ret with (t:=t0); auto.
     - (* vis φ *)
       destruct H0, H1; clear H0.
       destruct H1 as (t' & w' & TR).
-      apply RStepA; auto.
-      split.
+      split; [auto | split].
       + apply can_step_bind_l with t' w'; auto.
         destruct (H3 _ _ TR); try contradiction.
         destruct H1.
@@ -205,14 +202,14 @@ Section BindLemmas.
         apply ktrans_bind_inv in TRk as
             [(t0' & TR0 & Hd_ & Heq) | (x & w0 & TRt0 & Hd & TRk)].
         * (* [t0] steps and is not [Ret] *)
-          apply (fT_T (mequ_clos_car (KS:=KripkeSetoidEqu))).
+          apply (fT_T (mequ_clos_cag (KS:=KripkeSetoidEqu))).
           cbn; eapply mequ_clos_ctor with (t1:=x <- t0';; k x) (w1:=w_); auto.
           clear Heq k_.            
-          eapply (fTf_Tf (car_ <( |- now φ )> <( |- ⊥ )>)).
+          eapply (fTf_Tf (cagF <( |- now φ )>)). 
           apply in_bind_ctx1.
           -- rewrite unfold_entailsF; auto.             
           -- intros.
-             apply (b_T (car_ <( |- now φ )> <( |- ⊥ )>)); cbn; auto.
+             apply (b_T (cagF <( |- now φ )>)); cbn; auto.
         * (* [t0] steps and is [Ret], contradiction *)
           ddestruction Hd; subst;
             specialize (H3 _ _ TRt0); ddestruction H3;
@@ -256,7 +253,7 @@ Section BindLemmas.
     generalize dependent x.
     generalize dependent w.    
     coinduction RR CIH; intros.
-    apply RStepA.
+    split.
     - apply ctl_now; auto.
     - split. 
       + (* can_step (iter k x) w *)
@@ -345,8 +342,7 @@ Section CtlAgState.
     generalize dependent s.
     generalize dependent w.
     coinduction RR CIH; intros.
-    apply RStepA; [apply ctl_now; now constructor|].
-    split.
+    split; [apply ctl_now; now constructor|split].
     - (* can_step *)
       specialize (H2 _ _ _ H H0 H1).
       cdestruct H2.
@@ -407,8 +403,7 @@ Section CtlAgW.
     generalize dependent σ.
     generalize dependent i.    
     coinduction RR CIH; intros.
-    apply RStepA; [apply ctl_now; eauto with ctl |].
-    split.
+    split; [apply ctl_now; eauto with ctl |split].
     - (* can_step *)
       specialize (H1 _ _ H H0).
       cdestruct H1.
@@ -446,7 +441,7 @@ Section CtlAgW.
           apply HAX.
         * intros (lr' & s_) w ([σ'] & [] & ? & ? & i' & -> & ? & ?); subst.
           unfold Classes.iter, MonadIter_ctree.          
-          apply (ft_t (mequ_clos_car (KS:=KripkeSetoidSBisim))); cbn.
+          apply (ft_t (mequ_clos_cag (KS:=KripkeSetoidSBisim))); cbn.
           econstructor.
           rewrite sb_guard.
           rewrite interp_state_unfold_iter.

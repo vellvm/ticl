@@ -83,35 +83,21 @@ Section SecurityEx.
           | Write l addr v => unit
           end.
 
+  (* Insecure interpreter, does not check labels *)
   Definition h_secE: secE ~> stateT St (ctree void) :=
     fun e => mkStateT
             (fun (st: St) =>                                     
                match e return ctree void (encode e * St) with
-               | Read l addr =>                                 
+               | Read _ addr =>                                 
                    match lookup addr st with
                    (* [addr] exists and set to [(v, l_a)] *)
-                   | Some (l_a, v) =>
-                       (* [l_a ⪯ l] *)
-                       if sec_lte_dec l_a l then
-                         Ret (Some v, st)
-                       else
-                         Ret (None, st)
+                   | Some (l_a, v) => Ret (Some v, st)
                    (* [addr] does not exist, return [None] *)
                    | None => Ret (None, st)
                    end
-               | Write l addr v =>                   
-                   match lookup addr st with
-                   (* [addr] exists and set to [(_, l_a)] *)
-                   | Some (l_a, _) =>
-                       (* [l_a ⪯ l] *)
-                       if sec_lte_dec l_a l then
-                         Ret (tt, add addr (l, v) st)
-                       else
-                         Ret (tt, st)
-                   (* [addr] does not exist, create it *)
-                   | None =>
-                       Ret (tt, add addr (l, v) st)
-                   end
+               | Write l addr v =>
+                   (* Set [addr] to [(l, v)] *)
+                   Ret (tt, add addr (l, v) st)
                end).
 
   (* Ghost state, instrument every read with
@@ -163,22 +149,6 @@ Section SecurityEx.
     Nat.Even i ->
     exists v, lookup i σ = Some (L, v).
 
-
-  Ltac even_odd :=
-    match goal with
-    | [H: Nat.Even ?x, H': Nat.Odd ?x |- _] =>
-        exfalso;
-        apply Nat.Even_Odd_False with x; [apply H | apply H']
-    | [H: Nat.Even ?x, H': Nat.Even (S ?x) |- _] =>
-        exfalso;
-        apply Nat.Even_succ in H';
-        apply Nat.Even_Odd_False with x; [apply H | apply H']
-    | [H: Nat.Odd ?x, H': Nat.Odd (S ?x) |- _] =>
-        exfalso;
-        apply Nat.Odd_succ in H';
-        apply Nat.Even_Odd_False with x; [apply H' | apply H]          
-    end.
-
   (* Safety property: there does not exist a memory label [ml] accessed by
      label [al ≺ ml], or there does not exist a low intruction that reads from
      high-security memory *)
@@ -208,37 +178,15 @@ Section SecurityEx.
     - (* Alice runs, [i] is even *)
       eapply au_bind_r_eq.
       + rewrite (@interp_state_trigger _ _ _ _ _ _ (Write H (S i) secret) _); cbn.
-        rewrite bind_bind.          
-        destruct (lookup (S i)%nat σ') eqn:Hlook.
-        * destruct p as (l, a).
-          destruct (sec_lte_dec l H); inv s;
-            rewrite resumCtree_ret', bind_ret_l.
-          -- eapply au_bind_r_eq; [eapply au_bind_r_eq|].
-             ++ apply au_vis_l...
-                ** apply ctl_vis...
-                ** intros [].
-                   cright; apply ax_done...
-             ++ cright; apply ax_done...
-             ++ cbn.
-                apply au_guard.
-                cright; apply ax_done...
-          -- eapply au_bind_r_eq; [eapply au_bind_r_eq|].
-             ++ apply au_vis_l...
-                apply ctl_vis...
-                intros [].
-                cright; apply ax_done...
-             ++ cright; apply ax_done...
-             ++ apply au_guard.
-                cright; apply ax_done...
-        * rewrite resumCtree_ret', bind_ret_l.
-          eapply au_bind_r_eq; [eapply au_bind_r_eq|].
-          -- apply au_vis_l...
-             apply ctl_vis...
-             intros [].
-             cright; apply ax_done...
-          -- cright; apply ax_done...
-          -- apply au_guard.
-             cright; apply ax_done...
+        rewrite bind_bind, resumCtree_ret', bind_ret_l.
+        eapply au_bind_r_eq; [eapply au_bind_r_eq|].
+        * apply au_vis_l...
+           -- apply ctl_vis...
+           -- intros [].
+              cright; apply ax_done...
+        * cright; apply ax_done...
+        * apply au_guard.
+          cright; apply ax_done...
       + cbn.
         rewrite interp_state_ret.
         cright; apply ax_done; split...
@@ -254,45 +202,25 @@ Section SecurityEx.
             apply Nat.Even_succ in Heven.
             exfalso.
             apply Nat.Even_Odd_False with i...
-          -- destruct (Hσ0 i0 Heven) as (v & ?).
+          -- (* i0 <> S i *)
+            destruct (Hσ0 i0 Heven) as (v & ?).
             exists v.
-            rewrite mapsto_lookup.
+            rewrite OF.(mapsto_lookup).
             apply mapsto_add_neq with (R:=eq); auto.
             now rewrite <- mapsto_lookup.
     - (* Alice runs, [i] is odd *)
       eapply au_bind_r_eq.
       + rewrite (@interp_state_trigger _ _ _ _ _ _ (Write H i secret) _); cbn.
-        rewrite bind_bind.          
-        destruct (lookup i σ') eqn:Hlook.
-        * destruct p as (l, a).
-          destruct (sec_lte_dec l H); inv s;
-            rewrite resumCtree_ret', bind_ret_l.
-          -- eapply au_bind_r_eq; [eapply au_bind_r_eq|].
-             ++ apply au_vis_l...
-                ** apply ctl_vis...
-                ** intros [].
-                   cright; apply ax_done...
-             ++ cright; apply ax_done...
-             ++ cbn.
-                apply au_guard.
-                cright; apply ax_done...
-          -- eapply au_bind_r_eq; [eapply au_bind_r_eq|].
-             ++ apply au_vis_l...
-                apply ctl_vis...
-                intros [].
-                cright; apply ax_done...
-             ++ cright; apply ax_done...
-             ++ apply au_guard.
-                cright; apply ax_done...
-        * rewrite resumCtree_ret', bind_ret_l.
-          eapply au_bind_r_eq; [eapply au_bind_r_eq|].
-          -- apply au_vis_l...
-             apply ctl_vis...
-             intros [].
+        rewrite bind_bind, resumCtree_ret', bind_ret_l.
+        eapply au_bind_r_eq; [eapply au_bind_r_eq|].
+        * apply au_vis_l...
+          -- apply ctl_vis...
+          -- intros [].
              cright; apply ax_done...
-          -- cright; apply ax_done...
-          -- apply au_guard.
-             cright; apply ax_done...
+        * cright; apply ax_done...
+        * cbn.
+          apply au_guard.
+          cright; apply ax_done...
       + cbn.
         rewrite interp_state_ret.
         cright; apply ax_done; split...
@@ -310,33 +238,22 @@ Section SecurityEx.
           -- (* i0 <> i *)
             destruct (Hσ0 i0 Heven) as (v & ?).
             exists v.
-            rewrite mapsto_lookup.
+            rewrite OF.(mapsto_lookup).
             apply mapsto_add_neq with (R:=eq); auto.
             now rewrite <- mapsto_lookup.
     - (* Bob runs, [i] is even *)
       eapply au_bind_r_eq.
       + rewrite interp_state_bind.
         rewrite (@interp_state_trigger _ _ _ _ _ _ (Read L i) _); cbn.
-        repeat rewrite bind_bind.          
+        rewrite ?bind_bind.          
         destruct (lookup i σ') eqn:Hlook.
         * destruct p as (l, a).
-          destruct (sec_lte_dec l L); inv s;
-            rewrite resumCtree_ret', bind_ret_l, bind_bind.
+          rewrite resumCtree_ret', bind_ret_l, bind_bind.
           -- eapply au_bind_r_eq; [eapply au_bind_r_eq|].
              ++ apply au_vis_l...
                 ** apply ctl_vis...
                 ** intros [].
                    cright; apply ax_done...
-             ++ rewrite bind_ret_l, sb_guard.
-                cright; apply ax_done...
-             ++ cbn.
-                rewrite interp_state_ret.
-                cright; apply ax_done...
-          -- eapply au_bind_r_eq; [eapply au_bind_r_eq|].
-             ++ apply au_vis_l...
-                apply ctl_vis...
-                intros [].
-                cright; apply ax_done...
              ++ rewrite bind_ret_l, sb_guard.
                 cright; apply ax_done...
              ++ cbn.
@@ -365,23 +282,12 @@ Section SecurityEx.
         repeat rewrite bind_bind.          
         destruct (lookup (S i) σ') eqn:Hlook.
         * destruct p as (l, a).
-          destruct (sec_lte_dec l L); inv s;
-            rewrite resumCtree_ret', bind_ret_l, bind_bind.
+          rewrite resumCtree_ret', bind_ret_l, bind_bind.
           -- eapply au_bind_r_eq; [eapply au_bind_r_eq|].
              ++ apply au_vis_l...
                 ** apply ctl_vis...
                 ** intros [].
                    cright; apply ax_done...
-             ++ rewrite bind_ret_l, sb_guard.
-                cright; apply ax_done...
-             ++ cbn.
-                rewrite interp_state_ret.
-                cright; apply ax_done...
-          -- eapply au_bind_r_eq; [eapply au_bind_r_eq|].
-             ++ apply au_vis_l...
-                apply ctl_vis...
-                intros [].
-                cright; apply ax_done...
              ++ rewrite bind_ret_l, sb_guard.
                 cright; apply ax_done...
              ++ cbn.
@@ -403,9 +309,6 @@ Section SecurityEx.
         do 2 eexists; split...
         cbn; intuition.
         eexists; intuition.
-        Unshelve.
-        exact OF.
-        exact OF.
   Qed.
-                
+  Print Assumptions ag_safety_sec.
 End SecurityEx.

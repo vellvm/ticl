@@ -121,7 +121,106 @@ Section EquivSetoid.
     all: ktrans_equ TR;
       exists z0,z; split; [| rewrite <- EQ]; auto.
   Qed.
+      
+  (*| [meq] closure enchancing function |*)
+  Variant mequ_clos_body(R : MP) : MP :=
+    | mequ_clos_ctor : forall t0 w0 t1 w1
+                         (Heqm : meq t0 t1)
+                         (Heqw : w0 = w1)
+                         (HR : R t1 w1),
+        mequ_clos_body R t0 w0.
+  Hint Constructors mequ_clos_body: core.
 
+  Arguments impl /.
+  Program Definition mequ_clos: mon MP :=
+    {| body := mequ_clos_body |}.
+  Next Obligation. repeat red; intros; destruct H0; subst; eauto. Qed.
+
+  Lemma mequ_clos_cag:
+    mequ_clos <= cagt P.
+  Proof.
+    apply Coinduction; cbn.
+    intros R t0 w0 [t1 w1 t2 w2 Heq -> [Hp HR]]. 
+    rewrite <- Heq in Hp.
+    destruct HR as (Hs & HR').
+    split; [auto | split].
+    - now rewrite Heq.
+    - intros t' w' TR.
+      eapply (f_Tf (cagF P)). 
+      ktrans_equ TR.
+      eapply mequ_clos_ctor with (t1:=z); eauto. 
+  Qed.
+
+  Lemma mequ_clos_ceg:
+    mequ_clos <= cegt P.
+  Proof.
+    apply Coinduction; cbn.
+    intros R t0 w0 [t1 w1 t2 w2 Heq -> [Hp HR]]. 
+    rewrite <- Heq in Hp.
+    destruct HR as (t' & w' & TR & HR). 
+    split; [auto |].
+    ktrans_equ TR.
+    exists z, w'; split; auto.
+    eapply (f_Tf (cegF P)). 
+    eapply mequ_clos_ctor with (t1:=t') (w1:=w'); eauto.
+    now symmetry.
+  Qed.
+
+  Global Add Parametric Morphism RR: (cagt P RR) with signature
+         (meq ==> eq ==> iff) as proper_agt_equ.
+  Proof.
+    intros t t' Heqm w'; split; intro G; apply (ft_t mequ_clos_cag).
+    - eapply mequ_clos_ctor with (t1:=t); eauto.
+      now symmetry.
+    - eapply mequ_clos_ctor with (t1:=t'); eauto.
+  Qed.
+  
+  Global Add Parametric Morphism RR f: (cagT P f RR)
+         with signature (meq ==> eq ==> iff) as proper_agT_equ.
+  Proof.
+    intros t t' Heqt w'; split; intro G; apply (fT_T mequ_clos_cag).
+    - eapply mequ_clos_ctor with (t1:=t); eauto.
+      now symmetry.
+    - eapply mequ_clos_ctor with (t1:=t'); eauto.
+  Qed.
+  
+  Global Add Parametric Morphism: (cag P)
+         with signature (meq ==> eq ==> iff) as proper_ag_equ.
+  Proof.
+    intros t t' Heqt w'; split; intro G; apply (ft_t mequ_clos_cag).
+    - eapply mequ_clos_ctor with (t1:=t); eauto.
+      now symmetry.
+    - eapply mequ_clos_ctor with (t1:=t'); eauto.
+  Qed.      
+
+  Global Add Parametric Morphism RR: (cegt P RR)
+         with signature (meq ==> eq ==> iff) as proper_egt_equ.
+  Proof.
+    intros t t' Heqt w'; split; intro G; apply (ft_t mequ_clos_ceg).
+    - eapply mequ_clos_ctor with (t1:=t); eauto.
+      now symmetry.
+    - eapply mequ_clos_ctor with (t1:=t'); eauto.
+  Qed.
+
+  Global Add Parametric Morphism RR f: (cegT P f RR)
+         with signature (meq ==> eq ==> iff) as proper_egT_equ.
+  Proof.
+    intros t t' Heqt w'; split; intro G; apply (fT_T mequ_clos_ceg).
+    - eapply mequ_clos_ctor with (t1:=t); eauto.
+      now symmetry.
+    - eapply mequ_clos_ctor with (t1:=t'); eauto.
+  Qed.
+  
+  Global Add Parametric Morphism: (ceg P)
+         with signature (meq ==> eq ==> iff) as proper_er_equ.
+  Proof.
+    intros t t' Heqt w'; split; intro G; apply (ft_t mequ_clos_ceg).
+    - eapply mequ_clos_ctor with (t1:=t); eauto.
+      now symmetry.
+    - eapply mequ_clos_ctor with (t1:=t'); eauto.
+  Qed.
+
+  (*| Binary modalities AU, EU |*)
   Context {Q: MP} {HQ: Proper (meq ==> eq ==> iff) Q}.
   Global Add Parametric Morphism: (cau P Q)
         with signature (meq ==> eq ==> iff) as proper_au_equ.
@@ -174,106 +273,7 @@ Section EquivSetoid.
           exists z, w1; split; eauto.
           apply EQ1; symmetry; auto.
   Qed.
-    
-  (*| [meq] closure enchancing function |*)
-  Variant mequ_clos_body(R : MP) : MP :=
-    | mequ_clos_ctor : forall t0 w0 t1 w1
-                         (Heqm : meq t0 t1)
-                         (Heqw : w0 = w1)
-                         (HR : R t1 w1),
-        mequ_clos_body R t0 w0.
-  Hint Constructors mequ_clos_body: core.
 
-  Arguments impl /.
-  Program Definition mequ_clos: mon MP :=
-    {| body := mequ_clos_body |}.
-  Next Obligation. repeat red; intros; destruct H0; subst; eauto. Qed.
-
-  Lemma mequ_clos_car:
-    mequ_clos <= cart P Q.
-  Proof.
-    apply Coinduction; cbn.
-    intros R t0 w0 [t1 w1 t2 w2 Heq -> ?];  inv HR. 
-    - apply RMatchA; now rewrite Heq.
-    - apply RStepA; intros.
-      + now rewrite Heq. 
-      + unfold cax; destruct H0 as [Hsm2 TR2]; split; cbn; cbn in Hsm2.
-        * now rewrite Heq. 
-        * intros t' w' TR.
-          eapply (f_Tf (car_ P Q)). 
-          ktrans_equ TR.
-          eapply mequ_clos_ctor with (t1:=z); eauto. 
-  Qed.
-
-  Lemma mequ_clos_cer:
-    mequ_clos <= cert P Q.
-  Proof.    
-    apply Coinduction; cbn.
-    intros R t0 w0 [t1 w1 t2 w2 Heq -> ?]; inv HR. 
-    - apply RMatchE; now rewrite Heq. 
-    - destruct H0 as (t' & w' & TR2 & ?).
-      apply RStepE.
-      + now rewrite Heq.
-      + ktrans_equ TR2.
-        exists z, w'; split; auto. 
-        eapply (f_Tf (cer_ P Q)).       
-        eapply mequ_clos_ctor with (t1:=t') (w1:=w'); eauto.
-        now symmetry.
-  Qed.
-
-  Global Add Parametric Morphism RR: (cart P Q RR) with signature
-         (meq ==> eq ==> iff) as proper_art_equ.
-  Proof.
-    intros t t' Heqm w'; split; intro G; apply (ft_t mequ_clos_car).
-    - eapply mequ_clos_ctor with (t1:=t); eauto.
-      now symmetry.
-    - eapply mequ_clos_ctor with (t1:=t'); eauto.
-  Qed.
-  
-  Global Add Parametric Morphism RR f: (carT P Q f RR)
-         with signature (meq ==> eq ==> iff) as proper_arT_equ.
-  Proof.
-    intros t t' Heqt w'; split; intro G; apply (fT_T mequ_clos_car).
-    - eapply mequ_clos_ctor with (t1:=t); eauto.
-      now symmetry.
-    - eapply mequ_clos_ctor with (t1:=t'); eauto.
-  Qed.
-  
-  Global Add Parametric Morphism: (car P Q)
-         with signature (meq ==> eq ==> iff) as proper_ar_equ.
-  Proof.
-    intros t t' Heqt w'; split; intro G; apply (ft_t mequ_clos_car).
-    - eapply mequ_clos_ctor with (t1:=t); eauto.
-      now symmetry.
-    - eapply mequ_clos_ctor with (t1:=t'); eauto.
-  Qed.      
-
-  Global Add Parametric Morphism RR: (cert P Q RR)
-         with signature (meq ==> eq ==> iff) as proper_ert_equ.
-  Proof.
-    intros t t' Heqt w'; split; intro G; apply (ft_t mequ_clos_cer).
-    - eapply mequ_clos_ctor with (t1:=t); eauto.
-      now symmetry.
-    - eapply mequ_clos_ctor with (t1:=t'); eauto.
-  Qed.
-
-  Global Add Parametric Morphism RR f: (cerT P Q f RR)
-         with signature (meq ==> eq ==> iff) as proper_erT_equ.
-  Proof.
-    intros t t' Heqt w'; split; intro G; apply (fT_T mequ_clos_cer).
-    - eapply mequ_clos_ctor with (t1:=t); eauto.
-      now symmetry.
-    - eapply mequ_clos_ctor with (t1:=t'); eauto.
-  Qed.
-  
-  Global Add Parametric Morphism: (cer P Q)
-         with signature (meq ==> eq ==> iff) as proper_er_equ.
-  Proof.
-    intros t t' Heqt w'; split; intro G; apply (ft_t mequ_clos_cer).
-    - eapply mequ_clos_ctor with (t1:=t); eauto.
-      now symmetry.
-    - eapply mequ_clos_ctor with (t1:=t'); eauto.
-  Qed.
 End EquivSetoid.
 
 Global Add Parametric Morphism `{KS: KripkeSetoid M E X meq} (φ: ctlf E X) : <( |- φ )>
@@ -308,10 +308,10 @@ Proof.
   - (* eu *)
     refine (@proper_eu_equ M E HE K X meq Eqm KS (entailsF φ1) _ (entailsF φ2) _ _ _ Heq _ _ eq_refl);
       unfold Proper, respectful; intros; subst; auto.
-  - (* ar *)
-    refine (@proper_ar_equ M E HE K X meq Eqm KS (entailsF φ1) _ (entailsF φ2) _ _ _ Heq _ _ eq_refl);
+  - (* ag *)
+    refine (@proper_ag_equ M E HE K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl);
       unfold Proper, respectful; intros; subst; auto.
   - (* er *)
-    refine (@proper_er_equ M E HE K X meq Eqm KS (entailsF φ1) _ (entailsF φ2) _ _ _ Heq _ _ eq_refl);
+    refine (@proper_er_equ M E HE K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl);
       unfold Proper, respectful; intros; subst; auto.
 Qed.

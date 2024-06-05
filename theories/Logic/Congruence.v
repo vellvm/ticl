@@ -121,59 +121,50 @@ Section EquivCtlFormulas.
       + exact H1.
   Qed.
 
-  Arguments CAR {E} {HE} {X}.
-  Global Add Parametric Morphism: CAR with signature
-         (equiv_ctl ==> equiv_ctl ==> equiv_ctl)
-           as proper_equivctl_ar.
+  Arguments CAG {E} {HE} {X}.
+  Global Add Parametric Morphism: CAG with signature
+         (equiv_ctl ==> equiv_ctl)
+           as proper_equivctl_ag.
   Proof.
     intros.
     unfold equiv_ctl.
-    split; revert t w; coinduction R CIH; intros; step in H1; cbn in H1; inv H1.
-    - apply RMatchA.
-      + now rewrite <- H0.
-      + now rewrite <- H.
-    - apply RStepA.
-      + now rewrite <- H.
-      + destruct H3; split; auto.
+    split; revert t w; coinduction R CIH; intros; step in H0; destruct H0 as (Hy & H0). 
+    - constructor. 
+      + now rewrite H in Hy.
+      + rewrite H in Hy.
+        destruct H0 as (Hs & Htr).
+        split; auto.
         intros t' w' TR.
         apply CIH.
         rewrite unfold_entailsF.
-        now apply H3.
-    - apply RMatchA.
-      + now rewrite H0.
-      + now rewrite H.
-    - apply RStepA.
-      + now rewrite H.
-      + destruct H3; split; auto.
+        now apply Htr.
+    - constructor.      
+      + now rewrite <- H in Hy.
+      + rewrite <- H in Hy.
+        destruct H0 as (Hs & Htr).
+        split; auto.
         intros t' w' TR.
         apply CIH.
         rewrite unfold_entailsF.
-        now apply H3.
+        now apply Htr.
   Qed.
   
-  Arguments CER {E} {HE} {X}.
-  Global Add Parametric Morphism : CER with signature
-         (equiv_ctl ==> equiv_ctl ==> equiv_ctl)
-           as proper_equivctl_er.
+  Arguments CEG {E} {HE} {X}.
+  Global Add Parametric Morphism : CEG with signature
+         (equiv_ctl ==> equiv_ctl)
+           as proper_equivctl_eg.
   Proof.
     intros.
     unfold equiv_ctl.
-    split; revert t w; coinduction R CIH; intros; step in H1; cbn in H1; inv H1.
-    - apply RMatchE.
-      + now rewrite <- H0.
-      + now rewrite <- H.
-    - apply RStepE.
-      + now rewrite <- H.
-      + destruct H3 as (t' & w' & TR & H').
-        exists t', w'; intuition.
-    - apply RMatchE.
-      + now rewrite H0.
-      + now rewrite H.
-    - apply RStepE.
-      + now rewrite H.
-      + destruct H3 as (t' & w' & TR & H').
-        exists t', w'; intuition.
+    split; revert t w; coinduction R CIH; intros; step in H0; destruct H0 as (Hy & (t' & w' & TR & H0)).
+    - constructor.
+      + now rewrite H in Hy.
+      + exists t', w'; split; auto.
+    - constructor.
+      + now rewrite <- H in Hy.
+      + exists t', w'; split; auto.
   Qed.
+
   
 End EquivCtlFormulas.
 
@@ -310,46 +301,22 @@ Section CtlEquations.
     now rewrite ctl_and_idL.
   Qed.
 
-  Lemma ctl_ar_ax: forall (p q: ctlf E X),
-      <( p AR q )> ⩸ <( p /\ (q \/ AX (p AR q)) )>.
+  Lemma ctl_ag_ax: forall (p: ctlf E X),
+      <( AG p )> ⩸ <( p /\ AX (AG p) )>.
    Proof. 
      split; intros * Hp.
-     - step in Hp; inv Hp; csplit.
-       + assumption.
-       + now cleft. 
-       + assumption. 
-       + now cright.
+     - step in Hp; inv Hp; csplit; auto.
      - cdestruct Hp.
        destruct H0; step; now constructor.
    Qed.
 
-   Lemma ctl_er_ex: forall (p q: ctlf E X),
-      <( p ER q )> ⩸ <( p /\ (q \/ EX (p ER q)) )>.
-   Proof. 
-     split; intros * Hp.
-     - split; step in Hp; inv Hp.
-       + assumption.
-       + assumption.
-       + now left.
-       + now right.
-     - destruct Hp.
-       destruct H0; step; now constructor.
-   Qed.
-
-   Lemma ctl_ag_ax: forall (p: ctlf E X),
-       <( AG p )> ⩸ <( p /\ AX (AG p) )>.
-   Proof.
-     etransitivity.
-     - apply ctl_ar_ax.
-     - now rewrite ctl_or_idL.
-   Qed.
-
    Lemma ctl_eg_ex: forall (p: ctlf E X),
        <( EG p )> ⩸ <( p /\ EX (EG p) )>.
-   Proof.
-     etransitivity.
-     - apply ctl_er_ex.
-     - now rewrite ctl_or_idL.
+   Proof. 
+     split; intros * Hp.
+     - split; step in Hp; inv Hp; auto.
+     - cdestruct Hp.
+       step; now constructor.
    Qed.
 
    (* LEF: The opposite direction does not seem provable at this level
@@ -408,7 +375,7 @@ Section CtlEquations.
    Proof.
      split; intros;
        revert H; revert t w; coinduction R CIH; intros t' w' Hag.     
-     - apply RStepA; auto.
+     - constructor; auto. 
        apply ctl_ag_ax in Hag; cdestruct Hag.
        cdestruct H0.
        split; auto. 
@@ -417,7 +384,7 @@ Section CtlEquations.
        cdestruct H0.
        rewrite ctl_ag_ax in H.
        cdestruct H.
-       apply RStepA; auto.
+       constructor; auto.
        split; auto; intros.       
    Qed.
 
@@ -426,7 +393,7 @@ Section CtlEquations.
    Proof.
      split; intros;
        revert H; revert t w; coinduction R CIH; intros t' w' Heg.     
-     - apply RStepE; auto.
+     - constructor; auto.
        apply ctl_eg_ex in Heg; cdestruct Heg.
        cdestruct H0.
        exists t, w; intuition.
@@ -435,7 +402,7 @@ Section CtlEquations.
        cdestruct H0.
        rewrite ctl_eg_ex in H.
        cdestruct H.
-       apply RStepE; auto.
+       constructor; auto.
        exists t, w; intuition.
    Qed.
 End CtlEquations.
@@ -448,6 +415,8 @@ End CtlEquations.
       lazymatch φ with
       | CAX ?p => apply (@unfold_ax M E HE KMS X)
       | CEX ?p => apply (@unfold_ex M E HE KMS X)
+      | CAG ?p => apply (@ctl_ag_ax M E HE KMS X)
+      | CEG ?p => apply (@ctl_eg_ex M E HE KMS X)
       | CAU ?p ?q => lazymatch eval cbv in p with
                     | CBase (fun _ => True) =>
                         apply (@ctl_af_ax M E HE KMS X)
@@ -457,16 +426,6 @@ End CtlEquations.
                     | CBase (fun _ => True) =>
                         apply (@ctl_ef_ex M E HE KMS X)
                     | _ => apply (@ctl_eu_ex M E HE KMS X)
-                    end
-      | CAR ?p ?q => lazymatch eval cbv in q with
-                    | CBase (fun _ => False) =>
-                        apply (@ctl_ag_ax M E HE KMS X)
-                    | _ => apply (@ctl_ar_ax M E HE KMS X)
-                    end
-      | CER ?p ?q => lazymatch eval cbv in q with
-                    | CBase (fun _ => False) =>
-                        apply (@ctl_eg_ex M E HE KMS X)
-                    | _ => apply (@ctl_er_ex M E HE KMS X)
                     end
       | ?ptrivial => fail "Cannot step formula " ptrivial
       end
@@ -478,6 +437,8 @@ End CtlEquations.
       lazymatch φ with
       | CAX ?p => rewrite (@unfold_ax M E HE KMS X) in H
       | CEX ?p => rewrite (@unfold_ex M E HE KMS X) in H
+      | context[CAG ?p] => rewrite (@ctl_ag_ax M E HE KMS X p) in H
+      | context[CEG ?p] => rewrite (@ctl_eg_ex M E HE KMS X p) in H
       | context[CAU ?p ?q] =>
           lazymatch eval cbv in p with
           | CBase (fun _ => True) =>
@@ -488,16 +449,6 @@ End CtlEquations.
           lazymatch eval cbv in p with
           | CBase (fun _ => True) => rewrite (@ctl_ef_ex M E HE KMS X q) in H
           | _ => rewrite (@ctl_eu_ex M E HE KMS X p q) in H
-          end
-      | context[CAR ?p ?q] =>
-          lazymatch eval cbv in q with
-          | CBase (fun _ => False) => rewrite (@ctl_ag_ax M E HE KMS X p) in H
-          | _ => rewrite (@ctl_ar_ax M E HE KMS X p q) in H
-          end
-      | context[CER ?p ?q] =>
-          lazymatch eval cbv in q with
-          | CBase (fun _ => False) => rewrite (@ctl_eg_ex M E HE KMS X p) in H
-          | _ => rewrite (@ctl_er_ex M E HE KMS X p q) in H
           end
       | ?ptrivial => fail "Cannot step formula " ptrivial " in " H
       end
