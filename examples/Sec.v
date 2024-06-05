@@ -190,8 +190,7 @@ Section SecurityEx.
   Proof with eauto with ctl.
     intros.    
     unfold sec_system, forever.
-    apply ag_iterW with (Ri:=fun _ => True)
-                        (Rv:=fun _ _ => True)...
+    apply ag_iterW with (R:=fun _ => True)...
     intros i σ' [] Hσ0. 
     rewrite map_bind, interp_state_bind.
     unfold br2.
@@ -410,8 +409,3 @@ Section SecurityEx.
   Qed.
                 
 End SecurityEx.
-          
-          
-          
-          
-  

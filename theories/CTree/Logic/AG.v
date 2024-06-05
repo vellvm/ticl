@@ -389,7 +389,7 @@ Section CtlAgW.
 
   Theorem ag_iterW{X I}: forall (σ: Σ) (k: I -> ctree E (I + X)) (i: I) (φ: Σ -> Prop) R,
       R i ->         (* Iterator invariant [Ri] *)
-      φ σ ->          (* Goal Invariant [φ] *)
+      φ σ ->         (* Goal Invariant [φ] *)
       (forall (x: I) (σ: Σ),
           R x ->
           φ σ ->
