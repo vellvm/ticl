@@ -191,11 +191,7 @@ Section SecurityEx.
     intros.    
     unfold sec_system, forever.
     apply ag_iterW with (Ri:=fun _ => True)
-                        (Rv:= fun i j =>
-                                if Nat.Even_Odd_dec i then
-                                  Nat.Odd j
-                                else
-                                  Nat.Even j) (φ := fun σ => forall i, noleak i σ)...
+                        (Rv:=fun _ _ => True)...
     intros i σ' [] Hσ0. 
     rewrite map_bind, interp_state_bind.
     unfold br2.
@@ -264,7 +260,6 @@ Section SecurityEx.
             rewrite mapsto_lookup.
             apply mapsto_add_neq with (R:=eq); auto.
             now rewrite <- mapsto_lookup.
-        * now apply Nat.Odd_succ.
     - (* Alice runs, [i] is odd *)
       eapply au_bind_r_eq.
       + rewrite (@interp_state_trigger _ _ _ _ _ _ (Write H i secret) _); cbn.
@@ -319,7 +314,6 @@ Section SecurityEx.
             rewrite mapsto_lookup.
             apply mapsto_add_neq with (R:=eq); auto.
             now rewrite <- mapsto_lookup.
-        * now apply Nat.Even_succ.
     - (* Bob runs, [i] is even *)
       eapply au_bind_r_eq.
       + rewrite interp_state_bind.
@@ -365,7 +359,6 @@ Section SecurityEx.
         do 2 eexists; split...
         cbn; intuition.
         eexists; intuition.
-        now apply Nat.Odd_succ.
     - (* Bob runs, [i] is odd *)
       eapply au_bind_r_eq.
       + rewrite interp_state_bind.
@@ -411,7 +404,6 @@ Section SecurityEx.
         do 2 eexists; split...
         cbn; intuition.
         eexists; intuition.
-        now apply Nat.Even_succ.
         Unshelve.
         exact OF.
         exact OF.
