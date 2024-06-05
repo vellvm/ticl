@@ -22,13 +22,7 @@ Ltac ddestruction H := cbn in H; dependent destruction H.
 Global Coercion is_true(b: bool): Prop :=
   if b then True else False.
 
-Global Coercion is_left{A B}(b: {A} + {B}): Prop :=
-  if b then True else False.
-
-
-(*|
-Heterogeneous [pair], todo move to coinduction library
-|*)
+(*| Heterogeneous [pair], todo move to coinduction library |*)
 Definition pointwise {X X' Y Y'} (SS : rel X X')
   : rel Y Y' -> rel (X -> Y) (X' -> Y') :=
   fun R k k' => forall x x', SS x x' -> R (k x) (k' x').
