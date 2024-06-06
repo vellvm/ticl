@@ -3,14 +3,11 @@ open ExtrOcamlIntConv;;
 open ImpBrEx;;
 open Printf;;
 
-let choose2 () =
-  if Random.int 2 = 1 then true else false;;
-
 let rec run1 t =
   match observe t with
   | RetF r -> print_int (int_of_nat r)
   | VisF (_e, _k) -> failwith "Vis (unreachable)"
-  | BrF (_, k) -> run1 (k (Obj.magic choose2()))
+  | BrF (_, k) -> run1 (k (Obj.magic Random.bool()))
   | GuardF t -> run1 t
   | StuckF -> failwith "Stuck"
   | _ -> failwith "unreachable";;
@@ -20,7 +17,7 @@ let rec run t =
   | RetF r -> print_int (int_of_nat r); true
   | VisF (_e, _k) -> failwith "Vis (unreachable)"
   | BrF (_, k) ->
-    let b = choose2() in
+    let b = Random.bool() in
     if run (k (Obj.magic b)) then true else run (k (Obj.magic (not b)))
   | GuardF t -> run t
   | StuckF -> false
