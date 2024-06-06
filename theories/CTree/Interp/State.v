@@ -23,6 +23,8 @@ Local Open Scope ctree_scope.
 Set Implicit Arguments.
 Generalizable All Variables.
 
+Notation ctreeW W := (ctree (writerE W)).
+
 (*| Observe 1-to-1 interpretation event-to-state -- [state S] to [stateT S (ctree void)] |*)
 Definition h_state `{Encode E} {Σ} (h:E ~> state Σ):
   E ~> stateT Σ (ctree void) :=

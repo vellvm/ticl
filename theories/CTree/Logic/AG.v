@@ -381,31 +381,31 @@ Section CtlAgState.
 End CtlAgState.
 
 Section CtlAgW.
-  Context {E Σ W: Type} {HE: Encode E} (h:E ~> stateT Σ (ctree void)). 
+  Context {E Σ W: Type} {HE: Encode E} (h:E ~> stateT Σ (ctreeW W)). 
 
-  Theorem ag_iterW{X I}: forall (σ: Σ) (k: I -> ctree E (I + X)) (i: I) (φ: Σ -> Prop) R,
-      R i ->         (* Iterator invariant [Ri] *)
-      φ σ ->         (* Goal Invariant [φ] *)
-      (forall (x: I) (σ: Σ),
-          R x ->
-          φ σ ->
-          <( {interp_state (h_writerΣ h) (k x) σ}, {Obs (Log σ) tt} |=
+  Theorem ag_iterW{X I}: forall (i: I) (σ: Σ) (w: W) (k: I -> ctree E (I + X)) φ R,
+      R i σ ->       (* Iterator & state invariant [R] *)
+      φ w ->         (* Goal Invariant [φ] *)
+      (forall (i: I) (σ: Σ) (w: W),
+          R i σ ->
+          φ w ->
+          <( {interp_state h (k i) σ}, {Obs (Log w) tt} |=
               AX (visW φ AU AX
-                    (finishW {fun (lr: I + X) (σ σ': Σ) =>
-                                σ = σ' /\ (* [h_writerΣ h] logs σ, then returns it [σ'] *)
-                                exists (i: I), lr = inl i /\ R i /\ φ σ})))>) ->
-      <( {interp_state (h_writerΣ h) (iter k i) σ}, {Obs (Log σ) tt} |= AG visW φ )>.
+                    (finishW {fun (lr: I + X) (σ: Σ) (w: W) =>
+                                exists (i: I), lr = inl i /\ R i σ /\ φ w})))>) ->
+      <( {interp_state h (iter k i) σ}, {Obs (Log w) tt} |= AG visW φ )>.
   Proof with eauto with ctl.
     setoid_rewrite ctl_vis_now.
     setoid_rewrite ctl_finish_done.
     intros.
     rewrite interp_state_unfold_iter.
     generalize dependent σ.
-    generalize dependent i.    
+    generalize dependent i.
+    generalize dependent w.    
     coinduction RR CIH; intros.
     split; [apply ctl_now; eauto with ctl |split].
     - (* can_step *)
-      specialize (H1 _ _ H H0).
+      specialize (H1 _ _ _ H H0).
       cdestruct H1.
       destruct Hs as (t' & w' & TR).
       specialize (H1 _ _ TR).
@@ -419,27 +419,26 @@ Section CtlAgW.
       + (* [k x] steps *)
         rewrite Heq; clear Heq t'.
         apply (ft_t (ag_bind_now_ag
-                       (fun w => (exists (e : writerE Σ) (v : encode e),
+                       (fun w => (exists (e : writerE W) (v : encode e),
                                   w = Obs e v /\
                                     (let 'Log v0 as x := e return (encode x -> Prop) in
                                      fun 'tt => φ v0) v))
-                       (fun (x : (I + X) * Σ) (w : World (writerE Σ)) =>
-                        exists (e : writerE Σ) (v : encode e),
+                       (fun (x : (I + X) * Σ) (w : World (writerE W)) =>
+                        exists (e : writerE W) (v : encode e),
                           w = Obs e v /\
                           (let
                            '(x0, s) := x in
-                            fun pat0 : writerE Σ =>
+                            fun pat0 : writerE _ =>
                             let
-                              'Log v0 as u := pat0 return (encode u -> Prop) in
-                            fun 'tt => s = v0 /\
-                                      exists i' : I, x0 = inl i' /\ R i' /\ φ s )
+                              'Log w0 as u := pat0 return (encode u -> Prop) in
+                            fun 'tt => exists i' : I, x0 = inl i' /\ R i' s /\ φ w0)
                             e v))); cbn.
         apply in_bind_ctx1.
-        * specialize (H1 _ _ H H0) as HAX.
+        * specialize (H1 _ _ _ H H0) as HAX.
           cdestruct HAX.
           specialize (HAX _ _ TR0).
           apply HAX.
-        * intros (lr' & s_) w ([σ'] & [] & ? & ? & i' & -> & ? & ?); subst.
+        * intros (lr' & s_) w_ ([σ'] & [] & ? & ? & i' & ? & ?); subst.
           unfold Classes.iter, MonadIter_ctree.          
           apply (ft_t (mequ_clos_cag (KS:=KripkeSetoidSBisim))); cbn.
           econstructor.
@@ -449,7 +448,7 @@ Section CtlAgW.
           reflexivity.
           apply CIH...
       + (* [k x] returns *)        
-        specialize (H1 _ _ H H0) as HAX.        
+        specialize (H1 _ _ _ H H0) as HAX.        
         cdestruct HAX.
         specialize (HAX _ _ TRt0).
         apply au_stuck in HAX.

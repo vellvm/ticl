@@ -240,8 +240,8 @@ Module CtlNotations.
 
   Notation "'finishW' R" :=
     (CDone (finish_with (fun '(x, s) (pat : writerE _) =>
-                           let 'Log v as u := pat return (encode u -> Prop) in
-                           fun 'tt => R x s v)))
+                           let 'Log w as u := pat return (encode u -> Prop) in
+                           fun 'tt => R x s w)))
       (in custom ctl at level 75): ctl_scope.
 
   Notation "⊤" := (CBase (fun _ => True)) (in custom ctl at level 76): ctl_scope.

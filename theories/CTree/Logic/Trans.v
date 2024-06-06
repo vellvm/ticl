@@ -27,8 +27,6 @@ Generalizable All Variables.
 Import Ctree CTreeNotations.
 Local Open Scope ctree_scope.
 
-Notation ctreeW W := (ctree (writerE W)).
-
 Section CTreeTrans.
   Context {E: Type} `{HE: Encode E}.
   Notation encode := (@encode E HE).
