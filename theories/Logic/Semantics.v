@@ -18,19 +18,17 @@ From ExtLib Require Import
 From CTree Require Import
   Events.Core
   Events.WriterE
-  Utils.Utils.
+  Utils.Utils
+  Logic.Kripke
+  Logic.Syntax.
 
-From CTree Require Export
-  Logic.Kripke.
-
-Set Implicit Arguments.
 Generalizable All Variables.
 
 (*| CTL logic shallow embedding, based on kripke semantics |*)
 Section Shallow.
   Context `{KMS: Kripke M E} {X: Type}.
 
-  Notation MS := (M HE X).
+  Notation MS := (M E HE X).
   Notation MP := (MS -> World E -> Prop).
   Local Open Scope ctl_scope.
 
@@ -124,29 +122,75 @@ Section Shallow.
 
 End Shallow.
 
-Section Syntax.
-  Context `{HE: Encode E} {X: Type}.
-
-  Inductive ctlf: Type :=
-  | CBase  (p: World E -> Prop): ctlf
-  | CDone (p: X -> World E -> Prop): ctlf
-  | CAX   : ctlf -> ctlf
-  | CEX   : ctlf -> ctlf
-  | CAnd  : ctlf -> ctlf -> ctlf
-  | COr   : ctlf -> ctlf -> ctlf
-  | CImpl : ctlf -> ctlf -> ctlf
-  | CAU   : ctlf -> ctlf -> ctlf
-  | CEU   : ctlf -> ctlf -> ctlf
-  | CAG   : ctlf -> ctlf
-  | CEG   : ctlf -> ctlf.
-
-End Syntax.
-
-Arguments ctlf E {HE} X.
-
 Notation cag p := (gfp (cagF p)).
 Notation ceg p := (gfp (cegF p)).
 
+Section Entailment.
+  Context `{KMS: Kripke M E}.
+
+  (* Two types of formulas requires a typeclass for denotation *)
+  Polymorphic Class Entails {X} (Φ: Type): Type :=
+    entails: Φ -> M E HE X -> World E -> Prop.
+
+  Fixpoint entailsL X (φ: ctll E) : M E HE X -> World E -> Prop :=
+    let fix entailsP (φ: CProp (ctll E)) :=
+      match φ with
+      | CBase cp => entailsL X cp
+      | CAnd φ ψ => fun m w => entailsP φ m w /\ entailsP ψ m w
+      | COr φ ψ => fun m w => entailsP φ m w \/ entailsP ψ m w
+      | CImpl φ ψ => fun m w => entailsP φ m w -> entailsP ψ m w
+      end in
+    match φ with
+    | CNowL ψ => fun _ w => ψ w /\ not_done w
+    | CgL Q_A p => cag (entailsL X p)
+    | CgL Q_E p => ceg (entailsL X p)
+    | CxL Q_A p => cax (entailsL X p)
+    | CxL Q_E p => cex (entailsL X p)
+    | CuL Q_A p q => cau (entailsL X p) (entailsL X q)
+    | CuL Q_E p q => ceu (entailsL X p) (entailsL X q)
+    | CPropL p => entailsP p
+    end.
+
+  Fixpoint entailsR {X} (φ: ctlr E X): M E HE X -> World E -> Prop :=
+    let fix entailsP (φ: CProp (ctlr E X)) :=
+      match φ with
+      | CBase cp => entailsR cp
+      | CAnd φ ψ => fun m w => entailsP φ m w /\ entailsP ψ m w
+      | COr φ ψ => fun m w => entailsP φ m w \/ entailsP ψ m w
+      | CImpl φ ψ => fun m w => entailsP φ m w -> entailsP ψ m w
+      end in
+    match φ with
+    | CNowR ψ => fun _ w => ψ w /\ not_done w
+    | CDoneR ψ => fun _ => done_with ψ
+    | CxR Q_A p => cax (entailsR p)
+    | CxR Q_E p => cex (entailsR p)
+    | CuR Q_A p q => cau (entailsL X p) (entailsR q)
+    | CuR Q_E p q => ceu (entailsL X p) (entailsR q)           
+    | CPropR p => entailsP p
+    end.
+
+  Global Instance EntailsL {X} : Entails (ctll E) :=
+    fun (φ: ctll E) => entailsL X φ.
+
+  Global Instance EntailsR {X}: Entails (ctlr E X) :=
+    fun (φ: ctlr E X) => entailsR φ.
+
+  Lemma unfold_entailsL {X}: forall (φ: ctll E),
+      entailsL X φ = match φ with
+                   | CBase p => fun _ => p
+                   | CDone p => fun _ => done_with p
+                   | CAnd φ ψ => fun t w => entailsF φ t w /\ entailsF ψ t w
+                   | COr φ ψ => fun t w => entailsF φ t w \/ entailsF ψ t w
+                   | CImpl φ ψ => fun t w => entailsF φ t w-> entailsF ψ t w
+                   | CAX φ => cax (entailsF φ)
+                   | CEX φ => cex (entailsF φ)
+                   | CAU φ ψ => cau (entailsF φ) (entailsF ψ)
+                   | CEU φ ψ => ceu (entailsF φ) (entailsF ψ)
+                   | CAG φ => cag (entailsF φ)
+                   | CEG φ => ceg (entailsF φ)
+                   end.
+  Proof. destruct φ; reflexivity. Qed.
+  Global Opaque entailsF.
 Section Entailment.
   Context `{KMS: Kripke M E} {X: Type}.
   Notation MS := (M HE X).

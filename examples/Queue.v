@@ -3,6 +3,7 @@ From CTree Require Import
   Events.Writer
   Logic.Ctl
   CTree.Equ
+  CTree.SBisim
   CTree.Logic.Trans
   Logic.Kripke
   CTree.Interp.Core
@@ -56,7 +57,7 @@ Section QueueEx.
   Context {S: Type} {HDec: RelDec (@eq S)} {HCor: RelDec_Correct HDec}.
   Infix "=?" := (rel_dec) (at level 75).
   
-  (* Ex1: Drain a queue *)
+  (* Ex1: Drain a queue until there is nothing left, you should get a needle in the end eventually. *)
   Definition drain: ctree (queueE S) unit :=
     iter (fun _ =>
             x <- pop ;;
@@ -75,28 +76,19 @@ Section QueueEx.
             | None => Ret (inr tt) (* should never return *)
             end) tt.            
 
-  (* Queue semantics *)
-  Definition h_queueE_sem: queueE S ~> state (list S) := 
+  (* Queue instrumented semantics *)
+  Definition h_queueE: queueE S ~> stateT (list S) (ctreeW S) := 
     fun e =>
-      mkState (fun q =>
-                 match e return encode e * list S with
-                 | Push v => (tt, q ++ [v])
+      mkStateT (fun q =>
+                 match e return ctreeW S (encode e * list S) with
+                 | Push v => Ret (tt, q ++ [v])
                  | Pop => match q with
-                         | nil => (None, nil)
-                         | h :: ts => (Some h, ts)
+                         | nil => Ret (None, nil)
+                         | h :: ts =>
+                             log h ;;
+                             Ret (Some h, ts)
                          end
                  end).
-
-  Definition h_queueE: queueE S ~> stateT (list S) (ctree (writerE S)) :=
-    h_writerA
-      (* queue semantics *)
-      (h_state h_queueE_sem)
-      (* queue instrumentation, observe [Pop] results *)
-      (fun (e: queueE S) (v: encode e) (_: list S) =>
-         match e return encode e -> option S with
-         | Pop => fun x: option S => x
-         | Push x => fun _ => None
-         end v).
 
   Lemma list_app_cons: forall (h s: S) ts hs,
       h :: ts = hs ++ [s] ->
@@ -106,80 +98,82 @@ Section QueueEx.
       end.  
   Proof. destruct hs; intros; cbn in *; inv H; auto. Qed.
   
-  (*| Eventually we get [s] |*)
+  (*| Eventually we get [nl] (needle) to show up in the instrumentation. |*)
   Typeclasses Transparent equ.
-  Opaque entailsF.
-
-  Theorem drain_af_pop: forall (s: S) q,
-      <( {interp_state h_queueE drain (q ++ [s])}, Pure |=
-         AF finishW \v l, v = s /\ l = @nil S )>.
+  Theorem drain_af_pop: forall (nl: S) (q: list S),
+      <( {interp_state h_queueE drain (q ++ [nl])}, Pure |=
+         AF finishW {fun 'tt l w => w = nl /\ l = @nil S })>.
   Proof with eauto with ctl.
     intros.
-    apply af_iter_state_list
-      with (Ri:=fun '(tt) w l =>
-                  not_done w /\
+    apply au_state_iter_list
+      with (Ri:=fun 'tt w l =>
                   match w with
                   | Obs (Log s') tt =>
                       match l with
-                      | nil => s = s'
-                      | h :: ts => exists hs, h:: ts = hs ++ [s]
+                      | nil => nl = s'
+                      | h :: ts => exists hs, h :: ts = hs ++ [nl]
                       end
-                  | _ => exists hs, l = hs ++ [s]
-                  end); [|eauto with ctl].
-    intros [] w l Hw.    
+                  | _ => exists hs, l = hs ++ [nl]
+                  end)... 
+    intros [] w l Hw Hd.    
     rewrite interp_state_bind.
-    unfold pop, trigger.
-    rewrite interp_state_vis, bind_bind.
-    unfold runStateT, h_queueE; cbn.
+    rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
     rewrite bind_bind.
-    resum.
-    rewrite bind_ret_l. 
-    destruct l as [|h ts], Hw as [Hd Hw].
-    - (* l = [] *)
-      inv Hd; cbn.
-      + destruct Hw, x; cbn in *; inv H.
-      + destruct e, v.
-        subst.
-        rewrite bind_ret_l, bind_guard.
-        apply af_guard.
-        rewrite interp_state_ret, bind_ret_l.
-        cbn.
-        rewrite interp_state_ret.
-        next; left.
-        apply ax_done; split...
-        do 2 eexists; intuition.
-    - (* l = h :: ts *)
-      cbn.
-      rewrite bind_trigger, bind_vis.      
-      next; right; next; split.
-      + apply can_step_vis; intuition.
-      + intros t' w' TR.
-        apply ktrans_vis in TR as (x & -> & <- & _).        
-        rewrite bind_ret_l, bind_guard.
-        apply af_guard.
-        rewrite interp_state_ret, bind_ret_l.
-        cbn.
-        rewrite interp_state_ret.
-        next; left.
-        apply ax_done; cbn; destruct x; intuition. 
-        inv Hd.
-        * destruct Hw as [[|h' ts'] Hw];
-            apply list_app_cons in Hw as (-> & ->); cbn; auto.
-          destruct ts'; cbn; intuition.
-          -- now (exists nil).
-          -- now (exists (s0 :: ts')).
-        * destruct e, v, Hw; apply list_app_cons in H; destruct x, H; subst; cbn; auto.
-          destruct x; cbn; intuition.
-          -- now (exists nil).
-          -- now (exists (s2 :: x)).
-  Qed.       
+    destruct l as [|h ts] eqn:Hl; inv Hd. 
+    - (* l = [], w = Pure *)
+      destruct Hw, x; cbn in *; inv H.
+    - (* l = [], w = Obs e v *)
+      destruct e, v.
+      subst.
+      rewrite bind_ret_l, bind_guard, sb_guard, bind_ret_l, interp_state_ret.
+      cright; apply ax_done; split...
+      eexists; intuition...
+      intuition...
+      exists (Log s), tt...
+    - (* l = h :: ts, w = Pure *)
+      rewrite bind_bind.
+      eapply au_bind_r_eq.
+      + unfold log, trigger.
+        apply au_vis_l...
+        intros [].
+        cright; apply ax_done...
+      + rewrite bind_ret_l, bind_guard, sb_guard, bind_ret_l, interp_state_ret.
+        cright; apply ax_done; split...
+        eexists; intuition...
+        cbn; intuition...
+        destruct Hw as (hs & H).
+        destruct ts...
+        * apply list_app_cons in H; destruct hs; intuition.
+          exfalso.
+          now apply app_cons_not_nil with (x:=hs) (a:=nl) (y:=nil).
+        * apply list_app_cons in H; destruct hs; intuition; subst.
+          -- ddestruction H1.
+          -- now (exists hs).
+    - (* l = h :: ts, w = Obs e v *)
+      rewrite bind_bind.
+      eapply au_bind_r_eq.
+      + unfold log, trigger.
+        apply au_vis_l...
+        intros [].
+        cright; apply ax_done...
+      + rewrite bind_ret_l, bind_guard, sb_guard, bind_ret_l, interp_state_ret.
+        cright; apply ax_done...
+        split; intuition...
+        eexists; split...
+        cbn; split...
+        destruct v, e.
+        destruct Hw as (hs & H).
+        destruct ts...
+        * apply list_app_cons in H; destruct hs; intuition.
+          exfalso.
+          now apply app_cons_not_nil with (x:=hs) (a:=nl) (y:=nil).
+        * apply list_app_cons in H; destruct hs; intuition; subst.
+          -- ddestruction H1.
+          -- now (exists hs).
+  Qed.
 
-  Record ghostS :=
-   mkGhost {
-      elem : S;
-      dist : nat;
-   }.
-
+  (* Ex2: Now the program is [rotate], which pushes hay [hy]
+     into a [q], we will eventually get the needle [nl] out *)
   Fixpoint index(l: list S)(s: S): option nat :=
     match l with
     | h :: ts =>
@@ -190,47 +184,39 @@ Section QueueEx.
     | nil => None
     end.
 
-
-  (* Needle to look for *)
-  Context (t: S) (f: S) (Htf: f <> t).
-
-  Lemma index_last_S: forall l,
-      index (l ++ [f]) t = option_map Datatypes.S (index l t).
+  (* Needle to look for is [gd], all other hay is [hy] *)
+  Lemma index_last_S(nl hy: S) (Hnl: hy <> nl): forall l,
+      index (l ++ [hy]) nl = option_map Datatypes.S (index l nl).
   Proof.
     induction l; cbn.
-    - eapply rel_dec_neq_false in Htf; eauto.
-      now rewrite Htf.
-    - destruct (a =? t) eqn:Ha.
+    - eapply rel_dec_neq_false in Hnl; eauto.
+      now rewrite Hnl.
+    - destruct (a =? nl) eqn:Ha.
       + rewrite app_length; cbn.
         rewrite PeanoNat.Nat.add_1_r.
         reflexivity.
       + apply IHl.
   Qed.
 
-  Definition h_ghostE: queueE S ~> stateT (list S) (ctree (writerE ghostS)) :=
-    h_writerA
-      (* queue semantics *)
-      (h_state h_queueE_sem)
-      (* queue instrumentation, observe [Pop] + ghost state *)
-      (fun (e: queueE S) (v: encode e) (q: list S) =>
-         match e return encode e -> option ghostS with
-         | Pop => fun x: option S =>
-                   match x with
-                   | Some x =>
-                       match index q t with
-                       | Some i => Some (mkGhost x i)
-                       | None => None
-                       end
-                   | None => None
-                   end
-         | Push x => fun _ => None                      
-         end v).
+  (* queue instrumentation, observe final queue. *)
+  Definition h_ghostE: queueE S ~> stateT (list S) (ctreeW (list S)) := 
+    fun e =>
+      mkStateT (fun q =>
+                 match e return ctreeW (list S) (encode e * list S) with
+                 | Push v =>
+                     log (q ++ [v]);;
+                     Ret (tt, q ++ [v])
+                 | Pop => match q with
+                         | nil => Ret (None, nil)
+                         | h :: ts =>
+                             log ts ;;
+                             Ret (Some h, ts)
+                         end
+                 end).
 
-
-  Theorem rotate_af_pop: forall q,
-      <( {interp_state h_ghostE (rotate f) (q ++ [t])}, Pure |=
-           AF finishW \g l,
-             g.(elem) = t /\ g.(dist) = 0 /\ Forall (eq f) l )>.
+  Theorem rotate_af_pop: forall q nl hy (Hnl: nl <> hy),      
+      <( {interp_state h_ghostE (rotate hy) (q ++ [nl])}, Pure |=
+           AF visW {fun l => exists ts, l = nl :: ts /\ Forall (eq hy) ts} )>.
   Proof with eauto with ctl.
     intros.
     apply af_iter_state_list

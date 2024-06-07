@@ -41,22 +41,32 @@ Section BasicLemmas.
     - now next; left.
   Qed.
 
-  Lemma au_ret: forall (r: X) w w' φ ψ,      
-      done_with (fun r' w' => w' = w /\ r' = r) w' ->
-      <( {Ctree.stuck}, w' |= ψ )> ->
+  Lemma au_ret_r: forall (r: X) w φ ψ,      
+      <( {Ret r}, w |= ψ )> ->
+      <( {Ret r}, w |= φ AU ψ )>.
+  Proof.
+    intros * Hr.
+    now next; left.
+  Qed.
+  
+  Lemma au_ret_l: forall (r: X) w φ ψ,      
+      <( {Ret r}, w |= AX ψ )> ->
       <( {Ret r}, w |= φ )> ->
       <( {Ret r}, w |= φ AU ψ )>.
   Proof.
-    intros * Hr Hd Hw.
+    intros * Hr Hd.
     next; right; split; auto.
     split.
-    - apply can_step_ret; inv Hr; intuition. 
+    - now cdestruct Hr.
     - intros t_ w_ TR_.
-      inv Hr; destruct H as (<- & <-).
+      cdestruct Hr.
+      destruct (can_step_not_done _ _ Hs).
       + apply ktrans_done in TR_ as (-> & ->).
-        next; now left.
+        next; left. 
+        apply Hr; now constructor. 
       + apply ktrans_finish in TR_ as (-> & ->).
-        next; now left.
+        next; left.
+        apply Hr; now constructor.
   Qed.
 
   Lemma not_done_au: forall (t: ctree E X) φ ψ w,
@@ -255,19 +265,46 @@ End CtlAuBind.
 
 Section CtlAuIter.
   Context {E: Type} {HE: Encode E}.
+  
+  Definition is_minimal{A}(R: relation A) `{well_founded R} (a: A):=
+    forall b, ~ R b a.
 
-  (* Total correctness lemma for [iter] *)
+  Definition exhaustive_dec{A}(R: relation A) `{well_founded R} (a: A) :=
+    {forall b, ~ R b a} + {exists b, R b a}.
+  
+  Lemma au_iter_now{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E (I + X)) φ:
+    (forall (i: I) w,
+        Ri i w ->
+        if exhaustive_dec Rv (i, w) then
+          (* minimum *)
+          φ i w
+        else (        
+            
+            <( {k i}, w |= AF AX now {fun w =>
+                                        
+                        {fun (x: I + X) w' =>
+                           exists i', x = inl i' /\
+                                   Ri i w' /\ Rv (i', w') (i, w) /\
+                                   
+                                   match x with
+                                   | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
+                                   | inr r' => not_done w' /\ Rr r' w'
+                                   end})>) ->
+             well_founded Rv ->
+             Ri i w ->
+    <( {iter k i}, w |= AF now φ )>.
+                                                
+  (* Termination lemma for [iter] *)
   (* [Ri: I -> World E -> Prop] loop invariant (left).
      [Rr: X -> World E -> Prop] loop postcondition (right).
      [Rv: (I * World E) -> (I * World E) -> Prop)] loop variant (left). *)
-  Lemma au_iter{X I} Ri Rr (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E (I + X)) φ:
+  Lemma au_iter_done{X I} Ri Rr (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E (I + X)) φ:
     (forall (i: I) w,
         Ri i w ->
         <( {k i}, w |= base φ AU AX done
                     {fun (x: I + X) w' =>
                        match x with
-                       | inl i' => Ri i' w' /\
-                                    Rv (i', w') (i, w)
+                       | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
                        | inr r' => not_done w' /\ φ w' /\ Rr r' w'
                        end})>) ->
     well_founded Rv ->
@@ -300,12 +337,12 @@ Section CtlAuIter.
       replace i' with (fst y) by now subst.
       replace w' with (snd y) by now subst.      
       apply HindWf; inv Heqy; auto.
-    - intros [Hd HR]; inv Hd.
-      + apply au_ret with (w':=Done r); auto with ctl.
-        * apply ctl_done; now constructor.
+    - intros [Hd (Hφ & HR)]; inv Hd.
+      + apply au_ret_l.
+        * rewrite ax_done; split; eauto with ctl.
         * apply ctl_base; intuition. 
-      + apply au_ret with (w':=Finish e v r); auto with ctl.
-        * apply ctl_done; now constructor.
+      + apply au_ret_l.
+        * rewrite ax_done; split; eauto with ctl. 
         * apply ctl_base; intuition. 
   Qed.
 
@@ -361,15 +398,15 @@ Section CtlAuState.
     now apply au_bind_l.
   Qed.  
 
-  Theorem au_state_bind_r{X Y}: forall s (t: ctree E Y) (k: Y -> ctree E X) w ψ φ (R: Y * S -> World F -> Prop),
-      <( {interp_state h t s}, w |= base ψ AU AX done R )> ->
-      (forall (y: Y) (s: S) w, R (y,s) w ->
+  Theorem au_state_bind_r{X Y}: forall s (t: ctree E Y) (k: Y -> ctree E X) w ψ φ (R: Y -> S -> World F -> Prop),
+      <( {interp_state h t s}, w |= base ψ AU AX done {fun '(y, s) => R y s} )> ->
+      (forall (y: Y) (s: S) w, R y s w ->
           <( {interp_state h (k y) s}, w |= base ψ AU φ )>) ->
       <( {interp_state h (x <- t ;; k x) s}, w |= base ψ AU φ )>.
   Proof.
     intros.
     rewrite interp_state_bind.
-    apply au_bind_r with (R:=R); auto.
+    apply au_bind_r with (R:=fun '(y, s) => R y s); auto.
     intros [y s'] w' Hr; auto.
   Qed.
 
@@ -386,48 +423,48 @@ Section CtlAuState.
   Theorem au_state_iter{X I} s Ri (Rr: rel (X * S) (World F)) Rv (i: I) (k: I -> ctree E (I + X)) φ w:
     (forall (i: I) w s,
         Ri i w s ->
+        not_done w ->
         <( {interp_state h (k i) s}, w |= base φ AU AX done
-          {fun '(x, s') w' =>
+          {fun '(x, s') w' => not_done w' /\
              match x with
-             | inl i' => Ri i' w' s'
-                        /\ Rv (i', w', s') (i, w, s)
-             | inr r' => not_done w' /\ φ w' /\ Rr (r',s') w'
+             | inl i' => Ri i' w' s' /\ Rv (i', w', s') (i, w, s)
+             | inr r' => φ w' /\ Rr (r',s') w'
              end})>) ->
     well_founded Rv ->
     Ri i w s ->
+    not_done w ->
     <( {interp_state h (Ctree.iter k i) s}, w |= base φ AU done Rr )>.
   Proof.
-    intros H WfR Hi.
+    intros H WfR Hi Hd.
     generalize dependent k.
     revert Hi.
     remember (i, w, s) as P.
     replace i with (fst (fst P)) by now subst.
     replace w with (snd (fst P)) by now subst.
     replace s with (snd P) by now subst.
+    replace w with (snd (fst P)) in Hd by now subst.
     clear HeqP i w s.
     induction P using (well_founded_induction WfR);
       destruct P as ((i, w), s); cbn in *. 
     rename H into HindWf.
     intros.
     rewrite interp_state_unfold_iter.
-    eapply au_bind_r with (R:=fun '(r, s0) (w0 : World F) =>
+    eapply au_bind_r with (R:=fun '(r, s0) (w0 : World F) => not_done w0 /\
                       match r with
                       | inl i' => Ri i' w0 s0 /\ Rv (i', w0, s0) (i, w, s)
-                      | inr r' => not_done w0 /\ φ w0 /\ Rr (r',s0) w0
+                      | inr r' => φ w0 /\ Rr (r',s0) w0
                       end); auto.
     intros ([i' | r] & s') w'; cbn.
-    - intros (Hi' & Hv).
+    - intros (Hd' & Hi' & Hv).
       apply au_guard.
       remember (i', w',s') as y.
       replace i' with (fst (fst y)) by now subst.
       replace w' with (snd (fst y)) by now subst.
       replace s' with (snd y) by now subst.      
       apply HindWf; inv Heqy; auto.
-    - intros (Hd & HR & Hr); inv Hd.
-      + apply au_ret with (w':=Done (r, s')); auto with ctl.
-        apply ctl_done; now constructor.
-      + apply au_ret with (w':=Finish e v (r,s')); auto with ctl.
-        apply ctl_done; now constructor.
+    - intros (Hd' & HR & Hr); inv Hd';
+        apply au_ret_l; auto with ctl;
+        rewrite ax_done; split; eauto with ctl.          
   Qed.
     
   (*| Instead of a WF relation [Rv] a "ranking" function [f] |*)
@@ -435,13 +472,16 @@ Section CtlAuState.
     (k: I -> ctree E (I + X)):
     (forall (i: I) w s,
         Ri i w s ->
+        not_done w ->
         <( {interp_state h (k i) s}, w |= base φ AU AX done
-                    {fun '(x, s') w' =>
-                       match x with
-                       | inl i' => Ri i' w' s' /\ f i' w' s' < f i w s
-                       | inr r' => not_done w' /\ φ w' /\ Rr (r',s') w'
-                       end})>) ->
+                                       {fun '(x, s') w' =>
+                                          not_done w' /\
+                                            match x with
+                                            | inl i' => Ri i' w' s' /\ f i' w' s' < f i w s
+                                            | inr r' => φ w' /\ Rr (r', s') w'
+                                            end})>) ->
     Ri i w s ->
+    not_done w ->
     <( {interp_state h (Ctree.iter k i) s}, w |= base φ AU done Rr )>.
   Proof.
     intros.
@@ -458,13 +498,15 @@ Section CtlAuStateList.
   Lemma au_state_iter_list{X I} Ri (Rr: rel (X * list A) (World F)) (l: list A) w (i: I) (k: I -> ctree E (I + X)) φ :
     (forall (i: I) w (l: list A),
         Ri i w l ->
+        not_done w ->
         <( {interp_state h (k i) l}, w |= base φ AU AX done
-                 {fun '(x, l') w' =>
+                 {fun '(x, l') w' => not_done w' /\
                     match x with
                     | inl i' => Ri i' w' l' /\ length l' < length l
-                    | inr r' => not_done w' /\ φ w' /\ Rr (r', l') w'
+                    | inr r' => φ w' /\ Rr (r', l') w'
                     end})>) ->
     Ri i w l ->
+    not_done w ->
     <( {interp_state h (Ctree.iter k i) l}, w |= base φ AU done Rr )>.
   Proof.
     intros.
