@@ -265,34 +265,17 @@ End CtlAuBind.
 
 Section CtlAuIter.
   Context {E: Type} {HE: Encode E}.
-  
-  Definition is_minimal{A}(R: relation A) `{well_founded R} (a: A):=
-    forall b, ~ R b a.
 
-  Definition exhaustive_dec{A}(R: relation A) `{well_founded R} (a: A) :=
-    {forall b, ~ R b a} + {exists b, R b a}.
-  
-  Lemma au_iter_now{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E (I + X)) φ:
+  Lemma au_iter_now{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E (I + X)) (φ: ctlf E (I + X)):
+    well_founded Rv ->
+    Ri i w ->    
     (forall (i: I) w,
         Ri i w ->
-        if exhaustive_dec Rv (i, w) then
-          (* minimum *)
-          φ i w
-        else (        
-            
-            <( {k i}, w |= AF AX now {fun w =>
-                                        
-                        {fun (x: I + X) w' =>
-                           exists i', x = inl i' /\
-                                   Ri i w' /\ Rv (i', w') (i, w) /\
-                                   
-                                   match x with
-                                   | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
-                                   | inr r' => not_done w' /\ Rr r' w'
-                                   end})>) ->
-             well_founded Rv ->
-             Ri i w ->
-    <( {iter k i}, w |= AF now φ )>.
+        <( {k i}, w |= AF φ \/ 
+                    AF AX done
+                      {fun (x: I + X) (w': World E) => True})>) ->
+
+    <( {iter k i}, w |= AF φ )>.
                                                 
   (* Termination lemma for [iter] *)
   (* [Ri: I -> World E -> Prop] loop invariant (left).

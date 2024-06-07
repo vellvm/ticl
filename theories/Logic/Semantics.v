@@ -133,12 +133,13 @@ Section Entailment.
     entails: Φ -> M E HE X -> World E -> Prop.
 
   Fixpoint entailsL X (φ: ctll E) : M E HE X -> World E -> Prop :=
-    let fix entailsP (φ: CProp (ctll E)) :=
+    let fix entailsP (φ: CBool (ctll E)) :=
       match φ with
       | CBase cp => entailsL X cp
       | CAnd φ ψ => fun m w => entailsP φ m w /\ entailsP ψ m w
       | COr φ ψ => fun m w => entailsP φ m w \/ entailsP ψ m w
       | CImpl φ ψ => fun m w => entailsP φ m w -> entailsP ψ m w
+      | CNot φ => fun m w => entailsP φ m w -> False
       end in
     match φ with
     | CNowL ψ => fun _ w => ψ w /\ not_done w
@@ -148,16 +149,17 @@ Section Entailment.
     | CxL Q_E p => cex (entailsL X p)
     | CuL Q_A p q => cau (entailsL X p) (entailsL X q)
     | CuL Q_E p q => ceu (entailsL X p) (entailsL X q)
-    | CPropL p => entailsP p
+    | CBoolL p => entailsP p
     end.
 
   Fixpoint entailsR {X} (φ: ctlr E X): M E HE X -> World E -> Prop :=
-    let fix entailsP (φ: CProp (ctlr E X)) :=
+    let fix entailsP (φ: CBool (ctlr E X)) :=
       match φ with
       | CBase cp => entailsR cp
       | CAnd φ ψ => fun m w => entailsP φ m w /\ entailsP ψ m w
       | COr φ ψ => fun m w => entailsP φ m w \/ entailsP ψ m w
       | CImpl φ ψ => fun m w => entailsP φ m w -> entailsP ψ m w
+      | CNot φ => fun m w => entailsP φ m w -> False
       end in
     match φ with
     | CNowR ψ => fun _ w => ψ w /\ not_done w
@@ -166,7 +168,7 @@ Section Entailment.
     | CxR Q_E p => cex (entailsR p)
     | CuR Q_A p q => cau (entailsL X p) (entailsR q)
     | CuR Q_E p q => ceu (entailsL X p) (entailsR q)           
-    | CPropR p => entailsP p
+    | CBoolR p => entailsP p
     end.
 
   Global Instance EntailsL {X} : Entails (ctll E) :=
