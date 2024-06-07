@@ -51,19 +51,7 @@ A [ctree] can locally provide three kind of observations:
 - An interaction with the environment, emitting the corresponding
 indexed event and non-deterministically continuing indexed by the
 value returned by the environment
-- A (finite) internal non-deterministic branching
-
-TODO YZ:
-
-- Do we want to name the sources of the brs?
-  For instance if we want to support simultaneously different schedulers for different kind of non-determinism in a language.
-- Do we want non-finite internal branching? Indexed by arbitrary types?
-- Or crazier, do we want non-uniform branching, modelling non-uniform random brs for instance?
-- Could ctrees be parameterized by:
-
-  + a bound on nested brs before reaching a Vis/Ret
-  + a general domain of br events
-
+- An internal non-deterministic branching
 .. coq::
 |*)
 
@@ -118,18 +106,11 @@ Notation Step t       := (go (StepF t)).
 Notation Vis e k      := (go (VisF e k)).
 Notation Br n k       := (go (BrF n k)).
 Notation BrS n k      := (go (BrF n (fun x => Step (k x)))).
-(* Notation BrS n k      := (go (BrF true n k)). *)
-(* Notation BrD n k      := (go (BrF false n k)). *)
-(* Notation BrSF         := (BrF true). *)
-(* Notation BrDF         := (BrF false). *)
 
 Notation vis e k      := (Vis (subevent _ e) k).
 Notation br c k       := (Br (subevent _ c) k).
 Notation brF c        := (BrF (subevent _ c)).
 Notation brS c k      := (BrS (subevent _ c) k).
-(* Notation brD c k      := (br false c k). *)
-(* Notation brSF c       := (BrSF (subevent _ c)). *)
-(* Notation brDF c       := (BrDF (subevent _ c)). *)
 
 Section Branching.
 
