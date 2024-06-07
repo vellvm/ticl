@@ -108,9 +108,9 @@ least annoying solution.
 The transition relation over [ctree]s.
 It can either:
 - recursively crawl through invisible [br] node;
-- stop at a successor of a visible [br] node, labelling the transition [tau];
+- stop at a successor of a [Step] node, labelling the transition [tau];
 - stop at a successor of a [Vis] node, labelling the transition by the event and branch taken;
-- stop at a sink (implemented as a [br] node with no successor) by stepping from a [ret v]
+- stop at a sink (implemented as a [Stuck] node) by stepping from a [ret v]
 node, labelling the transition by the returned value.
 |*)
   Inductive trans_ : label -> hrel S' S' :=

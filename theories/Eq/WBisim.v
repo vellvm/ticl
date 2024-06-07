@@ -84,34 +84,10 @@ Section WeakBisim.
       forall l p', trans l p p' -> exists2 q', wtrans l q q' & R p' q' |}.
   Next Obligation. destruct (H0 _ _ H1). eauto. Qed.
 
-  (*| Heterogenous version TODO: make ws |*)
-  Program Definition hws {E F C D: Type -> Type} {X Y: Type}
-          (L: rel (@label E) (@label F)) : mon (rel (ctree E C X) (ctree F D Y)) :=
-    {| body R p q :=
-      forall l p', trans l p p' -> exists q' l', wtrans l' q q' /\ R p' q' /\ L l l' |}.
-  Next Obligation.
-    destruct (H0 _ _ H1) as (? & ? & ? & ? & ?).
-    do 2 eexists; intuition; eauto.
-  Qed.
-
   (*|
     The bisimulation is obtained by intersecting [ws] with its symmetrized version.
     |*)
   Definition wb := (Coinduction.lattice.cap ws (comp converse (comp ws converse))).
-
-  (*| Heterogenous version TODO: make wb |*)
-  Program Definition hwb {E F C D: Type -> Type} {X Y: Type}
-          (L: rel (@label E) (@label F)) : mon (rel (ctree E C X) (ctree F D Y)) :=
-    {| body R p q :=
-      hws L R p q /\ hws (flip L) (flip R) q p
-    |}.
-  Next Obligation.
-    split; intros.
-    - destruct (H0 _ _ H2) as (? & ? & ? & ? & ?).
-      do 2 eexists; intuition; eauto.
-    - destruct (H1 _ _ H2) as (? & ? & ? & ? & ?).
-      do 2 eexists; intuition; eauto.
-  Qed.
 
   (*|
     The function defining one-sided expansion (standard notion in process algebra).
@@ -124,16 +100,6 @@ Section WeakBisim.
     {| body R p q :=
       forall l p', trans l p p' -> exists2 q', etrans l q q' & R p' q' |}.
   Next Obligation. destruct (H0 _ _ H1). eauto. Qed.
-
-  (*| Heterogenous version TODO: make es |*)
-  Program Definition hes {E F C D: Type -> Type} {X Y: Type} `{Stuck: B0 -< C} `{Stuck': B0 -< D}
-          (L: rel (@label E) (@label F)) : mon (rel (ctree E C X) (ctree F D Y)) :=
-    {| body R p q :=
-      forall l p', trans l p p' -> exists q' l', etrans l' q q' /\ R p' q' /\ L l l' |}.
-  Next Obligation.
-    destruct (H0 _ _ H1) as (? & ? & ? & ? & ?).
-    do 2 eexists; intuition; eauto.
-  Qed.
 
 End WeakBisim.
 
