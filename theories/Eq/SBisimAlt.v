@@ -643,14 +643,6 @@ Proof.
   intros; step; apply step_sb'_step; auto.
 Qed.
 
-(* Lemma step_ss'_step_l: *)
-(*   forall {E F C D : Type -> Type} {X Y : Type} {L : rel label label} *)
-(*     {R Reps : rel (ctree E C X) (ctree F D Y)}, *)
-(*   Proper (equ eq ==> equ eq ==> impl) Reps -> *)
-(*   forall (t : ctree E C X) (t' : ctree F D Y), *)
-(*   (Reps t t') -> ss'_gen L R Reps (Step t) t'. *)
-(* Admitted. *)
-
 Lemma step_sb'_true_step_l {E F C D X Y L}
   {R : Chain (sb' L)} :
   forall (t : ctree E C X) (u : ctree F D Y),
@@ -791,28 +783,6 @@ Section Inversion_Rules.
     - apply RV in H1 as [_ ?].
       pose proof (H1 (Is_val _)). inversion H2.
   Qed.
-
-  (* Lemma sb'_true_brS_l_inv' {Z R} : *)
-  (*   forall (c : C Z) (k : Z -> ctree E C X) (u : ctree F D Y), *)
-  (*   Respects_τ L -> *)
-  (*   (Proper (eq ==> equ eq ==> equ eq ==> impl) R) -> *)
-  (*   sb' L R true (BrS c k) u -> *)
-  (*   forall x, exists Z' (c' : D Z') k' x', *)
-  (*     epsilon u (BrS c' k') /\ *)
-  (*     forall side, R side (k x) (k' x'). *)
-  (* Proof. *)
-  (*   intros * RT ? SIM x. *)
-  (*   pose proof (TR := trans_brS c k x). *)
-  (*   apply SIM in TR; etrans. *)
-  (*   destruct TR as (l' & u' & TR & ? & ?). *)
-  (*   destruct l'. *)
-  (*   - admit. *)
-  (*   - apply trans_τ_epsilon in TR as (Z' & c' & k' & x' & EPS & EQ). *)
-  (*     setoid_rewrite EQ in H0. *)
-  (*     eauto 6 with trans. *)
-  (*   - apply RT in H1; intuition; discriminate. *)
-  (*   - apply RT in H1; intuition; discriminate. *)
-  (* Qed. *)
 
   Lemma sb'_true_br_l_inv {Z R} :
     forall (c : C Z) (k : Z -> ctree E C X) (u : ctree F D Y),

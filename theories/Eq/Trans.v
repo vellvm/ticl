@@ -280,17 +280,17 @@ Inclusion relation between the three relations:
 Introduction rules for [trans]
 [trans (val v)   (ret v)       stuck]
 [trans (obs e v) (Vis e k)     (k v)]
-[trans τ       (BrS n k) (k x)]
+[trans l (k x) u -> trans l (BrD n k) u]
 [trans τ       (Step t) t]
-[trans l (k x) u -> trans l (BrI n k) u]
+[trans τ       (BrS n k) (k x)]
 [trans l t u     -> trans l (Guard t) u]
 
 Elimination rules for [trans]
 [trans l (Ret x)       u -> l = val x /\ t ≅ stuck]
 [trans l (Vis e k)     u -> exists v, l = obs e v /\ t ≅ k v]
-[trans l (BrS n k) u -> exists x, t' ≅ k x /\ l = τ]
 [trans l (Step t)      u -> t ≅ u /\ l = τ]
-[trans l (BrI n k) u -> exists x, trans l (k x) u]
+[trans l (Br n k) u -> exists x, trans l (k x) u]
+[trans l (BrS n k) u -> exists x, t' ≅ k x /\ l = τ]
 [trans l (Guard t)      u -> trans l t u]
 
 |*)

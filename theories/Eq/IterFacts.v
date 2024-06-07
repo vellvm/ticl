@@ -53,7 +53,7 @@ Proof.
   rewrite !iter_iter_gen. apply iter_gen_equ; auto.
 Qed.
 
-(* Thanks to SSimAlt, this proof does not need trans_iter_gen. *)
+(* Thanks to SSimAlt, this proof does not need an helper inductive. *)
 Theorem ssim_iter {E F C D A A' B B'}
   (L : rel (@label E) (@label F)) (Ra : rel A A') (Rb : rel B B') L0
   (HL0 : is_update_val_rel L (sum_rel Ra Rb) L0)
