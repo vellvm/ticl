@@ -6,12 +6,14 @@ We develop a cousin of Interaction Trees, dubbed _ctrees_ with native support fo
 ## Meta
 
 - Author(s):
+  - Nicolas Chappe
   - Paul He
   - Ludovic Henrio
+  - Eleftherios Ioannidis
   - Yannick Zakowski
   - Steve Zdancewic
 - License: MIT License
-- Compatible Coq versions: 8.15
+- Compatible Coq versions: 8.19
 - Additional dependencies:
   - dune
   - [Extlib](https://github.com/coq-community/coq-ext-lib)
