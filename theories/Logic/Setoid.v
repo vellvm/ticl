@@ -1,7 +1,7 @@
 (*|
-=================================================
-Congruence [general] and specialized to [equ eq]
-=================================================
+==============================================================
+Congruence with respect a KripkeSetoid structure (simulation)
+==============================================================
 |*)
 From Coq Require Import
   Basics
@@ -15,8 +15,9 @@ From CTree Require Import
   Utils.Utils
   Events.Core
   Logic.Kripke
-  Logic.Semantics
-  Logic.Tactics.
+  Logic.Semantics.
+
+From Equations Require Import Equations.
 
 Import CtlNotations.
 Local Open Scope ctl_scope.
@@ -69,7 +70,6 @@ Section EquivSetoid.
 
   Notation MS := (M E HE X).
   Notation MP := (MS -> World E -> Prop).
-  Notation equiv_ctl := (equiv_ctl X (K:=K)).
 
   Global Add Parametric Morphism: can_step
     with signature meq ==> eq ==> iff as proper_can_step.
@@ -85,7 +85,7 @@ Section EquivSetoid.
 
   (*| Start building the proof that
       [entailsF] is a congruence with regards to [meq] |*)
-  Global Add Parametric Morphism (p: Prop): (entailsF (CProp p) (X:=X))
+  Global Add Parametric Morphism (p: Prop): (entailsL X (CProp p))
          with signature meq ==> eq ==> iff as meq_proper_base.
   Proof. intros; split; auto. Qed.
 
@@ -93,9 +93,9 @@ Section EquivSetoid.
       with signature meq ==> eq ==> iff as meq_proper_fun.
   Proof. intros; split; auto. Qed.
   
-  Global Add Parametric Morphism p: (entailsF (CDone X p))
+  Global Add Parametric Morphism p: (entailsR (CDone p))
         with signature meq ==> eq ==> iff as meq_proper_done.
-  Proof. intros; now rewrite unfold_entailsF. Qed.
+  Proof. intros; rewrite unfold_entailsR; reflexivity. Qed.
 
   Context {P: MP} {HP: Proper (meq ==> eq ==> iff) P}.
   Global Add Parametric Morphism: (cax P)
@@ -276,47 +276,81 @@ Section EquivSetoid.
 
 End EquivSetoid.
 
-Global Add Parametric Morphism `{KS: KripkeSetoid M E X meq} (φ: ctlf E) :
-  (entailsF (X:=X) φ)
-       with signature (meq ==> eq  ==> iff) as proper_entailsF_.
+Global Add Parametric Morphism `{KS: KripkeSetoid M E X meq} (φ: ctll E) :
+  (entailsL X φ)
+       with signature (meq ==> eq  ==> iff) as proper_entailsL_meq.
 Proof.
   induction φ; intros * Heq w.
-  - (* Prop *) rewrite unfold_entailsF; reflexivity. 
-  - (* Now *) rewrite ?ctl_now; reflexivity. 
-  - (* Done *) rewrite unfold_entailsF; reflexivity. 
-  - rewrite unfold_entailsF; destruct q.
-    + (* ax *)
-      refine (@proper_ax_equ M E HE K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl).
-      unfold Proper, respectful; intros; subst; now apply IHφ.
-    + (* ex *)
-      refine (@proper_ex_equ M E HE K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl).
-      unfold Proper, respectful; intros; subst; now apply IHφ.
-  - rewrite unfold_entailsF; destruct q.
+  - (* Now *) rewrite ?ctll_now; reflexivity. 
+  - (* Prop *) rewrite ?ctl_prop; reflexivity. 
+  - (* CuL *) destruct q; rewrite unfold_entailsL.
     + (* au *)
-      refine (@proper_au_equ M E HE K X meq Eqm KS (entailsF φ1) _ (entailsF φ2) _ _ _ Heq _ _ eq_refl);
+      refine (@proper_au_equ M E HE K X meq Eqm KS (entailsL X φ1) _ (entailsL X φ2) _ _ _ Heq _ _ eq_refl);
       unfold Proper, respectful; intros; subst; auto.
     + (* eu *)
-      refine (@proper_eu_equ M E HE K X meq Eqm KS (entailsF φ1) _ (entailsF φ2) _ _ _ Heq _ _ eq_refl);
+      refine (@proper_eu_equ M E HE K X meq Eqm KS (entailsL X φ1) _ (entailsL X φ2) _ _ _ Heq _ _ eq_refl);
       unfold Proper, respectful; intros; subst; auto.
-  - rewrite unfold_entailsF; destruct q.
+  - (* CxL *) destruct q; rewrite unfold_entailsL.
+    + (* ax *)
+      refine (@proper_ax_equ M E HE K X meq Eqm KS (entailsL X φ) _ _ _ Heq _ _ eq_refl).
+      unfold Proper, respectful; intros; subst; now apply IHφ.
+    + (* ex *)
+      refine (@proper_ex_equ M E HE K X meq Eqm KS (entailsL X φ) _ _ _ Heq _ _ eq_refl).
+      unfold Proper, respectful; intros; subst; now apply IHφ.
+  - (* Cg *) destruct q; rewrite unfold_entailsL.
     + (* ag *)
-      refine (@proper_ag_equ M E HE K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl);
+      refine (@proper_ag_equ M E HE K X meq Eqm KS (entailsL X φ) _ _ _ Heq _ _ eq_refl);
         unfold Proper, respectful; intros; subst; auto.
     + (* er *)
-      refine (@proper_er_equ M E HE K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl);
+      refine (@proper_er_equ M E HE K X meq Eqm KS (entailsL X φ) _ _ _ Heq _ _ eq_refl);
         unfold Proper, respectful; intros; subst; auto.
   - (* /\ *) split; intros [Ha Hb]; split.
     + now rewrite <- (IHφ1 _ _ Heq).
     + now rewrite <- (IHφ2 _ _ Heq).
     + now rewrite (IHφ1 _ _ Heq).
     + now rewrite (IHφ2 _ _ Heq).
-  - (* \/ *) split; intros; cdestruct H.
-    + cleft. now rewrite <- (IHφ1 _ _ Heq).
+  - (* \/ *) split; intros; rewrite unfold_entailsL in *; destruct H.
+    + left; now rewrite <- (IHφ1 _ _ Heq).
     + right; now rewrite <- (IHφ2 _ _ Heq).
     + left; now rewrite (IHφ1 _ _ Heq).
     + right; now rewrite (IHφ2 _ _ Heq).
   - (* -> *)
-    split; intros * H; rewrite unfold_entailsF in H |- *; intro HI;
+    split; intros * H; rewrite unfold_entailsL in *; intro HI;
       apply (IHφ1 _ _ Heq) in HI;
       apply (IHφ2 _ _ Heq); auto.
+Qed.
+
+Global Add Parametric Morphism `{KS: KripkeSetoid M E X meq} (φ: ctlr E X) :
+  (entailsR φ)
+       with signature (meq ==> eq  ==> iff) as proper_entailsR_meq.
+Proof.
+  induction φ; intros * Heq w.
+  - (* Done *) rewrite ?ctll_done; reflexivity. 
+  - (* CuR *) destruct q; rewrite unfold_entailsR.
+    + (* au *)
+      refine (@proper_au_equ M E HE K X meq Eqm KS (entailsL X φ) _ (entailsR φ0) _ _ _ Heq _ _ eq_refl);
+      unfold Proper, respectful; intros; subst; auto.
+    + (* eu *)
+      refine (@proper_eu_equ M E HE K X meq Eqm KS (entailsL X φ) _ (entailsR φ0) _ _ _ Heq _ _ eq_refl);
+      unfold Proper, respectful; intros; subst; auto.
+  - (* CxR *) destruct q; rewrite unfold_entailsR.
+    + (* ax *)
+      refine (@proper_ax_equ M E HE K X meq Eqm KS (entailsR φ) _ _ _ Heq _ _ eq_refl).
+      unfold Proper, respectful; intros; subst; now apply IHφ.
+    + (* ex *)
+      refine (@proper_ex_equ M E HE K X meq Eqm KS (entailsR φ) _ _ _ Heq _ _ eq_refl).
+      unfold Proper, respectful; intros; subst; now apply IHφ.
+  - (* /\ *) split; rewrite unfold_entailsR; intros [Ha Hb]; rewrite unfold_entailsR; split.
+    + now rewrite <- Heq. 
+    + now rewrite <- (IHφ _ _ Heq).
+    + now rewrite Heq. 
+    + now rewrite (IHφ _ _ Heq).
+  - (* \/ *) split; intros; rewrite unfold_entailsR in *; destruct H.
+    + left; now rewrite <- (IHφ1 _ _ Heq).
+    + right; now rewrite <- (IHφ2 _ _ Heq).
+    + left; now rewrite (IHφ1 _ _ Heq).
+    + right; now rewrite (IHφ2 _ _ Heq).
+  - (* -> *)
+    split; intros * H; rewrite unfold_entailsR in *; intro HI;
+      now apply (IHφ2 _ _ Heq), H, (IHφ1 _ _ Heq). 
 Qed.

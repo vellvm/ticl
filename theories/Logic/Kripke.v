@@ -62,20 +62,20 @@ Variant not_done `{Encode E}: World E -> Prop :=
       not_done (Obs e v).
 Global Hint Constructors not_done: ctl.
 
-Variant is_done `{Encode E}: World E -> Prop :=
-  | DoneDone: forall X (x: X), is_done (Done x)
-  | DoneFinish: forall X (e: E) (v: encode e) (x: X),
-      is_done (Finish e v x).
+Variant is_done `{Encode E} X: World E -> Prop :=
+  | DoneDone: forall (x: X), is_done X (Done x)
+  | DoneFinish: forall (e: E) (v: encode e) (x: X),
+      is_done X (Finish e v x).
 Global Hint Constructors is_done: ctl.
 
 Definition not_done_dec `{Encode E}: forall (w: World E),
-    {not_done w} + {is_done w}.
+    {not_done w} + {exists X, is_done X w}.
 Proof.
   dependent destruction w; intros.
   - left; econstructor.
   - left; econstructor.
-  - right; econstructor. 
-  - right; econstructor.
+  - right; eexists; econstructor. 
+  - right; eexists; econstructor.
 Qed.
 
 Definition not_pure_dec `{Encode E}: forall (w: World E),

@@ -12,32 +12,104 @@ From CTree Require Import
   Events.Core
   Logic.Semantics
   Logic.Kripke
-  Logic.Setoid
-  Logic.Tactics.
+  Logic.Setoid.
+
+From Equations Require Import Equations.
 
 Import CtlNotations.
 Local Open Scope ctl_scope.
-Local Open Scope type_scope.
 
 Generalizable All Variables.
 
-(*| Equations of CTL |*)
-Section EquivCtlFormulas.
+(*| Semantic equivalences of formulas |*)
+Definition equiv_ctll {M} `{HE: Encode E} {K: Kripke M E} (X: Type): relation (ctll E) :=
+  fun p q => forall (t: M E HE X) (w: World E), entailsL X p t w <-> entailsL X q t w.
+
+Definition equiv_ctlr {M} `{HE: Encode E} {K: Kripke M E} (X: Type): relation (ctlr E X) :=
+  fun p q => forall (t: M E HE X) (w: World E), entailsR p t w <-> entailsR q t w.
+
+Section EquivCtlEquivalences.
+  Context `{K: Kripke M E} {X: Type}.
+  Notation equiv_ctll := (@equiv_ctll M E HE K X).
+  Notation equiv_ctlr := (@equiv_ctlr M E HE K X).
+
+  Global Instance Equivalence_equiv_ctll:
+    Equivalence equiv_ctll.
+  Proof.
+    constructor.
+    - intros P x; reflexivity.
+    - intros P Q H' x; symmetry; auto.
+    - intros P Q R H0' H1' x; etransitivity; auto.
+  Qed.
+
+  (*| [equiv_ctll] proper under [equiv_ctll] |*)
+  Global Add Parametric Morphism : equiv_ctll with signature
+         equiv_ctll ==> equiv_ctll ==> iff as equiv_ctll_equiv.
+  Proof.
+    intros p q EQpq p' q' EQpq'; split;
+      intros EQpp'; split; intro BASE; cbn in *.
+    - symmetry in EQpq'; apply EQpq'.
+      symmetry in EQpp'; apply EQpp'.
+      now apply EQpq.
+    - symmetry in EQpq'; apply EQpq.
+      apply EQpp'.
+      now apply EQpq'.
+    - apply EQpq'.
+      symmetry in EQpp'; apply EQpp'.
+      symmetry in EQpq; now apply EQpq.
+    - apply EQpq.
+      apply EQpp'.
+      symmetry in EQpq'; now apply EQpq'.
+  Qed.
+
+  Global Instance Equivalence_equiv_ctlr:
+    Equivalence equiv_ctlr.
+  Proof.
+    constructor.
+    - intros P x; reflexivity.
+    - intros P Q H' x; symmetry; auto.
+    - intros P Q R H0' H1' x; etransitivity; auto.
+  Qed.
+  
+  (*| [equiv_ctlr] proper under [equiv_ctlr] |*)
+  Global Add Parametric Morphism : equiv_ctlr with signature
+         equiv_ctlr ==> equiv_ctlr ==> iff as equiv_ctlr_equiv.
+  Proof.
+    intros p q EQpq p' q' EQpq'; split;
+      intros EQpp'; split; intro BASE; cbn in *.
+    - symmetry in EQpq'; apply EQpq'.
+      symmetry in EQpp'; apply EQpp'.
+      now apply EQpq.
+    - symmetry in EQpq'; apply EQpq.
+      apply EQpp'.
+      now apply EQpq'.
+    - apply EQpq'.
+      symmetry in EQpp'; apply EQpp'.
+      symmetry in EQpq; now apply EQpq.
+    - apply EQpq.
+      apply EQpp'.
+      symmetry in EQpq'; now apply EQpq'.
+  Qed.
+  
+End EquivCtlEquivalences.
+
+(*| Equations of CTL (left) |*)
+Section EquivCtllFormulas.
   Context `{KMS: Kripke M E} {X: Type}.
   Notation MS := (M E HE X).
   Notation MP := (MS -> World E -> Prop).
-  Notation equiv_ctl := (@equiv_ctl M E HE KMS X).
+  Notation equiv_ctll := (@equiv_ctll M E HE KMS X).
 
   (*| Rewriting [equiv_ctl] over [entailsF] |*)
-  Global Add Parametric Morphism: (entailsF (X:=X))
-         with signature (equiv_ctl ==> eq ==> eq ==> iff)
-           as proper_equiv_ctl_entailsF.
+  Global Add Parametric Morphism: (entailsL X)
+         with signature (equiv_ctll ==> eq ==> eq ==> iff)
+           as proper_equiv_ctl_entailsL.
   Proof. intro x; induction x; intros y EQφ; apply EQφ. Qed.
 
   (*| Congruences over equiv_ctl |*)
-  Global Add Parametric Morphism: CAnd
-         with signature equiv_ctl ==> equiv_ctl ==> equiv_ctl
-           as equiv_ctl_equiv_and.
+  Global Add Parametric Morphism: CAndL
+         with signature equiv_ctll ==> equiv_ctll ==> equiv_ctll
+           as equiv_ctll_equiv_and.
   Proof.
     intros p q EQpq p' q' EQpq'; split;
       intros EQpp'; split; destruct EQpp'.
@@ -47,9 +119,9 @@ Section EquivCtlFormulas.
     + now apply EQpq' in H0.
   Qed.
 
-  Global Add Parametric Morphism: COr
-         with signature equiv_ctl ==> equiv_ctl ==> equiv_ctl
-           as equiv_ctl_equiv_or.
+  Global Add Parametric Morphism: COrL
+         with signature equiv_ctll ==> equiv_ctll ==> equiv_ctll
+           as equiv_ctll_equiv_or.
   Proof.
     intros p q EQpq p' q' EQpq'; split;
       intros EQpp'; destruct EQpp'.
@@ -59,55 +131,60 @@ Section EquivCtlFormulas.
     + right; now apply EQpq' in H.
   Qed.
 
-  Global Add Parametric Morphism: CImpl
-         with signature equiv_ctl ==> equiv_ctl ==> equiv_ctl
-           as equiv_ctl_equiv_impl.
+  Global Add Parametric Morphism: CImplL
+         with signature equiv_ctll ==> equiv_ctll ==> equiv_ctll
+           as equiv_ctll_equiv_impl.
   Proof.
-    intros p q EQpq p' q' EQpq'; split; rewrite unfold_entailsF;
-      intros EQpp'; rewrite unfold_entailsF; intro HH; apply EQpq'; apply EQpq in HH;
+    intros p q EQpq p' q' EQpq'; split; rewrite unfold_entailsL;
+      intros EQpp'; rewrite unfold_entailsL; intro HH; apply EQpq'; apply EQpq in HH;
       now apply EQpp'.
   Qed.
 
-  Global Add Parametric Morphism: Cx
-      with signature eq ==> equiv_ctl ==> equiv_ctl as equiv_ctl_equiv_next.
+  Global Add Parametric Morphism: CxL
+      with signature eq ==> equiv_ctll ==> equiv_ctll as equiv_ctll_equiv_next.
   Proof.
     intros [] p q EQpq.
-    - split; intros; rewrite ctl_ax in *;
+    - split; intros; rewrite ctll_ax in *;
         destruct H; split; auto; intros.
       + rewrite <- EQpq; auto.
       + rewrite EQpq; auto.
-    - split; intros; rewrite ctl_ex in *;
+    - split; intros; rewrite ctll_ex in *;
         destruct H as (t' & w' & TR & Hdone); exists t', w'; split; auto.
-      + now rewrite <- EQpq.
-      + now rewrite EQpq. 
+      + rewrite <- EQpq; auto.
+      + rewrite EQpq; auto.
   Qed.
 
-  Global Add Parametric Morphism: Cu
-         with signature eq ==> equiv_ctl ==> equiv_ctl ==> equiv_ctl
-           as equiv_ctl_equiv_until.
+  Global Add Parametric Morphism: CuL
+         with signature eq ==> equiv_ctll ==> equiv_ctll ==> equiv_ctll
+           as equiv_ctll_equiv_until.
   Proof.
     intros [] p q EQpq p' q' EQpq'.
-    - split; intros Hau; cinduction Hau.
-      + cright; now rewrite <- EQpq'.
-      + cleft; auto; now rewrite <- EQpq.
-      + cright; now rewrite EQpq'.
-      + cleft; auto; now rewrite EQpq.
+    - split; intros Hau; cinduction Hau; rewrite unfold_entailsL.
+      + left; now rewrite <- EQpq'.
+      + right; auto; now rewrite <- EQpq.
+      + left; now rewrite EQpq'.
+      + right; auto; now rewrite EQpq.
     - split; intros Heu; cinduction Heu.
-      + right; now rewrite <- EQpq'.
-      + left; destruct H0 as (m' & TR & Heu).
+      + left; now rewrite <- EQpq'.
+      + right; destruct H0 as (m' & TR & Heu).
         * now rewrite <- EQpq.
         * exact H1. 
-      + right; now rewrite EQpq'.
-      + left; destruct H0 as (m' & TR & Heu).
+      + left; now rewrite EQpq'.
+      + right; destruct H0 as (m' & TR & Heu).
         * now rewrite EQpq.
         * exact H1.
   Qed.
 
+  Ltac coinduction_gg R CIH :=
+  let R' := fresh R in
+  setoid_rewrite unfold_entailsL;
+  coinduction R' CIH.
+  
   Global Add Parametric Morphism: Cg
-         with signature (eq ==> equiv_ctl ==> equiv_ctl)
+         with signature (eq ==> equiv_ctll ==> equiv_ctll)
            as proper_equivctl_global.
   Proof.
-    intros [] p q Heq; unfold equiv_ctl.  
+    intros [] p q Heq; unfold equiv_ctll.  
     - split; revert t w; coinduction R CIH; intros; step in H; destruct H as (Hy & H0). 
       + constructor. 
         * now rewrite Heq in Hy.
@@ -116,8 +193,7 @@ Section EquivCtlFormulas.
           split; auto.
           intros t' w' TR.
           apply CIH.
-          rewrite unfold_entailsF.
-          now apply Htr.
+          rewrite unfold_entailsL; auto.
       + constructor.      
         * now rewrite <- Heq in Hy.
         * rewrite <- Heq in Hy.
@@ -125,8 +201,7 @@ Section EquivCtlFormulas.
           split; auto.
           intros t' w' TR.
           apply CIH.
-          rewrite unfold_entailsF.
-          now apply Htr.
+          rewrite unfold_entailsL; auto.
     - split; revert t w; coinduction R CIH; intros; step in H;
         destruct H as (Hy & (t' & w' & TR & H0)).
       + constructor.
@@ -137,16 +212,98 @@ Section EquivCtlFormulas.
         * exists t', w'; split; auto.
   Qed.
   
-End EquivCtlFormulas.
+End EquivCtllFormulas.
 
-(*| Equations of CTL |*)
-Section CtlEquations.
+Section EquivCtlrFormulas.
+  Context `{KMS: Kripke M E} {X: Type}.
+  Notation MS := (M E HE X).
+  Notation MP := (MS -> World E -> Prop).
+  Notation equiv_ctlr := (@equiv_ctlr M E HE KMS X).
+
+   (*| Rewriting [equiv_ctl] over [entailsF] |*)
+  Global Add Parametric Morphism: entailsR
+         with signature (equiv_ctlr ==> eq ==> eq ==> iff)
+           as proper_equiv_ctl_entailsR.
+  Proof. intro x; induction x; intros y EQφ; apply EQφ. Qed.
+
+  (*| Congruences over equiv_ctlr |*)
+  Global Add Parametric Morphism: CAndR
+         with signature equiv_ctll X ==> equiv_ctlr ==> equiv_ctlr
+           as equiv_ctlr_equiv_and.
+  Proof.
+    intros p q EQpq p' q' EQpq'; split;
+      intros EQpp'; split; destruct EQpp'.
+    + now apply EQpq.
+    + now apply EQpq'.
+    + now apply EQpq in H.
+    + now apply EQpq' in H0.
+  Qed.
+
+  Global Add Parametric Morphism: COrR
+         with signature equiv_ctlr ==> equiv_ctlr ==> equiv_ctlr
+           as equiv_ctlr_equiv_or.
+  Proof.
+    intros p q EQpq p' q' EQpq'; split;
+      intros EQpp'; destruct EQpp'.
+    + left; now apply EQpq.
+    + right; now apply EQpq'.
+    + left; now apply EQpq in H.
+    + right; now apply EQpq' in H.
+  Qed.
+
+  Global Add Parametric Morphism: CImplR
+         with signature equiv_ctlr ==> equiv_ctlr ==> equiv_ctlr
+           as equiv_ctlr_equiv_impl.
+  Proof.
+    intros p q EQpq p' q' EQpq'; split; rewrite unfold_entailsR;
+      intros EQpp'; rewrite unfold_entailsR; intro HH; apply EQpq'; apply EQpq in HH;
+      now apply EQpp'.
+  Qed.
+
+  Global Add Parametric Morphism: CxR
+      with signature eq ==> equiv_ctlr ==> equiv_ctlr as equiv_ctlr_equiv_next.
+  Proof.
+    intros [] p q EQpq.
+    - split; intros; rewrite ctlr_ax in *;
+        destruct H; split; auto; intros.
+      + rewrite <- EQpq; auto.
+      + rewrite EQpq; auto.
+    - split; intros; rewrite ctlr_ex in *;
+        destruct H as (t' & w' & TR & Hdone); exists t', w'; split; auto.
+      + rewrite <- EQpq; auto.
+      + rewrite EQpq; auto.
+  Qed.
+
+  Global Add Parametric Morphism: CuR
+         with signature eq ==> equiv_ctll X ==> equiv_ctlr ==> equiv_ctlr
+           as equiv_ctlr_equiv_until.
+  Proof.
+    intros [] p q EQpq p' q' EQpq'.
+    - split; intros Hau; cinduction Hau; rewrite unfold_entailsR.
+      + left; now rewrite <- EQpq'.
+      + right; auto; now rewrite <- EQpq.
+      + left; now rewrite EQpq'.
+      + right; auto; now rewrite EQpq.
+    - split; intros Heu; cinduction Heu.
+      + left; now rewrite <- EQpq'.
+      + right; destruct H0 as (m' & TR & Heu).
+        * now rewrite <- EQpq.
+        * exact H1. 
+      + left; now rewrite EQpq'.
+      + right; destruct H0 as (m' & TR & Heu).
+        * now rewrite EQpq.
+        * exact H1.
+  Qed.
+End EquivCtlrFormulas.
+
+(*| Equations of CTL (left) |*)
+Section CtllEquations.
   Context `{KMS: Kripke M E} {X: Type}.
   Notation MS := (M E HE X).
   Notation MP := (MS -> World E -> Prop).  
-  Infix "⩸" := (equiv_ctl X (K:=KMS)) (at level 58, left associativity).
+  Infix "⩸" := (equiv_ctll X (K:=KMS)) (at level 58, left associativity).
 
-  Lemma ctl_vis_now: forall φ,
+  Lemma ctll_vis_now: forall φ,
       <( vis φ )> ⩸ <( now {fun w => exists (e: E) (v: encode e), w = Obs e v /\ φ e v} )>.
   Proof.
     intros; split; rewrite ?unfold_entailsF.
@@ -156,50 +313,37 @@ Section CtlEquations.
     - intros [(e & v & -> & Hφ) Hd]; split; auto with ctl.
   Qed.
 
-  Lemma ctl_finish_done: forall (φ: X -> forall e, encode e -> Prop),
-      <( finish φ )> ⩸ <( done {fun x w => 
-                                  exists (e: E) (v: encode e), w = Obs e v /\ φ x e v})>.
-  Proof.
-    intros; split; intro Hinv. 
-    - apply ctl_done.
-      apply ctl_finish in Hinv; inv Hinv; constructor;
-        destruct H as (e' & v' & Hinv & ?); ddestruction Hinv; eauto with ctl.
-    - apply ctl_finish.
-      apply ctl_finish in Hinv; inv Hinv; constructor;
-        destruct H as (e' & v' & Hinv & ?); ddestruction Hinv; eauto with ctl.
-  Qed.
-
-  Lemma ctl_au_ax: forall (p q: ctlf E),
+  Lemma ctll_au_ax: forall (p q: ctll E),
       <( p AU q )> ⩸ <( q \/ (p /\ AX (p AU q)) )>.
   Proof.
     intros p q; split; intro Hind.
     - cinduction Hind. 
-      + now cleft.
+      + now left.
       + destruct H1 as ([? ?] & ?).
-        cright; split; auto.
-    - cdestruct Hind.
-      + now cright. 
-      + cdestruct H.
-        cdestruct H0.
-        cleft; auto.
-        split; auto.
+        right; split; auto.
+    - rewrite unfold_entailsL in Hind; destruct Hind.
+      + now left. 
+      + destruct H.
+        destruct H0.
+        rewrite unfold_entailsL.
+        now right.
   Qed.
 
-  Lemma ctl_eu_ex: forall (p q: ctlf E),
+  Lemma ctll_eu_ex: forall (p q: ctll E),
       <( p EU q )> ⩸ <( q \/ (p /\ EX (p EU q)) )>.
   Proof.
     intros p q; split; intro Hind.
     - cinduction Hind. 
-      + now cleft.
+      + now left.
       + destruct H1 as (t' & w' & TR & ?).
-        cright; csplit; auto.
-    - cdestruct Hind.
-      + now cright. 
-      + cdestruct H.
-        now cleft.
+        right; split; auto.
+    - rewrite unfold_entailsL in Hind; destruct Hind.
+      + now left. 
+      + destruct H.
+        now right. 
   Qed.
   
-  Lemma ctl_and_idL: forall (p: ctlf E),
+  Lemma ctll_and_idL: forall (p: ctll E),
       <( ⊤ /\ p )> ⩸ <( p )>.
   Proof.
     split; intros * Hp.
@@ -207,7 +351,7 @@ Section CtlEquations.
     - split; auto.
   Qed.
 
-  Lemma ctl_and_idR: forall (p: ctlf E),
+  Lemma ctll_and_idR: forall (p: ctll E),
       <( p /\ ⊤ )> ⩸ <( p )>.
   Proof.
     split; intros * Hp.
@@ -215,7 +359,7 @@ Section CtlEquations.
     - split; auto.
   Qed.
 
-  Lemma ctl_or_idL: forall (p: ctlf E),
+  Lemma ctll_or_idL: forall (p: ctll E),
       <( ⊥ \/ p )> ⩸ <( p )>.
   Proof.
     split; intros * Hp.
@@ -223,7 +367,7 @@ Section CtlEquations.
     - now right. 
   Qed.
 
-  Lemma ctl_or_idR: forall (p: ctlf E),
+  Lemma ctll_or_idR: forall (p: ctll E),
       <( p \/ ⊥ )> ⩸ <( p )>.
   Proof.
     split; intros * Hp.
@@ -231,168 +375,258 @@ Section CtlEquations.
     - now left.
   Qed.
 
-  Lemma ctl_af_ax: forall (p: ctlf E),
+  Lemma ctll_af_ax: forall (p: ctll E),
       <( AF p )> ⩸ <( p \/ AX (AF p) )>.
   Proof.
     intros.
     etransitivity.
-    apply ctl_au_ax.
-    now rewrite ctl_and_idL.
+    apply ctll_au_ax.
+    now rewrite ctll_and_idL.
   Qed.
 
-  Lemma ctl_ef_ex: forall (p: ctlf E),
+  Lemma ctll_ef_ex: forall (p: ctll E),
       <( EF p )> ⩸ <( p \/ EX (EF p) )>.
   Proof.
     intros.
     etransitivity.
-    apply ctl_eu_ex.
-    now rewrite ctl_and_idL.
+    apply ctll_eu_ex.
+    now rewrite ctll_and_idL.
   Qed.
 
-  Lemma ctl_ag_ax: forall (p: ctlf E),
+  Lemma ctll_ag_ax: forall (p: ctll E),
       <( AG p )> ⩸ <( p /\ AX (AG p) )>.
    Proof. 
      split; intros * Hp.
-     - step in Hp; inv Hp; csplit; auto.
-     - cdestruct Hp.
+     - step in Hp; inv Hp; split; auto.
+     - destruct Hp.
        destruct H0; step; now constructor.
    Qed.
 
-   Lemma ctl_eg_ex: forall (p: ctlf E),
+   Lemma ctll_eg_ex: forall (p: ctll E),
        <( EG p )> ⩸ <( p /\ EX (EG p) )>.
    Proof. 
      split; intros * Hp.
      - split; step in Hp; inv Hp; auto.
-     - cdestruct Hp.
+     - destruct Hp.
        step; now constructor.
    Qed.
 
-   (* LEF: The opposite direction does not seem provable at this level
-      of abstraction. *)
-   Lemma ctl_afax_axaf: forall (p: ctlf E) (t: MS) w,
+   Lemma ctll_afax_axaf: forall (p: ctll E) (t: MS) w,
        <( t, w |= AF AX p )> -> <( t, w |= AX AF p )>.
    Proof.
      intros * H.
      cinduction H.
-     + cdestruct H.
+     + destruct H.
+       rewrite unfold_entailsL.
        split; auto.
        intros t' w' TR.
-       apply ctl_af_ax.
+       cut <( t', w' |= AF p )>; auto.
+       apply ctll_af_ax.
+       rewrite unfold_entailsL.
        left.
-       now apply H.
+       now apply H0.
      + destruct H0, H1; clear H H1.
+       rewrite unfold_entailsL.
        split; auto.
        intros t' w' TR.       
        pose proof (H3 _ _ TR).
-       cdestruct H. 
-       apply ctl_af_ax.
-       right.
-       now apply H3.
+       rewrite unfold_entailsL in H; destruct H.
+       cut <( t', w' |= AF p )>; auto.
+       apply ctll_af_ax.
+       rewrite unfold_entailsL.
+       right; split; auto.
    Qed.
 
-   Lemma ctl_af_involutive: forall (p: ctlf E),
+   Lemma ctll_af_involutive: forall (p: ctll E),
        <( AF p )> ⩸ <( AF (AF p) )>.
    Proof.
-     split; intros; induction H.
-     - apply ctl_af_ax; left.
-       now apply ctl_af_ax; left.
+     split; intros; cinduction H.
+     - apply ctll_af_ax. rewrite unfold_entailsL.
+       left.
+       now apply ctll_af_ax; left.
      - destruct H0, H1; clear H1.
-       apply ctl_af_ax; right; split; auto.
+       apply ctll_af_ax; right; split; auto.
      - apply H.
      - destruct H0, H1; clear H1 H.
-       apply ctl_af_ax; right; split; auto.
+       apply ctll_af_ax; right; split; auto.
    Qed.
 
-   Lemma ctl_ef_involutive: forall (p: ctlf E),
+   Lemma ctll_ef_involutive: forall (p: ctll E),
        <( EF p )> ⩸ <( EF (EF p) )>.
    Proof.
      split; intros; cinduction H.
-     - apply ctl_ef_ex; left.
-       now apply ctl_ef_ex; left.
+     - apply ctll_ef_ex; rewrite unfold_entailsL; left.
+       now apply ctll_ef_ex; left.
      - destruct H1 as (t1 & w1 & TR1 & H1). 
-       apply ctl_ef_ex; right.
+       apply ctll_ef_ex; right.
        exists t1, w1; auto.
      - apply H.
      - destruct H1 as (t1 & w1 & TR1 & H1). 
-       apply ctl_ef_ex; right.
+       apply ctll_ef_ex; right.
        exists t1, w1; auto.
    Qed.
    
-   Lemma ctl_ag_involutive: forall (p: ctlf E),
+   Lemma ctll_ag_involutive: forall (p: ctll E),
        <( AG p )> ⩸ <( AG (AG p) )>.
    Proof.
      split; intros;
        revert H; revert t w; coinduction R CIH; intros t' w' Hag.     
      - constructor; auto. 
-       apply ctl_ag_ax in Hag; cdestruct Hag.
-       cdestruct H0.
+       apply ctll_ag_ax in Hag; rewrite unfold_entailsL in Hag; destruct Hag.
+       rewrite unfold_entailsL in H0; destruct H0.
        split; auto. 
-     - rewrite ctl_ag_ax in Hag.      
-       cdestruct Hag.
-       cdestruct H0.
-       rewrite ctl_ag_ax in H.
-       cdestruct H.
+     - rewrite ctll_ag_ax in Hag; rewrite unfold_entailsL in Hag; destruct Hag.
+       rewrite unfold_entailsL in H0; destruct H0.
+       rewrite ctll_ag_ax in H; rewrite unfold_entailsL in H.
+       destruct H.
        constructor; auto.
        split; auto; intros.       
    Qed.
 
-   Lemma ctl_eg_involutive: forall (p: ctlf E),
+   Lemma ctll_eg_involutive: forall (p: ctll E),
        <( EG p )> ⩸ <( EG (EG p) )>.
    Proof.
      split; intros;
        revert H; revert t w; coinduction R CIH; intros t' w' Heg.     
      - constructor; auto.
-       apply ctl_eg_ex in Heg; cdestruct Heg.
-       cdestruct H0.
+       apply ctll_eg_ex in Heg; rewrite unfold_entailsL in Heg; destruct Heg.
+       rewrite unfold_entailsL in H0; destruct H0 as (t & w & TR & HH).
        exists t, w; intuition.
-     - rewrite ctl_eg_ex in Heg.      
-       cdestruct Heg.
-       cdestruct H0.
-       rewrite ctl_eg_ex in H.
-       cdestruct H.
+     - apply ctll_eg_ex in Heg; rewrite unfold_entailsL in Heg; destruct Heg.
+       rewrite unfold_entailsL in H0; destruct H0 as (t & w & TR & HH).
+       rewrite ctll_eg_ex in H.
+       rewrite unfold_entailsL in H; destruct H.
        constructor; auto.
        exists t, w; intuition.
    Qed.
-End CtlEquations.
+End CtllEquations.
 
-(*| Ltac Tactic [next], rewrite au, af, ag, ar, eu, ef, er, eg
-    to a disjunction/conjucntion with ax, ex respectively |*)
-#[global] Tactic Notation "next" :=
-  lazymatch goal with
-  | |- context[@entailsF ?M ?E ?HE ?KMS ?X ?φ ?t ?w] =>
-      lazymatch φ with
-      | Cx Q_A ?p => apply (@ctl_ax M E HE KMS X)
-      | Cx Q_E ?p => apply (@ctl_ex M E HE KMS X)
-      | Cg Q_A ?p => apply (@ctl_ag_ax M E HE KMS X)
-      | Cg Q_E ?p => apply (@ctl_eg_ex M E HE KMS X)
-      | Cu Q_A (CProp True) ?q =>
-          apply (@ctl_af_ax M E HE KMS X)
-      | Cu Q_A ?p ?q =>
-          apply (@ctl_au_ax M E HE KMS X)
-      | Cu Q_E (CProp True) ?q =>
-          apply (@ctl_ef_ex M E HE KMS X)
-      | Cu Q_A ?p ?q =>
-          apply (@ctl_eu_ex M E HE KMS X)
-      | ?ptrivial => fail "Cannot step formula " ptrivial
-      end
-  end.
+Section CtlrEquations.
+  Context `{KMS: Kripke M E} {X: Type}.
+  Notation MS := (M E HE X).
+  Notation MP := (MS -> World E -> Prop).
+  Infix "⩸" := (@equiv_ctlr M E HE KMS X) (at level 58, left associativity).
+  
+  Lemma ctlr_finish_done: forall (φ: X -> forall e, encode e -> Prop),
+      <[ finish φ ]> ⩸ <[ done {fun x w => 
+                                  exists (e: E) (v: encode e), w = Obs e v /\ φ x e v} ]>.
+  Proof with eauto with ctl.
+    intros; split; intro Hinv. 
+    - apply ctlr_done.
+      apply ctlr_finish in Hinv; inv Hinv; constructor;
+        destruct H as (e' & v' & Hinv & ?); ddestruction Hinv...
+    - apply ctlr_finish.
+      apply ctlr_finish in Hinv; inv Hinv; constructor;
+        destruct H as (e' & v' & Hinv & ?); ddestruction Hinv...
+  Qed.
+  
+  Lemma ctlr_au_ax: forall (p: ctll E) (q: ctlr E X),
+      <[ p AU q ]> ⩸ <[ q \/ (p /\ AX (p AU q)) ]>.
+  Proof.
+    intros p q; split; intro Hind.
+    - cinduction Hind. 
+      + now left.
+      + destruct H1 as ([? ?] & ?).
+        right; split; auto.
+    - rewrite unfold_entailsR in Hind; destruct Hind.
+      + now left. 
+      + destruct H, H0.
+        rewrite unfold_entailsR.
+        now right.
+  Qed.
 
-#[global] Tactic Notation "next" "in" ident(H) :=
-  lazymatch type of H with
-  | context[@entailsF ?M ?E ?HE ?KMS ?X ?φ ?t ?w] =>
-      lazymatch φ with
-      | Cx Q_A ?p => rewrite (@ctl_ax M E HE KMS X) in H
-      | Cx Q_E ?p => rewrite (@ctl_ex M E HE KMS X) in H
-      | context[Cg Q_A ?p] => rewrite (@ctl_ag_ax M E HE KMS X p) in H
-      | context[Cg Q_E ?p] => rewrite (@ctl_eg_ex M E HE KMS X p) in H
-      | context[Cu Q_A (CProp True) ?q] =>
-          rewrite (@ctl_af_ax M E HE KMS X q) in H
-      | context[Cu Q_A ?p ?q] =>
-          rewrite (@ctl_au_ax M E HE KMS X p q) in H
-      | context[Cu Q_E (CProp True) ?q] =>
-          rewrite (@ctl_ef_ex M E HE KMS X q) in H
-      | context[Cu Q_E ?p ?q] =>
-          rewrite (@ctl_eu_ex M E HE KMS X p q) in H
-      | ?ptrivial => fail "Cannot step formula " ptrivial " in " H
-      end
-  end.
+  Lemma ctlr_eu_ex: forall (p: ctll E) (q: ctlr E X),
+      <[ p EU q ]> ⩸ <[ q \/ (p /\ EX (p EU q)) ]>.
+  Proof.
+    intros p q; split; intro Hind.
+    - cinduction Hind. 
+      + now left.
+      + destruct H1 as (t' & w' & TR & ?).
+        right; split; auto.
+    - rewrite unfold_entailsR in Hind; destruct Hind.
+      + now left. 
+      + destruct H.
+        now right. 
+  Qed.
+
+  Lemma ctlr_and_idL: forall (p: ctlr E X),
+      <[ ⊤ /\ p ]> ⩸ <[ p ]>.
+  Proof.
+    split; intros * Hp.
+    - now destruct Hp.
+    - split; auto.
+  Qed.
+
+  Lemma ctlr_af_ax: forall (p: ctlr E X),
+      <[ AF p ]> ⩸ <[ p \/ AX (AF p) ]>.
+  Proof.
+    intros.
+    etransitivity.
+    apply ctlr_au_ax.
+    now rewrite ctlr_and_idL.
+  Qed.
+
+  Lemma ctlr_ef_ex: forall (p: ctlr E X),
+      <[ EF p ]> ⩸ <[ p \/ EX (EF p) ]>.
+  Proof.
+    intros.
+    etransitivity.
+    apply ctlr_eu_ex.
+    now rewrite ctlr_and_idL.
+  Qed.
+  
+  Lemma ctlr_afax_axaf: forall (p: ctlr E X) (t: MS) w,
+      <[ t, w |= AF AX p ]> -> <[ t, w |= AX AF p ]>.
+  Proof.
+    intros * H.
+    cinduction H.
+    + destruct H.
+      rewrite unfold_entailsR.
+      split; auto.
+      intros t' w' TR.
+      cut <[ t', w' |= AF p ]>; auto.
+      apply ctlr_af_ax.
+      rewrite unfold_entailsR.
+      left.
+      now apply H0.
+    + destruct H0, H1; clear H H1.
+      rewrite unfold_entailsR.
+      split; auto.
+      intros t' w' TR.       
+      pose proof (H3 _ _ TR).
+      rewrite unfold_entailsR in H; destruct H.
+      cut <[ t', w' |= AF p ]>; auto.
+      apply ctlr_af_ax.
+      rewrite unfold_entailsR.
+      right; split; auto.
+   Qed.
+
+   Lemma ctlr_af_involutive: forall (p: ctlr E X),
+       <[ AF p ]> ⩸ <[ AF (AF p) ]>.
+   Proof.
+     split; intros; cinduction H.
+     - apply ctlr_af_ax; rewrite unfold_entailsR.
+       left.
+       now apply ctlr_af_ax; left.
+     - destruct H0, H1; clear H1.
+       apply ctlr_af_ax; right; split; auto.
+     - apply H.
+     - destruct H0, H1; clear H1 H.
+       apply ctlr_af_ax; right; split; auto.
+   Qed.
+
+   Lemma ctlr_ef_involutive: forall (p: ctlr E X),
+       <[ EF p ]> ⩸ <[ EF (EF p) ]>.
+   Proof.
+     split; intros; cinduction H.
+     - apply ctlr_ef_ex; rewrite unfold_entailsR; left.
+       now apply ctlr_ef_ex; left.
+     - destruct H1 as (t1 & w1 & TR1 & H1). 
+       apply ctlr_ef_ex; right.
+       exists t1, w1; auto.
+     - apply H.
+     - destruct H1 as (t1 & w1 & TR1 & H1). 
+       apply ctlr_ef_ex; right.
+       exists t1, w1; auto.
+   Qed.
+End CtlrEquations.

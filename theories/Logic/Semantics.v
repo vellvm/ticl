@@ -10,7 +10,7 @@ From Coq Require Import
   Classes.RelationPairs.
 
 From Coinduction Require Import
-  coinduction lattice.
+  coinduction lattice tactics.
 
 From ExtLib Require Import
   Structures.Monad
@@ -24,8 +24,6 @@ From CTree Require Import
 
 From CTree Require Export
   Logic.Syntax.
-
-From Equations Require Import Equations.
 
 Generalizable All Variables.
 
@@ -146,37 +144,73 @@ Section Entailment.
   Notation MS X := (M E HE X).
   Notation MP X := (M E HE X -> World E -> Prop).
 
-  Equations entailsL(φ: ctll E): forall X, MP X := {
-      entailsL (CNowL φ) => fun _ _ w => φ w /\ not_done w;
-      entailsL (CuL Q_A p q) => fun X => cau (entailsL p X) (entailsL q X);
-      entailsL (CuL Q_E p q) => fun X => ceu (entailsL p X) (entailsL q X);
-      entailsL (CxL Q_A φ) => fun X => cax (entailsL φ X);
-      entailsL (CxL Q_E φ) => fun X => cex (entailsL φ X);
-      entailsL (Cg Q_A φ) => fun X => cag (entailsL φ X);
-      entailsL (Cg Q_E φ) => fun X => ceg (entailsL φ X);
-      entailsL (CAndL p q) => fun X t w => entailsL p X t w /\ entailsL q X t w;
-      entailsL (COrL p q) => fun X t w => entailsL p X t w \/ entailsL q X t w;
-      entailsL (CImplL p q) => fun X t w => entailsL p X t w -> entailsL q X t w      
-    }.
+  Definition entailsL X : ctll E -> MP X := 
+    fix entailsL (φ: ctll E): MP X :=
+      match φ with
+      | (CNow φ) => fun _ w => φ w /\ not_done w
+      | (CProp p) => fun _ _ => p
+      | (CuL Q_A p q) => cau (entailsL p) (entailsL q)
+      | (CuL Q_E p q) => ceu (entailsL p) (entailsL q)
+      | (CxL Q_A φ) => cax (entailsL φ)
+      | (CxL Q_E φ) => cex (entailsL φ)
+      | (Cg Q_A φ) => cag (entailsL φ)
+      | (Cg Q_E φ) => ceg (entailsL φ)
+      | (CAndL p q) => fun t w => entailsL p t w /\ entailsL q t w
+      | (COrL p q) => fun t w => entailsL p t w \/ entailsL q t w
+      | (CImplL p q) => fun t w => entailsL p t w -> entailsL q t w
+      end.
 
-  Equations entailsR{X}(φ: ctlr E X): MP X := {
-      entailsR (CDone φ) => fun _ => done_with φ;
-      entailsR (CuR Q_A p q) => cau (entailsL p X) (entailsR q);
-      entailsR (CuR Q_E p q) => ceu (entailsL p X) (entailsR q);
-      entailsR (CxR Q_A φ) => cax (entailsR φ);
-      entailsR (CxR Q_E φ) => cex (entailsR φ);
-      entailsR (CAndR p q) => fun t w => entailsL p X t w /\ entailsR q t w;
-      entailsR (COrR p q) => fun t w => entailsL p X t w \/ entailsR q t w;
-      entailsR (CImplR p q) => fun t w => entailsL p X t w -> entailsR q t w;
-    }.
+  Definition entailsR {X}: ctlr E X -> MP X := 
+    fix entailsR (φ: ctlr E X): MP X :=
+      match φ with
+      | (CDone φ) => fun _ => done_with φ
+      | (CuR Q_A p q) => cau (entailsL X p) (entailsR q)
+      | (CuR Q_E p q) => ceu (entailsL X p) (entailsR q)
+      | (CxR Q_A φ) => cax (entailsR φ)
+      | (CxR Q_E φ) => cex (entailsR φ)
+      | (CAndR p q) => fun t w => entailsL X p t w /\ entailsR q t w
+      | (COrR p q) => fun t w => entailsR p t w \/ entailsR q t w
+      | (CImplR p q) => fun t w => entailsR p t w -> entailsR q t w
+      end.
 
+  Lemma unfold_entailsL {X}: forall (t: M E HE X) (w: World E) (φ: ctll E),
+      entailsL X φ t w = match φ with
+                         | (CNow φ) => φ w /\ not_done w
+                         | (CProp p) => p
+                         | (CuL Q_A p q) => cau (entailsL X p) (entailsL X q) t w
+                         | (CuL Q_E p q) => ceu (entailsL X p) (entailsL X q) t w
+                         | (CxL Q_A φ) => cax (entailsL X φ) t w
+                         | (CxL Q_E φ) => cex (entailsL X φ) t w
+                         | (Cg Q_A φ) => cag (entailsL X φ) t w
+                         | (Cg Q_E φ) => ceg (entailsL X φ) t w
+                         | (CAndL p q) => entailsL X p t w /\ entailsL X q t w
+                         | (COrL p q) => entailsL X p t w \/ entailsL X q t w
+                         | (CImplL p q) => entailsL X p t w -> entailsL X q t w
+                         end.
+  Proof. intros; unfold entailsL; destruct φ; auto; destruct q; auto. Qed.
+
+  Lemma unfold_entailsR {X}: forall (t: M E HE X) (w: World E) (φ: ctlr E X),
+      entailsR φ t w = match φ with
+                       | (CDone φ) => done_with φ w
+                       | (CuR Q_A p q) => cau (entailsL X p) (entailsR q) t w
+                       | (CuR Q_E p q) => ceu (entailsL X p) (entailsR q) t w
+                       | (CxR Q_A φ) => cax (entailsR φ) t w
+                       | (CxR Q_E φ) => cex (entailsR φ) t w
+                       | (CAndR p q) => entailsL X p t w /\ entailsR q t w
+                       | (COrR p q) => entailsR p t w \/ entailsR q t w
+                       | (CImplR p q) => entailsR p t w -> entailsR q t w
+                       end.
+  Proof. intros; unfold entailsR; destruct φ; auto; destruct q; auto. Qed.
+
+  Global Opaque entailsL.
+  Global Opaque entailsR.
 End Entailment.
 
 (* Entailment notation *)
 Import CtlNotations.
 Local Open Scope ctl_scope.
 
-Notation " t , w  |= φ " := (entailsL φ _ t w)
+Notation " t , w  |= φ " := (entailsL _ φ t w)
                               (in custom ctll at level 80,
                                   φ custom ctll,
                                   right associativity): ctl_scope.
@@ -194,11 +228,17 @@ Lemma ctll_now `{KMS: Kripke M E} X:
 Proof. reflexivity. Qed.
 Global Hint Resolve ctll_now: ctll.
 
+Lemma ctll_prop `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) (φ: Prop),
+    <( t, w |= prop φ )> <-> φ.
+Proof. intros; rewrite unfold_entailsL; reflexivity. Qed.
+Global Hint Resolve ctll_prop: ctll.
+
 Lemma ctll_pure `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E),
     <( t, w |= pure )> <-> w = Pure.
 Proof.
-  intros; simp entailsF; split; intros. 
+  intros; split; intros. 
   - now destruct H.
   - subst; split; now constructor. 
 Qed.
@@ -208,7 +248,7 @@ Lemma ctll_vis `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) φ,
     <( t, w |= vis φ )> <-> vis_with φ w.
 Proof.
-  intros; simp entailsF; split; intros.
+  intros; split; intros.
   - now destruct H.
   - split; inv H; now constructor. 
 Qed.
@@ -217,43 +257,43 @@ Global Hint Resolve ctll_vis: ctll.
 Lemma ctlr_done `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (φ: X -> World E -> Prop),
     <[ t, w |= done φ ]> <-> done_with φ w.
-Proof. intros; simp entailsF; auto. Qed.
+Proof. intros; auto. Qed.
 Global Hint Resolve ctlr_done: ctlr.
 
 Lemma ctlr_done_eq `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (r:X),
     <[ t, w |= done= r w ]> <-> done_with (fun r' w' => r=r' /\ w=w') w.
-Proof. intros; simp entailsF; auto. Qed. 
+Proof. intros; auto. Qed. 
 Global Hint Resolve ctlr_done_eq: ctlr.
 
-Lemma ctll_finish `{KMS: Kripke M E} X:
+Lemma ctlr_finish `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) φ,
     <[ t, w |= finish φ ]> <-> done_with (X:=X) (finish_with φ) w.
-Proof. intros; simp entailsF; auto. Qed. 
-Global Hint Resolve ctll_finish: ctlr.
+Proof. intros; auto. Qed. 
+Global Hint Resolve ctlr_finish: ctlr.
 
 (*| AX, WX, EX unfold |*)
 Lemma ctll_ax `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (p: ctll E),
     <( t, w |= AX p )> <-> can_step t w /\ forall t' w', [t, w] ↦ [t',w'] -> <( t',w' |= p )>.
-Proof. intros; now simp entailsF. Qed.
+Proof. intros; auto. Qed.
 
 Lemma ctll_ex `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (p: ctll E),
     <( t,w |= EX p )> <-> exists t' w', [t,w] ↦ [t',w'] /\ <( t',w' |= p )>.
-Proof. intros; now simp entailsF. Qed.
+Proof. intros; auto. Qed.
 Global Hint Resolve ctll_ax ctll_ex: ctl.
 
 Lemma ctlr_ax `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (p: ctlr E X),
     <[ t, w |= AX p ]> <-> can_step t w /\ forall t' w', [t, w] ↦ [t',w'] -> <[ t',w' |= p ]>.
-Proof. intros; now simp entailsF. Qed.
+Proof. intros; auto. Qed.
 
 Lemma ctlr_ex `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (p: ctlr E X),
     <[ t,w |= EX p ]> <-> exists t' w', [t,w] ↦ [t',w'] /\ <[ t',w' |= p ]>.
-Proof. intros; now simp entailsF. Qed.
-Global Hint Resolve ctll_ax ctll_ex: ctl.
+Proof. intros; auto. Qed.
+Global Hint Resolve ctlr_ax ctlr_ex: ctl.
 
 (* [AX φ] is stronger than [EX φ] *)
 Lemma ctll_ax_ex `{KMS: Kripke M E} X:
@@ -267,12 +307,37 @@ Proof.
 Qed.
 
 (* [AF φ] is stronger than [EF φ] *)
-Lemma ctll_af_ef `{KMS: Kripke M E} X:
-  forall (t: M E HE X) (w: World E) (p: ctll E),
-    <( t, w |= AF p )> -> <( t, w |= EF p )>.
+Lemma ctll_au_eu `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) (p q: ctll E),
+    <( t, w |= p AU q )> -> <( t, w |= p EU q )>.
 Proof.
   intros.
-  simp entailsL in *.
+  rewrite unfold_entailsL in *.
+  induction H.
+  - now apply MatchE. 
+  - destruct H0 as ((m' & ? & ?) & ?).
+    destruct H1 as ((? & ? & ?) &  ?).
+    apply StepE; auto.
+    exists x0, x1; split; auto.
+Qed.
+
+Lemma ctlr_ax_ex `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) (p: ctlr E X),
+    <[ t, w |= AX p ]> -> <[ t, w |= EX p ]>.
+Proof.
+  intros.
+  rewrite ctlr_ax, ctlr_ex in *.
+  destruct H as ((m' & w' & TR) & ?).
+  exists m', w'; auto.
+Qed.
+
+(* [AF φ] is stronger than [EF φ] *)
+Lemma ctlr_au_eu `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) (p: ctll E) (q: ctlr E X),
+    <[ t, w |= p AU q ]> -> <[ t, w |= p EU q ]>.
+Proof.
+  intros.
+  rewrite unfold_entailsR in *.
   induction H.
   - now apply MatchE. 
   - destruct H0 as ((m' & ? & ?) & ?).
@@ -291,23 +356,16 @@ Lemma ctll_ex_falso `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E) (p: 
     <( t, w |= ⊥ -> p )>.
 Proof.
   cbn.
-  intros; simp entailsL.
+  intros; rewrite unfold_entailsL.
   now intros [].
 Qed.
 
 (*| Top is True |*)
 Lemma ctll_top `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
-    not_done w -> <( t, w |= ⊤ )>.
+    <( t, w |= ⊤ )>.
 Proof.
-  cbn.
-  simp entailsL; intros; auto.
-Qed.
-
-Lemma ctlr_top `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
-    is_done w -> <[ t, w |= ⊤ ]>.
-Proof.
-  cbn.
-  simp entailsL; intros; auto.
+  intros.
+  now apply ctll_prop.
 Qed.
 
 (*| Cannot exist path such that eventually Bot |*)
@@ -315,7 +373,7 @@ Lemma ctll_sound_ef `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
     ~ <( t, w |= EF ⊥ )>.
 Proof.
   intros * Contra.
-  simp entailsF in Contra.
+  rewrite unfold_entailsL in Contra.
   induction Contra.
   - contradiction.
   - now destruct H1 as (? & ? & ? & ?).
@@ -326,45 +384,39 @@ Lemma ctll_sound_af `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
     ~ <( t, w |= AF ⊥ )>.
 Proof.
   intros * Contra.
-  apply ctll_af_ef in Contra.
+  apply ctll_au_eu in Contra.
   apply ctll_sound_ef in Contra.
   contradiction.
 Qed.
 
-(*| Semantic equivalence of formulas |*)
-Definition equiv_ctl {M} `{HE: Encode E} {K: Kripke M E} X: relation (ctlf E) :=
-  fun p q => forall (t: M E HE X) (w: World E), entailsF p t w <-> entailsF q t w.
+(* Basic tactics, more automated ones defined in [Tactics.v] after [Congruence.v] is done *)
+#[global] Tactic Notation "step" "in" ident(H) :=
+  (lazymatch type of H with
+   | @entailsL ?M ?W ?HE ?KMS ?X (Cg ?q ?φ) ?t ?w =>
+       rewrite unfold_entailsL in H; step_in H
+   end || step_in H).
 
-Section EquivCtlEquivalence.
-  Context `{K: Kripke M E} {X: Type}.
-  Notation equiv_ctl := (@equiv_ctl M E HE K X).
+#[global] Ltac step :=
+  first [
+      lazymatch goal with
+      | |- @entailsL ?M ?W ?HE ?KMS ?X (Cg ?q ?φ) ?t ?w =>
+          rewrite unfold_entailsL; red; step_
+      end | red; step_ ].
 
-  Global Instance Equivalence_equiv_ctl:
-    Equivalence equiv_ctl.
-  Proof.
-    constructor.
-    - intros P x; reflexivity.
-    - intros P Q H' x; symmetry; auto.
-    - intros P Q R H0' H1' x; etransitivity; auto.
-  Qed.
+#[global] Ltac cinduction H0 :=
+  match type of H0 with
+  | @entailsL ?M ?W ?HE ?KMS ?X (CuL ?q ?φ ?ψ) ?t ?w =>
+      rewrite unfold_entailsL in H0; induction H0
+  | @entailsR ?M ?W ?HE ?KMS ?X (CuR ?q ?φ ?ψ) ?t ?w =>
+      rewrite unfold_entailsR in H0; induction H0
+  end.
 
-  (*| [equiv_ctl] proper under [equiv_ctl] |*)
-  Global Add Parametric Morphism : equiv_ctl with signature
-         equiv_ctl ==> equiv_ctl ==> iff as equiv_ctll_equiv.
-  Proof.
-    intros p q EQpq p' q' EQpq'; split;
-      intros EQpp'; split; intro BASE; cbn in *.
-    - symmetry in EQpq'; apply EQpq'.
-      symmetry in EQpp'; apply EQpp'.
-      now apply EQpq.
-    - symmetry in EQpq'; apply EQpq.
-      apply EQpp'.
-      now apply EQpq'.
-    - apply EQpq'.
-      symmetry in EQpp'; apply EQpp'.
-      symmetry in EQpq; now apply EQpq.
-    - apply EQpq.
-      apply EQpp'.
-      symmetry in EQpq'; now apply EQpq'.
-  Qed.
-End EquivCtlEquivalence.
+#[global] Ltac coinduction_g R CIH :=
+  let R' := fresh R in
+  setoid_rewrite unfold_entailsL;
+  coinduction R' CIH;
+  try change (cag (entailsL ?X ?p) ?t ?w) with <( t, w |= AG p )> in *;
+  try change (ceg (entailsL ?X ?p) ?t ?w) with <( t, w |= EG p )> in *.
+
+#[global] Tactic Notation "coinduction" simple_intropattern(R) simple_intropattern(H) :=
+  (coinduction_g R H || coinduction R H).

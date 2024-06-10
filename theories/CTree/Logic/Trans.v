@@ -285,7 +285,7 @@ Section CTreeTrans.
   Hint Resolve ktrans_stuck: ctl.
   
   Lemma done_not_ktrans{X}: forall (t: ctree E X) w,
-      is_done w ->
+      is_done X w ->
       ~ (exists t' w', [t, w] ↦ [t', w']).
   Proof.
     intros * Hret Htr.

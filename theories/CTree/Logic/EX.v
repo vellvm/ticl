@@ -29,7 +29,7 @@ Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
   Lemma done_ex: forall (t: ctree E X) φ w,
-      is_done w ->
+      is_done X w ->
       ~ <( t, w |= EX φ )>.
   Proof.
     intros * Hret Hcontra.
@@ -60,7 +60,7 @@ Section BasicLemmas.
         not_done w /\ (exists (i: fin' n), <( {k i}, w |= φ )>).
   Proof with auto with ctl.
     split; intros.
-    - next in H; destruct H as (t' & w' & TR & H).
+    - cdestruct H. 
       apply ktrans_br in TR as (i & H' & -> & Hd').
       split...
       exists i.
@@ -76,7 +76,7 @@ Section BasicLemmas.
         not_done w /\ (exists (v: encode e), <( {k v}, {Obs e v} |= φ )>).
   Proof with auto with ctl.
     split; intros.
-    - next in H; destruct H as (t' & w' & TR & H).
+    - cdestruct H. 
       apply ktrans_vis in TR as (v & -> & ? & ?).
       rewrite <- H0 in H.
       split; [|exists v]...
@@ -87,14 +87,14 @@ Section BasicLemmas.
   Qed.
 
   Lemma ex_done_ret: forall (x: X) φ w,
-      <( {Ret x}, w |= EX done φ )> <->
+      <[ {Ret x}, w |= EX done φ ]> <->
         not_done w /\ φ x w. 
   Proof with eauto with ctl.
     split; intros.
-    - next in H; destruct H as (t' & w' & TR & H).
+    - cdestruct H. 
       split.
-      + now apply ktrans_not_done with (Ret x) t' w'.
-      + inv TR; rewrite unfold_entailsF in H; now ddestruction H. 
+      + now apply ktrans_not_done with (Ret x) t w0.
+      + cdestruct H; inv TR; now ddestruction H. 
     - destruct H as ([] & ?); exists (Ctree.stuck).
       + exists (Done x); split.
         * apply ktrans_done...
@@ -105,17 +105,17 @@ Section BasicLemmas.
   Qed.
 
   Lemma ex_done: forall (t: ctree E X) φ w,
-      <( t, w |= EX done φ )> <-> not_done w /\ (exists (x: X), t ~ Ret x /\ φ x w).
+      <[ t, w |= EX done φ ]> <-> not_done w /\ (exists (x: X), t ~ Ret x /\ φ x w).
   Proof.
     split; intros.
-    - next in H; destruct H as (t' & w' & TR & ?).
-      split; [now apply ktrans_not_done with t t' w'|].
+    - cdestruct H.
+      split; [now apply ktrans_not_done with t t0 w0|].
       cbn in *.
       setoid_rewrite (ctree_eta t).
-      setoid_rewrite (ctree_eta t') in H.
+      setoid_rewrite (ctree_eta t0) in H.
       remember (observe t) as T.
-      remember (observe t') as T'.
-      clear HeqT t HeqT' t'.
+      remember (observe t0) as T'.
+      clear HeqT t HeqT' t0.
       dependent induction TR; intros.
       + setoid_rewrite <- (ctree_eta t) in IHTR.
         destruct (IHTR H) as (x & Heq & Hφ).
@@ -124,10 +124,10 @@ Section BasicLemmas.
       + inv H1; inv H.
       + inv H1.
       + exists x; intuition.
-        rewrite unfold_entailsF in H0.
+        cdestruct H0.
         now ddestruction H0.
       + exists x; intuition.
-        rewrite unfold_entailsF in H0.
+        cdestruct H0.
         now ddestruction H0.
     - destruct H as (Hw & x & Heq & H).
       rewrite Heq.
@@ -150,28 +150,28 @@ Section BindLemmas.
 
   Opaque Ctree.stuck.
   Typeclasses Transparent equ.
-  Theorem ex_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ R,
-      <( t, w |= EX done R )> ->
-      (forall x w, R x w -> <( {k x}, w |= EX φ )>) ->
+  Theorem ex_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ r,
+      <[ t, w |= EX done= r w' ]> ->
+      <( {k r}, w' |= EX φ )> ->
       <( {x <- t ;; k x}, w |= EX φ )>.
   Proof with eauto with ctl.
     intros.
-    next in H; destruct H as (t' & w' & TR & H).
-    cbn in H, TR.
+    cdestruct H.
+    cbn in TR.
     rewrite (ctree_eta t).
-    rewrite (ctree_eta t') in H; [|exact (equ eq)].
+    rewrite (ctree_eta t0) in H; [|exact (equ eq)].
     remember (observe t) as T; clear t HeqT.
-    remember (observe t') as T'; clear t' HeqT'.
+    remember (observe t0) as T'; clear t0 HeqT'.
     hinduction TR before Y; intros; subst.
     - rewrite bind_guard.
       apply ex_guard.
-      eapply IHTR with R...
+      eapply IHTR with w'0 r...
     - rewrite bind_br.
       inv H; inv H1.
     - inv H1.
-    - rewrite unfold_entailsF in H0; ddestruction H0. 
+    - cdestruct H0; ddestruction H0; destruct H0; subst.
       rewrite bind_ret_l...
-    - rewrite bind_ret_l.
-      rewrite unfold_entailsF in H0; ddestruction H0; auto.
+    - cdestruct H0; ddestruction H0; destruct H0; subst.
+      rewrite bind_ret_l...
   Qed.
 End BindLemmas.

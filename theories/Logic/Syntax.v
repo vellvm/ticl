@@ -14,10 +14,11 @@ Variant ctlq := Q_A | Q_E.
 
 Section CtlSyntax.
   Context {E: Type} {HE: Encode E}.
-  
+
   Inductive ctll: Type :=
   (* Property [φ] holds right now and not in a [done] world *)
-  | CNowL (φ: World E -> Prop): ctll
+  | CNow (φ: World E -> Prop): ctll
+  | CProp (φ: Prop): ctll
   (* Path quantifier [q]; property [φ: ctll] holds finitely, until [ψ: ctlr] stops it *)
   | CuL (q: ctlq) (φ ψ: ctll): ctll
   | CxL (q: ctlq) (φ: ctll): ctll
@@ -35,8 +36,8 @@ Section CtlSyntax.
   | CxR (q: ctlq) (p: ctlr): ctlr
   (* Boolean combinators *)
   | CAndR (p: ctll) (q: ctlr): ctlr
-  | COrR (p: ctll) (q: ctlr): ctlr
-  | CImplR (p: ctll) (q: ctlr): ctlr.
+  | COrR (p: ctlr) (q: ctlr): ctlr
+  | CImplR (p: ctlr) (q: ctlr): ctlr.
 
   Arguments ctlr: clear implicits.
 
@@ -52,7 +53,7 @@ Module CtlNotations.
 
   (* left CTL syntax (no termination) *)
   Declare Custom Entry ctll.
-
+  
   Notation "<( e )>" := e (at level 0, e custom ctll at level 95) : ctl_scope.
   Notation "( x )" := x (in custom ctll, x at level 99) : ctl_scope.
   Notation "{ x }" := x (in custom ctll at level 0, x constr): ctl_scope.
@@ -67,20 +68,24 @@ Module CtlNotations.
   Notation "x" := x (in custom ctlr at level 0, x constr at level 0) : ctl_scope.
 
   (* Temporal syntax: base predicates *)
+  Notation "'prop' p" :=
+    (CProp p)
+      (in custom ctll at level 74): ctl_scope.
+  
   Notation "'now' p" :=
-    (CNowL p)
+    (CNow p)
       (in custom ctll at level 74): ctl_scope.
 
   Notation "'pure'" :=
-    (CNowL (fun w => w = Pure))
+    (CNow (fun w => w = Pure))
       (in custom ctll at level 74): ctl_scope.
 
   Notation "'vis' R" :=
-    (CNowL (vis_with R))
+    (CNow (vis_with R))
       (in custom ctll at level 74): ctl_scope.
 
   Notation "'visW' R" :=
-    (CNowL (vis_with (fun pat : writerE _ =>
+    (CNow (vis_with (fun pat : writerE _ =>
                        let 'Log v as x := pat return (encode x -> Prop) in
                        fun 'tt => R v)))
       (in custom ctll at level 75): ctl_scope.
@@ -103,16 +108,17 @@ Module CtlNotations.
                            fun 'tt => R x s w)))
       (in custom ctlr at level 75): ctl_scope.
 
-  Notation "⊤" := (CNowL (fun _ => True))
+  Notation "⊤" := (CProp True)
                     (in custom ctll at level 76): ctl_scope.
   
-  Notation "⊥" := (CNowL (fun _ => False))
+  Notation "⊥" := (CProp False)
                     (in custom ctll at level 76): ctl_scope.
-  Notation "⊤" := (CNowL (fun _ => True))
-                    (in custom ctlr at level 76): ctl_scope.  
-  Notation "⊥" := (CNowL (fun _ => False))
+  Notation "⊤" := (CProp True)
                     (in custom ctlr at level 76): ctl_scope.
-
+  
+  Notation "⊥" := (CProp False)
+                    (in custom ctlr at level 76): ctl_scope.
+  
   (* Temporal syntax *)
   Notation "'EX' p" := (CxL Q_E p) (in custom ctll at level 75): ctl_scope.
   Notation "'AX' p" := (CxL Q_A p) (in custom ctll at level 75): ctl_scope.
@@ -153,9 +159,10 @@ Module CtlNotations.
 
   Notation "p '/\' q" := (CAndR p q)
                            (in custom ctlr at level 77, left associativity): ctl_scope.
-  Notation "p '\/' q" := (CAndR p q)
+  Notation "p '\/' q" := (COrR p q)
                            (in custom ctlr at level 77, left associativity): ctl_scope.
   Notation "p '->' q" := (CImplR p q)
                            (in custom ctlr at level 78, right associativity): ctl_scope.
-
+  Notation "p '<->' q" := (CAndR (CImplR p q) (CImplR q p))
+                            (in custom ctlr at level 77): ctl_scope.
 End CtlNotations.

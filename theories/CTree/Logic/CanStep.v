@@ -22,7 +22,6 @@ Local Open Scope ctree_scope.
 Section CanStepCtrees.
   Context {E: Type} {HE: Encode E}.
   Notation encode := (@encode E HE).
-  Notation equiv_ctl X := (equiv_ctl (X:=X) (M:= ctree)).
 
   Global Add Parametric Morphism{X}: (can_step (M:=ctree) (X:=X))
          with signature (equ eq ==> eq ==> iff)
@@ -155,7 +154,7 @@ Section CanStepCtrees.
 
   Typeclasses Opaque equ.
   Lemma can_step_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w R,      
-      <( t, w |= AF AX done R )> ->
+      <[ t, w |= AF AX done R ]> ->
       (forall y w, R y w -> can_step (k y) w) ->
       can_step (x <- t ;; k x) w.
   Proof with eauto with ctl. 
@@ -179,7 +178,7 @@ Section CanStepCtrees.
             by now apply ktrans_done.
         destruct (H _ _ TR').
         -- apply ktrans_done in TR' as (? & _).
-           dependent destruction H3.
+           ddestruction H3.
            right.
            exists x, (Done x); split... 
         -- cbn in TR'.

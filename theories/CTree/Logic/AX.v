@@ -29,7 +29,7 @@ Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
   Lemma done_ax: forall (t: ctree E X) φ w,
-      is_done w ->
+      is_done X w ->
       ~ <( t, w |= AX φ )>.
   Proof.
     intros * Hret Hcontra.
@@ -60,14 +60,14 @@ Section BasicLemmas.
         not_done w /\ (forall (i: fin' n), <( {k i}, w |= φ )>).
   Proof with auto with ctl.
     split; intros.
-    - next in H; destruct H.
-      assert(Hd: not_done w) by now apply can_step_br in H.
+    - cdestruct H.
+      assert(Hd: not_done w) by now apply can_step_br in Hs.
       split...
       intros i.
-      apply H0.
+      apply H.
       apply ktrans_br.
       exists i...
-    - destruct H; split.
+    - destruct H; csplit.
       + apply can_step_br...
       + intros t' w' TR.
         apply ktrans_br in TR as (i & -> & -> & TR).
@@ -79,14 +79,14 @@ Section BasicLemmas.
         not_done w /\ (forall (v: encode e), <( {k v}, {Obs e v} |= φ )>).
   Proof with auto with ctl.
     split; intros.
-    - next in H; destruct H.
-      assert(Hd: not_done w) by now apply can_step_vis in H.
+    - cdestruct H.
+      assert(Hd: not_done w) by now apply can_step_vis in Hs.
       split...
       intros v.
-      apply H0.
+      apply H.
       apply ktrans_vis.
       exists v...
-    - destruct H; split.
+    - destruct H; csplit.
       + apply can_step_vis...
       + intros t' w' TR.
         apply ktrans_vis in TR as (i & -> & <- & TR); subst.
@@ -94,36 +94,32 @@ Section BasicLemmas.
   Qed.
 
   Lemma ax_done_ret: forall (x: X) φ w,
-      <( {Ret x}, w |= AX done φ )> <-> not_done w /\ φ x w. 
+      <[ {Ret x}, w |= AX done φ ]> <-> not_done w /\ φ x w. 
   Proof.
     split; intros.
-    - next in H; destruct H.
-      destruct H as (t' & w' & TR).
-      specialize (H0 _ _ TR).
+    - cdestruct H.
+      destruct Hs as (t' & w' & TR).
+      specialize (H _ _ TR).
       split.
       + now apply ktrans_not_done with (Ret x) t' w'.
       + cbn in TR.
         dependent destruction TR; observe_equ x;
-          rewrite <- Eqt in H0;
-          now apply ctl_done in H0;
-          dependent destruction H0.
-    - split; destruct H.
+          rewrite <- Eqt in H0; now cdestruct H0.
+    - destruct H; csplit.
       + now apply can_step_ret.
       + intros t' w' TR.
         inv H.
-        * apply ktrans_done in TR as (? & ->).
-          apply ctl_done; subst.
-          now constructor.
+        * apply ktrans_done in TR as (-> & ->).
+          now csplit.
         * apply ktrans_finish in TR as (-> & ->).
-          apply ctl_done.
-          now constructor.
+          now csplit.
   Qed.
   
   Lemma ax_done: forall (t: ctree E X) φ w,
-      <( t, w |= AX done φ )> <-> not_done w /\ (exists (x: X), t ~ Ret x /\ φ x w).
+      <[ t, w |= AX done φ ]> <-> not_done w /\ (exists (x: X), t ~ Ret x /\ φ x w).
   Proof.
     split; intros.
-    - next in H; destruct H as ((t' & w' & TR) & ?).
+    - cdestruct H; destruct Hs as (t' & w' & TR).
       cbn in *.
       setoid_rewrite (ctree_eta t).
       remember (observe t) as T.
@@ -143,12 +139,10 @@ Section BasicLemmas.
       + inv H1.
       + split; auto with ctl.
         exists x; intuition.
-        rewrite unfold_entailsF in H0.
-        now ddestruction H0.
+        now cdestruct H0.
       + split; auto with ctl.
         exists x; intuition.
-        rewrite unfold_entailsF in H0.
-        now ddestruction H0.
+        now cdestruct H0.
     - destruct H as (Hw & x & Heq & H).
       rewrite Heq.
       apply ax_done_ret; intuition.
@@ -160,26 +154,26 @@ Section BindLemmas.
   Context {E: Type} {HE: Encode E}.
 
   Theorem ax_bind_vis{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) φ w,
-      <( t, w |= AX vis φ )> ->
-      <( {x <- t ;; k x}, w |= AX vis φ )>.
+      <( t, w |= AX φ )> ->
+      <( {x <- t ;; k x}, w |= AX φ )>.
   Proof with auto with ctl.
     intros.
-    next in H.
-    destruct H as [(t' & w' & TR') Hs].
-    next; split.
-    + specialize (Hs _ _ TR').
-      apply ctl_vis in Hs; inv Hs.
+    generalize dependent w.
+    revert t.
+    induction φ; intros.
+    (* HERE *)
+    + destruct Hs as (t' & w' & TR).
+      specialize (H _ _ TR).
+      cdestruct H.
       eapply can_step_bind_l with t' (Obs e v)...
     + intros t_ w_ TR_.
-      clear t' w' TR' w'.
       apply ktrans_bind_inv in TR_ as
           [(t' & TR' & Hd & Ht_) |
             (x & w' & TR' & Hr & TRk)].
-      * specialize (Hs _ _ TR').
-        now rewrite !unfold_entailsF in *. 
-      * dependent destruction Hr;
-        specialize (Hs _ _ TR');
-        apply ctl_vis in Hs; inv Hs. 
+      * specialize (H _ _ TR').
+        now cdestruct H; csplit.
+      * ddestruction Hr; subst;
+          specialize (H _ _ TR'); cdestruct H.
   Qed.
 
   Theorem ax_bind_pure{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w,
