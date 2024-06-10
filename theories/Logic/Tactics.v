@@ -4,6 +4,7 @@ From Coinduction Require Import
 From CTree Require Import
   Utils.Utils
   Events.Core
+  Logic.Syntax
   Logic.Semantics.
 
 Import CtlNotations.
@@ -11,28 +12,31 @@ Local Open Scope ctl_scope.
 
 Generalizable All Variables.
 
+
 #[global] Tactic Notation "step" "in" ident(H) :=
   (lazymatch type of H with
-   | @entailsF ?M ?W ?HE ?KMS ?X (CAG ?φ) ?t ?w =>
-       rewrite unfold_entailsF in H; step_in H
-   | @entailsF ?M ?W ?HE ?KMS ?X (CEG ?φ) ?t ?w =>
+   | @entailsF ?M ?W ?HE ?KMS ?X (Cg ?q ?φ) ?t ?w =>
        rewrite unfold_entailsF in H; step_in H
    end || step_in H).
 
 #[global] Ltac step :=
   first [
       lazymatch goal with
-      | |- @entailsF ?M ?W ?HE ?KMS ?X (CAG ?φ) ?t ?w =>
-          rewrite unfold_entailsF; red; step_
-      | |- @entailsF ?M ?W ?HE ?KMS ?X (CEG ?φ) ?t ?w =>
+      | |- @entailsF ?M ?W ?HE ?KMS ?X (Cg ?q ?φ) ?t ?w =>
           rewrite unfold_entailsF; red; step_
       end | red; step_ ].
 
 #[global] Ltac csplit :=
   lazymatch goal with
   | |- <( ?t, ?w |= ?φ /\ ?ψ )> => rewrite unfold_entailsF; split
-  | |- <( ?t, ?w |= AX ?φ )> => rewrite unfold_ax; split
-  | |- <( ?t, ?w |= AX ?φ )> => rewrite unfold_ex                                      
+  | |- <( ?t, ?w |= AX ?φ )> => rewrite ctl_ax; split
+  | |- <( ?t, ?w |= EX ?φ )> => rewrite ctl_ex
+  | |- <( ?t, ?w |= prop ?φ )> => rewrite unfold_entailsF
+  | |- <( ?t, ?w |= pure )> => rewrite ctl_pure                                     
+  | |- <( ?t, ?w |= vis ?φ )> => rewrite ctl_vis
+  | |- <( ?t, ?w |= now ?φ )> => rewrite ctl_now
+  | |- <( ?t, ?w |= finish ?φ )> => rewrite ctl_finish
+  | |- <( ?t, ?w |= done ?φ )> => rewrite ctl_done                                          
   end.
 
 #[global] Ltac cleft :=
@@ -55,31 +59,42 @@ Generalizable All Variables.
 
 #[global] Ltac cdestruct H0 :=
   match type of H0 with
+  | <( ?t, ?w |= prop ?φ )> => rewrite unfold_entailsF in H0
+  | <( ?t, ?w |= pure )> => rewrite ctl_pure in H0; subst
+  | <( ?t, ?w |= vis ?φ )> =>
+      let e := fresh "e" in
+      let v := fresh "v" in
+      rewrite ctl_vis in H0; destruct H0 as (e & v & ?)
+  | <( ?t, ?w |= now ?φ )> => rewrite ctl_now in H0
+  | <( ?t, ?w |= finish ?φ )> =>
+      let e := fresh "e" in
+      let v := fresh "v" in
+      let x := fresh "x" in
+      rewrite ctl_finish in H0; destruct H0 as (e & v & x & ?)
+  | <( ?t, ?w |= done ?φ )> => rewrite ctl_done in H0
+  | @entailsF ?M ?W ?HE ?KMS ?X (CProp ?φ) ?t ?w =>
+      rewrite unfold_entailsF in H0
+  | @entailsF ?M ?W ?HE ?KMS ?X (CNow ?φ) ?t ?w =>
+      rewrite ctl_now in H0
+  | @entailsF ?M ?W ?HE ?KMS ?X (CDone ?φ) ?t ?w =>
+      rewrite ctl_done in H0
   | @entailsF ?M ?W ?HE ?KMS ?X (CAnd ?φ ?ψ) ?t ?w =>
       rewrite unfold_entailsF in H0; destruct H0      
   | @entailsF ?M ?W ?HE ?KMS ?X (COr ?φ ?ψ) ?t ?w =>
       rewrite unfold_entailsF in H0; destruct H0
-  | @entailsF ?M ?W ?HE ?KMS ?X (CAX ?φ) ?t ?w =>
+  | @entailsF ?M ?W ?HE ?KMS ?X (Cx Q_A ?φ) ?t ?w =>
       let Hs' := fresh "Hs" in
-      rewrite unfold_ax in H0; destruct H0 as (Hs' & H0)
-  | @entailsF ?M ?W ?HE ?KMS ?X (CEX ?φ) ?t ?w =>
+      rewrite ctl_ax in H0; destruct H0 as (Hs' & H0)
+  | @entailsF ?M ?W ?HE ?KMS ?X (Cx Q_E ?φ) ?t ?w =>
       let t' := fresh "t" in
       let w' := fresh "w" in
       let TR' := fresh "TR" in
-      rewrite unfold_ex in H0; destruct H0 as (t' & w' & TR' & H0)
-  | @entailsF ?M ?W ?HE ?KMS ?X (CAU ?φ ?ψ) ?t ?w =>
+      rewrite ctl_ex in H0; destruct H0 as (t' & w' & TR' & H0)
+  | @entailsF ?M ?W ?HE ?KMS ?X (Cu ?q ?φ ?ψ) ?t ?w =>
       let t' := fresh "t" in
       remember t as t';
       rewrite unfold_entailsF in H0; destruct H0; subst      
-  | @entailsF ?M ?W ?HE ?KMS ?X (CEU ?φ ?ψ) ?t ?w =>
-      let t' := fresh "t" in
-      remember t as t';
-      rewrite unfold_entailsF in H0; destruct H0; subst
-  | @entailsF ?M ?W ?HE ?KMS ?X (CAG ?φ) ?t ?w =>
-      let t' := fresh "t" in
-      remember t as t';
-      rewrite unfold_entailsF in H0; step in H0; cbn in H0; subst
-  | @entailsF ?M ?W ?HE ?KMS ?X (CEG ?φ) ?t ?w =>
+  | @entailsF ?M ?W ?HE ?KMS ?X (Cg ?q ?φ) ?t ?w =>
       let t' := fresh "t" in
       remember t as t';
       rewrite unfold_entailsF in H0; step in H0; cbn in H0; subst
@@ -87,9 +102,7 @@ Generalizable All Variables.
 
 #[global] Ltac cinduction H0 :=
   match type of H0 with
-  | @entailsF ?M ?W ?HE ?KMS ?X (CAU ?φ ?ψ) ?t ?w =>
-      rewrite unfold_entailsF in H0; induction H0
-  | @entailsF ?M ?W ?HE ?KMS ?X (CEU ?φ ?ψ) ?t ?w =>
+  | @entailsF ?M ?W ?HE ?KMS ?X (Cu ?q ?φ ?ψ) ?t ?w =>
       rewrite unfold_entailsF in H0; induction H0
   end.
 

@@ -1,12 +1,13 @@
+
 (*|
 =========================================
 Modal logics over kripke semantics
 =========================================
 |*)
 From Coq Require Import
-         Basics
-         FunctionalExtensionality
-         Classes.RelationPairs.
+  Basics
+  FunctionalExtensionality
+  Classes.RelationPairs.
 
 From Coinduction Require Import
   coinduction lattice.
@@ -19,8 +20,12 @@ From CTree Require Import
   Events.Core
   Events.WriterE
   Utils.Utils
-  Logic.Kripke
+  Logic.Kripke.
+
+From CTree Require Export
   Logic.Syntax.
+
+From Equations Require Import Equations.
 
 Generalizable All Variables.
 
@@ -122,296 +127,152 @@ Section Shallow.
 
 End Shallow.
 
+(* Companion notations *)
 Notation cag p := (gfp (cagF p)).
 Notation ceg p := (gfp (cegF p)).
+Notation cagt p  := (t (cagF p)).
+Notation cegt p  := (t (cegF p)).
+Notation cagbt p := (bt (cagF p)).
+Notation cegbt p := (bt (cegF p)).
+Notation cagT p  := (T (cagF p)).
+Notation cegT p  := (T (cegF p)).
+Notation cagbT p := (bT (cagF p)).
+Notation cegbT p := (bT (cegF p)).
+#[global] Hint Constructors ceu cau: ctl.
 
+(*| Semantics of ctl entailment |*)
 Section Entailment.
   Context `{KMS: Kripke M E}.
+  Notation MS X := (M E HE X).
+  Notation MP X := (M E HE X -> World E -> Prop).
 
-  (* Two types of formulas requires a typeclass for denotation *)
-  Polymorphic Class Entails {X} (Φ: Type): Type :=
-    entails: Φ -> M E HE X -> World E -> Prop.
+  Equations entailsL(φ: ctll E): forall X, MP X := {
+      entailsL (CNowL φ) => fun _ _ w => φ w /\ not_done w;
+      entailsL (CuL Q_A p q) => fun X => cau (entailsL p X) (entailsL q X);
+      entailsL (CuL Q_E p q) => fun X => ceu (entailsL p X) (entailsL q X);
+      entailsL (CxL Q_A φ) => fun X => cax (entailsL φ X);
+      entailsL (CxL Q_E φ) => fun X => cex (entailsL φ X);
+      entailsL (Cg Q_A φ) => fun X => cag (entailsL φ X);
+      entailsL (Cg Q_E φ) => fun X => ceg (entailsL φ X);
+      entailsL (CAndL p q) => fun X t w => entailsL p X t w /\ entailsL q X t w;
+      entailsL (COrL p q) => fun X t w => entailsL p X t w \/ entailsL q X t w;
+      entailsL (CImplL p q) => fun X t w => entailsL p X t w -> entailsL q X t w      
+    }.
 
-  Fixpoint entailsL X (φ: ctll E) : M E HE X -> World E -> Prop :=
-    let fix entailsP (φ: CBool (ctll E)) :=
-      match φ with
-      | CBase cp => entailsL X cp
-      | CAnd φ ψ => fun m w => entailsP φ m w /\ entailsP ψ m w
-      | COr φ ψ => fun m w => entailsP φ m w \/ entailsP ψ m w
-      | CImpl φ ψ => fun m w => entailsP φ m w -> entailsP ψ m w
-      | CNot φ => fun m w => entailsP φ m w -> False
-      end in
-    match φ with
-    | CNowL ψ => fun _ w => ψ w /\ not_done w
-    | CgL Q_A p => cag (entailsL X p)
-    | CgL Q_E p => ceg (entailsL X p)
-    | CxL Q_A p => cax (entailsL X p)
-    | CxL Q_E p => cex (entailsL X p)
-    | CuL Q_A p q => cau (entailsL X p) (entailsL X q)
-    | CuL Q_E p q => ceu (entailsL X p) (entailsL X q)
-    | CBoolL p => entailsP p
-    end.
+  Equations entailsR{X}(φ: ctlr E X): MP X := {
+      entailsR (CDone φ) => fun _ => done_with φ;
+      entailsR (CuR Q_A p q) => cau (entailsL p X) (entailsR q);
+      entailsR (CuR Q_E p q) => ceu (entailsL p X) (entailsR q);
+      entailsR (CxR Q_A φ) => cax (entailsR φ);
+      entailsR (CxR Q_E φ) => cex (entailsR φ);
+      entailsR (CAndR p q) => fun t w => entailsL p X t w /\ entailsR q t w;
+      entailsR (COrR p q) => fun t w => entailsL p X t w \/ entailsR q t w;
+      entailsR (CImplR p q) => fun t w => entailsL p X t w -> entailsR q t w;
+    }.
 
-  Fixpoint entailsR {X} (φ: ctlr E X): M E HE X -> World E -> Prop :=
-    let fix entailsP (φ: CBool (ctlr E X)) :=
-      match φ with
-      | CBase cp => entailsR cp
-      | CAnd φ ψ => fun m w => entailsP φ m w /\ entailsP ψ m w
-      | COr φ ψ => fun m w => entailsP φ m w \/ entailsP ψ m w
-      | CImpl φ ψ => fun m w => entailsP φ m w -> entailsP ψ m w
-      | CNot φ => fun m w => entailsP φ m w -> False
-      end in
-    match φ with
-    | CNowR ψ => fun _ w => ψ w /\ not_done w
-    | CDoneR ψ => fun _ => done_with ψ
-    | CxR Q_A p => cax (entailsR p)
-    | CxR Q_E p => cex (entailsR p)
-    | CuR Q_A p q => cau (entailsL X p) (entailsR q)
-    | CuR Q_E p q => ceu (entailsL X p) (entailsR q)           
-    | CBoolR p => entailsP p
-    end.
-
-  Global Instance EntailsL {X} : Entails (ctll E) :=
-    fun (φ: ctll E) => entailsL X φ.
-
-  Global Instance EntailsR {X}: Entails (ctlr E X) :=
-    fun (φ: ctlr E X) => entailsR φ.
-
-  Lemma unfold_entailsL {X}: forall (φ: ctll E),
-      entailsL X φ = match φ with
-                   | CBase p => fun _ => p
-                   | CDone p => fun _ => done_with p
-                   | CAnd φ ψ => fun t w => entailsF φ t w /\ entailsF ψ t w
-                   | COr φ ψ => fun t w => entailsF φ t w \/ entailsF ψ t w
-                   | CImpl φ ψ => fun t w => entailsF φ t w-> entailsF ψ t w
-                   | CAX φ => cax (entailsF φ)
-                   | CEX φ => cex (entailsF φ)
-                   | CAU φ ψ => cau (entailsF φ) (entailsF ψ)
-                   | CEU φ ψ => ceu (entailsF φ) (entailsF ψ)
-                   | CAG φ => cag (entailsF φ)
-                   | CEG φ => ceg (entailsF φ)
-                   end.
-  Proof. destruct φ; reflexivity. Qed.
-  Global Opaque entailsF.
-Section Entailment.
-  Context `{KMS: Kripke M E} {X: Type}.
-  Notation MS := (M HE X).
-
-  (* Entailment inductively on formulas *)
-  Fixpoint entailsF(φ: ctlf E X): MS -> World E -> Prop :=
-    match φ with
-    | CBase p => fun _ => p
-    | CDone p => fun _ => done_with p
-    | CAnd φ ψ => fun t w => entailsF φ t w /\ entailsF ψ t w
-    | COr φ ψ => fun t w => entailsF φ t w \/ entailsF ψ t w
-    | CImpl φ ψ => fun t w => entailsF φ t w -> entailsF ψ t w
-    | CAX φ => cax (entailsF φ)
-    | CEX φ => cex (entailsF φ)
-    | CAU φ ψ => cau (entailsF φ) (entailsF ψ)
-    | CEU φ ψ => ceu (entailsF φ) (entailsF ψ)
-    | CAG φ => cag (entailsF φ)
-    | CEG φ => ceg (entailsF φ)
-    end.
-
-  Lemma unfold_entailsF: forall (φ: ctlf E X),
-      entailsF φ = match φ with
-                   | CBase p => fun _ => p
-                   | CDone p => fun _ => done_with p
-                   | CAnd φ ψ => fun t w => entailsF φ t w /\ entailsF ψ t w
-                   | COr φ ψ => fun t w => entailsF φ t w \/ entailsF ψ t w
-                   | CImpl φ ψ => fun t w => entailsF φ t w-> entailsF ψ t w
-                   | CAX φ => cax (entailsF φ)
-                   | CEX φ => cex (entailsF φ)
-                   | CAU φ ψ => cau (entailsF φ) (entailsF ψ)
-                   | CEU φ ψ => ceu (entailsF φ) (entailsF ψ)
-                   | CAG φ => cag (entailsF φ)
-                   | CEG φ => ceg (entailsF φ)
-                   end.
-  Proof. destruct φ; reflexivity. Qed.
-  Global Opaque entailsF.
 End Entailment.
 
-Module CtlNotations.
-
-  Local Open Scope ctl_scope. 
-  Delimit Scope ctl_scope with ctl.
-
-  Notation "<( e )>" := e (at level 0, e custom ctl at level 95) : ctl_scope.
-  Notation "( x )" := x (in custom ctl, x at level 99) : ctl_scope.
-  Notation "{ x }" := x (in custom ctl at level 0, x constr): ctl_scope.
-  Notation "x" := x (in custom ctl at level 0, x constr at level 0) : ctl_scope.
-  Notation " t , w  |= φ " := (entailsF φ t w)
-                                (in custom ctl at level 80,
-                                    φ custom ctl,
-                                    right associativity):
-      ctl_scope.
-
-  Notation "|- φ " := (entailsF φ) (in custom ctl at level 80,
-                                       φ custom ctl, only parsing): ctl_scope.
-
-  (* Temporal syntax: base predicates *)
-  Notation "'base' p" :=
-    (CBase p)
-      (in custom ctl at level 74): ctl_scope.
-  
-  Notation "'now' p" :=
-    (CBase (fun w => p w /\ not_done w))
-      (in custom ctl at level 74): ctl_scope.
-  
-  Notation "'done' R" :=
-    (CDone R)
-      (in custom ctl at level 74): ctl_scope.
-  
-  Notation "'done=' r w" :=
-    (CDone (fun r' w' => r = r' /\ w = w'))
-      (in custom ctl at level 74): ctl_scope.
-  
-  Notation "'pure'" :=
-    (CBase (fun w => w = Pure))
-      (in custom ctl at level 74): ctl_scope.
-
-  Notation "'vis' R" :=
-    (CBase (vis_with R))
-      (in custom ctl at level 74): ctl_scope.
-  
-  Notation "'finish' R" :=
-    (CDone (finish_with R))
-      (in custom ctl at level 74): ctl_scope.
-  
-  Notation "'visW' R" :=
-    (CBase (vis_with (fun pat : writerE _ =>
-                       let 'Log v as x := pat return (encode x -> Prop) in
-                       fun 'tt => R v)))
-      (in custom ctl at level 75): ctl_scope.
-
-  Notation "'finishW' R" :=
-    (CDone (finish_with (fun '(x, s) (pat : writerE _) =>
-                           let 'Log w as u := pat return (encode u -> Prop) in
-                           fun 'tt => R x s w)))
-      (in custom ctl at level 75): ctl_scope.
-
-  Notation "⊤" := (CBase (fun _ => True)) (in custom ctl at level 76): ctl_scope.
-  Notation "⊥" := (CBase (fun _ => False)) (in custom ctl at level 76): ctl_scope.
-  
-  (* Temporal syntax: inductive *)
-  Notation "'EX' p" := (CEX p) (in custom ctl at level 75): ctl_scope.
-  Notation "'AX' p" := (CAX p) (in custom ctl at level 75): ctl_scope.
-
-  Notation "p 'EU' q" := (CEU p q) (in custom ctl at level 75): ctl_scope.
-  Notation "p 'AU' q" := (CAU p q) (in custom ctl at level 75): ctl_scope.
-  
-  Notation "'EG' p" := (CEG p) (in custom ctl at level 75): ctl_scope.
-  Notation "'AG' p" := (CAG p) (in custom ctl at level 75): ctl_scope.
-  
-  (* Syntactic sugar [AF, EF] is finally *)
-  Notation "'EF' p" := (CEU <( ⊤ )> p) (in custom ctl at level 74): ctl_scope.
-  Notation "'AF' p" := (CAU <( ⊤ )> p) (in custom ctl at level 74): ctl_scope.
-  
-  (* Propositional syntax *)
-  Notation "p '/\' q" := (CAnd p q) (in custom ctl at level 77, left associativity): ctl_scope.
-  Notation "p '\/' q" := (COr p q) (in custom ctl at level 77, left associativity): ctl_scope.
-  Notation "p '->' q" := (CImpl p q)
-                           (in custom ctl at level 78, right associativity): ctl_scope.
-  Notation " ¬ p" := (CImpl p <( ⊥ )>) (in custom ctl at level 76): ctl_scope.
-  Notation "p '<->' q" := (CAnd (CImpl p q) (CImpl q p)) (in custom ctl at level 77): ctl_scope.
-
-  (* Companion notations *)
-  Notation cagt p  := (t (cagF p)).
-  Notation cegt p  := (t (cegF p)).
-  Notation cagbt p := (bt (cagF p)).
-  Notation cegbt p := (bt (cegF p)).
-  Notation cagT p  := (T (cagF p)).
-  Notation cegT p  := (T (cegF p)).
-  Notation cagbT p := (bT (cagF p)).
-  Notation cegbT p := (bT (cegF p)).
-  #[global] Hint Constructors ceu cau: ctl.
-  
-End CtlNotations.
-
+(* Entailment notation *)
 Import CtlNotations.
 Local Open Scope ctl_scope.
 
-(*| Base constructors of logical formulas |*)
-Lemma ctl_base `{KMS: Kripke M E} X:
-  forall (t: M E HE X) (w: World E) (φ: World E -> Prop),
-    <( t, w |= base φ )> <-> φ w.
-Proof. intros; now rewrite unfold_entailsF. Qed.
-Global Hint Resolve ctl_base: ctl.
+Notation " t , w  |= φ " := (entailsL φ _ t w)
+                              (in custom ctll at level 80,
+                                  φ custom ctll,
+                                  right associativity): ctl_scope.
 
-Lemma ctl_now `{KMS: Kripke M E} X:
+Notation " t , w  |= φ " := (entailsR φ t w)
+                              (in custom ctlr at level 80,
+                                  φ custom ctlr,
+                                  right associativity): ctl_scope.
+
+
+(*| Base constructors of logical formulas |*)
+Lemma ctll_now `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (φ: World E -> Prop),
     <( t, w |= now φ )> <-> φ w /\ not_done w.
-Proof. intros; now rewrite unfold_entailsF. Qed.
-Global Hint Resolve ctl_now: ctl.
+Proof. reflexivity. Qed.
+Global Hint Resolve ctll_now: ctll.
 
-Lemma ctl_pure `{KMS: Kripke M E} X:
+Lemma ctll_pure `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E),
     <( t, w |= pure )> <-> w = Pure.
 Proof.
-  intros; rewrite unfold_entailsF; split; intros.
+  intros; simp entailsF; split; intros. 
   - now destruct H.
   - subst; split; now constructor. 
 Qed.
-Global Hint Resolve ctl_pure: ctl.
+Global Hint Resolve ctll_pure: ctll.
 
-Lemma ctl_vis `{KMS: Kripke M E} X:
+Lemma ctll_vis `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) φ,
-    <( t, w |= vis φ )> <-> vis_with φ w. 
+    <( t, w |= vis φ )> <-> vis_with φ w.
 Proof.
-  intros; rewrite unfold_entailsF; split; intros.
+  intros; simp entailsF; split; intros.
   - now destruct H.
-  - inv H; now constructor. 
+  - split; inv H; now constructor. 
 Qed.
-Global Hint Resolve ctl_vis: ctl.
+Global Hint Resolve ctll_vis: ctll.
 
-Lemma ctl_done `{KMS: Kripke M E} X:
+Lemma ctlr_done `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (φ: X -> World E -> Prop),
-    <( t, w |= done φ )> <-> done_with φ w.
-Proof. intros; now rewrite unfold_entailsF. Qed.
-Global Hint Resolve ctl_done: ctl.
+    <[ t, w |= done φ ]> <-> done_with φ w.
+Proof. intros; simp entailsF; auto. Qed.
+Global Hint Resolve ctlr_done: ctlr.
 
-Lemma ctl_done_eq `{KMS: Kripke M E} X:
+Lemma ctlr_done_eq `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (r:X),
-    <( t, w |= done= r w )> <-> done_with (fun r' w' => r=r' /\ w=w') w.
-Proof. intros; now rewrite unfold_entailsF. Qed.
-Global Hint Resolve ctl_done_eq: ctl.
+    <[ t, w |= done= r w ]> <-> done_with (fun r' w' => r=r' /\ w=w') w.
+Proof. intros; simp entailsF; auto. Qed. 
+Global Hint Resolve ctlr_done_eq: ctlr.
 
-Lemma ctl_finish `{KMS: Kripke M E} X:
+Lemma ctll_finish `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) φ,
-    <( t, w |= finish φ )> <-> done_with (finish_with φ) w.
-Proof. intros; now rewrite unfold_entailsF. Qed.
-Global Hint Resolve ctl_finish: ctl.
+    <[ t, w |= finish φ ]> <-> done_with (X:=X) (finish_with φ) w.
+Proof. intros; simp entailsF; auto. Qed. 
+Global Hint Resolve ctll_finish: ctlr.
 
 (*| AX, WX, EX unfold |*)
-Lemma unfold_ax `{KMS: Kripke M E} X:
-  forall (t: M E HE X) (w: World E) (p: ctlf E X),
+Lemma ctll_ax `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) (p: ctll E),
     <( t, w |= AX p )> <-> can_step t w /\ forall t' w', [t, w] ↦ [t',w'] -> <( t',w' |= p )>.
-Proof. intros; now rewrite unfold_entailsF. Qed.
+Proof. intros; now simp entailsF. Qed.
 
-Lemma unfold_ex `{KMS: Kripke M E} X:
-  forall (t: M E HE X) (w: World E) (p: ctlf E X),
+Lemma ctll_ex `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) (p: ctll E),
     <( t,w |= EX p )> <-> exists t' w', [t,w] ↦ [t',w'] /\ <( t',w' |= p )>.
-Proof. intros; now rewrite unfold_entailsF. Qed.
-Global Hint Resolve unfold_ax unfold_ex: ctl.
+Proof. intros; now simp entailsF. Qed.
+Global Hint Resolve ctll_ax ctll_ex: ctl.
+
+Lemma ctlr_ax `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) (p: ctlr E X),
+    <[ t, w |= AX p ]> <-> can_step t w /\ forall t' w', [t, w] ↦ [t',w'] -> <[ t',w' |= p ]>.
+Proof. intros; now simp entailsF. Qed.
+
+Lemma ctlr_ex `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) (p: ctlr E X),
+    <[ t,w |= EX p ]> <-> exists t' w', [t,w] ↦ [t',w'] /\ <[ t',w' |= p ]>.
+Proof. intros; now simp entailsF. Qed.
+Global Hint Resolve ctll_ax ctll_ex: ctl.
 
 (* [AX φ] is stronger than [EX φ] *)
-Lemma ctl_ax_ex `{KMS: Kripke M E} X:
-  forall (t: M E HE X) (w: World E) (p: ctlf E X),
+Lemma ctll_ax_ex `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) (p: ctll E),
     <( t, w |= AX p )> -> <( t, w |= EX p )>.
 Proof.
   intros.
-  rewrite unfold_ax, unfold_ex in *.
+  rewrite ctll_ax, ctll_ex in *.
   destruct H as ((m' & w' & TR) & ?).
   exists m', w'; auto.
 Qed.
 
 (* [AF φ] is stronger than [EF φ] *)
-Lemma ctl_af_ef `{KMS: Kripke M E} X:
-  forall (t: M E HE X) (w: World E) (p: ctlf E X),
+Lemma ctll_af_ef `{KMS: Kripke M E} X:
+  forall (t: M E HE X) (w: World E) (p: ctll E),
     <( t, w |= AF p )> -> <( t, w |= EF p )>.
 Proof.
   intros.
-  rewrite unfold_entailsF in *.
+  simp entailsL in *.
   induction H.
   - now apply MatchE. 
   - destruct H0 as ((m' & ? & ?) & ?).
@@ -421,46 +282,58 @@ Proof.
 Qed.
 
 (*| Bot is false |*)
-Lemma ctl_sound `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
+Lemma ctll_sound `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
     ~ <( t, w |= ⊥ )>.
-Proof. intros * []. Qed.
+Proof. now intros * []. Qed. 
 
 (*| Ex-falso |*)
-Lemma ctl_ex_falso `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E) (p: ctlf E X),
+Lemma ctll_ex_falso `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E) (p: ctll E),
     <( t, w |= ⊥ -> p )>.
-Proof. intros; rewrite unfold_entailsF; intro CONTRA; contradiction. Qed.
+Proof.
+  cbn.
+  intros; simp entailsL.
+  now intros [].
+Qed.
 
 (*| Top is True |*)
-Lemma ctl_top `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
-    <( t, w |= ⊤ )>.
-Proof. reflexivity. Qed. 
+Lemma ctll_top `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
+    not_done w -> <( t, w |= ⊤ )>.
+Proof.
+  cbn.
+  simp entailsL; intros; auto.
+Qed.
+
+Lemma ctlr_top `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
+    is_done w -> <[ t, w |= ⊤ ]>.
+Proof.
+  cbn.
+  simp entailsL; intros; auto.
+Qed.
 
 (*| Cannot exist path such that eventually Bot |*)
-Lemma ctl_sound_ef `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
+Lemma ctll_sound_ef `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
     ~ <( t, w |= EF ⊥ )>.
 Proof.
   intros * Contra.
-  rewrite unfold_entailsF in Contra.
+  simp entailsF in Contra.
   induction Contra.
   - contradiction.
   - now destruct H1 as (? & ? & ? & ?).
 Qed.
 
 (*| Cannot have all paths such that eventually always Bot |*)
-Lemma ctl_sound_af `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
+Lemma ctll_sound_af `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
     ~ <( t, w |= AF ⊥ )>.
 Proof.
   intros * Contra.
-  apply ctl_af_ef in Contra.
-  apply ctl_sound_ef in Contra.
+  apply ctll_af_ef in Contra.
+  apply ctll_sound_ef in Contra.
   contradiction.
 Qed.
 
 (*| Semantic equivalence of formulas |*)
-Definition equiv_ctl {M} `{HE: Encode E} {K: Kripke M E}{X}: relation (ctlf E X) :=
+Definition equiv_ctl {M} `{HE: Encode E} {K: Kripke M E} X: relation (ctlf E) :=
   fun p q => forall (t: M E HE X) (w: World E), entailsF p t w <-> entailsF q t w.
-
-Infix "⩸" := equiv_ctl (at level 58, left associativity): ctl_scope.
 
 Section EquivCtlEquivalence.
   Context `{K: Kripke M E} {X: Type}.
@@ -477,7 +350,7 @@ Section EquivCtlEquivalence.
 
   (*| [equiv_ctl] proper under [equiv_ctl] |*)
   Global Add Parametric Morphism : equiv_ctl with signature
-         equiv_ctl ==> equiv_ctl ==> iff as equiv_ctl_equiv.
+         equiv_ctl ==> equiv_ctl ==> iff as equiv_ctll_equiv.
   Proof.
     intros p q EQpq p' q' EQpq'; split;
       intros EQpp'; split; intro BASE; cbn in *.

@@ -38,7 +38,7 @@ Section BasicLemmas.
       cinduction H; subst; auto.
       destruct H0, H1; clear H H0.
       now apply can_step_stuck in H1.
-    - now next; left.
+    - now right. 
   Qed.
 
   Lemma au_ret_r: forall (r: X) w φ ψ,      
@@ -46,7 +46,7 @@ Section BasicLemmas.
       <( {Ret r}, w |= φ AU ψ )>.
   Proof.
     intros * Hr.
-    now next; left.
+    now right. 
   Qed.
   
   Lemma au_ret_l: forall (r: X) w φ ψ,      
@@ -55,17 +55,16 @@ Section BasicLemmas.
       <( {Ret r}, w |= φ AU ψ )>.
   Proof.
     intros * Hr Hd.
-    next; right; split; auto.
-    split.
+    left; [auto|]; split.
     - now cdestruct Hr.
     - intros t_ w_ TR_.
       cdestruct Hr.
       destruct (can_step_not_done _ _ Hs).
       + apply ktrans_done in TR_ as (-> & ->).
-        next; left. 
+        left. 
         apply Hr; now constructor. 
       + apply ktrans_finish in TR_ as (-> & ->).
-        next; left.
+        left.
         apply Hr; now constructor.
   Qed.
 
@@ -180,15 +179,40 @@ End BasicLemmas.
 Section CtlAuBind.
   Context {E: Type} {HE: Encode E}.
 
+  Lemma checks_done_not_done{X}: forall (t: ctree E X) (w: World E) φ,
+    <( t, w |= φ )> ->
+    checks_done φ = false ->
+    not_done w.
+  Proof.
+    intros.
+    generalize dependent t.
+    revert w; induction φ; intros; try discriminate H0.
+    - now destruct H.
+    - destruct q.
+      + cdestruct H.
+        now apply can_step_not_done in Hs.
+      + cdestruct H.
+        now apply ktrans_not_done with t t0 w0.
+    - apply Bool.orb_false_iff in H0 as [H0 H1].
+      
   Typeclasses Transparent equ.
   Theorem au_bind_l{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) ψ φ w,
-      <( t, w |= base ψ AU now φ )> ->
-      <( {x <- t ;; k x}, w |= base ψ AU now φ )>.
+      <( t, w |= ψ AU φ )> ->
+      checks_done φ = false ->
+      checks_done ψ = false ->
+      <( {x <- t ;; k x}, w |= ψ AU φ )>.
   Proof.
-    intros * Haf.
+    intros * Haf Hφ Hψ.
     revert X k.
     cinduction Haf; intros; subst.
     - (* MatchA *)
+      induction φ; cbn in Hφ; intros; try discriminate; right. 
+      + cdestruct H; now split. 
+      + cdestruct H; now split.
+      + destruct q; cdestruct H; split.
+        * destruct Hs as (t' & w' & TR).
+          apply can_step_bind_l with t' w'; auto.
+          
       next; left; cbn.
       now apply ctl_now. 
     - (* StepA *)

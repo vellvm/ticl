@@ -69,7 +69,7 @@ Section EquivSetoid.
 
   Notation MS := (M E HE X).
   Notation MP := (MS -> World E -> Prop).
-  Notation equiv_ctl := (equiv_ctl (K:=K) (X:=X)).
+  Notation equiv_ctl := (equiv_ctl X (K:=K)).
 
   Global Add Parametric Morphism: can_step
     with signature meq ==> eq ==> iff as proper_can_step.
@@ -85,7 +85,7 @@ Section EquivSetoid.
 
   (*| Start building the proof that
       [entailsF] is a congruence with regards to [meq] |*)
-  Global Add Parametric Morphism p: <( |- base p )>
+  Global Add Parametric Morphism (p: Prop): (entailsF (CProp p) (X:=X))
          with signature meq ==> eq ==> iff as meq_proper_base.
   Proof. intros; split; auto. Qed.
 
@@ -93,7 +93,7 @@ Section EquivSetoid.
       with signature meq ==> eq ==> iff as meq_proper_fun.
   Proof. intros; split; auto. Qed.
   
-  Global Add Parametric Morphism p : <( |- done p )>
+  Global Add Parametric Morphism p: (entailsF (CDone X p))
         with signature meq ==> eq ==> iff as meq_proper_done.
   Proof. intros; now rewrite unfold_entailsF. Qed.
 
@@ -276,25 +276,42 @@ Section EquivSetoid.
 
 End EquivSetoid.
 
-Global Add Parametric Morphism `{KS: KripkeSetoid M E X meq} (φ: ctlf E X) : <( |- φ )>
+Global Add Parametric Morphism `{KS: KripkeSetoid M E X meq} (φ: ctlf E) :
+  (entailsF (X:=X) φ)
        with signature (meq ==> eq  ==> iff) as proper_entailsF_.
 Proof.
   induction φ; intros * Heq w.
-  - (* Base *) rewrite Heq; reflexivity.
-  - (* Done *) rewrite Heq; reflexivity.
-  - (* ax *)
-    refine (@proper_ax_equ M E HE K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl).
-    unfold Proper, respectful; intros; subst; now apply IHφ.
-  - (* ex *)
-    refine (@proper_ex_equ M E HE K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl).
-    unfold Proper, respectful; intros; subst; now apply IHφ.
+  - (* Prop *) rewrite unfold_entailsF; reflexivity. 
+  - (* Now *) rewrite ?ctl_now; reflexivity. 
+  - (* Done *) rewrite unfold_entailsF; reflexivity. 
+  - rewrite unfold_entailsF; destruct q.
+    + (* ax *)
+      refine (@proper_ax_equ M E HE K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl).
+      unfold Proper, respectful; intros; subst; now apply IHφ.
+    + (* ex *)
+      refine (@proper_ex_equ M E HE K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl).
+      unfold Proper, respectful; intros; subst; now apply IHφ.
+  - rewrite unfold_entailsF; destruct q.
+    + (* au *)
+      refine (@proper_au_equ M E HE K X meq Eqm KS (entailsF φ1) _ (entailsF φ2) _ _ _ Heq _ _ eq_refl);
+      unfold Proper, respectful; intros; subst; auto.
+    + (* eu *)
+      refine (@proper_eu_equ M E HE K X meq Eqm KS (entailsF φ1) _ (entailsF φ2) _ _ _ Heq _ _ eq_refl);
+      unfold Proper, respectful; intros; subst; auto.
+  - rewrite unfold_entailsF; destruct q.
+    + (* ag *)
+      refine (@proper_ag_equ M E HE K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl);
+        unfold Proper, respectful; intros; subst; auto.
+    + (* er *)
+      refine (@proper_er_equ M E HE K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl);
+        unfold Proper, respectful; intros; subst; auto.
   - (* /\ *) split; intros [Ha Hb]; split.
     + now rewrite <- (IHφ1 _ _ Heq).
     + now rewrite <- (IHφ2 _ _ Heq).
     + now rewrite (IHφ1 _ _ Heq).
     + now rewrite (IHφ2 _ _ Heq).
   - (* \/ *) split; intros; cdestruct H.
-    + left; now rewrite <- (IHφ1 _ _ Heq).
+    + cleft. now rewrite <- (IHφ1 _ _ Heq).
     + right; now rewrite <- (IHφ2 _ _ Heq).
     + left; now rewrite (IHφ1 _ _ Heq).
     + right; now rewrite (IHφ2 _ _ Heq).
@@ -302,16 +319,4 @@ Proof.
     split; intros * H; rewrite unfold_entailsF in H |- *; intro HI;
       apply (IHφ1 _ _ Heq) in HI;
       apply (IHφ2 _ _ Heq); auto.
-  - (* au *)
-    refine (@proper_au_equ M E HE K X meq Eqm KS (entailsF φ1) _ (entailsF φ2) _ _ _ Heq _ _ eq_refl);
-      unfold Proper, respectful; intros; subst; auto.
-  - (* eu *)
-    refine (@proper_eu_equ M E HE K X meq Eqm KS (entailsF φ1) _ (entailsF φ2) _ _ _ Heq _ _ eq_refl);
-      unfold Proper, respectful; intros; subst; auto.
-  - (* ag *)
-    refine (@proper_ag_equ M E HE K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl);
-      unfold Proper, respectful; intros; subst; auto.
-  - (* er *)
-    refine (@proper_er_equ M E HE K X meq Eqm KS (entailsF φ) _ _ _ Heq _ _ eq_refl);
-      unfold Proper, respectful; intros; subst; auto.
 Qed.
