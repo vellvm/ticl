@@ -153,70 +153,30 @@ End BasicLemmas.
 Section BindLemmas.
   Context {E: Type} {HE: Encode E}.
 
-  Theorem ax_bind_vis{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) φ w,
-      <( t, w |= AX φ )> ->
-      <( {x <- t ;; k x}, w |= AX φ )>.
-  Proof with auto with ctl.
-    intros.
-    generalize dependent w.
-    revert t.
-    induction φ; intros.
-    (* HERE *)
-    + destruct Hs as (t' & w' & TR).
-      specialize (H _ _ TR).
-      cdestruct H.
-      eapply can_step_bind_l with t' (Obs e v)...
-    + intros t_ w_ TR_.
-      apply ktrans_bind_inv in TR_ as
-          [(t' & TR' & Hd & Ht_) |
-            (x & w' & TR' & Hr & TRk)].
-      * specialize (H _ _ TR').
-        now cdestruct H; csplit.
-      * ddestruction Hr; subst;
-          specialize (H _ _ TR'); cdestruct H.
-  Qed.
-
-  Theorem ax_bind_pure{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w,
-      <( t, w |= AX pure )> ->
-      <( {x <- t ;; k x}, w |= AX pure )>.
-  Proof with auto with ctl.
-    intros.
-    next in H.
-    destruct H as [(t' & w' & TR') Hs].
-    next; split.
-    + specialize (Hs _ _ TR').
-      apply ctl_pure in Hs as ->.
-      eapply can_step_bind_l with t' Pure... 
-    + intros t_ w_ TR_.
-      clear t' w' TR' w'.
-      apply ktrans_bind_inv in TR_ as
-          [(t' & TR' & Hd & Ht_) |
-            (x & w' & TR' & Hr & TRk)].
-      * specialize (Hs _ _ TR').
-        now rewrite !unfold_entailsF in *. 
-      * dependent destruction Hr;
-        specialize (Hs _ _ TR');
-        apply ctl_pure in Hs; inv Hs. 
-  Qed.
-
   Opaque Ctree.stuck.
-  Theorem ax_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ R,
-      <( t, w |= AX done R )> ->
+  Theorem axl_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ R,
+      <[ t, w |= AX done R ]> ->
       (forall x w, R x w -> <( {k x}, w |= AX φ )>) ->
       <( {x <- t ;; k x}, w |= AX φ )>.
-  Proof.
+  Proof with auto with ctl.
     intros.
-    next; split.
+    cdestruct H; csplit.
     - apply can_step_bind_r with R.
-      + now next; left.
-      + intros y w' HR.
-        specialize (H0 y w' HR).
-        now next in H0; destruct H0.
+      + cleft; csplit...
+      + intros t' w' HR.
+        specialize (H0 _ _ HR).
+        now cdestruct H0.
     - intros t' w' TR'. 
       apply ktrans_bind_inv in TR' as
           [(t_ & TR_ & Hd & ->) |
             (x & w_ & TR_ & Hr & TRk)].
-      + next in H; destruct H.
+      + specialize (H _ _ TR_).
+        cdestruct H; inv Hd.
+      + specialize (H _ _ TR_); inv Hr.
+
+        (* HERE *)
+        * apply ktrans_to_done_inv in TR_ as (_ & ->).
+          
         specialize (H1 _ _ TR_).
         apply ctl_done in H1; inv H1; inv Hd.
       + next in H; destruct H.

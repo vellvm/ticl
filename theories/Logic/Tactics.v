@@ -16,18 +16,20 @@ Generalizable All Variables.
 #[global] Ltac csplit :=
   lazymatch goal with
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CAndL ?p ?q) ?t ?w =>
-      rewrite unfold_entailsL; split
-  | |- @entailsR ?M ?W ?HE ?KMS ?X (CAndR ?p ?q) ?t ?w =>
-      rewrite unfold_entailsR; split
+      rewrite ctll_and; split
+  | |- @entailsR ?M ?W ?HE ?KMS ?X (CAndLR ?p ?q) ?t ?w =>
+      rewrite ctlr_andl; split
+  | |- @entailsR ?M ?W ?HE ?KMS ?X (CAndRR ?p ?q) ?t ?w =>
+      rewrite ctlr_andr; split
                                  
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CxL Q_A ?p) ?t ?w =>      
       rewrite ctll_ax; split
   | |- @entailsR ?M ?W ?HE ?KMS ?X (CxR Q_A ?p) ?t ?w =>
       rewrite ctlr_ax; split
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CxL Q_E ?p) ?t ?w =>
-      rewrite ctll_ex; split
+      rewrite ctll_ex
   | |- @entailsR ?M ?W ?HE ?KMS ?X (CxR Q_E ?p) ?t ?w =>
-      rewrite ctlr_ex; split
+      rewrite ctlr_ex
   (* Quantifier is a variable, destruct it *)
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CxL ?c ?p) ?t ?w =>
       is_var c; destruct c; csplit
@@ -42,8 +44,6 @@ Generalizable All Variables.
   | |- @entailsL ?M ?W ?HE ?KMS ?X (Cg ?c ?p ?q) ?t ?w =>
       is_var c; destruct c; csplit
                               
-  | |- @entailsL ?M ?W ?HE ?KMS ?X <( prop ?p )> ?t ?w =>
-      rewrite ctll_prop
   | |- @entailsL ?M ?W ?HE ?KMS ?X <( pure )> ?t ?w =>
       rewrite ctll_pure
   | |- @entailsL ?M ?W ?HE ?KMS ?X <( vis ?φ )> ?t ?w =>
@@ -59,9 +59,12 @@ Generalizable All Variables.
 #[global] Ltac cleft :=
   match goal with
   | |- @entailsL ?M ?W ?HE ?KMS ?X (COrL ?p ?q) ?t ?w =>
-      rewrite unfold_entailsL; left
-  | |- @entailsR ?M ?W ?HE ?KMS ?X (COrR ?p ?q) ?t ?w =>
-      rewrite unfold_entailsR; left                                 
+      rewrite ctll_or; left
+  | |- @entailsR ?M ?W ?HE ?KMS ?X (COrLR ?p ?q) ?t ?w =>
+      rewrite ctlr_orl; left
+  | |- @entailsR ?M ?W ?HE ?KMS ?X (COrRR ?p ?q) ?t ?w =>
+      rewrite ctlr_orr; left
+                          
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_A ?p ?q) ?t ?w =>
       match p with
       | <( ⊤ )> => rewrite ctll_af_ax
@@ -92,9 +95,12 @@ end.
 #[global] Ltac cright :=
   match goal with
   | |- @entailsL ?M ?W ?HE ?KMS ?X (COrL ?p ?q) ?t ?w =>
-      rewrite unfold_entailsL; right
-  | |- @entailsR ?M ?W ?HE ?KMS ?X (COrR ?p ?q) ?t ?w =>
-      rewrite unfold_entailsR; right                                 
+      rewrite ctll_or; right
+  | |- @entailsR ?M ?W ?HE ?KMS ?X (COrLR ?p ?q) ?t ?w =>
+      rewrite ctlr_orl; right
+  | |- @entailsR ?M ?W ?HE ?KMS ?X (COrRR ?p ?q) ?t ?w =>
+      rewrite ctlr_orr; right
+
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_A ?p ?q) ?t ?w =>
       match p with
       | <( ⊤ )> => rewrite ctll_af_ax
@@ -124,11 +130,10 @@ end.
 
 #[global] Ltac cdestruct H :=
   match type of H with
-  | <( ?t, ?w |= prop ?φ )> => rewrite ctll_prop in H
   | <( ?t, ?w |= pure )> => rewrite ctll_pure in H; destruct H; subst
   | <( ?t, ?w |= vis ?φ )> =>
       rewrite ctll_vis in H; ddestruction H
-  | <( ?t, ?w |= now ?φ )> => rewrite ctll_now in H
+  | <( ?t, ?w |= now ?φ )> => rewrite ctll_now in H; destruct H
   | <[ ?t, ?w |= finish ?φ ]> =>
       rewrite ctlr_finish in H; ddestruction H
   | <[ ?t, ?w |= done ?φ ]> => rewrite ctlr_done in H; ddestruction H
@@ -136,16 +141,25 @@ end.
   | <( ?t, ?w |= ?p /\ ?q )> =>
       let Hp := fresh "H"p in
       let Hq := fresh "H"q in
-      rewrite unfold_entailsL in H; destruct H as [Hp Hq]                                                      
+      rewrite ctll_and in H; destruct H as [Hp Hq]                                                      
   | <[ ?t, ?w |= ?p /\ ?q ]> =>
       let Hp := fresh "H"p in
       let Hq := fresh "H"q in
-      rewrite unfold_entailsR in H; destruct H as [Hp Hq]
+      rewrite ctlr_andr in H; destruct H as [Hp Hq]
+  | <[ ?t, ?w |= ?p ∩ ?q ]> =>
+      let Hp := fresh "H"p in
+      let Hq := fresh "H"q in
+      rewrite ctlr_andl in H; destruct H as [Hp Hq]
   (* OR *)                                         
   | <( ?t, ?w |= ?p \/ ?q )> =>
-      rewrite unfold_entailsL in H; destruct H as [H | H]
+      rewrite ctll_or in H; destruct H as [H | H]
   | <[ ?t, ?w |= ?p \/ ?q ]> =>
-      rewrite unfold_entailsR in H; destruct H as [H | H]
+      rewrite ctlr_orr in H; destruct H as [H | H]
+  | <[ ?t, ?w |= ?p ∪ ?q ]> =>
+      rewrite ctlr_orl in H; destruct H as [H | H]
+  (* IMPL *)
+  | <[ ?t, ?w |= ?p -> ?q ]> =>
+      rewrite ctlr_impll in H
   (* X *)
   | @entailsL ?M ?W ?HE ?KMS ?X (CxL Q_A ?φ) ?t ?w =>
       let Hs' := fresh "Hs" in
@@ -196,12 +210,12 @@ end.
       is_var c; destruct c; cdestruct H
 
   (* G *)          
-  | @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_A ?φ ?ψ) ?t ?w =>
+  | @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_A ?φ) ?t ?w =>
       let Hp := fresh "H"φ in
       rewrite ctll_ag_ax, unfold_entailsL in H; destruct H as [Hp H]
-  | @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_E ?φ ?ψ) ?t ?w =>
+  | @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_E ?φ) ?t ?w =>
       let Hp := fresh "H"φ in
       rewrite ctll_eg_ex, unfold_entailsL in H; destruct H as [Hp H]
-  | @entailsL ?M ?W ?HE ?KMS ?X (Cg ?c ?p ?q) ?t ?w =>
+  | @entailsL ?M ?W ?HE ?KMS ?X (Cg ?c ?p) ?t ?w =>
       is_var c; destruct c; cdestruct H
   end.

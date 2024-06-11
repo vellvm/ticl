@@ -1,6 +1,5 @@
 From Coq Require Import
   Basics
-  Arith.Wf_nat
   Classes.Morphisms.
 
 From Coinduction Require Import
@@ -94,7 +93,7 @@ Section BasicLemmas.
     - cdestruct H. 
       split.
       + now apply ktrans_not_done with (Ret x) t w0.
-      + cdestruct H; inv TR; now ddestruction H. 
+      + cdestruct H; now ddestruction TR.
     - destruct H as ([] & ?); exists (Ctree.stuck).
       + exists (Done x); split.
         * apply ktrans_done...
@@ -124,11 +123,9 @@ Section BasicLemmas.
       + inv H1; inv H.
       + inv H1.
       + exists x; intuition.
-        cdestruct H0.
-        now ddestruction H0.
+        now cdestruct H0.
       + exists x; intuition.
-        cdestruct H0.
-        now ddestruction H0.
+        now cdestruct H0.
     - destruct H as (Hw & x & Heq & H).
       rewrite Heq.
       apply ex_done_ret; intuition.
@@ -137,16 +134,6 @@ End BasicLemmas.
 
 Section BindLemmas.
   Context {E: Type} {HE: Encode E}.
-
-  Theorem ex_bind_l{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) φ w,
-      <( t, w |= EX now φ )> ->
-      <( {x <- t ;; k x}, w |= EX now φ )>.
-  Proof with auto with ctl.
-    intros.
-    destruct H as (t' & w' & TR' & Hv & Hd).
-    exists (x <- t';; k x), w'; split...
-    apply ktrans_bind_l...
-  Qed.
 
   Opaque Ctree.stuck.
   Typeclasses Transparent equ.

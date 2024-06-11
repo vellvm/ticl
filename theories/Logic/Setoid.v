@@ -85,10 +85,6 @@ Section EquivSetoid.
 
   (*| Start building the proof that
       [entailsF] is a congruence with regards to [meq] |*)
-  Global Add Parametric Morphism (p: Prop): (entailsL X (CProp p))
-         with signature meq ==> eq ==> iff as meq_proper_base.
-  Proof. intros; split; auto. Qed.
-
   Global Add Parametric Morphism {φ: World E -> Prop}: (fun _ => φ)
       with signature meq ==> eq ==> iff as meq_proper_fun.
   Proof. intros; split; auto. Qed.
@@ -282,7 +278,6 @@ Global Add Parametric Morphism `{KS: KripkeSetoid M E X meq} (φ: ctll E) :
 Proof.
   induction φ; intros * Heq w.
   - (* Now *) rewrite ?ctll_now; reflexivity. 
-  - (* Prop *) rewrite ?ctl_prop; reflexivity. 
   - (* CuL *) destruct q; rewrite unfold_entailsL.
     + (* au *)
       refine (@proper_au_equ M E HE K X meq Eqm KS (entailsL X φ1) _ (entailsL X φ2) _ _ _ Heq _ _ eq_refl);
@@ -314,10 +309,6 @@ Proof.
     + right; now rewrite <- (IHφ2 _ _ Heq).
     + left; now rewrite (IHφ1 _ _ Heq).
     + right; now rewrite (IHφ2 _ _ Heq).
-  - (* -> *)
-    split; intros * H; rewrite unfold_entailsL in *; intro HI;
-      apply (IHφ1 _ _ Heq) in HI;
-      apply (IHφ2 _ _ Heq); auto.
 Qed.
 
 Global Add Parametric Morphism `{KS: KripkeSetoid M E X meq} (φ: ctlr E X) :
@@ -345,12 +336,24 @@ Proof.
     + now rewrite <- (IHφ _ _ Heq).
     + now rewrite Heq. 
     + now rewrite (IHφ _ _ Heq).
-  - (* \/ *) split; intros; rewrite unfold_entailsR in *; destruct H.
+  - (* ∩ *) split; intros; rewrite ctlr_andr in H |- *; split; destruct H.
+    + now rewrite <- (IHφ1 _ _ Heq).
+    + now rewrite <- (IHφ2 _ _ Heq).
+    + now rewrite (IHφ1 _ _ Heq).
+    + now rewrite (IHφ2 _ _ Heq).
+  - (* ∩ *) split; intros; rewrite ctlr_orl in H |- *; destruct H.
+    + left; now rewrite <- Heq.
+    + right; now rewrite <- (IHφ _ _ Heq).
+    + left; now rewrite Heq. 
+    + right; now rewrite (IHφ _ _ Heq).
+  - (* /\ *) split; intros; rewrite ctlr_orr in H |- *; destruct H.
     + left; now rewrite <- (IHφ1 _ _ Heq).
     + right; now rewrite <- (IHφ2 _ _ Heq).
     + left; now rewrite (IHφ1 _ _ Heq).
-    + right; now rewrite (IHφ2 _ _ Heq).
+    + right; now rewrite (IHφ2 _ _ Heq).      
   - (* -> *)
     split; intros * H; rewrite unfold_entailsR in *; intro HI;
-      now apply (IHφ2 _ _ Heq), H, (IHφ1 _ _ Heq). 
+      apply (IHφ _ _ Heq), H.
+    + now rewrite Heq.
+    + now rewrite <- Heq.
 Qed.

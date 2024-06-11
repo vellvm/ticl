@@ -16,9 +16,8 @@ Section CtlSyntax.
   Context {E: Type} {HE: Encode E}.
 
   Inductive ctll: Type :=
-  (* Property [φ] holds right now and not in a [done] world *)
+  (* Property [φ] holds right now, while in [not_done] world *)
   | CNow (φ: World E -> Prop): ctll
-  | CProp (φ: Prop): ctll
   (* Path quantifier [q]; property [φ: ctll] holds finitely, until [ψ: ctlr] stops it *)
   | CuL (q: ctlq) (φ ψ: ctll): ctll
   | CxL (q: ctlq) (φ: ctll): ctll
@@ -26,8 +25,7 @@ Section CtlSyntax.
   | Cg (q: ctlq) (φ: ctll) : ctll
   (* Boolean combinators *)
   | CAndL (p q: ctll): ctll
-  | COrL (p q: ctll): ctll
-  | CImplL (p q: ctll): ctll.
+  | COrL (p q: ctll): ctll.
   
   Inductive ctlr {X: Type} : Type :=
   (* Model returns with type [X] and [φ] holds at this point *)
@@ -35,9 +33,11 @@ Section CtlSyntax.
   | CuR (q: ctlq) (φ: ctll) (ψ: ctlr): ctlr
   | CxR (q: ctlq) (p: ctlr): ctlr
   (* Boolean combinators *)
-  | CAndR (p: ctll) (q: ctlr): ctlr
-  | COrR (p: ctlr) (q: ctlr): ctlr
-  | CImplR (p: ctlr) (q: ctlr): ctlr.
+  | CAndLR (p: ctll) (q: ctlr): ctlr
+  | CAndRR (p: ctlr) (q: ctlr): ctlr
+  | COrLR (p: ctll) (q: ctlr): ctlr
+  | COrRR (p: ctlr) (q: ctlr): ctlr
+  | CImplLR (p: ctll) (q: ctlr): ctlr.
 
   Arguments ctlr: clear implicits.
 
@@ -68,10 +68,6 @@ Module CtlNotations.
   Notation "x" := x (in custom ctlr at level 0, x constr at level 0) : ctl_scope.
 
   (* Temporal syntax: base predicates *)
-  Notation "'prop' p" :=
-    (CProp p)
-      (in custom ctll at level 74): ctl_scope.
-  
   Notation "'now' p" :=
     (CNow p)
       (in custom ctll at level 74): ctl_scope.
@@ -108,15 +104,21 @@ Module CtlNotations.
                            fun 'tt => R x s w)))
       (in custom ctlr at level 75): ctl_scope.
 
-  Notation "⊤" := (CProp True)
+  Notation "⊤" := (CNow (fun _ => True))
                     (in custom ctll at level 76): ctl_scope.
   
-  Notation "⊥" := (CProp False)
-                    (in custom ctll at level 76): ctl_scope.
-  Notation "⊤" := (CProp True)
+  Notation "⊥" := (CNow (fun _ => False))
+                     (in custom ctll at level 76): ctl_scope.
+  Notation "⊤" := (CNow (fun _ => True))
                     (in custom ctlr at level 76): ctl_scope.
   
-  Notation "⊥" := (CProp False)
+  Notation "⊥" := (CNow (fun _ => False))
+                    (in custom ctlr at level 76): ctl_scope.
+  
+  Notation "⫪" := (CDone (fun _ _ => True))
+                    (in custom ctlr at level 76): ctl_scope.
+  
+  Notation "⫫" := (CDone (fun _ _ => False))
                     (in custom ctlr at level 76): ctl_scope.
   
   (* Temporal syntax *)
@@ -150,19 +152,16 @@ Module CtlNotations.
                            (in custom ctll at level 77, left associativity): ctl_scope.
   Notation "p '\/' q" := (COrL p q)
                            (in custom ctll at level 77, left associativity): ctl_scope.
-  Notation "p '->' q" := (CImplL p q)
-                           (in custom ctll at level 78, right associativity): ctl_scope.
-  Notation " ¬ p" := (CImplL p <( ⊥ )>)
-                       (in custom ctll at level 76): ctl_scope.
-  Notation "p '<->' q" := (CAndL (CImplL p q) (CImplL q p))
-                            (in custom ctll at level 77): ctl_scope.
-
-  Notation "p '/\' q" := (CAndR p q)
-                           (in custom ctlr at level 77, left associativity): ctl_scope.
-  Notation "p '\/' q" := (COrR p q)
-                           (in custom ctlr at level 77, left associativity): ctl_scope.
-  Notation "p '->' q" := (CImplR p q)
+  Notation "p '->' q" := (CImplLR p q)
                            (in custom ctlr at level 78, right associativity): ctl_scope.
-  Notation "p '<->' q" := (CAndR (CImplR p q) (CImplR q p))
-                            (in custom ctlr at level 77): ctl_scope.
+
+  Notation "p ∩ q" := (CAndLR p q)
+                        (in custom ctlr at level 77, left associativity): ctl_scope.
+  Notation "p ∪ q" := (COrLR p q)
+                        (in custom ctlr at level 77, left associativity): ctl_scope.
+  
+  Notation "p '/\' q" := (CAndRR p q)
+                           (in custom ctlr at level 77, left associativity): ctl_scope.  
+  Notation "p '\/' q" := (COrRR p q)
+                           (in custom ctlr at level 77, left associativity): ctl_scope.
 End CtlNotations.
