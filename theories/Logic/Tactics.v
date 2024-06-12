@@ -124,22 +124,26 @@ end.
   | <[ ?t, ?w |= ?p -> ?q ]> =>
       rewrite ctlr_impll in H
   (* X *)
-  | @entailsL ?M ?W ?HE ?KMS ?X (CxL Q_A ?φ) ?t ?w =>
+  | @entailsL ?M ?W ?HE ?KMS ?X (CxL Q_A ?p ?q) ?t ?w =>
       let Hs' := fresh "Hs" in
-      rewrite ctll_ax in H; destruct H as (Hs' & H)
-  | @entailsL ?M ?W ?HE ?KMS ?X (CxL Q_E ?φ) ?t ?w =>
+      let Hp' := fresh "Hp" in
+      rewrite ctll_ax in H; destruct H as (Hp & Hs' & H)
+  | @entailsL ?M ?W ?HE ?KMS ?X (CxL Q_E ?p ?q) ?t ?w =>
       let t' := fresh "t" in
       let w' := fresh "w" in
       let TR' := fresh "TR" in
-      rewrite ctll_ex in H; destruct H as (t' & w' & TR' & H)
-  | @entailsR ?M ?W ?HE ?KMS ?X (CxR Q_A ?φ) ?t ?w =>
+      let Hp := fresh "Hp" in
+      rewrite ctll_ex in H; destruct H as (Hp & t' & w' & TR' & H)
+  | @entailsR ?M ?W ?HE ?KMS ?X (CxR Q_A ?p ?q) ?t ?w =>
       let Hs' := fresh "Hs" in
-      rewrite ctlr_ax in H; destruct H as (Hs' & H)
-  | @entailsR ?M ?W ?HE ?KMS ?X (CxR Q_E ?φ) ?t ?w =>
+      let Hp := fresh "Hp" in
+      rewrite ctlr_ax in H; destruct H as (Hp & Hs' & H)
+  | @entailsR ?M ?W ?HE ?KMS ?X (CxR Q_E ?p ?q) ?t ?w =>
       let t' := fresh "t" in
       let w' := fresh "w" in
       let TR' := fresh "TR" in
-      rewrite ctlr_ex in H; destruct H as (t' & w' & TR' & H)
+      let Hp := fresh "Hp" in
+      rewrite ctlr_ex in H; destruct H as (Hp & t' & w' & TR' & H)
   (* Quantifier is a variable, destruct it *)
   | @entailsL ?M ?W ?HE ?KMS ?X (CxL ?c ?p ?q) ?t ?w =>
       is_var c; destruct c; cdestruct H

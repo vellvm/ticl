@@ -28,14 +28,14 @@ Local Open Scope ctree_scope.
 Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
-  Lemma done_ax: forall (t: ctree E X) φ w,
+  Lemma done_ax: forall (t: ctree E X) φ ψ w,
       is_done X w ->
-      ~ <( t, w |= AX φ )>.
+      ~ <( t, w |= φ AX ψ )>.
   Proof.
     intros * Hret Hcontra.
-    inv Hcontra.
-    apply can_step_not_done in H.
-    inv Hret; inv H.
+    cdestruct Hcontra.
+    apply can_step_not_done in Hs.
+    inv Hret; inv Hs.
   Qed.
 
   Lemma ax_stuck: forall w φ,
