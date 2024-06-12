@@ -154,21 +154,21 @@ Section CanStepCtrees.
 
   Typeclasses Opaque equ.
   Lemma can_step_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w R,      
-      <[ t, w |= AF AX done R ]> ->
+      <[ t, w |= AF AN done R ]> ->
       (forall y w, R y w -> can_step (k y) w) ->
       can_step (x <- t ;; k x) w.
   Proof with eauto with ctl. 
     intros.
     apply can_step_bind.
     induction H.
-    - destruct H as ((t' & w' & TR') & ?).
-      cbn in *.
+    - destruct H as (? & (t' & w' & TR') & ?).
+      cdestruct H.
+      cbn in *.      
       remember (observe t) as T.
       remember (observe t') as T'.
       clear HeqT t HeqT' t'.
       induction TR'.
-      * edestruct IHTR'.
-        -- intros t_ w_ TR_...
+      * edestruct IHTR'...
         -- left. setoid_rewrite ktrans_guard...           
         -- right. setoid_rewrite ktrans_guard...
       * left. exists (k0 i), w; split...
@@ -176,58 +176,48 @@ Section CanStepCtrees.
         exists (k0 v), (Obs e v); split...
       * assert (TR': [Ret x, Pure] ↦ [Ctree.stuck, Done x])
             by now apply ktrans_done.
-        destruct (H _ _ TR').
+        destruct (H1 _ _ TR').
         -- apply ktrans_done in TR' as (? & _).
-           ddestruction H3.
+           ddestruction H5.
            right.
            exists x, (Done x); split... 
-        -- cbn in TR'.
-           inv TR'.
+        -- cbn in TR'; inv TR'.
       * assert (TR': [Ret x, Obs e v] ↦ [Ctree.stuck, Finish e v x])
             by now apply ktrans_finish.
-        destruct (H _ _ TR').
+        destruct (H1 _ _ TR').
         -- apply ktrans_finish in TR' as (? & _).
-           dependent destruction H3.
+           dependent destruction H5.
         -- apply ktrans_finish in TR' as (? & _).
-           dependent destruction H3.
+           dependent destruction H5.
            right. exists x, (Finish e v x); split... 
-    - destruct H1, H2; clear H H2.
-      destruct H1 as (t' & w' & TR').
+    - destruct H as (Hp & Hs & H), H1 as (_ & _ & H1).
+      cdestruct Hp. 
+      destruct Hs as (t' & w' & TR').
       cbn in *.
       remember (observe t) as T.
       remember (observe t') as T'.
       clear HeqT t HeqT' t'.
       induction TR'.
-      * edestruct IHTR'.
-        -- intros t_ w_ TR_...
-        -- intros t_ w_ TR_...
+      * edestruct IHTR'...
         -- setoid_rewrite ktrans_guard.
            left.
-           destruct H as (? & ? & ? & ?).
+           destruct H4 as (? & ? & ? & ?).
            exists x, x0; split...
         -- right.
-           destruct H as (? & ? & ? & ? & ?).
+           destruct H4 as (? & ? & ? & ? & ?).
            exists x, x0; split... 
       * left. exists (k0 i), w...
       * left. exists (k0 v), (Obs e v)... 
       * assert (TR': [Ret x, Pure] ↦ [Ctree.stuck, Done x])
           by now apply ktrans_done.
-        destruct (H3 _ _ TR').
-        -- apply ktrans_done in TR' as (-> & _).
-           destruct H1.
-           apply can_step_not_done in H1; inv H1.
-        -- destruct H2.
-           apply ktrans_done in TR' as (-> & ?).
-           apply can_step_not_done in H2; inv H2.
+        destruct (H _ _ TR'); apply ktrans_done in TR' as (-> & _);
+          destruct H5 as (Hp & Hs & H5);
+          cdestruct Hp; inv H7.
       * assert (TR': [Ret x, Obs e v] ↦ [Ctree.stuck, Finish e v x])
           by now apply ktrans_finish.
-        destruct (H3 _ _ TR').
-        -- apply ktrans_finish in TR' as (-> & _).
-           destruct H1.
-           apply can_step_not_done in H1; inv H1.
-        -- destruct H2.
-           apply ktrans_finish in TR' as (-> & ?).
-           apply can_step_not_done in H2; inv H2.
+        destruct (H _ _ TR'); apply ktrans_finish in TR' as (-> & _);
+          destruct H5 as (Hp & Hs & H5);
+           cdestruct Hp; inv H7.
   Qed.
   Hint Resolve can_step_bind_r: ctl.
 

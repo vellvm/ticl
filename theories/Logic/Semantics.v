@@ -35,14 +35,15 @@ Section Shallow.
   Notation MP := (MS -> World E -> Prop).
   Local Open Scope ctl_scope.
 
-  (*| Shallow strong/weak forall [next] modality |*)
-  Definition cax (p: MP) (t: MS) (w: World E): Prop :=    
-    can_step t w /\
-      forall t' w', [t,w] ↦ [t', w'] -> p t' w'.
+  (*| Binary shallow strong/weak forall [next] modality |*)
+  Definition cax (p q: MP) (t: MS) (w: World E): Prop :=
+    p t w /\
+      can_step t w /\
+      (forall t' w', [t,w] ↦ [t', w'] -> q t' w').
   
-  Definition cex(p: MP) (t: MS) (w: World E): Prop :=
-    exists t' w', [t, w] ↦ [t', w'] /\ p t' w'.
-  
+  Definition cex(p q: MP) (t: MS) (w: World E): Prop :=
+    p t w /\
+      exists t' w', [t, w] ↦ [t', w'] /\ q t' w'.
   Hint Unfold cax cex: core.
 
   Unset Elimination Schemes.
@@ -52,8 +53,7 @@ Section Shallow.
       q t w ->    (* Matches [q] now; done *)
       cau p q t w
   | StepA:  forall t w,
-      p t w ->    (* Matches [p] now; steps to [m'] *)
-      cax (cau p q) t w ->
+      cax p (cau p q) t w -> (* Matches [p] now; steps to [m'] *)
       cau p q t w.
 
   (* Exists strong until *)
@@ -62,48 +62,46 @@ Section Shallow.
       q t w ->    (* Matches [q] now; done *)
       ceu p q t w
   | StepE: forall t w,
-      p t w ->    (* Matches [p] now; steps to [m'] *)
-      cex (ceu p q) t w ->
+      cex p (ceu p q) t w -> (* Matches [p] now; steps to [m'] *)
       ceu p q t w.
 
   (* Custom induction schemes for [cau, ceu] *)
   Definition cau_ind :
     forall [p q: MP] (P : MP),
       (forall t w, q t w -> P t w) -> (* base *)
-      (forall t w,
-          p t w ->          (* [p] now*)
-          cax (cau p q) t w ->
-          cax P t w ->
+      (forall t w, (* step *)
+          cax p (cau p q) t w ->
+          cax p P t w ->
          P t w) ->
       forall t w, cau p q t w -> P t w :=
     fun p q P Hbase Hstep =>
       fix F (t : MS) (w: World E) (c : cau p q t w) {struct c}: P t w :=
       match c with
       | MatchA _ _ t w y => Hbase t w y
-      | @StepA _ _ t w Hp (conj Hs HtrP) =>
-          Hstep t w Hp
-            (conj Hs HtrP)
-            (conj Hs (fun t' w' tr => F t' w' (HtrP t' w' tr)))
+      | @StepA _ _ t w (conj Hp (conj Hs HtrP)) =>
+          Hstep t w
+            (conj Hp (conj Hs HtrP))
+            (conj Hp (conj Hs (fun t' w' tr => F t' w' (HtrP t' w' tr))))
       end.
 
   Definition ceu_ind :
     forall [p q: MP] (P : MP),
       (forall t w, q t w -> P t w) -> (* base *)
-      (forall t w,
-          p t w ->          (* [p] now*)
-          cex (ceu p q) t w ->
-          cex P t w ->
-         P t w) ->
+      (forall t w, (* step *)
+          cex p (ceu p q) t w ->
+          cex p P t w ->
+          P t w) ->
       forall t w, ceu p q t w -> P t w :=
     fun p q P Hbase Hstep =>
       fix F (t : MS) (w: World E) (c : ceu p q t w) {struct c}: P t w :=
       match c with
       | MatchE _ _ t w y => Hbase t w y
-      | @StepE _ _ t w y (ex_intro _ t' (ex_intro _ w' (conj tr h))) =>
-          Hstep t w y
-            (ex_intro _ t'
-               (ex_intro _ w'
-                  (conj tr h))) (ex_intro _  t' (ex_intro _ w' (conj tr (F t' w' h))))
+      | @StepE _ _ t w (conj Hp (ex_intro _ t' (ex_intro _ w' (conj tr h)))) =>
+          Hstep t w
+            (conj Hp
+               (ex_intro _ t'
+                  (ex_intro _ w'
+                     (conj tr h)))) (conj Hp (ex_intro _  t' (ex_intro _ w' (conj tr (F t' w' h)))))
       end.
   Set Elimination Schemes.
 
@@ -111,13 +109,13 @@ Section Shallow.
   (* Always globally *)
   (* Matches [p] now; all paths step to (t', s') *)
   Program Definition cagF p: mon MP :=
-    {| body := fun R t w => p t w /\ cax R t w |}.
+    {| body := cax p |}.
   Next Obligation.
     repeat red; intros; destruct H0; split; destruct H1; auto.
   Qed.
   
   Program Definition cegF p: mon MP :=
-    {| body := fun R t w => p t w /\ cex R t w |}.
+    {| body := cex p |}.
   Next Obligation.
     repeat red; intros; destruct H0 as [H0 (t' & w' & TR & Hx)]; split; auto.
     exists t', w'; auto.
@@ -150,8 +148,8 @@ Section Entailment.
       | (CNow φ) => fun _ w => φ w /\ not_done w
       | (CuL Q_A p q) => cau (entailsL p) (entailsL q)
       | (CuL Q_E p q) => ceu (entailsL p) (entailsL q)
-      | (CxL Q_A φ) => cax (entailsL φ)
-      | (CxL Q_E φ) => cex (entailsL φ)
+      | (CxL Q_A p q) => cax (entailsL p) (entailsL q)
+      | (CxL Q_E p q) => cex (entailsL p) (entailsL q)
       | (Cg Q_A φ) => cag (entailsL φ)
       | (Cg Q_E φ) => ceg (entailsL φ)
       | (CAndL p q) => fun t w => entailsL p t w /\ entailsL q t w
@@ -164,13 +162,11 @@ Section Entailment.
       | (CDone φ) => fun _ => done_with φ
       | (CuR Q_A p q) => cau (entailsL X p) (entailsR q)
       | (CuR Q_E p q) => ceu (entailsL X p) (entailsR q)
-      | (CxR Q_A φ) => cax (entailsR φ)
-      | (CxR Q_E φ) => cex (entailsR φ)
-      | (CAndLR p q) => fun t w => entailsL X p t w /\ entailsR q t w
-      | (CAndRR p q) => fun t w => entailsR p t w /\ entailsR q t w
-      | (COrLR p q) => fun t w => entailsL X p t w \/ entailsR q t w
-      | (COrRR p q) => fun t w => entailsR p t w \/ entailsR q t w
-      | (CImplLR p q) => fun t w => entailsL X p t w -> entailsR q t w
+      | (CxR Q_A p q) => cax (entailsL X p) (entailsR q)
+      | (CxR Q_E p q) => cex (entailsL X p) (entailsR q)
+      | (CAndR p q) => fun t w => entailsR p t w /\ entailsR q t w
+      | (COrR p q) => fun t w => entailsR p t w \/ entailsR q t w
+      | (CImplR p q) => fun t w => entailsL X p t w -> entailsR q t w
       end.
 
   Lemma unfold_entailsL {X}: forall (t: M E HE X) (w: World E) (φ: ctll E),
@@ -178,8 +174,8 @@ Section Entailment.
                          | (CNow φ) => φ w /\ not_done w
                          | (CuL Q_A p q) => cau (entailsL X p) (entailsL X q) t w
                          | (CuL Q_E p q) => ceu (entailsL X p) (entailsL X q) t w
-                         | (CxL Q_A φ) => cax (entailsL X φ) t w
-                         | (CxL Q_E φ) => cex (entailsL X φ) t w
+                         | (CxL Q_A p q) => cax (entailsL X p) (entailsL X q) t w
+                         | (CxL Q_E p q) => cex (entailsL X p) (entailsL X q) t w
                          | (Cg Q_A φ) => cag (entailsL X φ) t w
                          | (Cg Q_E φ) => ceg (entailsL X φ) t w
                          | (CAndL p q) => entailsL X p t w /\ entailsL X q t w
@@ -192,13 +188,11 @@ Section Entailment.
                        | (CDone φ) => done_with φ w
                        | (CuR Q_A p q) => cau (entailsL X p) (entailsR q) t w
                        | (CuR Q_E p q) => ceu (entailsL X p) (entailsR q) t w
-                       | (CxR Q_A φ) => cax (entailsR φ) t w
-                       | (CxR Q_E φ) => cex (entailsR φ) t w
-                       | (CAndLR p q) => entailsL X p t w /\ entailsR q t w
-                       | (CAndRR p q) => entailsR p t w /\ entailsR q t w
-                       | (COrLR p q) => entailsL X p t w \/ entailsR q t w
-                       | (COrRR p q) => entailsR p t w \/ entailsR q t w
-                       | (CImplLR p q) => entailsL X p t w -> entailsR q t w
+                       | (CxR Q_A p q) => cax (entailsL X p) (entailsR q) t w
+                       | (CxR Q_E p q) => cex (entailsL X p) (entailsR q) t w
+                       | (CAndR p q) => entailsR p t w /\ entailsR q t w
+                       | (COrR p q) => entailsR p t w \/ entailsR q t w
+                       | (CImplR p q) => entailsL X p t w -> entailsR q t w
                        end.
   Proof. intros; unfold entailsR; destruct φ; auto; destruct q; auto. Qed.
 
@@ -267,25 +261,25 @@ Global Hint Resolve ctlr_finish: ctlr.
 
 (*| AX, WX, EX unfold |*)
 Lemma ctll_ax `{KMS: Kripke M E} X:
-  forall (t: M E HE X) (w: World E) (p: ctll E),
-    <( t, w |= AX p )> <-> can_step t w /\ forall t' w', [t, w] ↦ [t',w'] -> <( t',w' |= p )>.
+  forall (t: M E HE X) (w: World E) (p q: ctll E),
+    <( t, w |= p AX q )> <-> <( t, w |= p)> /\ can_step t w /\ forall t' w', [t, w] ↦ [t',w'] -> <( t',w' |= q )>.
 Proof. intros; auto. Qed.
 
 Lemma ctll_ex `{KMS: Kripke M E} X:
-  forall (t: M E HE X) (w: World E) (p: ctll E),
-    <( t,w |= EX p )> <-> exists t' w', [t,w] ↦ [t',w'] /\ <( t',w' |= p )>.
+  forall (t: M E HE X) (w: World E) (p q: ctll E),
+    <( t,w |= p EX q )> <-> <( t, w|= p)> /\ exists t' w', [t,w] ↦ [t',w'] /\ <( t',w' |= q )>.
 Proof. intros; auto. Qed.
 Global Hint Resolve ctll_ax ctll_ex: ctl.
 
 Lemma ctlr_ax `{KMS: Kripke M E} X:
-  forall (t: M E HE X) (w: World E) (p: ctlr E X),
-    <[ t, w |= AX p ]> <-> can_step t w /\ forall t' w', [t, w] ↦ [t',w'] -> <[ t',w' |= p ]>.
+  forall (t: M E HE X) (w: World E) (p: ctll E) (q: ctlr E X),
+    <[ t, w |= p AX q ]> <-> <( t, w |= p)> /\ can_step t w /\ forall t' w', [t, w] ↦ [t',w'] -> <[ t',w' |= q ]>.
 Proof. intros; auto. Qed.
 
 Lemma ctlr_ex `{KMS: Kripke M E} X:
-  forall (t: M E HE X) (w: World E) (p: ctlr E X),
-    <[ t,w |= EX p ]> <-> exists t' w', [t,w] ↦ [t',w'] /\ <[ t',w' |= p ]>.
-Proof. intros; auto. Qed.
+  forall (t: M E HE X) (w: World E) (p: ctll E) (q: ctlr E X),
+    <[ t,w |= p EX q ]> <-> <( t, w |= p )> /\ exists t' w', [t,w] ↦ [t',w'] /\ <[ t',w' |= q ]>.
+Proof. intros; eauto. Qed.
 Global Hint Resolve ctlr_ax ctlr_ex: ctl.
 
 (*| Propositional statements |*)
@@ -299,22 +293,12 @@ Lemma ctll_or  `{KMS: Kripke M E} X:
     <( t, w |= p \/ q )> <-> <( t, w |= p )> \/ <( t, w |= q )>.
 Proof. intros; rewrite unfold_entailsL; reflexivity. Qed.
 
-Lemma ctlr_andl  `{KMS: Kripke M E} X:
-  forall (t: M E HE X) (w: World E) (p: ctll E) (q: ctlr E X),
-    <[ t, w |= p ∩ q ]> <-> <( t, w |= p )> /\ <[ t, w |= q ]>.
-Proof. intros; rewrite unfold_entailsR; reflexivity. Qed.
-
-Lemma ctlr_orl  `{KMS: Kripke M E} X:
-  forall (t: M E HE X) (w: World E) (p: ctll E) (q: ctlr E X),
-    <[ t, w |= p ∪ q ]> <-> <( t, w |= p )> \/ <[ t, w |= q ]>.
-Proof. intros; rewrite unfold_entailsR; reflexivity. Qed.
-
-Lemma ctlr_andr  `{KMS: Kripke M E} X:
+Lemma ctlr_and  `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (p q: ctlr E X),
     <[ t, w |= p /\ q ]> <-> <[ t, w |= p ]> /\ <[ t, w |= q ]>.
 Proof. intros; rewrite unfold_entailsR; reflexivity. Qed.
 
-Lemma ctlr_orr  `{KMS: Kripke M E} X:
+Lemma ctlr_or  `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (p q: ctlr E X),
     <[ t, w |= p \/ q ]> <-> <[ t, w |= p ]> \/ <[ t, w |= q ]>.
 Proof. intros; rewrite unfold_entailsR; reflexivity. Qed.
@@ -326,13 +310,13 @@ Proof. intros t w p q; rewrite unfold_entailsR; intros [H H']; auto. Qed.
 
 (* [AX φ] is stronger than [EX φ] *)
 Lemma ctll_ax_ex `{KMS: Kripke M E} X:
-  forall (t: M E HE X) (w: World E) (p: ctll E),
-    <( t, w |= AX p )> -> <( t, w |= EX p )>.
+  forall (t: M E HE X) (w: World E) (p q: ctll E),
+    <( t, w |= p AX q )> -> <( t, w |= p EX q )>.
 Proof.
   intros.
   rewrite ctll_ax, ctll_ex in *.
-  destruct H as ((m' & w' & TR) & ?).
-  exists m', w'; auto.
+  destruct H as (Hp & (m' & w' & TR) & ?).
+  split; [|exists m', w']; auto.
 Qed.
 
 (* [AF φ] is stronger than [EF φ] *)
@@ -344,19 +328,20 @@ Proof.
   rewrite unfold_entailsL in *.
   induction H.
   - now apply MatchE. 
-  - destruct H0 as ((m' & ? & ?) & ?).
-    destruct H1 as ((? & ? & ?) &  ?).
-    apply StepE; auto.
-    exists x0, x1; split; auto.
+  - destruct H as (Hp & _ & ?).
+    destruct H0 as (_ & (? & ? & ?) &  ?).
+    apply StepE; split; auto.
+    exists x, x0; split; auto.
 Qed.
 
 Lemma ctlr_ax_ex `{KMS: Kripke M E} X:
-  forall (t: M E HE X) (w: World E) (p: ctlr E X),
-    <[ t, w |= AX p ]> -> <[ t, w |= EX p ]>.
+  forall (t: M E HE X) (w: World E) (p: ctll E) (q: ctlr E X),
+    <[ t, w |= p AX q ]> -> <[ t, w |= p EX q ]>.
 Proof.
   intros.
   rewrite ctlr_ax, ctlr_ex in *.
-  destruct H as ((m' & w' & TR) & ?).
+  destruct H as (H & (m' & w' & TR) & ?).
+  intuition.
   exists m', w'; auto.
 Qed.
 
@@ -369,10 +354,10 @@ Proof.
   rewrite unfold_entailsR in *.
   induction H.
   - now apply MatchE. 
-  - destruct H0 as ((m' & ? & ?) & ?).
-    destruct H1 as ((? & ? & ?) &  ?).
-    apply StepE; auto.
-    exists x0, x1; split; auto.
+  - destruct H as (Hp & _ & ?).
+    destruct H0 as (_ & (? & ? & ?) &  ?).
+    apply StepE; split; auto.
+    exists x, x0; split; auto.
 Qed.
 
 (*| Bot is false |*)
@@ -381,7 +366,7 @@ Lemma ctll_sound `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
 Proof. now intros * []. Qed. 
 
 (*| Ex-falso |*)
-Lemma ctlr_ex_falso `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E) (p: ctlr E X),
+Lemma ctlr_exfalso `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E) (p: ctlr E X),
     <[ t, w |= ⊥ -> p ]>.
 Proof.
   cbn.
@@ -413,7 +398,7 @@ Proof.
   rewrite unfold_entailsL in Contra.
   induction Contra.
   - rewrite ctll_now in H; intuition. 
-  - now destruct H1 as (? & ? & ? & ?).
+  - now destruct H0 as (? & ? & ? & ? & ?).
 Qed.
 
 (*| Cannot have all paths such that eventually always Bot |*)
@@ -434,7 +419,7 @@ Proof.
   rewrite unfold_entailsR in Contra.
   induction Contra.
   - rewrite ctlr_done in H; now ddestruction H.
-  - now destruct H1 as (? & ? & ? & ?).
+  - now destruct H0 as (? & ? & ? & ? & ?).
 Qed.
 
 (*| Cannot have all paths such that eventually always Bot |*)
@@ -447,6 +432,25 @@ Proof.
   contradiction.
 Qed.
 
+Lemma cax_not_done `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E) p q,
+    cax p q t w ->
+    not_done w.
+Proof.
+  intros.
+  destruct H as (? & ? & ?).
+  now apply can_step_not_done with t.
+Qed.
+
+Lemma cex_not_done `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E) p q,
+    cex p q t w ->
+    not_done w.
+Proof.
+  intros.
+  destruct H as (? & ? & ? & ? & ?).
+  now apply ktrans_not_done with t x x0.
+Qed.
+Hint Resolve cex_not_done cax_not_done: ctl.
+
 (* Here the syntax separation becomes semantically apparent *)
 Lemma ctll_not_done `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E) (p: ctll E),
     <( t, w |= p )> ->
@@ -455,9 +459,10 @@ Proof.
   intros.
   hinduction p before X; intros;
     rewrite unfold_entailsL in H; eauto; try destruct q; try solve [ destruct H; eauto].
-  - destruct H; now apply can_step_not_done with t.
-  - destruct H as (t' & w' & TR & ?).
-    now apply ktrans_not_done with t t' w'.
+  - destruct H; eauto.
+    now apply cax_not_done in H. 
+  - destruct H; eauto.
+    now apply cex_not_done in H.
   - step in H; destruct H, H0.
     now apply can_step_not_done with t.
   - step in H; destruct H, H0 as (t' & w' & TR & ?).
@@ -480,10 +485,50 @@ Qed.
 
 #[global] Ltac cinduction H0 :=
   match type of H0 with
-  | @entailsL ?M ?W ?HE ?KMS ?X (CuL ?q ?φ ?ψ) ?t ?w =>
-      rewrite unfold_entailsL in H0; induction H0
-  | @entailsR ?M ?W ?HE ?KMS ?X (CuR ?q ?φ ?ψ) ?t ?w =>
-      rewrite unfold_entailsR in H0; induction H0
+  | @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_A ?φ ?ψ) ?t ?w =>
+      let Hau := fresh "Hau" in
+      let HInd := fresh "HInd" in
+      let Hp := fresh "Hp" in
+      let Hs := fresh "Hs" in
+      rewrite unfold_entailsL in H0; induction H0 as [? ? Hp | ? ? Hau HInd]; 
+      [| destruct Hau as (Hp & Hs & Hau), HInd as (_ & _ & HInd)]
+  | @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_E ?φ ?ψ) ?t ?w =>
+      let Hau := fresh "Hau" in
+      let HInd := fresh "HInd" in
+      let Hp := fresh "Hp" in
+      let Hs := fresh "Hs" in
+      let t' := fresh "t'" in
+      let w' := fresh "w'" in
+      let TR' := fresh "TR'" in
+      let t_ := fresh "t_" in
+      let w_ := fresh "w_" in
+      let TR_ := fresh "TR_" in
+      rewrite unfold_entailsL in H0; induction H0 as [? ? Hp | ? ? Heu HInd];
+      [| destruct Heu as (Hp & t' & w' & TR & Heu), HInd as (_ & t_ & w_ & TR_ & HInd)]
+  | @entailsL ?M ?W ?HE ?KMS ?X (CuL ?c ?φ ?ψ) ?t ?w =>
+      is_var c; destruct c; cinduction H0
+  | @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_A ?φ ?ψ) ?t ?w =>
+      let Hau := fresh "Hau" in
+      let HInd := fresh "HInd" in
+      let Hp := fresh "Hp" in
+      let Hs := fresh "Hs" in
+      rewrite unfold_entailsR in H0; induction H0 as [? ? Hp | ? ? Hau HInd]; 
+      [| destruct Hau as (Hp & Hs & Hau), HInd as (_ & _ & HInd)]
+  | @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_E ?φ ?ψ) ?t ?w =>
+      let Hau := fresh "Hau" in
+      let HInd := fresh "HInd" in
+      let Hp := fresh "Hp" in
+      let Hs := fresh "Hs" in
+      let t' := fresh "t'" in
+      let w' := fresh "w'" in
+      let TR' := fresh "TR'" in
+      let t_ := fresh "t_" in
+      let w_ := fresh "w_" in
+      let TR_ := fresh "TR_" in
+      rewrite unfold_entailsR in H0; induction H0 as [? ? Hp | ? ? Heu HInd];
+      [| destruct Heu as (Hp & t' & w' & TR & Heu), HInd as (_ & t_ & w_ & TR_ & HInd)]
+  | @entailsR ?M ?W ?HE ?KMS ?X (CuR ?c ?φ ?ψ) ?t ?w =>
+      is_var c; destruct c; cinduction H0
   end.
 
 #[global] Ltac coinduction_g R CIH :=

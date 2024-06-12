@@ -18,6 +18,7 @@ Tactic Notation "cbn*" := unfold bt; cbn.
 Notation rel X Y := (X -> Y -> Prop).
 
 Ltac ddestruction H := cbn in H; dependent destruction H.
+Ltac split2 := split; [|split].
 
 Global Coercion is_true(b: bool): Prop :=
   if b then True else False.

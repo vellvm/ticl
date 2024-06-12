@@ -20,7 +20,7 @@ Section CtlSyntax.
   | CNow (φ: World E -> Prop): ctll
   (* Path quantifier [q]; property [φ: ctll] holds finitely, until [ψ: ctlr] stops it *)
   | CuL (q: ctlq) (φ ψ: ctll): ctll
-  | CxL (q: ctlq) (φ: ctll): ctll
+  | CxL (q: ctlq) (φ ψ: ctll): ctll
   (* Path quantifier [q]; property [φ] holds always (strong always) *)
   | Cg (q: ctlq) (φ: ctll) : ctll
   (* Boolean combinators *)
@@ -31,13 +31,11 @@ Section CtlSyntax.
   (* Model returns with type [X] and [φ] holds at this point *)
   | CDone (φ: X -> World E -> Prop): ctlr
   | CuR (q: ctlq) (φ: ctll) (ψ: ctlr): ctlr
-  | CxR (q: ctlq) (p: ctlr): ctlr
+  | CxR (q: ctlq) (φ: ctll) (ψ: ctlr): ctlr
   (* Boolean combinators *)
-  | CAndLR (p: ctll) (q: ctlr): ctlr
-  | CAndRR (p: ctlr) (q: ctlr): ctlr
-  | COrLR (p: ctll) (q: ctlr): ctlr
-  | COrRR (p: ctlr) (q: ctlr): ctlr
-  | CImplLR (p: ctll) (q: ctlr): ctlr.
+  | CAndR (p: ctlr) (q: ctlr): ctlr
+  | COrR (p: ctlr) (q: ctlr): ctlr
+  | CImplR (p: ctll) (q: ctlr): ctlr.
 
   Arguments ctlr: clear implicits.
 
@@ -122,11 +120,11 @@ Module CtlNotations.
                     (in custom ctlr at level 76): ctl_scope.
   
   (* Temporal syntax *)
-  Notation "'EX' p" := (CxL Q_E p) (in custom ctll at level 75): ctl_scope.
-  Notation "'AX' p" := (CxL Q_A p) (in custom ctll at level 75): ctl_scope.
+  Notation "p 'EX' q" := (CxL Q_E p q) (in custom ctll at level 75): ctl_scope.
+  Notation "p 'AX' q" := (CxL Q_A p q) (in custom ctll at level 75): ctl_scope.
 
-  Notation "'EX' p" := (CxR Q_E p) (in custom ctlr at level 75): ctl_scope.
-  Notation "'AX' p" := (CxR Q_A p) (in custom ctlr at level 75): ctl_scope.
+  Notation "p 'EX' q" := (CxR Q_E p q) (in custom ctlr at level 75): ctl_scope.
+  Notation "p 'AX' q" := (CxR Q_A p q) (in custom ctlr at level 75): ctl_scope.
 
   Notation "p 'EU' q" := (CuL Q_E p q) (in custom ctll at level 75): ctl_scope.
   Notation "p 'AU' q" := (CuL Q_A p q) (in custom ctll at level 75): ctl_scope.
@@ -147,21 +145,22 @@ Module CtlNotations.
   Notation "'EF' p" := <[ ⊤ EU p ]> (in custom ctlr at level 74): ctl_scope.
   Notation "'AF' p" := <[ ⊤ AU p ]> (in custom ctlr at level 74): ctl_scope.
 
+  Notation "'EN' p" := <( ⊤ EX p )> (in custom ctll at level 74): ctl_scope.
+  Notation "'AN' p" := <( ⊤ AX p )> (in custom ctll at level 74): ctl_scope.
+
+  Notation "'EN' p" := <[ ⊤ EX p ]> (in custom ctlr at level 74): ctl_scope.
+  Notation "'AN' p" := <[ ⊤ AX p ]> (in custom ctlr at level 74): ctl_scope.
+  
   (* Propositional syntax *)
   Notation "p '/\' q" := (CAndL p q)
                            (in custom ctll at level 77, left associativity): ctl_scope.
   Notation "p '\/' q" := (COrL p q)
                            (in custom ctll at level 77, left associativity): ctl_scope.
-  Notation "p '->' q" := (CImplLR p q)
-                           (in custom ctlr at level 78, right associativity): ctl_scope.
 
-  Notation "p ∩ q" := (CAndLR p q)
-                        (in custom ctlr at level 77, left associativity): ctl_scope.
-  Notation "p ∪ q" := (COrLR p q)
-                        (in custom ctlr at level 77, left associativity): ctl_scope.
-  
-  Notation "p '/\' q" := (CAndRR p q)
+  Notation "p '/\' q" := (CAndR p q)
                            (in custom ctlr at level 77, left associativity): ctl_scope.  
-  Notation "p '\/' q" := (COrRR p q)
+  Notation "p '\/' q" := (COrR p q)
                            (in custom ctlr at level 77, left associativity): ctl_scope.
+  Notation "p '->' q" := (CImplR p q)
+                           (in custom ctlr at level 78, right associativity): ctl_scope.
 End CtlNotations.
