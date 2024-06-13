@@ -10,6 +10,7 @@ From CTree Require Import
   CTree.Logic.CanStep
   CTree.Logic.AX
   CTree.Logic.AF
+  CTree.Logic.AG
   Logic.Ctl.
 
 Set Implicit Arguments.
@@ -22,6 +23,7 @@ Local Open Scope ctree_scope.
 Section BindLemmas.
   Context {E: Type} {HE: Encode E}.
 
+  (*| Prove by induction on formulas [φ], very useful! |*)
   Theorem ctll_bind_l{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) φ w,
       <( t, w |= φ )> ->
       <( {x <- t ;; k x}, w |= φ )>.
@@ -114,6 +116,7 @@ Section BindLemmas.
       cdestruct H; [cleft | cright]...
   Qed.
 
+  (*| Bind lemmas for [AX] |*)
   Theorem axl_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
       <[ t, w |= φ AX done R ]> ->
       (forall x w, R x w -> <( {k x}, w |= φ AX ψ )>) ->
@@ -178,6 +181,7 @@ Section BindLemmas.
           cdestruct Hax...
   Qed.
 
+  (*| Bind lemmas for [AU] |*)
   Typeclasses Transparent sbisim.
   Theorem aul_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
       <[ t, w |= φ AU AN done R ]> ->
@@ -236,6 +240,75 @@ Section BindLemmas.
             with <[ t, w |= φ AU ψ ]> in Hau.
           now apply aur_stuck, axr_stuck in Hau.
   Qed.
-  
 
+  (*| Bind lemma for [AG] |*)
+  Notation MP X := (rel (ctree E X) (World E)).
+  Program Definition ag_bind_clos{X Y} φ Post : mon (MP Y) :=
+    {| body R t w :=
+        bind_ctx1
+          (fun (t: ctree E X) => <[ t, w |= φ AU (AN done Post) ]>)
+          (fun (k: X -> ctree E Y) =>
+             forall (x: X) (w: World E), Post x w -> R (k x) w)
+          t
+    |}.
+  Next Obligation.
+    revert H0.
+    apply leq_bind_ctx1; intros.
+    apply in_bind_ctx1; eauto.
+  Qed.
+
+  Lemma ag_bind_now_ag{X Y} (φ: ctll E) (Post: rel X (World E)):
+      ag_bind_clos (Y:=Y) φ Post <= cagt (entailsL Y φ).
+  Proof with auto with ctl.  
+    apply Coinduction.
+    intros R t w; cbn.
+    apply (leq_bind_ctx1 _ _
+             (fun t => cax (entailsL Y φ)
+                      (cagT (entailsL Y φ)
+                         (ag_bind_clos φ Post) R) t w)).
+    clear t.
+    intros t Hau k Hk.    
+    cinduction Hau.
+    - (* AN done R *)
+      apply an_done in Hp as (Hw & x & Heq & HPost).
+      specialize (Hk _ _ HPost); remember (k x) as K;
+        destruct Hk; subst; split2.      
+      + rewrite Heq, bind_ret_l; auto. 
+      + rewrite Heq, bind_ret_l.
+        now destruct H0.
+      + intros t' w' TR.
+        apply (id_T (cagF (entailsL Y φ))); cbn.
+        destruct H0.
+        apply H1.
+        eapply ktrans_sbisim_ret with (t:=t); auto.
+    - (* φ AX (φ AU AN done R) *)
+      split2.
+      + now apply ctll_bind_l.
+      + destruct Hs as (t' & w' & TR).
+        apply can_step_bind_l with t' w'; auto.
+        specialize (Hau0 _ _ TR) as Hinv; destruct Hinv as [t' w' Hinv | t' w' Hinv].
+        * cdestruct Hinv; cdestruct Hp0...
+        * destruct Hinv as (? & Hs & ?).
+          now apply can_step_not_done in Hs.
+      + intros k_ w_ TRk.
+        apply ktrans_bind_inv in TRk as
+            [(t0' & TR0 & Hd_ & Heq) | (x & w0 & TRt0 & Hd & TRk)].
+        * (* [t0] steps and is not [Ret] *)
+          apply (fT_T (mequ_clos_cag (KS:=KripkeSetoidEqu))).
+          cbn; eapply mequ_clos_ctor with (t1:=x <- t0';; k x) (w1:=w_); auto.
+          clear Heq k_.            
+          eapply (fTf_Tf (cagF (entailsL Y φ))).
+          apply in_bind_ctx1.
+          -- rewrite unfold_entailsR... 
+          -- intros.
+             apply (b_T (cagF (entailsL Y φ))); cbn... 
+        * (* [t0] steps and is [Ret], contradiction *)
+          specialize (HInd _ _ TRt0).
+          destruct HInd as (Hp' & ? & ?).
+          inv Hd.
+          -- apply ktrans_to_done in TRt0 as (? & ->).             
+             apply ctll_not_done in Hp'; inv Hp'.
+          -- apply ktrans_to_finish in TRt0 as (? & ->).
+             apply ctll_not_done in Hp'; inv Hp'.
+  Qed.
 End BindLemmas.

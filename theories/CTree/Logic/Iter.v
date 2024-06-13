@@ -232,3 +232,168 @@ Section CtlAuStateList.
       auto.
   Qed.
 End CtlAuStateList.
+
+
+(*| Combinators for [interp_state] |*)
+Section CtlAgState.
+  Context {E F S: Type} {HE: Encode E} {HF: Encode F}
+    (h: E ~> stateT S (ctree F)).
+
+  Theorem ag_state_bind_l{X Y}: forall s w (t: ctree E Y) (k: Y -> ctree E X) φ,
+      <( {interp_state h t s}, w |= AG now φ )> ->
+      <( {interp_state h (x <- t ;; k x) s}, w |= AG now φ )>.
+  Proof.
+    intros.
+    rewrite interp_state_bind.
+    now apply ag_bind_l.
+  Qed.
+
+  Theorem ag_state_bind_r{X Y}: forall s (t: ctree E Y) (k: Y -> ctree E X) w φ
+                                  (R: Y -> S -> World F -> Prop),
+      <( {interp_state h t s}, w |= now φ AU (AX done {fun '(x, s) w => R x s w}) )> ->
+      (forall (y: Y) (s: S) (w: World F),
+          R y s w ->
+          <( {interp_state h (k y) s}, w |= AG now φ )>) ->
+      <( {interp_state h (x <- t ;; k x) s} , w |= AG now φ )>.
+  Proof.
+    intros.
+    rewrite interp_state_bind.
+    apply ag_bind_r with (R:=fun '(x, s) w => R x s w); auto.
+    intros [y s'] w' Hr; auto.
+  Qed.
+
+  Theorem ag_state_iter{X I}: forall s (k: I -> ctree E (I + X)) w (x: I) φ R,
+      R x s ->        (* Iterator invariant: [x] in [R] *)
+      φ w ->          (* Worlds invariant: [φ w] *)
+      not_done w ->
+      (forall (x: I) (s: S) (w: World F),
+          R x s ->
+          φ w ->
+          not_done w ->
+          <( {interp_state h (k x) s}, w |= AX (now φ AU AX done
+             {fun (lr: (I+X) * S) (w: World F) =>
+                exists (i' : I) (s': S), lr = (inl i', s') /\ φ w /\
+                                      not_done w /\ R i' s'}))>) ->
+      <( {interp_state h (iter k x) s}, w |= AG now φ )>.
+  Proof with auto with ctl.
+    intros.
+    rewrite interp_state_unfold_iter.
+    generalize dependent x.
+    generalize dependent s.
+    generalize dependent w.
+    coinduction RR CIH; intros.
+    split; [apply ctl_now; now constructor|split].
+    - (* can_step *)
+      specialize (H2 _ _ _ H H0 H1).
+      cdestruct H2.
+      destruct Hs as (t' & w' & TR).
+      specialize (H2 _ _ TR).
+      apply can_step_bind_l with t' w'; auto.
+      cdestruct H2.
+      + now apply ax_done in H2 as (? & ?).
+      + now apply ctl_now in H2 as (? & ?). 
+    - intros t' w' TR.
+      apply ktrans_bind_inv in TR as
+          [(t0' & TR0 & Hd_ & Heq) | (x' & w0 & TRt0 & Hd & TRk)].
+      + (* [k x] steps *)
+        rewrite Heq; clear Heq t'.
+        apply (ft_t (ag_bind_now_ag φ
+                       (fun (lr: (I+X) * S) (w: World F) =>
+                          exists (i': I) (s': S), lr = (inl i', s') /\
+                                               φ w /\ not_done w /\ R i' s'))); cbn.
+        apply in_bind_ctx1.
+        * specialize (H2 _ _ _ H H0 H1) as HAX.
+          cdestruct HAX.
+          specialize (HAX _ _ TR0).
+          apply HAX.
+        * intros (lr' & s_) w_ (i & s' & Hinv & Hφ & Hd' & HR'); inv Hinv.
+          rewrite sb_guard.
+          setoid_rewrite interp_state_unfold_iter.
+          apply CIH...
+      + (* [k x] returns *)        
+        specialize (H2 _ _ _ H H0 H1) as HAX.        
+        cdestruct HAX.
+        specialize (HAX _ _ TRt0).
+        apply au_stuck in HAX.
+        cdestruct HAX.
+        now apply can_step_stuck in Hs0.
+  Qed.        
+End CtlAgState.
+
+Section CtlAgW.
+  Context {E Σ W: Type} {HE: Encode E} (h:E ~> stateT Σ (ctreeW W)). 
+
+  Theorem ag_iterW{X I}: forall (i: I) (σ: Σ) (w: W) (k: I -> ctree E (I + X)) φ R,
+      R i σ ->       (* Iterator & state invariant [R] *)
+      φ w ->         (* Goal Invariant [φ] *)
+      (forall (i: I) (σ: Σ) (w: W),
+          R i σ ->
+          φ w ->
+          <( {interp_state h (k i) σ}, {Obs (Log w) tt} |=
+              AX (visW φ AU AX
+                    (finishW {fun (lr: I + X) (σ: Σ) (w: W) =>
+                                exists (i: I), lr = inl i /\ R i σ /\ φ w})))>) ->
+      <( {interp_state h (iter k i) σ}, {Obs (Log w) tt} |= AG visW φ )>.
+  Proof with eauto with ctl.
+    setoid_rewrite ctl_vis_now.
+    setoid_rewrite ctl_finish_done.
+    intros.
+    rewrite interp_state_unfold_iter.
+    generalize dependent σ.
+    generalize dependent i.
+    generalize dependent w.    
+    coinduction RR CIH; intros.
+    split; [apply ctl_now; eauto with ctl |split].
+    - (* can_step *)
+      specialize (H1 _ _ _ H H0).
+      cdestruct H1.
+      destruct Hs as (t' & w' & TR).
+      specialize (H1 _ _ TR).
+      apply can_step_bind_l with t' w'...
+      cdestruct H1.
+      + apply ax_done in H1 as (? & ?)...
+      + apply ctl_now in H1; destruct H1...
+    - intros t' w' TR.
+      apply ktrans_bind_inv in TR as
+          [(t0' & TR0 & Hd_ & Heq) | (x' & w0 & TRt0 & Hd & TRk)].
+      + (* [k x] steps *)
+        rewrite Heq; clear Heq t'.
+        apply (ft_t (ag_bind_now_ag
+                       (fun w => (exists (e : writerE W) (v : encode e),
+                                  w = Obs e v /\
+                                    (let 'Log v0 as x := e return (encode x -> Prop) in
+                                     fun 'tt => φ v0) v))
+                       (fun (x : (I + X) * Σ) (w : World (writerE W)) =>
+                        exists (e : writerE W) (v : encode e),
+                          w = Obs e v /\
+                          (let
+                           '(x0, s) := x in
+                            fun pat0 : writerE _ =>
+                            let
+                              'Log w0 as u := pat0 return (encode u -> Prop) in
+                            fun 'tt => exists i' : I, x0 = inl i' /\ R i' s /\ φ w0)
+                            e v))); cbn.
+        apply in_bind_ctx1.
+        * specialize (H1 _ _ _ H H0) as HAX.
+          cdestruct HAX.
+          specialize (HAX _ _ TR0).
+          apply HAX.
+        * intros (lr' & s_) w_ ([σ'] & [] & ? & ? & i' & ? & ?); subst.
+          unfold Classes.iter, MonadIter_ctree.          
+          apply (ft_t (mequ_clos_cag (KS:=KripkeSetoidSBisim))); cbn.
+          econstructor.
+          rewrite sb_guard.
+          rewrite interp_state_unfold_iter.
+          reflexivity.
+          reflexivity.
+          apply CIH...
+      + (* [k x] returns *)        
+        specialize (H1 _ _ _ H H0) as HAX.        
+        cdestruct HAX.
+        specialize (HAX _ _ TRt0).
+        apply au_stuck in HAX.
+        cdestruct HAX.
+        now apply can_step_stuck in Hs0.
+  Qed.        
+
+End CtlAgW.
