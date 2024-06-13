@@ -11,9 +11,9 @@ From CTree Require Import
   CTree.Logic.AX
   CTree.Logic.AF
   CTree.Logic.AG
+  CTree.Logic.EX
   Logic.Ctl.
 
-Set Implicit Arguments.
 Generalizable All Variables.
 
 Import CTreeNotations CtlNotations.
@@ -148,7 +148,7 @@ Section BindLemmas.
           specialize (H0 _ _ H) as Hax.
           cdestruct Hax...
   Qed.
-
+  
   Theorem axr_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
       <[ t, w |= φ AX done R ]> ->
       (forall x w, R x w -> <[ {k x}, w |= φ AX ψ ]>) ->
@@ -181,6 +181,32 @@ Section BindLemmas.
           cdestruct Hax...
   Qed.
 
+  (*| Bind lemmas for [EX] |*)
+  Typeclasses Transparent sbisim.
+  Theorem exl_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r,
+      <[ t, w |= φ EX done= r w' ]> ->
+      <( {k r}, w' |= φ EX ψ )> ->
+      <( {x <- t ;; k x}, w |= φ EX ψ )>.
+  Proof with eauto with ctl.
+    intros.
+    assert(Hd: <( t, w |= φ )> /\ (exists x : Y, t ~ Ret x /\ r = x /\ w' = w)) by
+      (apply ex_done in H as (? & ?); split; auto).
+    destruct Hd as (? & y & Heqt & -> & ->).
+    now rewrite Heqt, bind_ret_l.
+  Qed.
+
+  Theorem exr_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r,
+      <[ t, w |= φ EX done= r w' ]> ->
+      <[ {k r}, w' |= φ EX ψ ]> ->
+      <[ {x <- t ;; k x}, w |= φ EX ψ ]>.
+  Proof with eauto with ctl.
+    intros.
+    assert(Hd: <( t, w |= φ )> /\ (exists x : Y, t ~ Ret x /\ r = x /\ w' = w)) by
+      (apply ex_done in H as (? & ?); split; auto).
+    destruct Hd as (? & y & Heqt & -> & ->).
+    now rewrite Heqt, bind_ret_l.
+  Qed.
+  
   (*| Bind lemmas for [AU] |*)
   Typeclasses Transparent sbisim.
   Theorem aul_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
@@ -257,7 +283,7 @@ Section BindLemmas.
     apply in_bind_ctx1; eauto.
   Qed.
 
-  Lemma ag_bind_now_ag{X Y} (φ: ctll E) (Post: rel X (World E)):
+  Lemma ag_bind_ag{X Y} (φ: ctll E) (Post: rel X (World E)):
       ag_bind_clos (Y:=Y) φ Post <= cagt (entailsL Y φ).
   Proof with auto with ctl.  
     apply Coinduction.
@@ -310,5 +336,20 @@ Section BindLemmas.
              apply ctll_not_done in Hp'; inv Hp'.
           -- apply ktrans_to_finish in TRt0 as (? & ->).
              apply ctll_not_done in Hp'; inv Hp'.
+  Qed.
+
+  (* [t] satisfies [φ] until it terminates with post-condition [R],
+     then forall x w, R x w -> k x, w satisfies [φ] forever. *)
+  Lemma ag_bind_r{X Y}: forall (t: ctree E X)
+                          w (k: X -> ctree E Y) φ R,
+      <[ t, w |= φ AU AN done R ]> ->
+      (forall (x: X) (w: World E), R x w -> <( {k x}, w |= AG φ )>) ->
+      <( {x <- t ;; k x} , w |= AG φ )>.
+  Proof.
+    intros.
+    rewrite unfold_entailsL.
+    apply (ft_t (ag_bind_ag φ R)).
+    cbn.
+    apply in_bind_ctx1; auto.
   Qed.
 End BindLemmas.

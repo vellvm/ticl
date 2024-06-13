@@ -27,138 +27,130 @@ Local Open Scope ctree_scope.
 Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
-  Lemma done_ex: forall (t: ctree E X) φ w,
-      is_done X w ->
-      ~ <( t, w |= EX φ )>.
-  Proof.
-    intros * Hret Hcontra.
-    destruct Hcontra as (t' & w' & TR & H).
-    apply ktrans_not_done in TR.
-    inv TR; inv Hret.
-  Qed.
-
-  Lemma ex_stuck: forall w φ,
-      <( {Ctree.stuck: ctree E X}, w |= EX φ )> ->
-      <( {Ctree.stuck: ctree E X}, w |= φ )>.
+  Lemma exl_stuck: forall w φ ψ,
+      <( {Ctree.stuck: ctree E X}, w |= φ EX ψ )> ->
+      <( {Ctree.stuck: ctree E X}, w |= ψ )>.
   Proof.
     intros.
-    destruct H as (t' & w' & TR' & H).
-    now apply ktrans_stuck in TR'.
+    cdestruct H. 
+    now apply ktrans_stuck in TR.
   Qed.
 
-  Lemma ex_guard: forall (t: ctree E X) w φ,
-      <( {Guard t}, w |= EX φ )> <->
-      <( t, w |= EX φ )>.
-  Proof.
-    intros.
-    now rewrite sb_guard.
-  Qed.
-  
-  Lemma ex_br: forall n (k: fin' n -> ctree E X) w φ,
-      <( {Br n k}, w |= EX φ )> <->
-        not_done w /\ (exists (i: fin' n), <( {k i}, w |= φ )>).
+  Lemma exl_br: forall n (k: fin' n -> ctree E X) w φ ψ,
+      (<( {Br n k}, w |= φ )> /\ (exists (i: fin' n), <( {k i}, w |= ψ )>)) <->
+    <( {Br n k}, w |= φ EX ψ )>.
   Proof with auto with ctl.
     split; intros.
-    - cdestruct H. 
-      apply ktrans_br in TR as (i & H' & -> & Hd').
+    - destruct H as (Hφ & i & H).
+      csplit...
+      exists (k i), w; split...
+      apply ktrans_br; exists i. 
+      split2...
+      now apply ctll_not_done in Hφ.
+    - cdestruct H.
+      apply ktrans_br in TR as (i & Heq & -> & Hd).
+      rewrite Heq in H.
       split...
-      exists i.
-      now rewrite H' in H.
-    - destruct H as (Hd & i & H).
-      + exists (k i), w; split...
-        apply ktrans_br.
-        exists i...
+      exists i...
   Qed.
 
-  Lemma ex_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ,
-      <( {Vis e k}, w |= EX φ )> <->
-        not_done w /\ (exists (v: encode e), <( {k v}, {Obs e v} |= φ )>).
-  Proof with auto with ctl.
+  Lemma exl_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ ψ,
+      <( {Vis e k}, w |= φ EX ψ )> <->        
+        <( {Vis e k}, w |= φ )> /\ (exists (v: encode e), <( {k v}, {Obs e v} |= ψ )>).
+  Proof with eauto with ctl.
     split; intros.
     - cdestruct H. 
       apply ktrans_vis in TR as (v & -> & ? & ?).
       rewrite <- H0 in H.
-      split; [|exists v]...
+      split... 
     - destruct H as (Hd & v & ?).
+      csplit...
       exists (k v), (Obs e v); split...
       apply ktrans_vis.
-      exists v...
+      exists v; split2...
+      now apply ctll_not_done in Hd.
   Qed.
 
-  Lemma ex_done_ret: forall (x: X) φ w,
-      <[ {Ret x}, w |= EX done φ ]> <->
-        not_done w /\ φ x w. 
+  Lemma exr_stuck: forall w φ ψ,
+      <[ {Ctree.stuck: ctree E X}, w |= φ EX ψ ]> ->
+      <[ {Ctree.stuck: ctree E X}, w |= ψ ]>.
+  Proof.
+    intros.
+    cdestruct H. 
+    now apply ktrans_stuck in TR.
+  Qed.
+
+  Lemma exr_br: forall n (k: fin' n -> ctree E X) w φ ψ,
+      (<( {Br n k}, w |= φ )> /\ (exists (i: fin' n), <[ {k i}, w |= ψ ]>)) <->
+        <[ {Br n k}, w |= φ EX ψ ]>.
+  Proof with auto with ctl.
+    split; intros.
+    - destruct H as (Hφ & i & H).
+      csplit...
+      exists (k i), w; split...
+      apply ktrans_br; exists i. 
+      split2...
+      now apply ctll_not_done in Hφ.
+    - cdestruct H.
+      apply ktrans_br in TR as (i & Heq & -> & Hd).
+      rewrite Heq in H.
+      split...
+      exists i...
+  Qed.
+
+  Lemma exr_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ ψ,
+      <[ {Vis e k}, w |= φ EX ψ ]> <->        
+        <( {Vis e k}, w |= φ )> /\ (exists (v: encode e), <[ {k v}, {Obs e v} |= ψ ]>).
   Proof with eauto with ctl.
     split; intros.
     - cdestruct H. 
-      split.
-      + now apply ktrans_not_done with (Ret x) t w0.
-      + cdestruct H; now ddestruction TR.
-    - destruct H as ([] & ?); exists (Ctree.stuck).
-      + exists (Done x); split.
-        * apply ktrans_done...
-        * now constructor.
-      + exists (Finish e v x); split.
-        * apply ktrans_finish...
-        * now constructor.
+      apply ktrans_vis in TR as (v & -> & ? & ?).
+      rewrite <- H0 in H.
+      split... 
+    - destruct H as (Hd & v & ?).
+      csplit...
+      exists (k v), (Obs e v); split...
+      apply ktrans_vis.
+      exists v; split2...
+      now apply ctll_not_done in Hd.
   Qed.
 
-  Lemma ex_done: forall (t: ctree E X) φ w,
-      <[ t, w |= EX done φ ]> <-> not_done w /\ (exists (x: X), t ~ Ret x /\ φ x w).
-  Proof.
+  Lemma ex_done: forall (t: ctree E X) φ ψ w,
+      <[ t, w |= φ EX done ψ ]> <-> <( t, w |= φ )> /\ (exists (x: X), t ~ Ret x /\ ψ x w).
+  Proof with eauto with ctl.
     split; intros.
     - cdestruct H.
-      split; [now apply ktrans_not_done with t t0 w0|].
+      split...
       cbn in *.
       setoid_rewrite (ctree_eta t).
+      setoid_rewrite (ctree_eta t) in Hp.
       setoid_rewrite (ctree_eta t0) in H.
       remember (observe t) as T.
       remember (observe t0) as T'.
       clear HeqT t HeqT' t0.
       dependent induction TR; intros.
-      + setoid_rewrite <- (ctree_eta t) in IHTR.
-        destruct (IHTR H) as (x & Heq & Hφ).
+      + rewrite sb_guard in Hp.
+        setoid_rewrite <- (ctree_eta t) in IHTR.
+        destruct (IHTR Hp) as (x & Heq & Hφ)...
         exists x; split; auto.
         now apply sb_guard_l.
-      + inv H1; inv H.
-      + inv H1.
+      + cdestruct H1; inv H.
+      + cdestruct H1. 
       + exists x; intuition.
         now cdestruct H0.
       + exists x; intuition.
         now cdestruct H0.
-    - destruct H as (Hw & x & Heq & H).
-      rewrite Heq.
-      apply ex_done_ret; intuition.
+    - destruct H as (Hφ & x & Heq & H).
+      rewrite Heq in Hφ |- *.
+      csplit...
+      pose proof (ctll_not_done _ _ _ _ Hφ) as Hd.
+      inv Hd.
+      + exists (Ctree.stuck), (Done x); split.
+        * now apply ktrans_done.
+        * now csplit.
+      + exists (Ctree.stuck), (Finish e v x); split.
+        * now apply ktrans_finish.
+        * now csplit.
   Qed.
 End BasicLemmas.
 
-Section BindLemmas.
-  Context {E: Type} {HE: Encode E}.
-
-  Opaque Ctree.stuck.
-  Typeclasses Transparent equ.
-  Theorem ex_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ r,
-      <[ t, w |= EX done= r w' ]> ->
-      <( {k r}, w' |= EX φ )> ->
-      <( {x <- t ;; k x}, w |= EX φ )>.
-  Proof with eauto with ctl.
-    intros.
-    cdestruct H.
-    cbn in TR.
-    rewrite (ctree_eta t).
-    rewrite (ctree_eta t0) in H; [|exact (equ eq)].
-    remember (observe t) as T; clear t HeqT.
-    remember (observe t0) as T'; clear t0 HeqT'.
-    hinduction TR before Y; intros; subst.
-    - rewrite bind_guard.
-      apply ex_guard.
-      eapply IHTR with w'0 r...
-    - rewrite bind_br.
-      inv H; inv H1.
-    - inv H1.
-    - cdestruct H0; ddestruction H0; destruct H0; subst.
-      rewrite bind_ret_l...
-    - cdestruct H0; ddestruction H0; destruct H0; subst.
-      rewrite bind_ret_l...
-  Qed.
-End BindLemmas.
