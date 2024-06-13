@@ -65,7 +65,7 @@ Generalizable All Variables.
   | |- @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_A ?p ?q) ?t ?w =>
       rewrite ctlr_au_ax, ctlr_or; left
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_E ?p ?q) ?t ?w =>
-      rewrite ctll_eu_ex, ctlr_or; left
+      rewrite ctll_eu_ex, ctll_or; left
   | |- @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_E ?p ?q) ?t ?w =>
       rewrite ctlr_eu_ex, ctlr_or; left
   (* Quantifier is a variable, destruct it *)
@@ -109,12 +109,11 @@ end.
   | <( ?t, ?w |= ?p /\ ?q )> =>
       let Hp := fresh "H"p in
       let Hq := fresh "H"q in
-      rewrite ctll_and in H; destruct H as [Hp Hq]                                                      
+      rewrite ctll_and in H; destruct H as [Hp Hq]            
   | <[ ?t, ?w |= ?p /\ ?q ]> =>
       let Hp := fresh "H"p in
       let Hq := fresh "H"q in
       rewrite ctlr_and in H; destruct H as [Hp Hq]
-
   (* OR *)                                         
   | <( ?t, ?w |= ?p \/ ?q )> =>
       rewrite ctll_or in H; destruct H as [H | H]
@@ -127,7 +126,7 @@ end.
   | @entailsL ?M ?W ?HE ?KMS ?X (CxL Q_A ?p ?q) ?t ?w =>
       let Hs' := fresh "Hs" in
       let Hp' := fresh "Hp" in
-      rewrite ctll_ax in H; destruct H as (Hp & Hs' & H)
+      rewrite ctll_ax in H; destruct H as (Hp' & Hs' & H)
   | @entailsL ?M ?W ?HE ?KMS ?X (CxL Q_E ?p ?q) ?t ?w =>
       let t' := fresh "t" in
       let w' := fresh "w" in
@@ -167,10 +166,15 @@ end.
   (* G *)          
   | @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_A ?φ) ?t ?w =>
       let Hp := fresh "Hp" in
-      rewrite ctll_ag_ax, unfold_entailsL in H; destruct H as [Hp H]
+      let Hs := fresh "Hs" in
+      rewrite ctll_ag_ax, unfold_entailsL in H; destruct H as (Hp & Hs & H)
   | @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_E ?φ) ?t ?w =>
       let Hp := fresh "Hp" in
-      rewrite ctll_eg_ex, unfold_entailsL in H; destruct H as [Hp H]
+      let Hs := fresh "Hs" in
+      let t' := fresh "t" in
+      let w' := fresh "w" in
+      let TR' := fresh "TR" in
+      rewrite ctll_eg_ex, unfold_entailsL in H; destruct H as (Hp & t' & w' & TR' & H)
   | @entailsL ?M ?W ?HE ?KMS ?X (Cg ?c ?p) ?t ?w =>
       is_var c; destruct c; cdestruct H
   end.

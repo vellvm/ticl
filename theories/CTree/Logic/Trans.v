@@ -585,8 +585,8 @@ Proof.
 Qed.
 
 Local Opaque Ctree.stuck.
-Lemma ktrans_to_done `{Encode E} {X Y}:
-  forall (t: ctree E X) (k: X -> ctree E Y) (x: X) w,
+Lemma ktrans_to_done `{Encode E} {X}:
+  forall (t: ctree E X) (x: X) w,
     [t, w] ↦ [Ctree.stuck, Done x] ->
     (t ~ Ret x /\ w = Pure).
 Proof.
@@ -607,8 +607,8 @@ Proof.
   - ddestruction HeqD.
 Qed.
 
-Lemma ktrans_to_finish `{Encode E} {X Y}:
-  forall (t: ctree E X) (k: X -> ctree E Y) (e: E) (v: encode e) (x: X) w,
+Lemma ktrans_to_finish `{Encode E} {X}:
+  forall (t: ctree E X) (e: E) (v: encode e) (x: X) w,
     [t, w] ↦ [Ctree.stuck, Finish e v x] ->
     (t ~ Ret x /\ w = Obs e v).
 Proof.
