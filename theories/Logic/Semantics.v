@@ -525,7 +525,7 @@ Qed.
       let w' := fresh "w" in
       let TR' := fresh "TR" in
       rewrite unfold_entailsR in H0; induction H0 as [? ? Hp | ? ? Heu];
-      [| destruct Heu as (Hp & t' & w' & TR & Heu & HInd)]
+      [| destruct Heu as (Hp & t' & w' & TR' & Heu & HInd)]
   | @entailsR ?M ?W ?HE ?KMS ?X (CuR ?c ?φ ?ψ) ?t ?w =>
       is_var c; destruct c; cinduction H0
   end.

@@ -365,32 +365,31 @@ Section CTreeTrans.
   Qed.
 
   Typeclasses Transparent equ.
-  Lemma ktrans_bind_r{X Y}: forall (t: ctree E Y) (u: ctree E X) (k: Y -> ctree E X) (y: Y) w w_ w',
-      [t, w] ↦ [stuck, w_] ->
-      done_eq y w_ ->
-      [k y, w] ↦ [u, w'] ->
-      [y <- t ;; k y, w] ↦ [u, w'].
+  Lemma ktrans_bind_r{X Y}: forall (t t': ctree E Y) (k: Y -> ctree E X) w w',
+      not_done w' ->
+      [t, w] ↦ [t', w'] ->      
+      [x <- t ;; k x, w] ↦ [x <- t' ;; k x, w'].
   Proof.
-    intros.
-    generalize dependent y.
-    cbn in H; dependent induction H; intros.
-    - assert(Hx: t ≅ Guard t0) by (step; cbn; rewrite <- x0; reflexivity).
-      rewrite Hx.
-      rewrite bind_guard.
-      econstructor.
-      eapply IHktrans_; eauto.
-    - inv H1; inv H.
-    - inv H1.
-    - dependent destruction H0.
-      observe_equ x1.
-      rewrite Eqt.
-      now rewrite bind_ret_l.
-    - dependent destruction H0.
-      observe_equ x1.
-      setoid_rewrite Eqt.
-      now rewrite bind_ret_l.
+    intros; cbn in *.
+    rewrite (ctree_eta t), (ctree_eta t').
+    remember (observe t) as T.
+    remember (observe t') as T'.
+    clear HeqT t HeqT' t'.
+    revert H k.
+    induction H0; intros.
+    - rewrite bind_guard.
+      constructor.
+      now apply IHktrans_.
+    - rewrite bind_br.
+      eapply KtransBr with i; auto.
+      now rewrite H0.
+    - rewrite bind_vis.
+      eapply KtransObs; auto.
+      now rewrite H0.
+    - inv H0.
+    - inv H0.
   Qed.      
-  Typeclasses Opaque equ.
+
   
   Opaque Ctree.stuck.  
   Lemma ktrans_bind_inv_aux {X Y} (w w': World E)(T U: ctree' E Y) :

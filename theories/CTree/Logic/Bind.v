@@ -279,8 +279,32 @@ Section BindLemmas.
       now rewrite bind_ret_l.
     - cright; csplit.
       + now apply ctll_bind_l.
-      + (* Seems like I have the correct induction scheme now... *)
-  Admitted.
+      + exists (x <- t0;; k x), w0; split...
+        assert(Hd: not_done w0) by now apply ctll_not_done in HInd.
+        apply ktrans_bind_r...
+  Qed.
+
+  Theorem eur_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r,
+      <[ t, w |= φ EU EN done= r w' ]> ->
+      <[ {k r}, w' |= φ EU ψ ]> ->
+      <[ {x <- t ;; k x}, w |= φ EU ψ ]>.
+  Proof with eauto with ctl.
+    intros.
+    cinduction H; intros.
+    - apply ex_done in Hp as (Hw & ? & Heqt & <- & ->).
+      rewrite Heqt in Hw |- *.
+      now rewrite bind_ret_l.
+    - cright; csplit.
+      + now apply ctll_bind_l.
+      + exists (x <- t0;; k x), w0; split...
+        destruct Heu.
+        * cdestruct H.
+          cdestruct Hp0.
+          apply ktrans_bind_r...
+        * destruct H.
+          apply ctll_not_done in H.
+          apply ktrans_bind_r...
+  Qed.
   
   (*| Bind lemma for [AG] |*)
   Notation MP X := (rel (ctree E X) (World E)).
@@ -347,7 +371,7 @@ Section BindLemmas.
           specialize (HInd _ _ TRt0).
           destruct HInd as (Hp' & ? & ?).
           inv Hd.
-          -- apply ktrans_to_done in TRt0 as (? & ->).             
+          -- apply ktrans_to_done in TRt0 as (? & ->).
              apply ctll_not_done in Hp'; inv Hp'.
           -- apply ktrans_to_finish in TRt0 as (? & ->).
              apply ctll_not_done in Hp'; inv Hp'.
@@ -367,4 +391,83 @@ Section BindLemmas.
     cbn.
     apply in_bind_ctx1; auto.
   Qed.
+
+  (*| Bind lemma for [EG] |*)
+  Program Definition eg_bind_clos{X Y} φ r wr: mon (MP Y) :=
+    {| body R t w :=
+        bind_ctx1
+          (fun (t: ctree E X) => <[ t, w |= φ EU (EN done= r wr) ]>)
+          (fun (k: X -> ctree E Y) => R (k r) wr)
+          t
+    |}.
+  Next Obligation.
+    revert H0.
+    apply leq_bind_ctx1; intros.
+    apply in_bind_ctx1; auto.
+  Qed.
+
+  Lemma eg_bind_eg{X Y} (φ: ctll E) (r: X) (wr: World E):
+      eg_bind_clos (Y:=Y) φ r wr <= cegt (entailsL Y φ).
+  Proof with auto with ctl.  
+    apply Coinduction.
+    intros R t w; cbn.
+    apply (leq_bind_ctx1 _ _
+             (fun t => cex (entailsL Y φ)
+                      (cegT (entailsL Y φ)
+                         (eg_bind_clos φ r wr) R) t w)).
+    clear t.
+    intros t Heu k Hk.
+    destruct Hk as (Hφ & x & w' & TR & HP).
+    cinduction Heu.
+    - (* EN done R *)
+      apply ex_done in Hp as (Hd & y & Heqt & -> & ->).
+      cdestruct Hd; clear H.
+      rewrite Heqt, bind_ret_l.
+      split; auto.
+      exists x, w'; split...
+      now apply (id_T (cegF (entailsL Y φ))). 
+    - (* EX *)
+      destruct HInd as (Hφ' & t_ & w_ & TR_ & Hg).
+      split.
+      + now apply ctll_bind_l.
+      + apply ktrans_bind_inv in TR_ as
+            [(t0' & TR1 & Hd_ & Heq) | (x' & w1 & TRt0 & Hd & TRk)].
+        * exists (x <- t0 ;; k x), w0.
+          split...
+          eapply ktrans_bind_r...
+          apply (bT_T (cegF (entailsL Y φ))).
+          split...
+          exists t_, w_; split...
+          rewrite Heq.
+          apply ktrans_bind_r...
+        * exists (x <- t0;; k x), w0; split.
+          -- apply ktrans_bind_r...
+          -- inv Hd.
+             ++ apply ktrans_to_done in TRt0 as (Heqt & ->).
+                rewrite Heqt, bind_ret_l.
+                apply (bT_T (cegF (entailsL Y φ))).
+                rewrite Heqt, bind_ret_l in Hφ'.
+                split...
+                exists t_, w_; split...
+             ++ apply ktrans_to_finish in TRt0 as (Heqt & ->).
+                rewrite Heqt, bind_ret_l.
+                apply (bT_T (cegF (entailsL Y φ))).
+                rewrite Heqt, bind_ret_l in Hφ'.
+                split...
+                exists t_, w_; split...
+  Qed.
+
+  Lemma eg_bind_r{X Y}: forall (t: ctree E X) r
+                          w w' (k: X -> ctree E Y) φ,
+      <[ t, w |= φ EU EN done= r w' ]> ->
+      <( {k r}, w' |= EG φ )> ->
+      <( {x <- t ;; k x} , w |= EG φ )>.
+  Proof.
+    intros.
+    rewrite unfold_entailsL.
+    apply (ft_t (eg_bind_eg φ r w')).
+    rewrite unfold_entailsL in H0.
+    apply in_bind_ctx1; auto.
+  Qed.
+  
 End BindLemmas.
