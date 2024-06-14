@@ -216,7 +216,7 @@ Section BindLemmas.
   Proof with eauto with ctl.
     intros.
     cinduction H. 
-    - apply an_done in Hp as (Hd & y & Heqt & HR).
+    - apply ax_done in Hp as (Hp & y & Heqt & HR).
       rewrite Heqt, bind_ret_l.
       now apply H0.
     - cright; csplit.
@@ -243,7 +243,7 @@ Section BindLemmas.
   Proof with eauto with ctl.
     intros.
     cinduction H. 
-    - apply an_done in Hp as (Hd & y & Heqt & HR).
+    - apply ax_done in Hp as (Hp & y & Heqt & HR).
       rewrite Heqt, bind_ret_l.
       now apply H0.
     - cright; csplit.
@@ -335,7 +335,7 @@ Section BindLemmas.
     intros t Hau k Hk.    
     cinduction Hau.
     - (* AN done R *)
-      apply an_done in Hp as (Hw & x & Heq & HPost).
+      apply ax_done in Hp as (Hp & x & Heq & HPost).
       specialize (Hk _ _ HPost); remember (k x) as K;
         destruct Hk; subst; split2.      
       + rewrite Heq, bind_ret_l; auto. 
@@ -393,11 +393,11 @@ Section BindLemmas.
   Qed.
 
   (*| Bind lemma for [EG] |*)
-  Program Definition eg_bind_clos{X Y} φ r wr: mon (MP Y) :=
+  Program Definition eg_bind_clos{X Y} φ Post: mon (MP Y) :=
     {| body R t w :=
         bind_ctx1
-          (fun (t: ctree E X) => <[ t, w |= φ EU (EN done= r wr) ]>)
-          (fun (k: X -> ctree E Y) => R (k r) wr)
+          (fun (t: ctree E X) => <[ t, w |= φ EU (EN done Post) ]>)
+          (fun (k: X -> ctree E Y) => forall r wr, Post r wr -> R (k r) wr)
           t
     |}.
   Next Obligation.
@@ -406,25 +406,25 @@ Section BindLemmas.
     apply in_bind_ctx1; auto.
   Qed.
 
-  Lemma eg_bind_eg{X Y} (φ: ctll E) (r: X) (wr: World E):
-      eg_bind_clos (Y:=Y) φ r wr <= cegt (entailsL Y φ).
+  Lemma eg_bind_eg{X Y} (φ: ctll E) Post:
+      eg_bind_clos (X:=X) (Y:=Y) φ Post <= cegt (entailsL Y φ).
   Proof with auto with ctl.  
     apply Coinduction.
     intros R t w; cbn.
     apply (leq_bind_ctx1 _ _
              (fun t => cex (entailsL Y φ)
                       (cegT (entailsL Y φ)
-                         (eg_bind_clos φ r wr) R) t w)).
+                         (eg_bind_clos φ Post) R) t w)).
     clear t.
     intros t Heu k Hk.
-    destruct Hk as (Hφ & x & w' & TR & HP).
-    cinduction Heu.
+    cinduction Heu; intros.
     - (* EN done R *)
-      apply ex_done in Hp as (Hd & y & Heqt & -> & ->).
+      apply ex_done in Hp as (Hd & y & Heqt & HPosty). 
       cdestruct Hd; clear H.
       rewrite Heqt, bind_ret_l.
-      split; auto.
-      exists x, w'; split...
+      destruct (Hk _ _ HPosty) as (Hφ & k' & w' & TR & HR).
+      split...
+      exists k', w'; split...
       now apply (id_T (cegF (entailsL Y φ))). 
     - (* EX *)
       destruct HInd as (Hφ' & t_ & w_ & TR_ & Hg).
@@ -457,17 +457,26 @@ Section BindLemmas.
                 exists t_, w_; split...
   Qed.
 
-  Lemma eg_bind_r{X Y}: forall (t: ctree E X) r
-                          w w' (k: X -> ctree E Y) φ,
-      <[ t, w |= φ EU EN done= r w' ]> ->
-      <( {k r}, w' |= EG φ )> ->
+  Lemma eg_bind_r{X Y}: forall (t: ctree E X) w (k: X -> ctree E Y) Post φ,
+      <[ t, w |= φ EU EN done Post ]> ->
+      (forall r w', Post r w' -> <( {k r}, w' |= EG φ )>) ->
       <( {x <- t ;; k x} , w |= EG φ )>.
   Proof.
     intros.
     rewrite unfold_entailsL.
-    apply (ft_t (eg_bind_eg φ r w')).
-    rewrite unfold_entailsL in H0.
-    apply in_bind_ctx1; auto.
+    apply (ft_t (eg_bind_eg φ Post)); cbn.    
+    apply in_bind_ctx1; eauto.
+  Qed.
+  
+  Lemma eg_bind_r_eq{X Y}: forall (t: ctree E X) r
+                          w wr (k: X -> ctree E Y) φ,
+      <[ t, w |= φ EU EN done= r wr ]> ->
+      <( {k r}, wr |= EG φ )> ->
+      <( {x <- t ;; k x} , w |= EG φ )>.
+  Proof.
+    intros.
+    apply eg_bind_r with (Post:=fun r_ w_ => r = r_ /\ wr = w_); auto.
+    now intros * (-> & ->).
   Qed.
   
 End BindLemmas.

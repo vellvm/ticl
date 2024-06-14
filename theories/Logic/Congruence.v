@@ -468,6 +468,22 @@ Section CtllEquations.
       apply ctll_au_ax; apply ctll_or.
       right; auto.
   Qed.
+
+  Lemma ctll_ag_refl: forall (p: ctll E),
+      <( AG p )> ⋖ p.
+  Proof.
+    unfold impl_ctll; intros.
+    rewrite ctll_ag_ax, ctll_ax in H.
+    now destruct H.
+  Qed.
+
+  Lemma ctll_eg_refl: forall (p: ctll E),
+      <( EG p )> ⋖ p.
+  Proof.
+    unfold impl_ctll; intros.
+    rewrite ctll_eg_ex, ctll_ex in H.
+    now destruct H.
+  Qed.
   
   Lemma ctll_au_involutive: forall (p q: ctll E),
       <( p AU q )> ⩸ <( p AU (p AU q) )>.
@@ -501,30 +517,25 @@ Section CtllEquations.
   Lemma ctll_ag_involutive: forall (p: ctll E),
       <( AG p )> ⩸ <( AG (AG p) )>.
   Proof.
-    split; unfold impl_ctll; intros;
-      revert H; revert t w; coinduction R CIH; intros t' w' Hag.     
-    - constructor; auto. 
+    split.
+    - unfold impl_ctll; intros;
+        revert H; revert t w; coinduction R CIH; intros t' w' Hag.     
+      constructor; auto. 
       apply ctll_ag_ax in Hag; rewrite unfold_entailsL in Hag; destruct Hag, H0.
       split; auto. 
-    - rewrite ctll_ag_ax in Hag; rewrite unfold_entailsL in Hag; destruct Hag, H0.
-      rewrite ctll_ag_ax, ctll_ax in H. 
-      destruct H.
-      constructor; auto.
+    - apply ctll_ag_refl. 
   Qed.
 
   Lemma ctll_eg_involutive: forall (p: ctll E),
       <( EG p )> ⩸ <( EG (EG p) )>.
   Proof.
-    split;  unfold impl_ctll; intros;
-      revert H; revert t w; coinduction R CIH; intros t' w' Heg.     
-    - constructor; auto.
+    split.
+    - unfold impl_ctll; intros;
+        revert H; revert t w; coinduction R CIH; intros t' w' Heg.     
+      constructor; auto.
       apply ctll_eg_ex in Heg; rewrite unfold_entailsL in Heg; destruct Heg, H0 as (t_ & w_  & TR & H0).
       exists t_, w_; intuition.
-    - apply ctll_eg_ex in Heg; rewrite unfold_entailsL in Heg; destruct Heg, H0 as (t_ & w_ & TR & H0).
-      rewrite ctll_eg_ex in H.
-      apply ctll_ex in H as (Hs & t0 & w0 & TR0 & ?).
-      constructor; auto.
-      exists t_, w_; intuition.
+    - apply ctll_eg_refl. 
   Qed.
 End CtllEquations.
 

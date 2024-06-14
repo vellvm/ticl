@@ -47,6 +47,38 @@ Section BasicLemmas.
     intros * Hr.
     now cleft. 
   Qed.
+
+  Lemma aur_ret: forall (r: X) w φ ψ,
+      <[ {Ret r}, w |= ψ \/ φ AX ψ ]> <->
+      <[ {Ret r}, w |= φ AU ψ ]>.
+  Proof with auto with ctl.
+    split; intros H; cdestruct H.
+    - now cleft.
+    - cright; csplit; cdestruct H...
+      intros t' w' TR.
+      apply ctll_not_done in Hp.
+      specialize (H _ _ TR).
+      inv Hp.
+      + apply ktrans_done in TR as (-> & ?).
+        rewrite H0 in H |- *.
+        now cleft.
+      + apply ktrans_finish in TR as (-> & ?).
+        rewrite H0 in H |- *.
+        now cleft.
+    - now cleft.
+    - cdestruct H.
+      cright; csplit...
+      intros t' w' TR.
+      apply ctll_not_done in Hp.
+      specialize (H _ _ TR).
+      inv Hp.
+      + apply ktrans_done in TR as (-> & ?).
+        rewrite H0 in H |- *.
+        now apply aur_stuck in H.
+      + apply ktrans_finish in TR as (-> & ?).
+        rewrite H0 in H |- *.
+        now apply aur_stuck in H.
+  Qed.
   
   Lemma aul_br: forall n (k: fin' n -> ctree E X) w ψ φ,
       (<( {Br n k}, w |= φ )> \/
@@ -156,6 +188,14 @@ Section BasicLemmas.
           exists i; split2...
           now apply ctll_not_done in Hp.
   Qed.
-  
+
+  Lemma aur_not_done: forall φ ψ ξ (t: ctree E X) (w: World E),
+      <[ t, w |= φ AU (ψ AX ξ) ]> ->
+      not_done w.
+  Proof.
+    intros.
+    cdestruct H; cdestruct H;
+      now apply can_step_not_done with t.
+  Qed.
 End BasicLemmas.
 

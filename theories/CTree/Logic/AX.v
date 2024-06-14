@@ -120,24 +120,28 @@ Section BasicLemmas.
         apply H0.
   Qed.
 
-  Lemma an_done: forall (t: ctree E X) φ w,
-      <[ t, w |= AN done φ ]> <-> not_done w /\ (exists (x: X), t ~ Ret x /\ φ x w).
+  Typeclasses Transparent equ.
+  Lemma ax_done: forall (t: ctree E X) φ ψ w,
+      <[ t, w |= φ AX done ψ ]> <-> <( t, w |= φ )> /\ (exists (x: X), t ~ Ret x /\ ψ x w).
   Proof with auto with ctl.
     split; intros.
     - cdestruct H; destruct Hs as (t' & w' & TR).
       cbn in *.
+      assert(Hd: not_done w) by now apply ctll_not_done in Hp.
       setoid_rewrite (ctree_eta t).
+      rewrite (ctree_eta t) in Hp.
       remember (observe t) as T.
       specialize (H _ _ TR).
-      apply ctll_not_done in Hp.
-      rewrite (ctree_eta t') in H.
+      rewrite (ctree_eta t') in H; [|exact (equ eq)].
       remember (observe t') as T'.
       clear HeqT t HeqT' t'.
       dependent induction TR; intros.
       + setoid_rewrite <- (ctree_eta t) in IHTR.
         split.
-        * now apply ktrans_not_done with t t' w'.
-        * destruct (IHTR Hp H) as (_ & x & ? & ?).
+        * rewrite sb_guard in Hp |- *.
+          edestruct IHTR...
+        * rewrite sb_guard in Hp.
+          destruct (IHTR Hp H) as (_ & x & ? & ?)...
           exists x; split...
           now apply sb_guard_l.
       + inv H1; inv H.
@@ -148,17 +152,18 @@ Section BasicLemmas.
       + split... 
         exists x; intuition.
         now cdestruct H0.
-    - destruct H as (Hw & x & Heq & H).
-      rewrite Heq, ctlr_ax; split...
-      + apply ctll_now...
-      + split.
-        * apply can_step_ret...
-        * intros t' w' TR.
-          inv Hw.
-          -- apply ktrans_done in TR as (-> & ->).
-             apply ctlr_done...
-          -- apply ktrans_finish in TR as (-> & ->).
-             apply ctlr_done...
+    - destruct H as (Hφ & x & Heq & H).
+      rewrite Heq in Hφ |- *.
+      rewrite ctlr_ax; split2...
+      + apply ctll_not_done in Hφ.
+        apply can_step_ret...
+      + intros t' w' TR.
+        apply ctll_not_done in Hφ.
+        inv Hφ.
+        -- apply ktrans_done in TR as (-> & ->); [|exact (equ eq)].
+           apply ctlr_done...
+        -- apply ktrans_finish in TR as (-> & ->); [|exact (equ eq)].
+           apply ctlr_done...
   Qed.
   
 End BasicLemmas.

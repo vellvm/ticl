@@ -140,5 +140,13 @@ Section BasicLemmas.
           exists i.
           apply H.
   Qed.
-  
+
+  Lemma eur_not_done: forall φ ψ (t: ctree E X) (w: World E),
+      <[ t, w |= φ EU EN done ψ ]> ->
+      not_done w.
+  Proof.
+    intros.
+    cdestruct H; cdestruct H;
+      now apply ktrans_not_done with t t0 w0.
+  Qed.
 End BasicLemmas.
