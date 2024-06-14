@@ -37,7 +37,7 @@ Generalizable All Variables.
   | |- @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_A ?p) ?t ?w =>
       rewrite ctll_ag_ax, ctll_ax; split2
   | |- @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_E ?p) ?t ?w =>
-      rewrite ctll_eg_ex, ctll_ex; split2
+      rewrite ctll_eg_ex, ctll_ex; split
   (* Quantifier is a variable, destruct it *)
   | |- @entailsL ?M ?W ?HE ?KMS ?X (Cg ?c ?p ?q) ?t ?w =>
       is_var c; destruct c; csplit

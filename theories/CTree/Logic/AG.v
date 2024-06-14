@@ -10,16 +10,11 @@ From CTree Require Import
   CTree.Core
   CTree.Equ
   CTree.SBisim
-  CTree.Interp.State
   CTree.Logic.Trans
   CTree.Logic.CanStep
-  Logic.Setoid
   CTree.Logic.AX
   CTree.Logic.AF
-  Logic.Ctl
-  Logic.Tactics
-  Logic.Kripke
-  Events.WriterE.
+  Logic.Ctl.
 
 Generalizable All Variables.
 
@@ -31,7 +26,7 @@ Local Open Scope ctree_scope.
 Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
-  Lemma ag_now: forall e (k: encode e -> ctree E X)
+  Lemma ag_vis: forall e (k: encode e -> ctree E X)
                   (v : encode e) w φ,
       (<( {Vis e k}, w |= φ )> /\ forall v, <( {k v}, {Obs e v} |= AG φ )>) <->
          <( {Vis e k}, w |= AG φ )>.
