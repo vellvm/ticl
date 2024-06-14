@@ -40,7 +40,7 @@ Section BasicLemmas.
     - now apply can_step_stuck in Hs.
   Qed.
 
-  Lemma au_ret_r: forall (r: X) w φ ψ,      
+  Lemma aul_ret: forall (r: X) w φ ψ,      
       <( {Ret r}, w |= ψ )> ->
       <( {Ret r}, w |= φ AU ψ )>.
   Proof.
@@ -48,57 +48,113 @@ Section BasicLemmas.
     now cleft. 
   Qed.
   
-  Lemma au_br: forall n (k: fin' n -> ctree E X) w ψ φ,
-      not_done w ->
+  Lemma aul_br: forall n (k: fin' n -> ctree E X) w ψ φ,
       (<( {Br n k}, w |= φ )> \/
          <( {Br n k}, w |= ψ )> /\
-           forall (i: fin' n), <( {k i}, w |= ψ AU φ )>) ->
+           forall (i: fin' n), <( {k i}, w |= ψ AU φ )>) <->
       <( {Br n k}, w |= ψ AU φ )>.     
   Proof with auto with ctl.
-   intros e k * Hd [Hφ | (Hψ & H)].
-   - now cleft. 
-   - cright; csplit...
-     + now apply can_step_br.
-     + intros t' w' TR'.
-       apply ktrans_br in TR' as (? & -> & -> & ?).
-       apply H.
-  Qed.
-
-  Lemma au_br_inv: forall n (k: fin' n -> ctree E X) w ψ φ,
-      <( {Br n k}, w |= ψ AU φ )> ->
-        (<( {Br n k}, w |= φ )> \/
-          forall (i: fin' n), <( {k i}, w |= ψ AU φ )>).
-  Proof with eauto with ctl.
-    intros.
-    cdestruct H.
-    - now left. 
+    split; intros.
+    - destruct H as [Hφ | (Hψ & H)].
+      + now cleft. 
+      + cright; csplit...
+        * apply ctll_not_done in Hψ.
+          now apply can_step_br.
+        * intros t' w' TR'.
+          apply ktrans_br in TR' as (? & -> & -> & ?).
+          apply H.
     - cdestruct H.
-      right.
-      intros i.
-      apply H, ktrans_br...
+      + now left.
+      + right; split...
+        * now cdestruct H.
+        * cdestruct H...
+          intro i.
+          apply H.
+          apply ktrans_br.
+          exists i; split2...
+          now apply ctll_not_done in Hp.
   Qed.
 
-  Lemma au_vis_r: forall (e: E) (k: encode e -> ctree E X) w φ ψ,
-      not_done w ->
-      <( {Vis e k}, w |= φ )> ->
-      <( {Vis e k}, w |= ψ AU φ )>.        
-  Proof.
-    intros e k * Hd H. 
-    now cleft. 
-  Qed.
-  
-  Lemma au_vis_l: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ ψ,
-      not_done w ->
-      <( {Vis e k}, w |= ψ )> ->
-      (forall (x: encode e), <( {k x}, {Obs e x} |= ψ AU φ )>) ->
-      <( {Vis e k}, w |= ψ AU φ )>.        
+    
+  Lemma aul_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w ψ φ,
+      (<( {Vis e k}, w |= φ )> \/
+         <( {Vis e k}, w |= ψ )> /\
+           forall (v: encode e), <( {k v}, {Obs e v} |= ψ AU φ )>) <->
+      <( {Vis e k}, w |= ψ AU φ )>.     
   Proof with auto with ctl.
-    intros e k wit * Hd Hψ H. 
-    cright; csplit...    
-    + now apply can_step_vis.
-    + intros t' w' TR'.
-      apply ktrans_vis in TR' as (? & -> & ? & ?).
-      now rewrite <- H0.
+    split; intros.
+    - destruct H as [Hφ | (Hψ & H)].
+      + now cleft. 
+      + cright; csplit...
+        * apply ctll_not_done in Hψ.
+          now apply can_step_vis.
+        * intros t' w' TR'.
+          apply ktrans_vis in TR' as (? & -> & <- & ?).
+          apply H.
+    - cdestruct H.
+      + now left.
+      + right; split...
+        * now cdestruct H.
+        * cdestruct H...
+          intro i.
+          apply H.
+          apply ktrans_vis.
+          exists i; split2...
+          now apply ctll_not_done in Hp.
+  Qed.
+
+  Lemma aur_br: forall n (k: fin' n -> ctree E X) w ψ φ,
+      (<[ {Br n k}, w |= φ ]> \/
+         <( {Br n k}, w |= ψ )> /\
+           forall (i: fin' n), <[ {k i}, w |= ψ AU φ ]>) <->
+      <[ {Br n k}, w |= ψ AU φ ]>.     
+  Proof with auto with ctl.
+    split; intros.
+    - destruct H as [Hφ | (Hψ & H)].
+      + now cleft. 
+      + cright; csplit...
+        * apply ctll_not_done in Hψ.
+          now apply can_step_br.
+        * intros t' w' TR'.
+          apply ktrans_br in TR' as (? & -> & -> & ?).
+          apply H.
+    - cdestruct H.
+      + now left.
+      + right; split...
+        * now cdestruct H.
+        * cdestruct H...
+          intro i.
+          apply H.
+          apply ktrans_br.
+          exists i; split2...
+          now apply ctll_not_done in Hp.
+  Qed.
+    
+  Lemma aur_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w ψ φ,
+      (<[ {Vis e k}, w |= φ ]> \/
+         <( {Vis e k}, w |= ψ )> /\
+           forall (v: encode e), <[ {k v}, {Obs e v} |= ψ AU φ ]>) <->
+      <[ {Vis e k}, w |= ψ AU φ ]>.     
+  Proof with auto with ctl.
+    split; intros.
+    - destruct H as [Hφ | (Hψ & H)].
+      + now cleft. 
+      + cright; csplit...
+        * apply ctll_not_done in Hψ.
+          now apply can_step_vis.
+        * intros t' w' TR'.
+          apply ktrans_vis in TR' as (? & -> & <- & ?).
+          apply H.
+    - cdestruct H.
+      + now left.
+      + right; split...
+        * now cdestruct H.
+        * cdestruct H...
+          intro i.
+          apply H.
+          apply ktrans_vis.
+          exists i; split2...
+          now apply ctll_not_done in Hp.
   Qed.
   
 End BasicLemmas.

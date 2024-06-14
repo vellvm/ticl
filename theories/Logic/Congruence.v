@@ -201,10 +201,10 @@ Section EquivCtllFormulas.
       + left; auto.
       + right; auto.
         split2; auto.
-    - cinduction Hu; rewrite unfold_entailsL. 
+    - cinduction Hu; rewrite unfold_entailsL.
       + left; auto.
       + right; split; auto.
-        exists t_, w_; auto.
+        exists t0, w0; auto.
   Qed.
   
   Global Add Parametric Morphism: CuL
@@ -385,9 +385,11 @@ Section CtllEquations.
       <( p EU q )> ⩸ <( q \/ (p EX (p EU q)) )>.
   Proof.
     intros p q; split; intros t w Hind.
-    - cinduction Hind; rewrite unfold_entailsL. 
+    - cinduction Hind.
       + now left.
-      + right; split; eauto.
+      + rewrite ctll_or; right.
+        rewrite ctll_ex; split; auto.
+        exists t0, w0; split; auto.
     - rewrite unfold_entailsL in Hind; destruct Hind.
       + now left. 
       + destruct H.
@@ -430,100 +432,100 @@ Section CtllEquations.
 
   Lemma ctll_ag_ax: forall (p: ctll E),
       <( AG p )> ⩸ <( p AX (AG p) )>.
-   Proof. 
-     split; intros t w Hp.
-     - step in Hp; inv Hp; split; auto.
-     - destruct Hp.
-       destruct H0; step; now constructor.
-   Qed.
+  Proof. 
+    split; intros t w Hp.
+    - step in Hp; inv Hp; split; auto.
+    - destruct Hp.
+      destruct H0; step; now constructor.
+  Qed.
+  
+  Lemma ctll_eg_ex: forall (p: ctll E),
+      <( EG p )> ⩸ <( p EX (EG p) )>.
+  Proof. 
+    split; intros t w Hp.
+    - split; step in Hp; inv Hp; auto.
+    - destruct Hp.
+      step; now constructor.
+  Qed.
+  
+  (* TODO: Prove the other direction seems to be tricky *)
+  Lemma ctll_auax_axau: forall (p q: ctll E),
+      <( p AU (p AX q) )> ⋖ <( p AX (p AU q) )>.
+  Proof.
+    intros * t w H.
+    cinduction H.
+    + apply ctll_ax in Hp as (? & ? & ?).
+      rewrite unfold_entailsL.
+      split2; auto.
+      intros t' w' TR.
+      apply ctll_au_ax.
+      rewrite ctll_or.
+      left.
+      now apply H1.
+    + rewrite ctll_ax.
+      split2; auto.
+      intros t' w' TR.       
+      apply ctll_au_ax; apply ctll_or.
+      right; auto.
+  Qed.
+  
+  Lemma ctll_au_involutive: forall (p q: ctll E),
+      <( p AU q )> ⩸ <( p AU (p AU q) )>.
+  Proof.
+    split; unfold impl_ctll; intros; cinduction H.
+    - apply ctll_au_ax, ctll_or.
+      left.
+      apply ctll_au_ax, ctll_or.
+      now left.
+    - apply ctll_au_ax, ctll_or.
+      right.
+      apply ctll_ax; split; auto.
+    - apply Hp.
+    - apply ctll_au_ax; right; split; auto.
+  Qed.
+  
+  Lemma ctll_eu_involutive: forall (p q: ctll E),
+      <( p EU q )> ⩸ <( p EU (p EU q) )>.
+  Proof.
+    split; unfold impl_ctll; intros; cinduction H.
+    - apply ctll_eu_ex, ctll_or; left. 
+      apply ctll_eu_ex, ctll_or.
+      now left.
+    - apply ctll_eu_ex, ctll_or; right.
+      apply ctll_ex; split; eauto.
+    - apply Hp.
+    - apply ctll_eu_ex, ctll_or; right.
+      apply ctll_ex; split; eauto.
+  Qed.
+  
+  Lemma ctll_ag_involutive: forall (p: ctll E),
+      <( AG p )> ⩸ <( AG (AG p) )>.
+  Proof.
+    split; unfold impl_ctll; intros;
+      revert H; revert t w; coinduction R CIH; intros t' w' Hag.     
+    - constructor; auto. 
+      apply ctll_ag_ax in Hag; rewrite unfold_entailsL in Hag; destruct Hag, H0.
+      split; auto. 
+    - rewrite ctll_ag_ax in Hag; rewrite unfold_entailsL in Hag; destruct Hag, H0.
+      rewrite ctll_ag_ax, ctll_ax in H. 
+      destruct H.
+      constructor; auto.
+  Qed.
 
-   Lemma ctll_eg_ex: forall (p: ctll E),
-       <( EG p )> ⩸ <( p EX (EG p) )>.
-   Proof. 
-     split; intros t w Hp.
-     - split; step in Hp; inv Hp; auto.
-     - destruct Hp.
-       step; now constructor.
-   Qed.
-
-   (* TODO: Prove the other direction seems to be tricky *)
-   Lemma ctll_auax_axau: forall (p q: ctll E),
-       <( p AU (p AX q) )> ⋖ <( p AX (p AU q) )>.
-   Proof.
-     intros * t w H.
-     cinduction H.
-     + apply ctll_ax in Hp as (? & ? & ?).
-       rewrite unfold_entailsL.
-       split2; auto.
-       intros t' w' TR.
-       apply ctll_au_ax.
-       rewrite ctll_or.
-       left.
-       now apply H1.
-     + rewrite ctll_ax.
-       split2; auto.
-       intros t' w' TR.       
-       apply ctll_au_ax; apply ctll_or.
-       right; auto.
-   Qed.
-
-   Lemma ctll_au_involutive: forall (p q: ctll E),
-       <( p AU q )> ⩸ <( p AU (p AU q) )>.
-   Proof.
-     split; unfold impl_ctll; intros; cinduction H.
-     - apply ctll_au_ax, ctll_or.
-       left.
-       apply ctll_au_ax, ctll_or.
-       now left.
-     - apply ctll_au_ax, ctll_or.
-       right.
-       apply ctll_ax; split; auto.
-     - apply Hp.
-     - apply ctll_au_ax; right; split; auto.
-   Qed.
-
-   Lemma ctll_eu_involutive: forall (p q: ctll E),
-       <( p EU q )> ⩸ <( p EU (p EU q) )>.
-   Proof.
-     split; unfold impl_ctll; intros; cinduction H.
-     - apply ctll_eu_ex, ctll_or; left. 
-       apply ctll_eu_ex, ctll_or.
-       now left.
-     - apply ctll_eu_ex, ctll_or; right.
-       apply ctll_ex; split; eauto.
-     - apply Hp.
-     - apply ctll_eu_ex, ctll_or; right.
-       apply ctll_ex; split; eauto.
-   Qed.
-   
-   Lemma ctll_ag_involutive: forall (p: ctll E),
-       <( AG p )> ⩸ <( AG (AG p) )>.
-   Proof.
-     split; unfold impl_ctll; intros;
-       revert H; revert t w; coinduction R CIH; intros t' w' Hag.     
-     - constructor; auto. 
-       apply ctll_ag_ax in Hag; rewrite unfold_entailsL in Hag; destruct Hag, H0.
-       split; auto. 
-     - rewrite ctll_ag_ax in Hag; rewrite unfold_entailsL in Hag; destruct Hag, H0.
-       rewrite ctll_ag_ax, ctll_ax in H. 
-       destruct H.
-       constructor; auto.
-   Qed.
-
-   Lemma ctll_eg_involutive: forall (p: ctll E),
-       <( EG p )> ⩸ <( EG (EG p) )>.
-   Proof.
-     split;  unfold impl_ctll; intros;
-       revert H; revert t w; coinduction R CIH; intros t' w' Heg.     
-     - constructor; auto.
-       apply ctll_eg_ex in Heg; rewrite unfold_entailsL in Heg; destruct Heg, H0 as (t_ & w_  & TR & H0).
-       exists t_, w_; intuition.
-     - apply ctll_eg_ex in Heg; rewrite unfold_entailsL in Heg; destruct Heg, H0 as (t_ & w_ & TR & H0).
-       rewrite ctll_eg_ex in H.
-       apply ctll_ex in H as (Hs & t0 & w0 & TR0 & ?).
-       constructor; auto.
-       exists t_, w_; intuition.
-   Qed.
+  Lemma ctll_eg_involutive: forall (p: ctll E),
+      <( EG p )> ⩸ <( EG (EG p) )>.
+  Proof.
+    split;  unfold impl_ctll; intros;
+      revert H; revert t w; coinduction R CIH; intros t' w' Heg.     
+    - constructor; auto.
+      apply ctll_eg_ex in Heg; rewrite unfold_entailsL in Heg; destruct Heg, H0 as (t_ & w_  & TR & H0).
+      exists t_, w_; intuition.
+    - apply ctll_eg_ex in Heg; rewrite unfold_entailsL in Heg; destruct Heg, H0 as (t_ & w_ & TR & H0).
+      rewrite ctll_eg_ex in H.
+      apply ctll_ex in H as (Hs & t0 & w0 & TR0 & ?).
+      constructor; auto.
+      exists t_, w_; intuition.
+  Qed.
 End CtllEquations.
 
 Section CtlrEquations.
@@ -563,9 +565,11 @@ Section CtlrEquations.
       <[ p EU q ]> ⩸ <[ q \/ (p EX (p EU q)) ]>.
   Proof.
     intros p q; split; intros t w Hind.
-    - cinduction Hind. 
+    - cinduction Hind.
       + now left.
-      + right; split; eauto.
+      + rewrite ctlr_or; right.
+        rewrite ctlr_ex; split; auto.
+        exists t0, w0; split; auto.
     - rewrite unfold_entailsR in Hind; destruct Hind.
       + now left. 
       + destruct H.
@@ -620,5 +624,5 @@ Section CtlrEquations.
     - apply ctlr_eu_ex, ctlr_or; right.
       apply ctlr_ex; split; eauto.
   Qed.
-   
+  
 End CtlrEquations.

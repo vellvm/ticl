@@ -59,7 +59,7 @@ Section BindLemmas.
       + (* MatchE *) cleft...
       + (* StepE *)
         cright; csplit...
-        exists (x <- t_ ;; k x), w_; split.
+        exists (x <- t0 ;; k x), w0; split.
         * apply ktrans_bind_l...
           now apply ctll_not_done in HInd. 
         * apply HInd.
@@ -267,6 +267,21 @@ Section BindLemmas.
           now apply aur_stuck, axr_stuck in Hau.
   Qed.
 
+  Theorem eul_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r,
+      <[ t, w |= φ EU EN done= r w' ]> ->
+      <( {k r}, w' |= φ EU ψ )> ->
+      <( {x <- t ;; k x}, w |= φ EU ψ )>.
+  Proof with eauto with ctl.
+    intros.
+    cinduction H; intros.
+    - apply ex_done in Hp as (Hw & ? & Heqt & <- & ->).
+      rewrite Heqt in Hw |- *.
+      now rewrite bind_ret_l.
+    - cright; csplit.
+      + now apply ctll_bind_l.
+      + (* Seems like I have the correct induction scheme now... *)
+  Admitted.
+  
   (*| Bind lemma for [AG] |*)
   Notation MP X := (rel (ctree E X) (World E)).
   Program Definition ag_bind_clos{X Y} φ Post : mon (MP Y) :=

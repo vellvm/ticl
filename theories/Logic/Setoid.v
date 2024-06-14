@@ -268,20 +268,19 @@ Section EquivSetoid.
     - generalize dependent y.
       induction eu; intros.    
       + rewrite EQ in H; now apply MatchE.
-      + destruct H as (Hp & t' & w' & TR' & ?), H0 as (_ & t_ & w_ & TR_ & ?).
+      + destruct H as (Hp & t' & w' & TR' & Hind & Hy).
         eapply StepE; split.
-        * now rewrite <- EQ.
-        * ktrans_equ TR_.
-          exists z, w_; auto.
+        * now rewrite <- EQ.          
+        * ktrans_equ TR'; exists z, w'; auto.
     - generalize dependent x.
       induction eu; intros.
       + rewrite <- EQ in H; now apply MatchE.
-      + destruct H as (Hp & t' & w' & TR' & ?), H0 as (_ & t_ & w_ & TR_ & ?).
+      + destruct H as (Hp & t' & w' & TR' & Hind & Hy). 
         eapply StepE; split.
         * now rewrite EQ.
-        * ktrans_equ TR_.
-          exists z, w_; split; eauto.
-          apply H0.
+        * ktrans_equ TR';
+            exists z, w'; split; eauto.
+          apply Hy.
           now symmetry.
   Qed.
 

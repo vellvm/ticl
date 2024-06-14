@@ -88,8 +88,10 @@ Section Shallow.
     forall [p q: MP] (P : MP),
       (forall t w, q t w -> P t w) -> (* base *)
       (forall t w, (* step *)
-          cex p (ceu p q) t w ->
-          cex p P t w ->
+          p t w /\
+            (exists t' w', [t, w] ↦ [t', w']
+                      /\ ceu p q t' w'
+                      /\ P t' w') ->
           P t w) ->
       forall t w, ceu p q t w -> P t w :=
     fun p q P Hbase Hstep =>
@@ -100,9 +102,12 @@ Section Shallow.
           Hstep t w
             (conj Hp
                (ex_intro _ t'
-                  (ex_intro _ w'
-                     (conj tr h)))) (conj Hp (ex_intro _  t' (ex_intro _ w' (conj tr (F t' w' h)))))
+                  (ex_intro _ w' (conj tr
+                                    (conj h
+                                       (F t' w' h))))))
+
       end.
+    
   Set Elimination Schemes.
 
   Arguments impl /.  
@@ -398,7 +403,7 @@ Proof.
   rewrite unfold_entailsL in Contra.
   induction Contra.
   - rewrite ctll_now in H; intuition. 
-  - now destruct H0 as (? & ? & ? & ? & ?).
+  - now destruct H as (? & ? & ? & ? & ?).
 Qed.
 
 (*| Cannot have all paths such that eventually always Bot |*)
@@ -419,7 +424,7 @@ Proof.
   rewrite unfold_entailsR in Contra.
   induction Contra.
   - rewrite ctlr_done in H; now ddestruction H.
-  - now destruct H0 as (? & ? & ? & ? & ?).
+  - now destruct H as (? & ? & ? & ? & ?).
 Qed.
 
 (*| Cannot have all paths such that eventually always Bot |*)
@@ -493,18 +498,15 @@ Qed.
       rewrite unfold_entailsL in H0; induction H0 as [? ? Hp | ? ? Hau HInd]; 
       [| destruct Hau as (Hp & Hs & Hau), HInd as (_ & _ & HInd)]
   | @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_E ?φ ?ψ) ?t ?w =>
-      let Hau := fresh "Hau" in
+      let Heu := fresh "Heu" in
       let HInd := fresh "HInd" in
       let Hp := fresh "Hp" in
       let Hs := fresh "Hs" in
-      let t' := fresh "t'" in
-      let w' := fresh "w'" in
-      let TR' := fresh "TR'" in
-      let t_ := fresh "t_" in
-      let w_ := fresh "w_" in
-      let TR_ := fresh "TR_" in
-      rewrite unfold_entailsL in H0; induction H0 as [? ? Hp | ? ? Heu HInd];
-      [| destruct Heu as (Hp & t' & w' & TR & Heu), HInd as (_ & t_ & w_ & TR_ & HInd)]
+      let t' := fresh "t" in
+      let w' := fresh "w" in
+      let TR' := fresh "TR" in
+      rewrite unfold_entailsL in H0; induction H0 as [? ? Hp | ? ? Heu];
+      [| destruct Heu as (Hp & t' & w' & TR' & Heu & HInd)]
   | @entailsL ?M ?W ?HE ?KMS ?X (CuL ?c ?φ ?ψ) ?t ?w =>
       is_var c; destruct c; cinduction H0
   | @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_A ?φ ?ψ) ?t ?w =>
@@ -519,14 +521,11 @@ Qed.
       let HInd := fresh "HInd" in
       let Hp := fresh "Hp" in
       let Hs := fresh "Hs" in
-      let t' := fresh "t'" in
-      let w' := fresh "w'" in
-      let TR' := fresh "TR'" in
-      let t_ := fresh "t_" in
-      let w_ := fresh "w_" in
-      let TR_ := fresh "TR_" in
-      rewrite unfold_entailsR in H0; induction H0 as [? ? Hp | ? ? Heu HInd];
-      [| destruct Heu as (Hp & t' & w' & TR & Heu), HInd as (_ & t_ & w_ & TR_ & HInd)]
+      let t' := fresh "t" in
+      let w' := fresh "w" in
+      let TR' := fresh "TR" in
+      rewrite unfold_entailsR in H0; induction H0 as [? ? Hp | ? ? Heu];
+      [| destruct Heu as (Hp & t' & w' & TR & Heu & HInd)]
   | @entailsR ?M ?W ?HE ?KMS ?X (CuR ?c ?φ ?ψ) ?t ?w =>
       is_var c; destruct c; cinduction H0
   end.
