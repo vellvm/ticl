@@ -406,15 +406,15 @@ Section BindLemmas.
     apply in_bind_ctx1; auto.
   Qed.
 
-  Lemma eg_bind_eg{X Y} (φ: ctll E) Post:
-      eg_bind_clos (X:=X) (Y:=Y) φ Post <= cegt (entailsL Y φ).
+  Lemma eg_bind_eg{X Y} (φ: ctll E) R:
+      eg_bind_clos (X:=X) (Y:=Y) φ R <= cegt (entailsL Y φ).
   Proof with auto with ctl.  
     apply Coinduction.
-    intros R t w; cbn.
+    intros p t w; cbn.
     apply (leq_bind_ctx1 _ _
              (fun t => cex (entailsL Y φ)
                       (cegT (entailsL Y φ)
-                         (eg_bind_clos φ Post) R) t w)).
+                         (eg_bind_clos φ R) p) t w)).
     clear t.
     intros t Heu k Hk.
     cinduction Heu; intros.
@@ -457,14 +457,14 @@ Section BindLemmas.
                 exists t_, w_; split...
   Qed.
 
-  Lemma eg_bind_r{X Y}: forall (t: ctree E X) w (k: X -> ctree E Y) Post φ,
-      <[ t, w |= φ EU EN done Post ]> ->
-      (forall r w', Post r w' -> <( {k r}, w' |= EG φ )>) ->
+  Lemma eg_bind_r{X Y}: forall (t: ctree E X) w (k: X -> ctree E Y) R φ,
+      <[ t, w |= φ EU EN done R ]> ->
+      (forall r w', R r w' -> <( {k r}, w' |= EG φ )>) ->
       <( {x <- t ;; k x} , w |= EG φ )>.
   Proof.
     intros.
     rewrite unfold_entailsL.
-    apply (ft_t (eg_bind_eg φ Post)); cbn.    
+    apply (ft_t (eg_bind_eg φ R)); cbn.    
     apply in_bind_ctx1; eauto.
   Qed.
   
@@ -475,7 +475,7 @@ Section BindLemmas.
       <( {x <- t ;; k x} , w |= EG φ )>.
   Proof.
     intros.
-    apply eg_bind_r with (Post:=fun r_ w_ => r = r_ /\ wr = w_); auto.
+    apply eg_bind_r with (R:=fun r_ w_ => r = r_ /\ wr = w_); auto.
     now intros * (-> & ->).
   Qed.
   
