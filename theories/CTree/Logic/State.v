@@ -159,4 +159,4 @@ Section StateLemmas.
     intros [y σ'] * HR...
   Qed.
   
-End BindLemmas.
+End StateLemmas.

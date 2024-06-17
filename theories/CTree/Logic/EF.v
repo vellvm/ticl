@@ -30,7 +30,7 @@ Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
   Opaque Ctree.stuck.
-  Lemma eu_stuck: forall w φ ψ,
+  Lemma eul_stuck: forall w φ ψ,
       <( {Ctree.stuck: ctree E X}, w |= φ EU ψ )> <->
       <( {Ctree.stuck: ctree E X}, w |= ψ )>.
   Proof with auto with ctl.
@@ -41,6 +41,88 @@ Section BasicLemmas.
     - now cleft. 
   Qed.
 
+  Lemma eur_stuck: forall w φ ψ,
+      <[ {Ctree.stuck: ctree E X}, w |= φ EU ψ ]> <->
+      <[ {Ctree.stuck: ctree E X}, w |= ψ ]>.
+  Proof with auto with ctl.
+    split; intros.
+    - cdestruct H...
+      cdestruct H.
+      now apply ktrans_stuck in TR.
+    - now cleft. 
+  Qed.
+
+  Lemma eul_ret: forall (r: X) w φ ψ,
+      <( {Ret r}, w |= ψ \/ φ EX ψ )> <->
+      <( {Ret r}, w |= φ EU ψ )>.
+  Proof with auto with ctl.
+    split; intros H; cdestruct H.
+    - now cleft.
+    - cright; csplit; cdestruct H...
+      assert (Hd: not_done w) by now apply ktrans_not_done in TR.
+      inv Hd.
+      + apply ktrans_done in TR as (-> & ?).
+        exists (Ctree.stuck), (Done r); split.
+        * now constructor.
+        * rewrite H0 in H.
+          now cleft.
+      + apply ktrans_finish in TR as (-> & ?).
+        exists (Ctree.stuck), (Finish e v r); split.
+        * now constructor.
+        * rewrite H0 in H.
+          now cleft.
+    - now cleft.
+    - cdestruct H.
+      cright; csplit...
+      assert (Hd: not_done w) by now apply ktrans_not_done in TR.
+      inv Hd.
+      + apply ktrans_done in TR as (-> & ?).
+        rewrite H0 in H.
+        apply eul_stuck in H.
+        apply ctll_not_done in H; inv H.
+      + apply ktrans_finish in TR as (-> & ?).
+        rewrite H0 in H.
+        apply eul_stuck in H.
+        apply ctll_not_done in H; inv H.
+  Qed.
+
+  Lemma eur_ret: forall (r: X) w φ ψ,
+      <[ {Ret r}, w |= ψ \/ φ EX ψ ]> <->
+      <[ {Ret r}, w |= φ EU ψ ]>.
+  Proof with auto with ctl.
+    split; intros H; cdestruct H.
+    - now cleft.
+    - cright; csplit; cdestruct H...
+      assert (Hd: not_done w) by now apply ktrans_not_done in TR.
+      inv Hd.
+      + apply ktrans_done in TR as (-> & ?).
+        exists (Ctree.stuck), (Done r); split.
+        * now constructor.
+        * rewrite H0 in H.
+          now cleft.
+      + apply ktrans_finish in TR as (-> & ?).
+        exists (Ctree.stuck), (Finish e v r); split.
+        * now constructor.
+        * rewrite H0 in H.
+          now cleft.
+    - now cleft.
+    - cdestruct H.
+      assert (Hd: not_done w) by now apply ktrans_not_done in TR.
+      inv Hd.
+      + apply ktrans_done in TR as (-> & ?).
+        rewrite H0 in H.
+        apply eur_stuck in H.
+        cright; csplit...
+        exists (Ctree.stuck), (Done r); split...
+        constructor...
+      + apply ktrans_finish in TR as (-> & ?).
+        rewrite H0 in H.
+        apply eur_stuck in H.
+        cright; csplit...
+        exists (Ctree.stuck), (Finish e v r); split...
+        constructor...
+  Qed.
+  
   Lemma eul_br: forall n (k: fin' n -> ctree E X) w φ ψ,
       (<( {Br n k}, w |= φ )> \/
          <( {Br n k}, w |= ψ )> /\
@@ -142,7 +224,7 @@ Section BasicLemmas.
   Qed.
 
   Lemma eur_not_done: forall φ ψ (t: ctree E X) (w: World E),
-      <[ t, w |= φ EU EN done ψ ]> ->
+      <[ t, w |= φ EU EN ψ ]> ->
       not_done w.
   Proof.
     intros.

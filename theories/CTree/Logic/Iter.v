@@ -14,6 +14,7 @@ From CTree Require Import
   CTree.Logic.EX
   CTree.Logic.EF
   CTree.Logic.Bind
+  CTree.Logic.Ret
   Logic.Ctl.
 
 Generalizable All Variables.
@@ -33,7 +34,8 @@ Section IterLemmas.
         Ri i w ->
         <( {k i}, w |= φ AX ψ )> \/
           <[ {k i}, w |= φ AX done
-                      {fun (lr: I + X) (w': World E) => exists i', lr = inl i' /\ Ri i' w' /\ Rv (i', w') (i, w)}]>) ->
+                      {fun (lr: I + X) (w': World E) =>
+                         exists i', lr = inl i' /\ Ri i' w' /\ Rv (i', w') (i, w)}]>) ->
     <( {iter k i}, w |= φ AX ψ )>.
   Proof with auto with ctl.
     remember (i, w) as P.
@@ -104,6 +106,68 @@ Section IterLemmas.
       apply HindWf...
   Qed.
 
+  (* EX *)
+  Typeclasses Transparent sbisim.
+  Lemma exl_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E (I + X)) (φ ψ: ctll E):
+    well_founded Rv ->
+    Ri i w ->    
+    (forall (i: I) w,
+        Ri i w ->
+        <( {k i}, w |= φ EX ψ )> \/
+          <[ {k i}, w |= φ EX done {fun (lr: I + X) w' =>
+            exists i', lr = inl i' /\ Ri i' w' /\ Rv i' i} ]>) ->
+    <( {iter k i}, w |= φ EX ψ )>.
+  Proof with auto with ctl.    
+    intros WfR Hi H.
+    generalize dependent k.
+    generalize dependent w.
+    induction i using (well_founded_induction WfR).
+    cbn in *.
+    rename H into HindWf.
+    intros.
+    unfold iter, MonadIter_ctree.
+    rewrite unfold_iter.
+    destruct (H _ _ Hi).
+    - now eapply ctll_bind_l.
+    - apply ex_done in H0 as (Hφ & [l | r] & Heqt & i' & Hinv & HRi & HRv); inv Hinv.
+      rewrite Heqt, bind_ret_l, sb_guard.
+      apply HindWf...
+  Qed.
+
+  Lemma exr_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E (I + X))
+    (φ: ctll E) (ψ: ctlr E X):
+    well_founded Rv ->
+    Ri i w ->    
+    (forall (i: I) w,
+        Ri i w ->
+        <[ {k i}, w |= φ EX done {fun (lr: I + X) w' =>
+                                    match lr with
+                                    | inl i' => Ri i' w' /\ Rv i' i
+                                    | inr r => <[ {Ret r}, w' |= φ EX ψ ]>
+                                    end}]>) ->
+    <[ {iter k i}, w |= φ EX ψ ]>.
+  Proof with auto with ctl.
+    intros WfR Hi H.
+    generalize dependent k.
+    generalize dependent w.
+    induction i using (well_founded_induction WfR).
+    cbn in *.
+    rename H into HindWf.
+    intros.
+    unfold iter, MonadIter_ctree.
+    rewrite unfold_iter.    
+    pose proof (H _ _ Hi) as H'.
+    apply ex_done in H' as (Hφ & [l | r] & Heqt & Hi'). 
+    - destruct Hi' as (HRi & HRv).
+      rewrite Heqt, bind_ret_l, sb_guard.
+      apply HindWf...
+    - cdestruct Hi'.
+      rewrite Heqt in Hφ |- *.
+      rewrite bind_ret_l.
+      csplit...
+      exists t, w0...
+  Qed.  
+
   (* AU *)
   Lemma aul_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E (I + X)) (φ ψ: ctll E):
     well_founded Rv ->
@@ -112,7 +176,8 @@ Section IterLemmas.
         Ri i w ->
         <( {k i}, w |= φ AU ψ )> \/
           <[ {k i}, w |= φ AU AN done
-                      {fun (lr: I + X) (w': World E) => exists i', lr = inl i' /\ Ri i' w' /\ Rv (i', w') (i, w)}]>) ->
+                      {fun (lr: I + X) (w': World E) =>
+                         exists i', lr = inl i' /\ Ri i' w' /\ Rv (i', w') (i, w)}]>) ->
     <( {iter k i}, w |= φ AU ψ )>.
   Proof with auto with ctl.
     remember (i, w) as P.
@@ -183,6 +248,86 @@ Section IterLemmas.
     apply aur_ret.
   Qed.
 
+  (* EU *)
+  Lemma eul_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E (I + X)) (φ ψ: ctll E):
+    well_founded Rv ->
+    Ri i w ->    
+    (forall (i: I) w,
+        Ri i w ->
+        <( {k i}, w |= φ EU ψ )> \/
+          <[ {k i}, w |= φ EU EN done
+                      {fun (lr: I + X) (w': World E) =>
+                         exists i', lr = inl i' /\ Ri i' w' /\ Rv (i', w') (i, w)}]>) ->
+    <( {iter k i}, w |= φ EU ψ )>.
+  Proof with auto with ctl.
+    remember (i, w) as P.
+    replace i with (fst P) by now subst.
+    replace w with (snd P) by now subst.
+    clear HeqP i w.
+    intros WfR Hi H.
+    generalize dependent k.
+    induction P using (well_founded_induction WfR);
+      destruct P as (i, w); cbn in *. 
+    rename H into HindWf.
+    intros.
+    unfold iter, MonadIter_ctree.
+    rewrite unfold_iter.
+    destruct (H _ _ Hi).
+    - now eapply ctll_bind_l.
+    - eapply eul_bind_r with
+        (R:=fun (lr: I + X) (w': World E) =>
+              exists i' : I, lr = inl i' /\ Ri i' w' /\ Rv (i', w') (i, w))... 
+      intros [i' | r] w'.            
+      + intros (j & Hinv & Hi' & Hv); inv Hinv.
+        rewrite sb_guard.
+        remember (j, w') as y.
+        replace j with (fst y) in Hi' |- * by now subst.
+        replace w' with (snd y) in Hi' |- * by now subst.
+        apply HindWf...
+      + intros (j & Hcontra & ?); inv Hcontra.
+  Qed.
+
+  Lemma eur_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E (I + X)) (φ: ctll E) (ψ: ctlr E X):
+    well_founded Rv ->
+    Ri i w ->    
+    (forall (i: I) w,
+        Ri i w ->
+        <[ {k i}, w |= φ EU EN done
+                    {fun (lr: I + X) (w': World E) =>
+                       match lr with
+                       | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
+                       | inr r => <[ {Ret r}, w' |= ψ \/ φ EX ψ ]>
+                       end} ]>) ->
+    <[ {iter k i}, w |= φ EU ψ ]>.
+  Proof with auto with ctl.
+    remember (i, w) as P.
+    replace i with (fst P) by now subst.
+    replace w with (snd P) by now subst.
+    clear HeqP i w.
+    intros WfR Hi H.
+    generalize dependent k.
+    induction P using (well_founded_induction WfR);
+      destruct P as (i, w); cbn in *. 
+    rename H into HindWf.
+    intros.
+    unfold iter, MonadIter_ctree.
+    rewrite unfold_iter.
+    eapply eur_bind_r with
+      (R:=(fun (lr : I + X) (w' : World E) =>
+             match lr with
+             | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
+             | inr r => <[ {Ret r}, w' |= ψ \/ φ EX ψ ]>
+             end))...
+    intros [i' | r] w'...
+    intros (Hi' & Hv). 
+    rewrite sb_guard.
+    remember (i', w') as y.
+    replace i' with (fst y) in Hi' |- * by now subst.
+    replace w' with (snd y) in Hi' |- * by now subst.
+    apply HindWf...
+    apply eur_ret.
+  Qed.
+  
   (* AG *)
   Typeclasses Transparent sbisim.
   Lemma ag_iter{X I} R (i: I) w (k: I -> ctree E (I + X)) (φ: ctll E) (ψ: ctlr E X):

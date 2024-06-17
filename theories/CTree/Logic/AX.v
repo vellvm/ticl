@@ -165,5 +165,41 @@ Section BasicLemmas.
         -- apply ktrans_finish in TR as (-> & ->); [|exact (equ eq)].
            apply ctlr_done...
   Qed.
+
+  Lemma axl_ret: forall (r: X) w φ ψ,
+      ~ <( {Ret r}, w |= φ AX ψ )>.
+  Proof.
+    intros * H.
+    cdestruct H.
+    destruct Hs as (t' & w' & TR).
+    specialize (H _ _ TR).
+    assert (Hd: not_done w) by now apply ktrans_not_done in TR.
+    inv Hd.
+    - apply ktrans_done in TR as (-> & Heqt); rewrite Heqt in H.
+      apply ctll_not_done in H; inv H.
+    - apply ktrans_finish in TR as (-> & Heqt); rewrite Heqt in H.
+      apply ctll_not_done in H; inv H.
+  Qed.
   
+  Lemma axr_ret: forall (r: X) w φ ψ,
+      <[ {Ret r}, w |= φ AX ψ ]> ->
+        <( {Ret r}, w |= φ )>
+        /\ exists (w': World E), done_with (fun x w' => x = r /\ w = w') w'
+        /\ <[ Ctree.stuck, w' |= ψ ]>.
+  Proof with auto with ctl.
+    intros.
+    cdestruct H.
+    assert (Hd: not_done w) by now apply can_step_not_done in Hs.
+    destruct Hs as (t' & w' & TR).
+    specialize (H _ _ TR).
+    inv Hd.
+    + apply ktrans_done in TR as (-> & Heqt).
+      rewrite Heqt in H.
+      split...
+      exists (Done r)...
+    + apply ktrans_finish in TR as (-> & Heqt).
+      rewrite Heqt in H.
+      split...
+      exists (Finish e v r)...
+  Qed.
 End BasicLemmas.

@@ -152,5 +152,38 @@ Section BasicLemmas.
         * now apply ktrans_finish.
         * now csplit.
   Qed.
+
+  Lemma exl_ret: forall (r: X) w φ ψ,
+      ~ <( {Ret r}, w |= φ EX ψ )>.
+  Proof.
+    intros * H.
+    cdestruct H.
+    assert (Hd: not_done w) by now apply ktrans_not_done in TR.
+    inv Hd.
+    - apply ktrans_done in TR as (-> & Heqt); rewrite Heqt in H.
+      apply ctll_not_done in H; inv H.
+    - apply ktrans_finish in TR as (-> & Heqt); rewrite Heqt in H.
+      apply ctll_not_done in H; inv H.
+  Qed.
+  
+  Lemma exr_ret: forall (r: X) w φ ψ,
+      <[ {Ret r}, w |= φ EX ψ ]> ->
+        <( {Ret r}, w |= φ )>
+        /\ exists (w': World E), done_with (fun x w' => x = r /\ w = w') w'
+        /\ <[ Ctree.stuck, w' |= ψ ]>.
+  Proof with auto with ctl.
+    intros.
+    cdestruct H.
+    assert (Hd: not_done w) by now apply ktrans_not_done in TR. 
+    inv Hd.
+    + apply ktrans_done in TR as (-> & Heqt).
+      rewrite Heqt in H.
+      split...
+      exists (Done r)...
+    + apply ktrans_finish in TR as (-> & Heqt).
+      rewrite Heqt in H.
+      split...
+      exists (Finish e v r)...
+  Qed.
 End BasicLemmas.
 

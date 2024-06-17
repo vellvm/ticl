@@ -29,6 +29,17 @@ Local Open Scope ctree_scope.
 Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
+  Lemma aul_stuck: forall w φ ψ,
+      <( {Ctree.stuck: ctree E X}, w |= φ AU ψ )> ->
+      <( {Ctree.stuck: ctree E X}, w |= ψ )>.
+  Proof.
+    intros * H.
+    remember (Ctree.stuck) as S.
+    cinduction H; subst.
+    - apply Hp.
+    - now apply can_step_stuck in Hs.
+  Qed.
+
   Lemma aur_stuck: forall w φ ψ,
       <[ {Ctree.stuck: ctree E X}, w |= φ AU ψ ]> ->
       <[ {Ctree.stuck: ctree E X}, w |= ψ ]>.
@@ -39,15 +50,39 @@ Section BasicLemmas.
     - apply Hp.
     - now apply can_step_stuck in Hs.
   Qed.
-
-  Lemma aul_ret: forall (r: X) w φ ψ,      
-      <( {Ret r}, w |= ψ )> ->
+  
+  Lemma aul_ret: forall (r: X) w φ ψ,
+      <( {Ret r}, w |= ψ \/ φ AX ψ )> <->
       <( {Ret r}, w |= φ AU ψ )>.
-  Proof.
-    intros * Hr.
-    now cleft. 
+  Proof with auto with ctl.
+    split; intros H; cdestruct H.
+    - now cleft.
+    - cright; csplit; cdestruct H...
+      intros t' w' TR.
+      apply ctll_not_done in Hp.
+      specialize (H _ _ TR).
+      inv Hp.
+      + apply ktrans_done in TR as (-> & ?).
+        rewrite H0 in H |- *.
+        now cleft.
+      + apply ktrans_finish in TR as (-> & ?).
+        rewrite H0 in H |- *.
+        now cleft.
+    - now cleft.
+    - cdestruct H.
+      cright; csplit...
+      intros t' w' TR.
+      apply ctll_not_done in Hp.
+      specialize (H _ _ TR).
+      inv Hp.
+      + apply ktrans_done in TR as (-> & ?).
+        rewrite H0 in H |- *.
+        now apply aul_stuck in H.
+      + apply ktrans_finish in TR as (-> & ?).
+        rewrite H0 in H |- *.
+        now apply aul_stuck in H.
   Qed.
-
+  
   Lemma aur_ret: forall (r: X) w φ ψ,
       <[ {Ret r}, w |= ψ \/ φ AX ψ ]> <->
       <[ {Ret r}, w |= φ AU ψ ]>.
