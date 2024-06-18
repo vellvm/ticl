@@ -27,25 +27,21 @@ Section IterLemmas.
   Context {E: Type} {HE: Encode E}.
 
   (* AX *)
-  Lemma axl_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E (I + X)) (φ ψ: ctll E):
+  Lemma axl_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E (I + X)) (φ ψ: ctll E):
     well_founded Rv ->
     Ri i w ->    
     (forall (i: I) w,
         Ri i w ->
         <( {k i}, w |= φ AX ψ )> \/
           <[ {k i}, w |= φ AX done
-                      {fun (lr: I + X) (w': World E) =>
-                         exists i', lr = inl i' /\ Ri i' w' /\ Rv (i', w') (i, w)}]>) ->
+                      {fun (lr: I + X) (w': World E) => 
+                         exists i', lr = inl i' /\ Ri i' w' /\ Rv i' i}]>) ->
     <( {iter k i}, w |= φ AX ψ )>.
   Proof with auto with ctl.
-    remember (i, w) as P.
-    replace i with (fst P) by now subst.
-    replace w with (snd P) by now subst.
-    clear HeqP i w.
     intros WfR Hi H.
     generalize dependent k.
-    induction P using (well_founded_induction WfR);
-      destruct P as (i, w); cbn in *. 
+    generalize dependent w.
+    induction i using (well_founded_induction WfR).
     rename H into HindWf.
     intros.
     unfold iter, MonadIter_ctree.
@@ -54,18 +50,15 @@ Section IterLemmas.
     - now eapply ctll_bind_l.
     - eapply axl_bind_r with
         (R:=fun (lr: I + X) (w': World E) =>
-              exists i' : I, lr = inl i' /\ Ri i' w' /\ Rv (i', w') (i, w))... 
+              exists i' : I, lr = inl i' /\ Ri i' w' /\ Rv i' i)... 
       intros [i' | r] w'.            
       + intros (j & Hinv & Hi' & Hv); inv Hinv.
         rewrite sb_guard.
-        remember (j, w') as y.
-        replace j with (fst y) in Hi' |- * by now subst.
-        replace w' with (snd y) in Hi' |- * by now subst.
         apply HindWf...
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
 
-  Lemma axr_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E (I + X)) (φ: ctll E) (ψ: ctlr E X):
+  Lemma axr_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E (I + X)) (φ: ctll E) (ψ: ctlr E X):
     well_founded Rv ->
     Ri i w ->    
     (forall (i: I) w,
@@ -73,19 +66,15 @@ Section IterLemmas.
         <[ {k i}, w |= φ AX done
                     {fun (lr: I + X) (w': World E) =>
                        match lr with
-                       | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
+                       | inl i' => Ri i' w' /\ Rv i' i
                        | inr r => <[ {Ret r}, w' |= φ AX ψ ]>
                        end} ]>) ->
     <[ {iter k i}, w |= φ AX ψ ]>.
   Proof with auto with ctl.
-    remember (i, w) as P.
-    replace i with (fst P) by now subst.
-    replace w with (snd P) by now subst.
-    clear HeqP i w.
     intros WfR Hi H.
     generalize dependent k.
-    induction P using (well_founded_induction WfR);
-      destruct P as (i, w); cbn in *. 
+    generalize dependent w.
+    induction i using (well_founded_induction WfR).
     rename H into HindWf.
     intros.
     unfold iter, MonadIter_ctree.
@@ -94,15 +83,12 @@ Section IterLemmas.
     - eapply axr_bind_r with
         (R:=(fun (lr : I + X) (w' : World E) =>
                match lr with
-               | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
+               | inl i' => Ri i' w' /\ Rv i' i
                | inr r => <[ {Ret r}, w' |= φ AX ψ ]>
                end))...
       intros [i' | r] w'...
       intros (Hi' & Hv). 
       rewrite sb_guard.
-      remember (i', w') as y.
-      replace i' with (fst y) in Hi' |- * by now subst.
-      replace w' with (snd y) in Hi' |- * by now subst.
       apply HindWf...
   Qed.
 
@@ -239,13 +225,13 @@ Section IterLemmas.
              | inr r => <[ {Ret r}, w' |= ψ \/ φ AX ψ ]>
              end))...
     intros [i' | r] w'...
-    intros (Hi' & Hv). 
-    rewrite sb_guard.
-    remember (i', w') as y.
-    replace i' with (fst y) in Hi' |- * by now subst.
-    replace w' with (snd y) in Hi' |- * by now subst.
-    apply HindWf...
-    apply aur_ret.
+    - intros (Hi' & Hv). 
+      rewrite sb_guard.
+      remember (i', w') as y.
+      replace i' with (fst y) in Hi' |- * by now subst.
+      replace w' with (snd y) in Hi' |- * by now subst.
+      apply HindWf...
+    - apply aur_ret.
   Qed.
 
   (* EU *)

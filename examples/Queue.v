@@ -66,14 +66,17 @@ Section QueueEx.
             | None => Ret (inr tt)   (* done *)
             end) tt.
 
-  (* Ex2: Rotate (pop an element, add an element [a]) a queue (a ≠ b) *)
+  (* Ex2: Rotate a queue (pop an element from head, add it to tail) *)
   Definition rotate(a: S): ctree (queueE S) unit :=
     iter (fun _ =>
-            push a ;;
             x <- pop ;;
             match x with
-            | Some v => Ret (inl tt)
-            | None => Ret (inr tt) (* should never return *)
+            | Some v =>
+                push v;;
+                Ret (inl tt)
+            | None =>
+                (* If queue is empty, return *)
+                Ret (inr tt)
             end) tt.            
 
   (* Queue instrumented semantics *)
@@ -85,7 +88,7 @@ Section QueueEx.
                  | Pop => match q with
                          | nil => Ret (None, nil)
                          | h :: ts =>
-                             log h ;;
+                             log h ;; (* Instrument the head of the queue [h] *)
                              Ret (Some h, ts)
                          end
                  end).
@@ -98,12 +101,13 @@ Section QueueEx.
       end.  
   Proof. destruct hs; intros; cbn in *; inv H; auto. Qed.
   
-  (*| Eventually we get [nl] (needle) to show up in the instrumentation. |*)
-  Typeclasses Transparent equ.
-  Theorem drain_af_pop: forall (nl: S) (q: list S),
-      <( {interp_state h_queueE drain (q ++ [nl])}, Pure |=
-         AF finishW {fun 'tt l w => w = nl /\ l = @nil S })>.
+  (*| Eventually we get [nl] (needle) to show up
+    in the instrumentation. |*)
+  Example drain_af_pop: forall (nl: S) (q: list S),
+      <[ {interp_state h_queueE drain (q ++ [nl])}, Pure |=
+         AF finishW {fun 'tt l w => w = nl /\ l = @nil S }]>.
   Proof with eauto with ctl.
+    
     intros.
     apply au_state_iter_list
       with (Ri:=fun 'tt w l =>
