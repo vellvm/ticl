@@ -152,3 +152,58 @@ Ltac invert :=
 
 Tactic Notation "hinduction" hyp(IND) "before" hyp(H)
   := move IND before H; revert_until IND; induction IND.
+
+Lemma wf3_proj1{X Y Z: Type} (R: relation X):
+  well_founded R -> well_founded (fun (p: X * Y * Z) p' => R (fst (fst p)) (fst (fst p'))).
+Proof.
+  unfold well_founded.
+  intros Hind [[x a] b].
+  generalize dependent a.
+  generalize dependent b.
+  induction (Hind x) as [x Hx IH].
+  constructor.
+  intros [[x' a'] b'] H.
+  apply IH.
+  assumption.
+Defined.
+
+Lemma wf3_proj2{X Y Z: Type} (R: relation Y):
+  well_founded R -> well_founded (fun (p: X * Y * Z) p' => R (snd (fst p)) (snd (fst p'))).
+Proof.
+  unfold well_founded.
+  intros Hind [[a x] b].
+  generalize dependent a.
+  generalize dependent b.
+  induction (Hind x) as [x Hx IH].
+  constructor.
+  intros [[a' x'] b'] H.
+  apply IH.
+  assumption.
+Defined.
+
+Lemma wf3_proj3{X Y Z: Type} (R: relation Z):
+  well_founded R -> well_founded (fun (p: X * Y * Z) p' => R (snd p) (snd p')).
+Proof.
+  unfold well_founded.
+  intros Hind [[a b] x].
+  generalize dependent a.
+  generalize dependent b.
+  induction (Hind x) as [x Hx IH].
+  constructor.
+  intros [[a' b'] x'] H.
+  apply IH.
+  assumption.
+Defined.
+
+Lemma wf3_proj12{X Y Z: Type} (R: relation (X*Y)):
+  well_founded R -> well_founded (fun (p: X * Y * Z) p' => R (fst p) (fst p')).
+Proof.
+  unfold well_founded.
+  intros Hind [x b].
+  generalize dependent b.
+  induction (Hind x) as [x Hx IH].
+  constructor.
+  intros [x' b'] H.
+  apply IH.
+  assumption.
+Defined.

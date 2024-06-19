@@ -3,12 +3,11 @@ From CTree Require Import
   Events.Writer
   Logic.Ctl
   CTree.Equ
-  CTree.SBisim
-  CTree.Logic.Trans
-  Logic.Kripke
-  CTree.Interp.Core
+  CTree.SBisim  
   CTree.Logic.AF
   CTree.Logic.AX
+  CTree.Logic.State
+  CTree.Logic.Bind
   CTree.Logic.CanStep
   CTree.Interp.State
   CTree.Events.State
@@ -56,28 +55,6 @@ Arguments pop /.
 Section QueueEx.
   Context {S: Type} {HDec: RelDec (@eq S)} {HCor: RelDec_Correct HDec}.
   Infix "=?" := (rel_dec) (at level 75).
-  
-  (* Ex1: Drain a queue until there is nothing left, you should get a needle in the end eventually. *)
-  Definition drain: ctree (queueE S) unit :=
-    iter (fun _ =>
-            x <- pop ;;
-            match x with
-            | Some v => Ret (inl tt) (* keep popping *)
-            | None => Ret (inr tt)   (* done *)
-            end) tt.
-
-  (* Ex2: Rotate a queue (pop an element from head, add it to tail) *)
-  Definition rotate(a: S): ctree (queueE S) unit :=
-    iter (fun _ =>
-            x <- pop ;;
-            match x with
-            | Some v =>
-                push v;;
-                Ret (inl tt)
-            | None =>
-                (* If queue is empty, return *)
-                Ret (inr tt)
-            end) tt.            
 
   (* Queue instrumented semantics *)
   Definition h_queueE: queueE S ~> stateT (list S) (ctreeW S) := 
@@ -92,6 +69,19 @@ Section QueueEx.
                              Ret (Some h, ts)
                          end
                  end).
+  
+  (* Ex1: Drain a queue until there is nothing left, you should get a needle in the end eventually. *)
+  Definition drain: ctree (queueE S) unit :=
+    iter (fun _ =>
+            x <- pop ;;
+            match x with
+            | Some v => Ret (inl tt) (* keep popping *)
+            | None => Ret (inr tt)   (* done *)
+            end) tt.        
+
+  Lemma list_app_nil: forall (s: S) hs,
+      ~ [] = hs ++ [s].  
+  Proof. destruct hs; intros * H; inv H; auto. Qed.
 
   Lemma list_app_cons: forall (h s: S) ts hs,
       h :: ts = hs ++ [s] ->
@@ -100,17 +90,17 @@ Section QueueEx.
       | h' :: ts' => h = h' /\ ts = ts' ++ [s]
       end.  
   Proof. destruct hs; intros; cbn in *; inv H; auto. Qed.
-  
+    
   (*| Eventually we get [nl] (needle) to show up
     in the instrumentation. |*)
   Example drain_af_pop: forall (nl: S) (q: list S),
       <[ {interp_state h_queueE drain (q ++ [nl])}, Pure |=
          AF finishW {fun 'tt l w => w = nl /\ l = @nil S }]>.
-  Proof with eauto with ctl.
-    
+  Proof with eauto with ctl.    
     intros.
-    apply au_state_iter_list
-      with (Ri:=fun 'tt w l =>
+    apply aur_state_iter_nat
+      with (f:=fun 'tt l _ => List.length l)
+           (Ri:=fun 'tt l w => not_done w /\
                   match w with
                   | Obs (Log s') tt =>
                       match l with
@@ -119,121 +109,118 @@ Section QueueEx.
                       end
                   | _ => exists hs, l = hs ++ [nl]
                   end)... 
-    intros [] w l Hw Hd.    
-    rewrite interp_state_bind.
-    rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
-    rewrite bind_bind.
-    destruct l as [|h ts] eqn:Hl; inv Hd. 
-    - (* l = [], w = Pure *)
-      destruct Hw, x; cbn in *; inv H.
-    - (* l = [], w = Obs e v *)
-      destruct e, v.
-      subst.
-      rewrite bind_ret_l, bind_guard, sb_guard, bind_ret_l, interp_state_ret.
-      cright; apply ax_done; split...
-      eexists; intuition...
-      intuition...
-      exists (Log s), tt...
-    - (* l = h :: ts, w = Pure *)
-      rewrite bind_bind.
-      eapply au_bind_r_eq.
-      + unfold log, trigger.
-        apply au_vis_l...
-        intros [].
-        cright; apply ax_done...
-      + rewrite bind_ret_l, bind_guard, sb_guard, bind_ret_l, interp_state_ret.
-        cright; apply ax_done; split...
+    intros [] l w (Hd & Hw).
+    destruct l as [|h ts] eqn:Hl; subst.
+    - (* l = [] *)
+      inv Hd.
+      + (* w = Pure *)
+        destruct Hw.
+        now apply list_app_nil in H.
+      + (* w = Obs e v *)
+        destruct e, v.
+        subst.
+        eapply aur_state_bind_r_eq.
+        * rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
+          rewrite bind_ret_l, sb_guard.        
+          cleft; apply ax_done; split...
+          csplit...
+        * cbn.
+          rewrite interp_state_ret.
+          cleft; apply ax_done; split; try csplit...
+          eexists; intuition.
+          cright.
+          apply ax_done; split; try csplit...
+          eexists; intuition...
+          econstructor.
+          eexists; intuition...          
+    - (* l = h :: ts *)
+      eapply aur_state_bind_r_eq.
+      + inv Hd.
+        * (* w = Pure *)
+          rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
+          rewrite bind_bind.
+          eapply aur_bind_r_eq.
+          -- unfold log, trigger.
+             apply aur_vis...
+             right; split; try csplit...
+             intros [].
+             cleft; apply ax_done; intuition...
+             csplit...
+          -- rewrite bind_ret_l, sb_guard.
+             cleft; apply ax_done; split; try csplit...
+        * (* w = Obs e v *)
+          rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
+          rewrite bind_bind.
+          eapply aur_bind_r_eq.
+          -- unfold log, trigger.
+             apply aur_vis...
+             right; split; try csplit...
+             intros [].
+             cleft; apply ax_done; intuition...
+             csplit...
+          -- rewrite bind_ret_l, sb_guard.
+             cleft; apply ax_done; split; try csplit...
+      + cbn.
+        rewrite interp_state_ret.
+        cleft; apply ax_done; split; try csplit...
         eexists; intuition...
-        cbn; intuition...
-        destruct Hw as (hs & H).
-        destruct ts...
-        * apply list_app_cons in H; destruct hs; intuition.
-          exfalso.
-          now apply app_cons_not_nil with (x:=hs) (a:=nl) (y:=nil).
-        * apply list_app_cons in H; destruct hs; intuition; subst.
-          -- ddestruction H1.
-          -- now (exists hs).
-    - (* l = h :: ts, w = Obs e v *)
-      rewrite bind_bind.
-      eapply au_bind_r_eq.
-      + unfold log, trigger.
-        apply au_vis_l...
-        intros [].
-        cright; apply ax_done...
-      + rewrite bind_ret_l, bind_guard, sb_guard, bind_ret_l, interp_state_ret.
-        cright; apply ax_done...
-        split; intuition...
-        eexists; split...
-        cbn; split...
-        destruct v, e.
-        destruct Hw as (hs & H).
-        destruct ts...
-        * apply list_app_cons in H; destruct hs; intuition.
-          exfalso.
-          now apply app_cons_not_nil with (x:=hs) (a:=nl) (y:=nil).
-        * apply list_app_cons in H; destruct hs; intuition; subst.
-          -- ddestruction H1.
-          -- now (exists hs).
+        split.
+        * split...
+          cbn.
+          inv Hd.
+          -- destruct Hw.
+             apply list_app_cons in H.
+             destruct x; intuition; subst...
+             destruct x; intuition; cbn.
+             ++ now (exists []).
+             ++ now (exists (s0 ::x)).
+          -- destruct e, v, Hw.
+             apply list_app_cons in H.
+             destruct x; intuition; subst...
+             destruct x; intuition; cbn.
+             ++ now (exists []).
+             ++ now (exists (s1 ::x)).
+        * apply PeanoNat.Nat.lt_succ_diag_r.
   Qed.
 
-  (* Ex2: Now the program is [rotate], which pushes hay [hy]
-     into a [q], we will eventually get the needle [nl] out *)
-  Fixpoint index(l: list S)(s: S): option nat :=
-    match l with
-    | h :: ts =>
-        if h =? s then
-          Some (List.length ts)
-        else
-          index ts s
-    | nil => None
-    end.
+  (* Ex2: Rotate a queue (pop an element from head, add it to tail) *)
+  Definition rotate: ctree (queueE S) unit :=
+    iter (fun _ =>
+            x <- pop ;;
+            match x with
+            | Some v =>
+                push v;;
+                Ret (inl tt)
+            | None =>
+                (* If queue is empty to begin with, return [tt] *)
+                Ret (inr tt)
+            end) tt.
+  
+  Inductive index: list S -> S -> nat -> Prop :=
+  | IndexFound: forall h ts,
+    index (h :: ts) h 0
+  | IndexSucc: forall h ts x n,
+    index ts x n ->
+    index (h :: ts) x (1+ n)%nat.
+  Hint Constructors index: core.
 
-  (* Needle to look for is [gd], all other hay is [hy] *)
-  Lemma index_last_S(nl hy: S) (Hnl: hy <> nl): forall l,
-      index (l ++ [hy]) nl = option_map Datatypes.S (index l nl).
-  Proof.
-    induction l; cbn.
-    - eapply rel_dec_neq_false in Hnl; eauto.
-      now rewrite Hnl.
-    - destruct (a =? nl) eqn:Ha.
-      + rewrite app_length; cbn.
-        rewrite PeanoNat.Nat.add_1_r.
-        reflexivity.
-      + apply IHl.
+  Lemma index_last_eq: forall q (nl: S),
+      index (q ++ [nl]) nl (length q).
+  Proof with auto.
+    induction q; intros; cbn; auto.
   Qed.
-
-  (* queue instrumentation, observe final queue. *)
-  Definition h_ghostE: queueE S ~> stateT (list S) (ctreeW (list S)) := 
-    fun e =>
-      mkStateT (fun q =>
-                 match e return ctreeW (list S) (encode e * list S) with
-                 | Push v =>
-                     log (q ++ [v]);;
-                     Ret (tt, q ++ [v])
-                 | Pop => match q with
-                         | nil => Ret (None, nil)
-                         | h :: ts =>
-                             log ts ;;
-                             Ret (Some h, ts)
-                         end
-                 end).
-
-  Theorem rotate_af_pop: forall q nl hy (Hnl: nl <> hy),      
-      <( {interp_state h_ghostE (rotate hy) (q ++ [nl])}, Pure |=
-           AF visW {fun l => exists ts, l = nl :: ts /\ Forall (eq hy) ts} )>.
+  
+  Theorem rotate_agaf_pop: forall q nl,
+      <( {interp_state h_queueE rotate (q ++ [nl])}, Pure |=
+           AG AF visW {fun h => h = nl} )>.
   Proof with eauto with ctl.
     intros.
-    apply af_iter_state_list
-      with (Ri:=fun '(tt) w l =>
-                  not_done w /\
-                  match w with
-                  | Obs (Log g) tt =>
-                      length l = length q /\
-                        index l t = Some g.(dist)
-                  | _ => length l = length q /\
-                          index l t = Some (length l)
-                  end); [|eauto with ctl].
-    intros [] w l [Hw H'].    
+    eapply ag_state_iter with (R:=fun _ q _ => exists i, index q nl i).
+    exists (List.length q).
+    apply index_last_eq.
+    clear q.
+    intros [] q w (i & Hi).
+    
     rewrite interp_state_bind.
     unfold pop, push, trigger.
     rewrite interp_state_vis, bind_bind.
