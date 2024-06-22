@@ -10,6 +10,8 @@ From CTree Require Import
   CTree.Logic.AF
   CTree.Logic.AX
   CTree.Logic.AG
+  CTree.Logic.State
+  CTree.Logic.Bind
   CTree.Logic.CanStep
   CTree.Interp.Core
   CTree.Interp.State
@@ -149,7 +151,7 @@ Section SecurityEx.
   Definition no_leak(i: Addr) (σ: St): Prop :=
     Nat.Even i -> exists v, lookup i σ = Some (L, v).
 
-  (* Safety property: there does not exist a memory label [ml] accessed by
+  (* Safety property: All memory labels [ml] accessed by
      label [al ≺ ml], or there does not exist a low intruction that reads from
      high-security memory *)
   Typeclasses Transparent equ.
@@ -160,93 +162,82 @@ Section SecurityEx.
   Proof with eauto with ctl.
     intros.    
     unfold sec_system, forever.
-    apply ag_iterW with (R:=fun _ σ => forall i, no_leak i σ)...
-    intros i σ' [] Hσ0 Hφ; cbn in Hφ.
-    rewrite map_bind, interp_state_bind.
-    unfold br2.
-    rewrite interp_state_br.
-    rewrite bind_br.
-    apply ax_br; split... 
-    intro c.
-    rewrite bind_guard.
-    apply au_guard.       
+    apply ag_state_iter with
+      (R:=fun _ σ w =>
+            exists (obs: SecObs), w = Obs (Log obs) tt
+                             /\ obs.(al) ⪯ obs.(ml)
+                             /\ forall i, no_leak i σ)...
+    intros i σ' w (obs & -> & Hobs & Hσ0) Hφ; cbn in Hφ.
+    rewrite interp_state_map.
+    eapply ctlr_map; unfold br2; cbn.
+    rewrite interp_state_bind, interp_state_br, bind_br.
+    apply axr_br; split; [csplit; auto|].
+    intro c. (* Choice witness *)
+    rewrite bind_guard, sb_guard.
     ddestruction c; unfold sec_alice1, sec_bob1;
       destruct (Nat.Even_Odd_dec i);
       rewrite <- interp_state_bind;
-      setoid_rewrite map_ret;
       rewrite interp_state_bind.
     - (* Alice runs, [i] is even *)
-      eapply au_bind_r_eq.
-      + rewrite (@interp_state_trigger _ _ _ _ _ _ (Write H (S i) secret) _); cbn.
-        rewrite bind_ret_l, sb_guard.
-        cright; apply ax_done...
-      + cbn.
-        rewrite interp_state_ret.
-        cright; apply ax_done; split...
-        eexists; split...
-        do 2 eexists; split...
-        cbn; intuition.
-        eexists; intuition.
-        intro Heven.
-        destruct (Hσ0 i0 Heven) as (v & ?); exists v.
-        destruct (Nat.eq_dec i0 (S i)).
-        * (* i0 = S i *)
-          rewrite e0 in Heven.
-          exfalso.
-          apply Nat.Even_succ in Heven.
-          apply Nat.Even_Odd_False with i...
-        * (* i0 <> i *)
-          rewrite OF.(mapsto_lookup).
-          apply mapsto_add_neq with (R:=eq); auto.
-          now rewrite <- mapsto_lookup.
+      rewrite (@interp_state_trigger _ _ _ _ _ _ (Write H (S i) secret) _); cbn.
+      rewrite bind_bind, bind_ret_l, bind_guard, sb_guard, bind_ret_l,
+        interp_state_ret.
+      cleft; apply anr_ret...
+      eexists; split2...
+      eexists; split2...
+      intros i0 Heven.
+      destruct (Hσ0 i0 Heven) as (v & ?); exists v.
+      destruct (Nat.eq_dec i0 (S i)).
+      + (* i0 = S i *)
+        rewrite e0 in Heven.
+        exfalso.
+        apply Nat.Even_succ in Heven.
+        apply Nat.Even_Odd_False with i...
+      + (* i0 <> i *)
+        rewrite OF.(mapsto_lookup).
+        apply mapsto_add_neq with (R:=eq); auto.
+        now rewrite <- mapsto_lookup.
     - (* Alice runs, [i] is odd *)
-      eapply au_bind_r_eq.
-      + rewrite (@interp_state_trigger _ _ _ _ _ _ (Write H i secret) _); cbn.
-        rewrite bind_ret_l, sb_guard.
-        cright; apply ax_done...
-      + cbn.
-        rewrite interp_state_ret.
-        cright; apply ax_done; split...
-        eexists; split...
-        do 2 eexists; split...
-        cbn; intuition.
-        eexists; intuition.
-        intro Heven.
-        destruct (Hσ0 i0 Heven) as (v & ?); exists v.
-        destruct (Nat.eq_dec i0 i).
-        * (* i0 = i *)
-          rewrite e in Heven.
-          exfalso.
-          apply Nat.Even_Odd_False with i...
-        * (* i0 <> i *)
-          rewrite OF.(mapsto_lookup).
-          apply mapsto_add_neq with (R:=eq); auto.
-          now rewrite <- mapsto_lookup.
+      rewrite (@interp_state_trigger _ _ _ _ _ _ (Write H i secret) _); cbn.
+      rewrite bind_bind, bind_ret_l, bind_guard, sb_guard, bind_ret_l,
+        interp_state_ret.
+      cleft; apply anr_ret...
+      eexists; split2...
+      eexists; split2...
+      intros i0 Heven.
+      destruct (Hσ0 i0 Heven) as (v & ?); exists v.
+      destruct (Nat.eq_dec i0 i).
+      * (* i0 = i *)
+        rewrite e in Heven.
+        exfalso.
+        apply Nat.Even_Odd_False with i...
+      * (* i0 <> i *)
+        rewrite OF.(mapsto_lookup).
+        apply mapsto_add_neq with (R:=eq); auto.
+        now rewrite <- mapsto_lookup.
     - (* Bob runs, [i] is even *)
       rewrite interp_state_bind, bind_bind.
       rewrite (@interp_state_trigger _ _ _ _ _ _ (Read L i) _); cbn.
       rewrite bind_bind.
       destruct (lookup i σ') eqn:Hlook.
       + destruct p as (l, a).
-        eapply au_bind_r_eq; [eapply au_bind_r_eq|].
-        * apply au_vis_l...
-          -- apply ctl_vis...
+        eapply aur_bind_r_eq; [eapply aur_bind_r_eq|].
+        * apply aur_vis...
+          right; split.
+          -- apply ctll_vis...
           -- intros [].
-             cright; apply ax_done...
-        * cright; apply ax_done...
+             cleft; apply anr_ret...
+        * cleft; apply anr_ret... 
         * rewrite bind_guard, sb_guard, bind_ret_l, interp_state_ret, bind_ret_l,
             interp_state_ret.
-          cright; apply ax_done; split...
+          cleft; apply anr_ret... 
           eexists; intuition.
-          do 2 eexists; intuition.
-          cbn.
-          eexists; intuition.
+          eexists; intuition; cbn.
           apply sec_lte_L.
       + rewrite bind_ret_l, bind_guard, sb_guard, bind_ret_l, interp_state_ret,
           bind_ret_l, interp_state_ret.
-        cright; apply ax_done; intuition...
+        cleft; apply anr_ret... 
         eexists; intuition.
-        do 2 eexists; intuition.
         eexists; intuition.
     - (* Bob runs, [i] is odd *)
       rewrite interp_state_bind, bind_bind.
@@ -254,25 +245,23 @@ Section SecurityEx.
       rewrite bind_bind.
       destruct (lookup (S i) σ') eqn:Hlook.
       + destruct p as (l, a).
-        eapply au_bind_r_eq; [eapply au_bind_r_eq|].
-        * apply au_vis_l...
-          -- apply ctl_vis...
+        eapply aur_bind_r_eq; [eapply aur_bind_r_eq|].
+        * apply aur_vis...
+          right; split.
+          -- apply ctll_vis...
           -- intros [].
-             cright; apply ax_done...
-        * cright; apply ax_done...
+             cleft; apply anr_ret... 
+        * cleft; apply anr_ret... 
         * rewrite bind_guard, sb_guard, bind_ret_l, interp_state_ret, bind_ret_l,
             interp_state_ret.
-          cright; apply ax_done; split...
+          cleft; apply anr_ret... 
           eexists; intuition.
-          do 2 eexists; intuition.
-          cbn.
-          eexists; intuition.
+          eexists; intuition; cbn.
           apply sec_lte_L.
       + rewrite bind_ret_l, bind_guard, sb_guard, bind_ret_l, interp_state_ret,
           bind_ret_l, interp_state_ret.
-        cright; apply ax_done; intuition...
+        cleft; apply anr_ret... 
         eexists; intuition.
-        do 2 eexists; intuition.
         eexists; intuition.
   Qed.        
   Print Assumptions ag_safety_sec.

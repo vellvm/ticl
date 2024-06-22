@@ -180,8 +180,28 @@ Section BasicLemmas.
     - apply ktrans_finish in TR as (-> & Heqt); rewrite Heqt in H.
       apply ctll_not_done in H; inv H.
   Qed.
+
+  Lemma axr_ret: forall (r: X) (R: rel X (World E)) φ w,
+      <( {Ret r}, w |= φ )> ->
+      R r w ->
+      <[ {Ret r}, w |= φ AX done R ]>.
+  Proof with auto with ctl.
+    intros.
+    apply ax_done; split...
+    exists r...
+  Qed.
   
-  Lemma axr_ret: forall (r: X) w φ ψ,
+  Lemma anr_ret: forall (r: X) (R: rel X (World E)) w,
+      not_done w ->
+      R r w ->
+      <[ {Ret r}, w |= AN done R ]>.
+  Proof with auto with ctl.
+    intros.
+    apply axr_ret...
+    csplit...
+  Qed.
+  
+  Lemma axr_ret_inv: forall (r: X) w φ ψ,
       <[ {Ret r}, w |= φ AX ψ ]> ->
         <( {Ret r}, w |= φ )>
         /\ exists (w': World E), done_with (fun x w' => x = r /\ w = w') w'

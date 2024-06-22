@@ -193,6 +193,17 @@ Proof.
     apply IH.
 Qed.
 
+Lemma interp_state_map `{Encode E} `{Encode F} `(h : E ~> stateT W (ctree F))
+  {A B} (t : ctree E A) (f : A -> B) (s : W) :
+  interp_state h (Ctree.map f t) s ≅ Ctree.map (fun '(x, s) => (f x, s)) (interp_state h t s).
+Proof.
+  unfold Ctree.map.
+  rewrite interp_state_bind.
+  upto_bind_equ.
+  destruct x1.
+  apply interp_state_ret.
+Qed.
+
 Lemma interp_state_unfold_iter `{Encode E} `{Encode F}
   `(h : E ~> stateT W (ctree F)) {I R}
   (k : I -> ctree E (I + R)) (i: I) (s: W) :

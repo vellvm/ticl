@@ -18,6 +18,33 @@ Local Open Scope ctree_scope.
 
 Generalizable All Variables.
 
+Section Iter_ctx1.
+  Context {E:Type} `{HE: Encode E} {I R: Type}.
+   
+  Definition iter_ctx1 (Rk: (I -> ctree E (I + R)) -> Prop) (Rx: I -> Prop) :
+    ctree E R -> Prop :=
+    (sup Rk
+       (fun k =>
+          sup Rx
+            (fun x => (fun t => t = iter k x)))).
+
+  Lemma leq_iter_ctx1:
+    forall Rk Rx S, @iter_ctx1 Rk Rx <= S <->
+                (forall k, Rk k -> forall x, Rx x -> S (iter k x)).
+  Proof.
+    intros. unfold iter_ctx1.
+    setoid_rewrite sup_spec.
+    setoid_rewrite sup_spec.
+    firstorder congruence.
+  Qed.
+
+  Lemma in_iter_ctx1 (Rk : (I -> ctree E (I + R)) -> Prop) (Rx : I -> Prop) f x:
+    Rk f -> Rx x -> @iter_ctx1 Rk Rx (iter f x).
+  Proof. intros. epose proof (proj1 (leq_iter_ctx1 Rk Rx _)). apply H1; auto. Qed.
+
+  #[global] Opaque iter_ctx1.
+End Iter_ctx1.
+  
 (*| Up-to bind principle (unary) |*)
 Section Bind_ctx1.
   Context {E:Type} `{HE: Encode E} {X Y: Type}.
@@ -27,7 +54,7 @@ Section Bind_ctx1.
     (sup R
        (fun x => sup S
                 (fun k => (fun t => t = bind x k)))).
-  
+    
   Lemma leq_bind_ctx1:
     forall R S S', @bind_ctx1 R S <= S' <->
                 (forall x, R x -> forall k, S k -> S' (bind x k)).

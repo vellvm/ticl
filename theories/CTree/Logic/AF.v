@@ -114,7 +114,7 @@ Section BasicLemmas.
         rewrite H0 in H |- *.
         now apply aur_stuck in H.
   Qed.
-  
+
   Lemma aul_br: forall n (k: fin' n -> ctree E X) w ψ φ,
       (<( {Br n k}, w |= φ )> \/
          <( {Br n k}, w |= ψ )> /\
@@ -170,6 +170,26 @@ Section BasicLemmas.
           now apply ctll_not_done in Hp.
   Qed.
 
+  Lemma afl_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ,
+      <( {Vis e k}, w |= φ )> \/
+         (not_done w /\ forall (v: encode e), <( {k v}, {Obs e v} |= AF φ )>) <->
+      <( {Vis e k}, w |= AF φ )>.     
+  Proof with auto with ctl.
+    split; intros.
+    - destruct H. 
+      + apply aul_vis...
+      + apply aul_vis...
+        destruct H as (Hd & H).
+        right; split.
+        * csplit; split...
+        * apply H.
+    - apply aul_vis in H...
+      destruct H.
+      + now left.
+      + destruct H; cdestruct H.
+        right...
+  Qed.
+  
   Lemma aur_br: forall n (k: fin' n -> ctree E X) w ψ φ,
       (<[ {Br n k}, w |= φ ]> \/
          <( {Br n k}, w |= ψ )> /\
@@ -224,6 +244,26 @@ Section BasicLemmas.
           now apply ctll_not_done in Hp.
   Qed.
 
+  Lemma afr_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ,
+      <[ {Vis e k}, w |= φ ]> \/
+         (not_done w /\ forall (v: encode e), <[ {k v}, {Obs e v} |= AF φ ]>) <->
+      <[ {Vis e k}, w |= AF φ ]>.     
+  Proof with auto with ctl.
+    split; intros.
+    - destruct H. 
+      + apply aur_vis...
+      + apply aur_vis...
+        destruct H as (Hd & H).
+        right; split.
+        * csplit; split...
+        * apply H.
+    - apply aur_vis in H...
+      destruct H.
+      + now left.
+      + destruct H; cdestruct H.
+        right...
+  Qed.
+  
   Lemma aur_not_done: forall φ ψ ξ (t: ctree E X) (w: World E),
       <[ t, w |= φ AU (ψ AX ξ) ]> ->
       not_done w.

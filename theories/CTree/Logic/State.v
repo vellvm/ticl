@@ -75,6 +75,17 @@ Section StateLemmas.
     intros [y σ'] w' HR...
   Qed.
 
+  Theorem axr_state_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r σ',
+      <[ {interp_state h t σ}, w |= φ AX done= {(r, σ')} w' ]> ->
+      <[ {interp_state h (k r) σ'}, w' |= φ AX ψ ]> ->
+      <[ {interp_state h (x <- t ;; k x) σ}, w |= φ AX ψ ]>.  
+  Proof with eauto with ctl.
+    intros.
+    rewrite interp_state_bind.
+    eapply axr_bind_r... 
+    intros [y σ_] w_ (Hinv & HR); inv Hinv; subst...
+  Qed.
+  
   (*| Bind lemmas for [EX] |*)
   Typeclasses Transparent sbisim.
   Theorem exl_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r σ',
@@ -540,12 +551,14 @@ Section StateLemmas.
   (*| Iter lemma for [AG] |*)
   Typeclasses Transparent sbisim.
   Lemma ag_state_iter{X I} R i w (k: I -> ctree E (I + X)) φ:
-    R i σ w ->    
+    R i σ w ->
+    not_done w ->
     (forall (i: I) σ w,
         R i σ w ->
+        not_done w ->
         <[ {interp_state h (k i) σ}, w |= φ AX (φ AU AN done
                     {fun '(lr, σ') w' =>
-                       exists (i': I), lr = inl i' /\ R i' σ' w'}) ]>) ->
+                       exists (i': I), lr = inl i' /\ not_done w' /\ R i' σ' w'}) ]>) ->
     <( {interp_state h (Ctree.iter k i) σ}, w |= AG φ )>.
   Proof with auto with ctl.
     intros.
@@ -555,39 +568,42 @@ Section StateLemmas.
     generalize dependent σ.
     coinduction RR CIH; intros.
     rewrite interp_state_unfold_iter.
-    specialize (H0 _ _ _ H) as H0'.
-    cdestruct H0'.
+    specialize (H1 _ _ _ H H0) as H1'.
+    cdestruct H1'.
     split2.
     - now apply ctll_bind_l.
     - destruct Hs as (k' & wk & TRk).
       apply can_step_bind_l with k' wk...
-      specialize (H0' _ _ TRk).
-      now apply aur_not_done in H0'.
+      specialize (H1' _ _ TRk).
+      now apply aur_not_done in H1'.
     - intros t' w' TR.
       apply ktrans_bind_inv in TR as
           [(t0' & TR0 & Hd_ & Heq) | (x' & w0 & TRt0 & Hd & TRk)].
       + (* [k x] steps *)
         rewrite Heq; clear Heq t'.
         apply (ft_t (ag_bind_ag φ
-                       (fun '(lr, σ') w' => exists i' : I, lr = inl X i' /\ R i' σ' w'))).
+                       (fun '(lr, σ') w' =>
+                          exists i' : I, lr = inl X i' /\ not_done w' /\ R i' σ' w'))).
         apply in_bind_ctx1.
-        * now apply H0'. 
-        * intros [[l | r] σ'] w_ (? & Hinv & HR); inv Hinv.
+        * now apply H1'. 
+        * intros [[l | r] σ'] w_ (? & Hinv & Hd & HR); inv Hinv.
           rewrite sb_guard.
           apply CIH...
       + (* [k x] returns *)        
-        specialize (H0' _ _ TRt0) as HAX.
+        specialize (H1' _ _ TRt0) as HAX.
         now apply aur_stuck, axr_stuck in HAX.
   Qed.
 
   (*| Iter lemma for [EG] |*)
   Lemma eg_state_iter{X I} R (i: I) w (k: I -> ctree E (I + X)) φ:
-    R i σ w ->    
+    R i σ w ->
+    not_done w ->
     (forall (i: I) σ w,
         R i σ w ->
+        not_done w ->
         <[ {interp_state h (k i) σ}, w |= φ EX (φ EU EN done
                     {fun '(lr, σ') w' =>
-                       exists (i': I), lr = inl X i' /\ R i' σ' w'}) ]>) ->
+                       exists (i': I), lr = inl X i' /\ not_done w' /\ R i' σ' w'}) ]>) ->
     <( {interp_state h (iter k i) σ}, w |= EG φ )>.
   Proof with auto with ctl.
     intros.
@@ -597,8 +613,8 @@ Section StateLemmas.
     generalize dependent σ.
     coinduction RR CIH; intros.
     setoid_rewrite interp_state_unfold_iter.
-    specialize (H0 _ _ _ H) as H0'.
-    cdestruct H0'.
+    specialize (H1 _ _ _ H H0) as H1'.
+    cdestruct H1'.
     split.
     - now apply ctll_bind_l.
     - exists (pat <- t;; match pat with
@@ -606,12 +622,13 @@ Section StateLemmas.
                  | (inr r, s) => Ret (r, s)
                   end), w0; split.
       + apply ktrans_bind_r...
-        now apply eur_not_done in H0'.
+        now apply eur_not_done in H1'.
       + apply (ft_t (eg_bind_eg φ
-                       (fun '(lr, σ') w' => exists i' : I, lr = inl X i' /\ R i' σ' w'))).
+                       (fun '(lr, σ') w' =>
+                          exists i' : I, lr = inl X i' /\ not_done w' /\ R i' σ' w'))).
         apply in_bind_ctx1.
-        * now apply H0'. 
-        * intros [[l | r] σ'] w_ (? & Hinv & HR); inv Hinv.
+        * now apply H1'. 
+        * intros [[l | r] σ'] w_ (? & Hinv & Hd & HR); inv Hinv.
           rewrite sb_guard.
           apply CIH...
   Qed.

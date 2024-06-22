@@ -23,6 +23,11 @@ Local Open Scope ctree_scope.
 Section BindLemmas.
   Context {E: Type} {HE: Encode E}.
 
+  Theorem ctlr_map{X Y}: forall (t: ctree E X) (f: X -> Y) (φ: ctlr E Y) w,
+      <[ {Ctree.map f t}, w |= φ ]> <-> <[ t, w |= {contramap f φ} ]>.
+  Proof.
+  Admitted.
+  
   (*| Prove by induction on formulas [φ], very useful! |*)
   Theorem ctll_bind_l{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) φ w,
       <( t, w |= φ )> ->
@@ -181,6 +186,16 @@ Section BindLemmas.
           cdestruct Hax...
   Qed.
 
+  Theorem axr_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ r w',
+      <[ t, w |= φ AX done= r w' ]> ->
+      <[ {k r}, w' |= φ AX ψ ]> ->
+      <[ {x <- t ;; k x}, w |= φ AX ψ ]>.  
+  Proof with eauto with ctl.
+    intros.
+    eapply axr_bind_r...
+    now intros * [-> ->].
+  Qed.
+  
   (*| Bind lemmas for [EX] |*)
   Typeclasses Transparent sbisim.
   Theorem exl_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r,

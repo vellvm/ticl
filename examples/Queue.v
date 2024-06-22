@@ -3,11 +3,11 @@ From CTree Require Import
   Events.Writer
   Logic.Ctl
   CTree.Equ
-  CTree.SBisim  
-  CTree.Logic.AF
+  CTree.SBisim
   CTree.Logic.AX
-  CTree.Logic.State
+  CTree.Logic.AF
   CTree.Logic.Bind
+  CTree.Logic.State
   CTree.Logic.CanStep
   CTree.Interp.State
   CTree.Events.State
@@ -121,9 +121,9 @@ Section QueueEx.
         subst.
         eapply aur_state_bind_r_eq.
         * rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
-          rewrite bind_ret_l, sb_guard.        
-          cleft; apply ax_done; split...
-          csplit...
+          rewrite bind_ret_l, sb_guard.
+          cleft.
+          apply anr_ret...
         * cbn.
           rewrite interp_state_ret.
           cleft; apply ax_done; split; try csplit...
@@ -144,10 +144,11 @@ Section QueueEx.
              apply aur_vis...
              right; split; try csplit...
              intros [].
-             cleft; apply ax_done; intuition...
-             csplit...
+             cleft.
+             apply anr_ret...
           -- rewrite bind_ret_l, sb_guard.
-             cleft; apply ax_done; split; try csplit...
+             cleft.
+             apply anr_ret...
         * (* w = Obs e v *)
           rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
           rewrite bind_bind.
@@ -156,33 +157,33 @@ Section QueueEx.
              apply aur_vis...
              right; split; try csplit...
              intros [].
-             cleft; apply ax_done; intuition...
-             csplit...
+             cleft.
+             apply anr_ret...
           -- rewrite bind_ret_l, sb_guard.
-             cleft; apply ax_done; split; try csplit...
+             cleft.
+             apply anr_ret...
       + cbn.
         rewrite interp_state_ret.
-        cleft; apply ax_done; split; try csplit...
-        eexists; intuition...
-        split.
-        * split...
-          cbn.
-          inv Hd.
-          -- destruct Hw.
-             apply list_app_cons in H.
-             destruct x; intuition; subst...
-             destruct x; intuition; cbn.
-             ++ now (exists []).
-             ++ now (exists (s0 ::x)).
-          -- destruct e, v, Hw.
-             apply list_app_cons in H.
-             destruct x; intuition; subst...
-             destruct x; intuition; cbn.
-             ++ now (exists []).
-             ++ now (exists (s1 ::x)).
-        * apply PeanoNat.Nat.lt_succ_diag_r.
+        cleft.        
+        apply anr_ret; [constructor |split;[split; cbn|]]...
+        inv Hd.
+        * destruct Hw.
+          apply list_app_cons in H.
+          destruct x; intuition; subst...
+          destruct x; intuition; cbn.
+          ++ now (exists []).
+          ++ now (exists (s0 ::x)).
+        * destruct e, v, Hw.
+          apply list_app_cons in H.
+          destruct x; intuition; subst...
+          destruct x; intuition; cbn.
+          ++ now (exists []).
+          ++ now (exists (s1 ::x)).
   Qed.
 
+  Definition while{E} `{HE: Encode E}(k: ctree E (unit + unit)): ctree E unit :=
+    Ctree.iter (fun _ => k tt) tt.
+  
   (* Ex2: Rotate a queue (pop an element from head, add it to tail) *)
   Definition rotate: ctree (queueE S) unit :=
     iter (fun _ =>
@@ -197,8 +198,9 @@ Section QueueEx.
             end) tt.
   
   Inductive index: list S -> S -> nat -> Prop :=
-  | IndexFound: forall h ts,
-    index (h :: ts) h 0
+  | IndexFound: forall h h' ts,
+      h = h' ->
+      index (h :: ts) h' 0
   | IndexSucc: forall h ts x n,
     index ts x n ->
     index (h :: ts) x (1+ n)%nat.
@@ -209,67 +211,62 @@ Section QueueEx.
   Proof with auto.
     induction q; intros; cbn; auto.
   Qed.
-  
+
+  Typeclasses Transparent equ.
+  Typeclasses Transparent sbisim.
+
+  Lemma sb_iter_iter: forall (k: I -> ctree E (I + R)) (x: I),
+      Ctree.iter (fun x => Ctree.map inl (Ctree.iter k x)) x ~
+        Ctree.iter (fun x =>
+    
   Theorem rotate_agaf_pop: forall q nl,
       <( {interp_state h_queueE rotate (q ++ [nl])}, Pure |=
            AG AF visW {fun h => h = nl} )>.
   Proof with eauto with ctl.
     intros.
     eapply ag_state_iter with (R:=fun _ q _ => exists i, index q nl i).
-    exists (List.length q).
-    apply index_last_eq.
-    clear q.
-    intros [] q w (i & Hi).
-    
-    rewrite interp_state_bind.
-    unfold pop, push, trigger.
-    rewrite interp_state_vis, bind_bind.
-    unfold runStateT, h_queueE; cbn.
-    rewrite bind_bind.
-    resum.
-    rewrite ?bind_ret_l, bind_guard.
-    apply af_guard.
-    rewrite interp_state_ret, bind_ret_l.
-    rewrite interp_state_bind, interp_state_vis.
-    rewrite bind_bind.
-    unfold runStateT; cbn.
-    rewrite bind_bind.
-    resum.
-    rewrite bind_ret_l.
-    destruct l as [|h ts]; cbn.
-    - (* l = [] *)
-      rewrite bind_ret_l, bind_guard.
-      apply af_guard.
-      rewrite interp_state_ret, bind_ret_l.
-      cbn.
-      rewrite interp_state_ret.
-      next; left.
-      apply ax_done.
-      intuition.
-      inv Hw.
-      + destruct H'; cbn in *.
-        inv H0.
-      + destruct v, e.
-        cbn in *.
-        destruct H'; inv H0.
-    - (* l = h::ts *)
-      cbn.
-      rewrite index_last_S.
-      inv Hw; cbn in H'.
-      + destruct H'.
-        destruct (h =? t) eqn:Hh.
-        * inv H0; lia.
-        * rewrite H0; cbn.
-          rewrite bind_trigger, bind_vis.
-          next; right.
-          next; split.
-          -- apply can_step_vis...
-          -- intros t' w' TR.
-             apply ktrans_vis in TR as ([] & -> & <- & _).
-             rewrite bind_ret_l, bind_guard, af_guard,
-               interp_state_ret, bind_ret_l. 
-             cbn.
-             rewrite interp_state_ret.
+    - exists (List.length q).
+      apply index_last_eq.
+    - constructor.
+    - clear q.
+      intros [] q w (i & Hi) Hd.
+      rewrite interp_state_bind.
+      setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
+      rewrite bind_bind.
+      setoid_rewrite sb_guard.
+      setoid_rewrite bind_ret_l.
+      destruct q.
+      + inv Hi.
+      + rewrite bind_bind.
+        setoid_rewrite bind_ret_l.
+        unfold log, trigger.
+        (* Without this it's impossible to prove *)
+        rewrite bind_vis.
+        eapply axr_vis...
+        split.
+        * eapply afl_vis...
+          right.
+          split...
+          intros [].
+          rewrite bind_ret_l.
+          rewrite interp_state_bind, interp_state_vis, bind_bind.
+          cbn.
+          rewrite bind_ret_l, sb_guard, interp_state_ret, bind_ret_l,
+            interp_state_ret.          
+          dependent induction Hi. 
+          -- cleft.
+             csplit...
+          -- admit.
+        * intros [].
+          rewrite bind_ret_l, interp_state_bind, interp_state_vis.
+          cbn.
+          rewrite bind_bind, bind_ret_l, sb_guard, interp_state_ret,
+            bind_ret_l, interp_state_ret.
+          cleft.
+          apply anr_ret...
+          exists tt; split2...
+          exists (List.length q).
+          admit.
   Admitted.
 End QueueEx.
   

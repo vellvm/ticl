@@ -1,4 +1,3 @@
-
 From CTree Require Import
   Events.Core
   Logic.Kripke
@@ -37,12 +36,30 @@ Section CtlSyntax.
   | COrR (p: ctlr) (q: ctlr): ctlr
   | CImplR (p: ctll) (q: ctlr): ctlr.
 
+    
   Arguments ctlr: clear implicits.
 
 End CtlSyntax.
 
 Arguments ctll E {HE}.
 Arguments ctlr E {HE} X.
+
+Section Contramap.
+  Context {E: Type} {HE: Encode E} {X Y: Type}.
+  Definition contramap(f: Y -> X): ctlr E X -> ctlr E Y :=
+    fix F φ :=
+      match φ with
+      | CDone p => CDone (fun y w => p (f y) w)
+      | CuR q φ ψ => CuR q φ (F ψ)
+      | CxR q φ ψ => CxR q φ (F ψ)
+      | CAndR φ ψ => CAndR (F φ) (F ψ)
+      | COrR φ ψ => COrR (F φ) (F ψ)
+      | CImplR φ ψ => CImplR φ (F ψ)
+      end.
+
+  (* TODO: Contramap laws, identity and composition *)
+  (* contramap f id = id, contramap (f . g) p = contramap g (contramap f p) *)
+End Contramap.
 
 (*| Coq notation for CTL formulas |*)
 Module CtlNotations.
