@@ -8,6 +8,7 @@ From CTree Require Import
   Events.Core
   CTree.Logic.Trans
   CTree.Interp.State
+  CTree.Events.Writer
   CTree.Equ
   Logic.Ctl
   Logic.Kripke.
@@ -231,5 +232,20 @@ Section CanStepCtrees.
     rewrite unfold_iter.
     apply can_step_bind_l with t' w'; auto.   
   Qed.
-
+  
 End CanStepCtrees.
+
+(*| CTL logic lemmas on interpretations of c/itrees |*)
+Section CanStepInterp.
+  Context {E F S: Type} {HE: Encode E} {HF: Encode F} (h: E ~> stateT S (ctree F)) (s: S).
+
+  Lemma can_step_state_iter{I X}: forall (k: I -> ctree E (I+X)) (i: I) t' w w',
+      [interp_state h (k i) s, w] ↦ [t', w'] ->
+      not_done w' ->
+      can_step (interp_state h (Ctree.iter k i) s) w.
+  Proof.
+    intros k i t' w w' TR Hd.
+    rewrite interp_state_unfold_iter.
+    apply can_step_bind_l with t' w'; auto.   
+  Qed.
+End CanStepInterp.

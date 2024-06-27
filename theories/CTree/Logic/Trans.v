@@ -389,9 +389,8 @@ Section CTreeTrans.
     - inv H0.
     - inv H0.
   Qed.      
-
   
-  Opaque Ctree.stuck.  
+  Opaque Ctree.stuck.
   Lemma ktrans_bind_inv_aux {X Y} (w w': World E)(T U: ctree' E Y) :
     ktrans_ T w U w' ->
     forall (t: ctree E X) (k: X -> ctree E Y) (u: ctree E Y),
@@ -546,8 +545,6 @@ Global Hint Resolve
   ktrans_guard ktrans_pure_pred: ctl.
 
 From CTree Require Import CTree.SBisim.
-Local Typeclasses Opaque equ.
-
 Local Typeclasses Opaque sbisim.
 Local Typeclasses Opaque equ.
 Lemma ktrans_sbisim_ret `{Encode E} {X Y}:

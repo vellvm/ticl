@@ -18,6 +18,7 @@ Local Open Scope ctree_scope.
 
 Generalizable All Variables.
 
+(*| Up-to iter principle (unary) |*)
 Section Iter_ctx1.
   Context {E:Type} `{HE: Encode E} {I R: Type}.
    
@@ -173,7 +174,8 @@ Section Equ_bind_ctx.
   (*|
 Specialization of [bind_ctx2] to a function acting with [equ] on the bound value,
 and with the argument (pointwise) on the continuation.
-|*)  Program Definition bind_ctx_equ r: mon (rel (ctree E Y1) (ctree E Y2)) :=
+|*)
+  Program Definition bind_ctx_equ r: mon (rel (ctree E Y1) (ctree E Y2)) :=
     {|body := fun R => @bind_ctx2 E E HE HE X1 X2 Y1 Y2 (equ r) (pointwise r R) |}.
   Next Obligation.
     repeat red; intros.
@@ -624,6 +626,14 @@ Proof.
   rewrite H.
   upto_bind_equ.
   econstructor; apply CIH.
+Qed.
+
+#[global] Instance proper_equ_map{E X Y} {HE: Encode E} (f: X -> Y):
+  Proper (equ eq ==> equ eq) (map f).
+Proof.
+  unfold Proper, respectful; intros; subst.
+  unfold map.
+  now rewrite H.
 Qed.
 
 (*| Inversion of [≅] hypotheses |*)

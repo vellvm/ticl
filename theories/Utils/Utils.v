@@ -20,6 +20,28 @@ Notation rel X Y := (X -> Y -> Prop).
 Ltac ddestruction H := cbn in H; dependent destruction H.
 Ltac split2 := split; [|split].
 
+Lemma option_map_none {X Y}: forall (f: X -> Y) m,
+    option_map f m = None <-> m = None.
+Proof.
+  intros.
+  destruct m; cbn.
+  - split; intros Hcontra; inversion Hcontra.
+  - split; intros Hcontra; inversion Hcontra; auto.
+Qed.
+
+Lemma option_map_some {X Y}: forall (f: X -> Y) m v,
+    option_map f m = Some v <-> (exists x, m = Some x /\ v = f x).
+Proof.
+  intros; destruct m; cbn.
+  - split; intros.
+    + inversion H; subst.
+      exists x; auto.
+    + destruct H as (? & ? & ->).
+      inversion H; subst; reflexivity.
+  - split; intros; inversion H.
+    destruct H0; inversion H0.
+Qed.
+
 Global Coercion is_true(b: bool): Prop :=
   if b then True else False.
 

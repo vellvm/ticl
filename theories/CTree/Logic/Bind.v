@@ -12,6 +12,7 @@ From CTree Require Import
   CTree.Logic.AF
   CTree.Logic.AG
   CTree.Logic.EX
+  CTree.Events.Writer
   Logic.Ctl.
 
 Generalizable All Variables.
@@ -23,11 +24,6 @@ Local Open Scope ctree_scope.
 Section BindLemmas.
   Context {E: Type} {HE: Encode E}.
 
-  Theorem ctlr_map{X Y}: forall (t: ctree E X) (f: X -> Y) (φ: ctlr E Y) w,
-      <[ {Ctree.map f t}, w |= φ ]> <-> <[ t, w |= {contramap f φ} ]>.
-  Proof.
-  Admitted.
-  
   (*| Prove by induction on formulas [φ], very useful! |*)
   Theorem ctll_bind_l{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) φ w,
       <( t, w |= φ )> ->
@@ -536,5 +532,71 @@ Section BindLemmas.
     apply eg_bind_r with (R:=fun r_ w_ => r = r_ /\ wr = w_); auto.
     now intros * (-> & ->).
   Qed.
+
+  Theorem ctlr_map{X Y}: forall (t: ctree E X) (f: X -> Y) (φ: ctlr E Y) w,
+      not_done w ->
+      <[ {Ctree.map f t}, w |= φ ]> <-> <[ t, w |= {contramap f φ} ]>.
+  Proof with auto with ctl.
+    induction φ; intros; cbn.
+    - (* Done *)
+      split; intros Hinv; rewrite unfold_entailsR in Hinv.
+      + inv Hinv; inv H.
+      + inv Hinv; inv H.
+    - (* U *)
+      setoid_rewrite (ctree_eta t) in IHφ.
+      rewrite (ctree_eta t); desobs t; unfold Ctree.map in *; cbn in *;
+        rewrite ?bind_ret_l, ?bind_br, ?bind_guard, ?bind_vis.
+      destruct q.
+      + 
+      inv H; split; intro Hinv; try solve [inv Hinv].
+  Admitted.
+
+  Theorem ctll_map{X Y}: forall (t: ctree E X) (f: X -> Y) (φ: ctll E) w,
+      <( {Ctree.map f t}, w |= φ )> <-> <( t, w |= φ )>.
+  Proof.
+  Admitted.
   
+  Lemma aul_log_l{S}: forall (x: S) w φ,
+      φ x ->
+      not_done w ->
+      <( {log x}, w |= AF visW φ )>.
+  Proof with auto.
+    intros.
+    cright.
+    csplit.
+    - csplit...
+    - apply can_step_vis...
+    - intros * TR.
+      apply ktrans_vis in TR as (-> & -> & <- & ?).
+      cleft; csplit.
+      now cbn.
+  Qed.
+
+  Typeclasses Transparent equ.
+  Lemma aur_log_r{X S}: forall (s: S) (k: ctree (writerE S) X) w φ,
+      not_done w ->
+      <[ k, {Obs (Log s) tt} |= AF φ ]> ->
+      <[ {log s;; k }, w |= AF φ ]>.
+  Proof with eauto.
+    intros.
+    cright.
+    csplit.
+    - csplit...
+    - eapply can_step_bind_l.
+      + apply ktrans_vis...
+      + constructor.
+    - intros * TR.
+      apply ktrans_bind_inv in TR as
+              [(t_ & TR' & Hd & ->) |
+                (x & ? & TR' & Hr & TRk)].
+      + apply ktrans_vis in TR' as (-> & -> & ? & ?).
+        unfold resum_ret, ReSumRet_refl in H1.
+        rewrite <- H1, bind_ret_l.
+        unfold resum, ReSum_refl.
+        apply H0.
+      + apply ktrans_vis in TR' as (-> & -> & ? & ?).
+        inv Hr.
+        Unshelve.
+        exact tt.
+  Qed.
 End BindLemmas.

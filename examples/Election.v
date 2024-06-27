@@ -8,6 +8,7 @@ From CTree Require Import
   CTree.Logic.AF
   CTree.Logic.AX
   CTree.Logic.State
+  CTree.Logic.Iter
   CTree.Logic.Bind
   CTree.Events.Writer
   CTree.Events.Net.Uniring.
@@ -90,5 +91,18 @@ Section Election.
     apply axl_br; split; [csplit; split; auto with ctl|].
     intro c. (* Nondeterministic pick *)
     rewrite bind_ret_l.
+    unfold Ctree.forever.    
+    eapply aul_iter.
+      with (f:=fun 'tt l _ => List.length l)
+           (Ri:=fun 'tt l w => not_done w /\
+                  match w with
+                  | Obs (Log s') tt =>
+                      match l with
+                      | nil => nl = s'
+                      | h :: ts => exists hs, h :: ts = hs ++ [nl]
+                      end
+                  | _ => exists hs, l = hs ++ [nl]
+                  end)... 
+    intros [] l w (Hd & Hw).
   Admitted.    
 End Election.

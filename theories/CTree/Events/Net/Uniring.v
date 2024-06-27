@@ -90,7 +90,7 @@ Section UniringMsg.
 
   Definition upd_proc(sys: Sys)(id: fin' n)(p: ctree netE unit) :=
     sys @ id := {| mbox := mbox (sys $ id); proc := p |}.
-
+  
   Equations uring_sched_one' (id: fin' n)(sys: Sys): ctree (writerE NetObs) (fin' n * Sys) :=
     uring_sched_one' id sys with observe_worker (sys $ id) => {
         (** A non-deterministic choice, traverse it *)
