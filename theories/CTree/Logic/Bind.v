@@ -573,6 +573,33 @@ Section BindLemmas.
   Qed.
 
   Typeclasses Transparent equ.
+  Lemma aul_log_r{X S}: forall (s: S) (k: ctree (writerE S) X) w φ,
+      not_done w ->
+      <( k, {Obs (Log s) tt} |= AF φ )> ->
+      <( {log s;; k }, w |= AF φ )>.
+  Proof with eauto.
+    intros.
+    cright.
+    csplit.
+    - csplit...
+    - eapply can_step_bind_l.
+      + apply ktrans_vis...
+      + constructor.
+    - intros * TR.
+      apply ktrans_bind_inv in TR as
+              [(t_ & TR' & Hd & ->) |
+                (x & ? & TR' & Hr & TRk)].
+      + apply ktrans_vis in TR' as (-> & -> & ? & ?).
+        unfold resum_ret, ReSumRet_refl in H1.
+        rewrite <- H1, bind_ret_l.
+        unfold resum, ReSum_refl.
+        apply H0.
+      + apply ktrans_vis in TR' as (-> & -> & ? & ?).
+        inv Hr.
+        Unshelve.
+        exact tt.
+  Qed.
+  
   Lemma aur_log_r{X S}: forall (s: S) (k: ctree (writerE S) X) w φ,
       not_done w ->
       <[ k, {Obs (Log s) tt} |= AF φ ]> ->

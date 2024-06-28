@@ -160,61 +160,72 @@ Section IterLemmas.
   (* AU *)
   Lemma aul_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E (I + X)) (φ ψ: ctll E):
     well_founded Rv ->
+    not_done w ->
     Ri i w ->    
     (forall (i: I) w,
+        not_done w ->
         Ri i w ->
         <( {k i}, w |= φ AU ψ )> \/
           <[ {k i}, w |= φ AU AN done
                       {fun (lr: I + X) (w': World E) =>
-                         exists i', lr = inl i' /\ Ri i' w' /\ Rv (i', w') (i, w)}]>) ->
+                         exists i', lr = inl i'
+                               /\ not_done w'
+                               /\ Ri i' w'
+                               /\ Rv (i', w') (i, w)}]>) ->
     <( {iter k i}, w |= φ AU ψ )>.
   Proof with auto with ctl.
     remember (i, w) as P.
     replace i with (fst P) by now subst.
     replace w with (snd P) by now subst.
     clear HeqP i w.
-    intros WfR Hi H.
+    intros WfR Hd Hi H.
     generalize dependent k.
     induction P using (well_founded_induction WfR);
       destruct P as (i, w); cbn in *. 
     rename H into HindWf.
     intros.
     unfold iter, MonadIter_ctree.
-    destruct (H _ _ Hi).
+    destruct (H _ _ Hd Hi).
     - rewrite unfold_iter.
       apply ctll_bind_l... 
     - rewrite unfold_iter.
       eapply aul_bind_r with
         (R:=fun (lr: I + X) (w': World E) =>
-              exists i' : I, lr = inl i' /\ Ri i' w' /\ Rv (i', w') (i, w))... 
+              exists i' : I, lr = inl i' /\ not_done w'/\ Ri i' w' /\ Rv (i', w') (i, w))... 
       intros [i' | r] w'.            
-      + intros (j & Hinv & Hi' & Hv); inv Hinv.
+      + intros (j & Hinv & Hd' & Hi' & Hv); inv Hinv.
         rewrite sb_guard.
         remember (j, w') as y.
         replace j with (fst y) in Hi' |- * by now subst.
-        replace w' with (snd y) in Hi' |- * by now subst.
+        replace w' with (snd y) in Hd', Hi' |- * by now subst.
         apply HindWf...
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
 
   Lemma aul_iter_nat{X I} Ri (f: I -> World E -> nat) (i: I) w (k: I -> ctree E (I + X))
     (φ ψ: ctll E):
+    not_done w ->
     Ri i w ->    
     (forall (i: I) w,
+        not_done w ->
         Ri i w ->
         <( {k i}, w |= φ AU ψ )> \/
           <[ {k i}, w |= φ AU AN done
                       {fun (lr: I + X) (w': World E) =>
-                         exists i', lr = inl i' /\ Ri i' w' /\ f i'  w' < f i w}]>) ->
+                         exists i', lr = inl i'
+                               /\ not_done w'
+                               /\ Ri i' w'
+                               /\ f i'  w' < f i w}]>) ->
     <( {iter k i}, w |= φ AU ψ )>.
   Proof.
     intros.
-    eapply aul_iter with Ri (ltof _ (fun '(i, w) => f i w)); auto.
+    eapply aul_iter with Ri
+                         (ltof _ (fun '(i, w) => f i w)); auto.
     apply well_founded_ltof.
   Qed.
   
   Lemma aur_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E (I + X)) (φ: ctll E) (ψ: ctlr E X):
-    well_founded Rv ->
+    well_founded Rv ->    
     Ri i w ->    
     (forall (i: I) w,
         Ri i w ->

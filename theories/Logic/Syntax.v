@@ -61,9 +61,10 @@ Section Contramap.
   (* contramap f id = id, contramap (f . g) p = contramap g (contramap f p) *)
 End Contramap.
 
+Bind Scope ctl_scope with ctll ctlr.
+
 (*| Coq notation for CTL formulas |*)
 Module CtlNotations.
-  Declare Scope ctl_scope.
   Local Open Scope ctl_scope.
 
   (* left CTL syntax (no termination) *)

@@ -30,11 +30,15 @@ Class Kripke (M: forall E, Encode E -> Type -> Type) (E: Type) `{HE: Encode E} :
       not_pure w'
   }.
 
+Declare Scope ctl_scope.
+Local Open Scope ctl_scope.
+Delimit Scope ctl_scope with ctl.
+
 (* Transition relation *)
 Notation "[ t , w ]  ↦ [ t' , w' ]" :=
   (ktrans t w t' w')
     (at level 78,
-      right associativity).
+      right associativity): ctl_scope.
 
 Definition can_step `{Kripke M W} {X} (m: M W _ X) (w: World W): Prop :=
   exists m' w', [m,w] ↦ [m',w'].

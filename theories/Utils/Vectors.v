@@ -34,20 +34,6 @@ Proof.
   reflexivity.
 Qed.
 
-Program Definition cycle{n}(i: fin' n): fin' n :=
-  if Fin.eq_dec i (fin_max n) then
-    Fin.F1
-  else
-    (_ (Fin.FS i)).
-Next Obligation. exact i. Qed.
-
-Lemma next_sanity_max{n}: cycle (fin_max n) = Fin.F1.
-Proof.
-  unfold cycle.
-  destruct (Fin.eq_dec (fin_max n) (fin_max n)); auto.
-  exfalso; apply n0; reflexivity.
-Qed.
-
 Program Definition of_nat_lt' {n p: nat} (H: p < n): fin' n :=
   (_ (Fin.of_nat_lt H)).
 Next Obligation.
@@ -55,16 +41,6 @@ Next Obligation.
   - dependent destruction x.
   - exact (Fin.FS x).
 Defined.
-
-Lemma next_sanity_lt (m n: nat) (Hm: m < n):
-    proj1_sig (to_nat (cycle (of_nat_lt' Hm))) <= n.
-Proof.
-  induction m; cbn; unfold of_nat_lt', of_nat_lt'_obligation_1; cbn.
-  - destruct n.
-    + inversion Hm.
-    + cbn.
-      admit.
-Admitted.
 
 Definition init T :=
   @Vector.caseS _ (fun n v => vec n T) (fun h n t => t).
@@ -139,6 +115,7 @@ Fixpoint fin_all_v (n : nat) : vec' n (fin' n) :=
   | 0 => Vector.cons _ (F1) _ (@Vector.nil (fin' 0))
   | S n => Vector.cons _ (@FS (S n) (@F1 n)) _ (Vector.map (@FS _) (fin_all_v n))
   end%list.
+
 
 Theorem fin_all_In : forall {n} (f : fin n),
     List.In f (fin_all n).
@@ -246,17 +223,6 @@ Definition filter_to_indices{N T}(v: vec N T) (p: T -> bool): list (fin N) :=
   | [] => List.nil
   | h :: ts => filter_to_indices' p (Vector.rev (h :: ts)) (length_vec ts)
   end.
-
-Lemma filter_to_indices_spec: forall n T (v: vec n T) p (l: list (fin n)),
-    filter_to_indices v p = l <->
-      (forall x, List.In x l <-> p (Vector.nth v x) = true).
-Proof.
-  induction n; intros; split; intros; dependent destruction v.  
-  - dependent destruction x.
-  - destruct l; cbn.
-    + reflexivity.
-    + dependent destruction t.
-Admitted.
 
 Equations safe_nth{T}(h: T) (ts: list T)(i: fin (S (length ts))): T :=
   safe_nth h ts Fin.F1 := h;
