@@ -167,9 +167,10 @@ Section SecurityEx.
             exists (obs: SecObs), w = Obs (Log obs) tt
                              /\ obs.(al) ⪯ obs.(ml)
                              /\ forall i, no_leak i σ)...
-    intros i σ' w (obs & -> & Hobs & Hσ0) Hφ; cbn in Hφ.
+    intros i σ' w Hd (obs & -> & Hobs & Hσ0). 
     rewrite interp_state_map.
-    eapply ctlr_map; unfold br2; cbn.
+    split; [csplit; auto|].
+    eapply ctlr_map; unfold br2; cbn...
     rewrite interp_state_bind, interp_state_br, bind_br.
     apply axr_br; split; [csplit; auto|].
     intro c. (* Choice witness *)
@@ -263,6 +264,6 @@ Section SecurityEx.
         cleft; apply anr_ret... 
         eexists; intuition.
         eexists; intuition.
-  Qed.        
+  Qed.
   Print Assumptions ag_safety_sec.
 End SecurityEx.
