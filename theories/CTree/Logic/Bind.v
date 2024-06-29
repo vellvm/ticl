@@ -149,7 +149,7 @@ Section BindLemmas.
           specialize (H0 _ _ H) as Hax.
           cdestruct Hax...
   Qed.
-  
+
   Theorem axr_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
       <[ t, w |= φ AX done R ]> ->
       (forall x w, R x w -> <[ {k x}, w |= φ AX ψ ]>) ->
