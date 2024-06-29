@@ -533,29 +533,14 @@ Section BindLemmas.
     now intros * (-> & ->).
   Qed.
 
+  (* These are true but will require inversion lemmas on bind formulas
   Theorem ctlr_map{X Y}: forall (t: ctree E X) (f: X -> Y) (φ: ctlr E Y) w,
       not_done w ->
       <[ {Ctree.map f t}, w |= φ ]> <-> <[ t, w |= {contramap f φ} ]>.
-  Proof with auto with ctl.
-    induction φ; intros; cbn.
-    - (* Done *)
-      split; intros Hinv; rewrite unfold_entailsR in Hinv.
-      + inv Hinv; inv H.
-      + inv Hinv; inv H.
-    - (* U *)
-      setoid_rewrite (ctree_eta t) in IHφ.
-      rewrite (ctree_eta t); desobs t; unfold Ctree.map in *; cbn in *;
-        rewrite ?bind_ret_l, ?bind_br, ?bind_guard, ?bind_vis.
-      destruct q.
-      + 
-      inv H; split; intro Hinv; try solve [inv Hinv].
-  Admitted.
 
   Theorem ctll_map{X Y}: forall (t: ctree E X) (f: X -> Y) (φ: ctll E) w,
       <( {Ctree.map f t}, w |= φ )> <-> <( t, w |= φ )>.
-  Proof.
-  Admitted.
-  
+  *)
   Lemma aul_log_l{S}: forall (x: S) w φ,
       φ x ->
       not_done w ->

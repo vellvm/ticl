@@ -68,7 +68,7 @@ Section Election.
   Notation NetObs := (Id * msg).
   
   (* Local network instrumented semantics, write to [Mails] *)
-  Definition h_netE(cycle: fin' n -> fin' n): netE ~> stateT (Id * Mails) (ctreeW NetObs) := 
+  Definition h_netE'(cycle: fin' n -> fin' n): netE ~> stateT (Id * Mails) (ctreeW NetObs) := 
     fun e =>
       mkStateT
         (fun '(id, mail) =>
@@ -107,7 +107,7 @@ Section Election.
     end.
 
   (* Uniring scheduler, picks initial [i] nondeterministically, then runs forever *)
-  Definition elect_sched(cycle: fin' n -> fin' n): ctree netE void :=
+  Definition elect_sched'(cycle: fin' n -> fin' n): ctree netE void :=
     i <- Ctree.branch n ;;
     set i ;;
     Ctree.forever void
@@ -129,6 +129,9 @@ Equations cycle(i: fin' 2) : fin' 2 :=
   cycle Fin.F1 := Fin.FS Fin.F1;
   cycle (Fin.FS Fin.F1) := Fin.FS (Fin.FS Fin.F1);
   cycle (Fin.FS (Fin.FS Fin.F1)) := Fin.F1.
+
+Definition elect_sched := elect_sched' cycle.
+Definition h_netE := h_netE' cycle.
 
 (* Initial mailboxes are [F3, F1, F2] *)
 Definition mailboxes: vec' 2 (fin' 2) := 
@@ -176,13 +179,11 @@ Ltac run_elect' :=
   simp cycle; cbn.
 
 Lemma election3_liveness:
-  <( {interp_state
-        (h_netE cycle)
-        (elect_sched cycle) (F1, Vector.map Candidate mailboxes)}, Pure |=
+  <( {interp_state h_netE elect_sched (F1, Vector.map Candidate mailboxes)}, Pure |=
           AF visW {fun '(id, msg) => exists e, msg = Elected e /\ id = e /\ e = FS (FS F1)} )>.
 Proof with auto with ctl.
   intros.
-  unfold elect_sched, Ctree.forever.  
+  unfold elect_sched, elect_sched', Ctree.forever.  
   cbn.
   rewrite interp_state_bind.
   unfold Ctree.branch.
@@ -254,4 +255,4 @@ Proof with auto with ctl.
       eexists; intuition.
     + ddestruction i.  
 Qed.
-End Election.
+Print Assumptions election3_liveness.

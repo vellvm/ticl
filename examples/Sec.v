@@ -168,21 +168,19 @@ Section SecurityEx.
                              /\ obs.(al) ⪯ obs.(ml)
                              /\ forall i, no_leak i σ)...
     intros i σ' w Hd (obs & -> & Hobs & Hσ0). 
-    rewrite interp_state_map.
+    rewrite interp_state_map; unfold map.
     split; [csplit; auto|].
-    eapply ctlr_map; unfold br2; cbn...
-    rewrite interp_state_bind, interp_state_br, bind_br.
+    unfold br2; cbn...
+    rewrite interp_state_bind, interp_state_br, ?bind_br.
     apply axr_br; split; [csplit; auto|].
     intro c. (* Choice witness *)
-    rewrite bind_guard, sb_guard.
+    rewrite bind_bind, bind_guard, sb_guard.
     ddestruction c; unfold sec_alice1, sec_bob1;
-      destruct (Nat.Even_Odd_dec i);
-      rewrite <- interp_state_bind;
-      rewrite interp_state_bind.
+      destruct (Nat.Even_Odd_dec i).
     - (* Alice runs, [i] is even *)
       rewrite (@interp_state_trigger _ _ _ _ _ _ (Write H (S i) secret) _); cbn.
       rewrite bind_bind, bind_ret_l, bind_guard, sb_guard, bind_ret_l,
-        interp_state_ret.
+        interp_state_ret, bind_ret_l.
       cleft; apply anr_ret...
       eexists; split2...
       eexists; split2...
@@ -201,7 +199,7 @@ Section SecurityEx.
     - (* Alice runs, [i] is odd *)
       rewrite (@interp_state_trigger _ _ _ _ _ _ (Write H i secret) _); cbn.
       rewrite bind_bind, bind_ret_l, bind_guard, sb_guard, bind_ret_l,
-        interp_state_ret.
+        interp_state_ret, bind_ret_l.
       cleft; apply anr_ret...
       eexists; split2...
       eexists; split2...
@@ -230,13 +228,13 @@ Section SecurityEx.
              cleft; apply anr_ret...
         * cleft; apply anr_ret... 
         * rewrite bind_guard, sb_guard, bind_ret_l, interp_state_ret, bind_ret_l,
-            interp_state_ret.
+            interp_state_ret, bind_ret_l.
           cleft; apply anr_ret... 
           eexists; intuition.
           eexists; intuition; cbn.
           apply sec_lte_L.
       + rewrite bind_ret_l, bind_guard, sb_guard, bind_ret_l, interp_state_ret,
-          bind_ret_l, interp_state_ret.
+          bind_ret_l, interp_state_ret, bind_ret_l.
         cleft; apply anr_ret... 
         eexists; intuition.
         eexists; intuition.
@@ -254,13 +252,13 @@ Section SecurityEx.
              cleft; apply anr_ret... 
         * cleft; apply anr_ret... 
         * rewrite bind_guard, sb_guard, bind_ret_l, interp_state_ret, bind_ret_l,
-            interp_state_ret.
+            interp_state_ret, bind_ret_l.
           cleft; apply anr_ret... 
           eexists; intuition.
           eexists; intuition; cbn.
           apply sec_lte_L.
       + rewrite bind_ret_l, bind_guard, sb_guard, bind_ret_l, interp_state_ret,
-          bind_ret_l, interp_state_ret.
+          bind_ret_l, interp_state_ret, bind_ret_l.
         cleft; apply anr_ret... 
         eexists; intuition.
         eexists; intuition.

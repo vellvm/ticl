@@ -420,7 +420,8 @@ Section QueueEx.
                  end)...
         * clear Hlen Hi q w Hd i.
           intros [] q w Hd (Hlen & i & Hi).
-          rewrite interp_state_map, ctlr_map, ctll_map, interp_state_bind; cbn...
+          rewrite interp_state_map; unfold map.          
+          rewrite interp_state_bind, bind_bind; cbn...
           setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
           rewrite bind_bind.
           setoid_rewrite sb_guard.
@@ -444,7 +445,7 @@ Section QueueEx.
                setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Push t) _);
                  simpl runStateT.
                rewrite bind_bind, bind_ret_l, sb_guard, bind_ret_l,
-                 interp_state_ret.
+                 interp_state_ret, bind_ret_l.
                cleft.
                apply anr_ret...
                exists tt; intuition.
@@ -488,9 +489,10 @@ Section QueueEx.
                     rewrite unique_last_neq with (n:=n)...
                     rewrite unfold_unique_hd, Hnl, Hnl'.
                     rewrite app_length.
-                    cbn; destruct n.
+                    cbn; destruct n; admit.                    
       + (* Loop invariant *)
-        rewrite interp_state_map, ctlr_map, interp_state_bind,
+        rewrite interp_state_map; unfold map; cbn.
+        rewrite interp_state_bind, bind_bind,
           (@interp_state_trigger _ _ _ _ _ _ Pop _), bind_bind; cbn...
         setoid_rewrite sb_guard.
         setoid_rewrite bind_ret_l.
@@ -510,7 +512,7 @@ Section QueueEx.
              rewrite interp_state_bind, interp_state_vis, bind_bind.
              cbn.
              rewrite bind_ret_l, sb_guard, interp_state_ret, bind_ret_l,
-               interp_state_ret.
+               interp_state_ret, bind_ret_l.
              cleft.
              apply anr_ret...
              exists tt; intuition.
@@ -530,7 +532,7 @@ Section QueueEx.
              rewrite interp_state_bind, interp_state_vis, bind_bind.
              cbn.
              rewrite bind_ret_l, sb_guard, interp_state_ret, bind_ret_l,
-               interp_state_ret.
+               interp_state_ret, bind_ret_l.
              cleft.
              apply anr_ret...
              exists tt; intuition.
