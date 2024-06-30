@@ -22,12 +22,6 @@ Class Kripke (M: forall E, Encode E -> Type -> Type) (E: Type) `{HE: Encode E} :
     ktrans_not_done {X}: forall (t t': M E HE X) (w w': World E),
       ktrans t w t' w' ->
       not_done w;
-
-    (* - [ktrans] preserves impure effects *)
-    ktrans_not_pure {X}: forall (t t': M E HE X) (w w': World E),
-      ktrans t w t' w' ->
-      not_pure w ->
-      not_pure w'
   }.
 
 Declare Scope ctl_scope.
@@ -81,4 +75,4 @@ Ltac ktrans_inv :=
   | [H: [?t, ?w] ↦ [?t', ?w'] |- not_done ?w] =>
       apply ktrans_not_done with t t' w'; apply H
   end.
-Global Hint Extern 2 => ktrans_inv: ctl.  
+Global Hint Extern 2 => ktrans_inv: ctl.

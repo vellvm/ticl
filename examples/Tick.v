@@ -47,12 +47,22 @@ Section TickTock.
            tick)
       tt.
 
+  (* This requires the AR iter lemma, it's something like this
+
+  Lemma ag_iter_or{X I} (R: rel I (World E)) (i: I) w (k: I -> ctree E (I + X)) φ:
+    R i w ->
+    (forall (i: I) w,
+        R i w ->
+        <( {iter k i}, w |= φ)> \/
+          <[ {k i}, w |= φ AX (φ AR AN done
+                      {fun (lr: I + X) (w': World E) =>
+                         exists (i': I), lr = inl i' /\ R i' w'}) ]>) ->
+    <( {iter k i}, w |= AG φ )>.
   Typeclasses Transparent equ.
-  (* Requires much more elaborate tactics 
   Example ag_tick:
     <( ticker, {Obs Tick tt} |= AG vis {fun e _ => e = Tick} )>.
    *)
-              
+    
   (* Ex2: Non-det loop calling tick *)
   Definition tocker: ctree tickE unit :=
     forever unit
