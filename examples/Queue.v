@@ -70,15 +70,16 @@ Section QueueEx.
                              Ret (Some h, ts)
                          end
                  end).
-  
+
+  Local Open Scope ctree_scope.
   (* Ex1: Drain a queue until there is nothing left, you should get a needle in the end eventually. *)
   Definition drain: ctree (queueE T) unit :=
-    iter (fun _ =>
-            x <- pop ;;
-            match x with
-            | Some v => Ret (inl tt) (* keep popping *)
-            | None => Ret (inr tt)   (* done *)
-            end) tt.        
+    loop
+      (x <- pop ;;
+       match x with
+       | Some v => continue (* keep popping *)
+       | None => break   (* done *)
+       end).       
 
   Lemma list_app_nil: forall (s: T) hs,
       ~ [] = hs ++ [s].  
@@ -185,15 +186,15 @@ Section QueueEx.
   Qed.
   
   (* Ex2: Rotate a queue (pop an element from head, add it to tail) *)
-  Definition rotate: ctree (queueE T) void :=
-    Ctree.forever void (fun _ =>
-                          x <- pop ;;
-                          match x with
-                          | Some v =>
-                              push v;;
-                              Ret tt
-                          | None => Ret tt
-                          end) tt.
+  Definition rotate: ctree (queueE T) unit :=
+    loop 
+      (x <- pop ;;
+       match x with
+       | Some v =>
+           push v;;
+           continue
+       | None => continue
+       end).
 
   (* Element [t] does not appear in [l] *)
   Fixpoint not_inb(t: T)(l: list T): bool :=
@@ -420,7 +421,7 @@ Section QueueEx.
           (f:= fun 'tt q (w: WorldW T) =>
                  match unique nl q with
                  | Some n =>
-                     if Nat.eqb n 0 then
+                     if Nat.eqb (List.length q) (S n) then
                        List.length q
                      else 
                        n
@@ -428,8 +429,7 @@ Section QueueEx.
                  end)...
         * clear Hlen Hi q w Hd i.
           intros [] q w Hd (Hlen & i & Hi).
-          rewrite interp_state_map; unfold map.          
-          rewrite interp_state_bind, bind_bind; cbn...
+          rewrite interp_state_bind. 
           setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
           rewrite bind_bind.
           setoid_rewrite sb_guard.
@@ -453,7 +453,7 @@ Section QueueEx.
                setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Push t) _);
                  simpl runStateT.
                rewrite bind_bind, bind_ret_l, sb_guard, bind_ret_l,
-                 interp_state_ret, bind_ret_l.
+                 interp_state_ret.
                cleft.
                apply anr_ret...
                exists tt; intuition.
@@ -490,7 +490,11 @@ Section QueueEx.
                     rewrite unique_head_eq'...
                     rewrite app_length; cbn.
                     rewrite PeanoNat.Nat.add_comm.
-                    destruct(length q') eqn:Hlq; cbn; lia.
+                    cbn.
+                    rewrite PeanoNat.Nat.eqb_refl.
+                    destruct(length q') eqn:Hlq; cbn.
+                    +++ lia.
+                    +++ admit.
                   --- (* t <> nl *)
                     rewrite unfold_unique_hd, Hnl in Hi.
                     destruct (unique nl q') eqn:Hnl'; inv Hi.
@@ -503,15 +507,14 @@ Section QueueEx.
                     +++ (* length q = n *)
                       apply PeanoNat.Nat.eqb_eq in Hn; subst.
                       rewrite nat_eqb_S.
-                      lia.
+                      admit.
                     +++ (* length q <> n *)
                       destruct (length q') eqn:Hlq; try lia.
                       rewrite PeanoNat.Nat.eqb_sym.
                       cbn.
                       admit.
       + (* Loop invariant *)
-        rewrite interp_state_map; unfold map; cbn.
-        rewrite interp_state_bind, bind_bind,
+        rewrite interp_state_bind,
           (@interp_state_trigger _ _ _ _ _ _ Pop _), bind_bind; cbn...
         setoid_rewrite sb_guard.
         setoid_rewrite bind_ret_l.
@@ -531,7 +534,7 @@ Section QueueEx.
              rewrite interp_state_bind, interp_state_vis, bind_bind.
              cbn.
              rewrite bind_ret_l, sb_guard, interp_state_ret, bind_ret_l,
-               interp_state_ret, bind_ret_l.
+               interp_state_ret.
              cleft.
              apply anr_ret...
              exists tt; intuition.
@@ -551,7 +554,7 @@ Section QueueEx.
              rewrite interp_state_bind, interp_state_vis, bind_bind.
              cbn.
              rewrite bind_ret_l, sb_guard, interp_state_ret, bind_ret_l,
-               interp_state_ret, bind_ret_l.
+               interp_state_ret.
              cleft.
              apply anr_ret...
              exists tt; intuition.

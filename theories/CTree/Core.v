@@ -185,6 +185,25 @@ Module CTreeNotations.
   Notation "' p <- t1 ;; t2" :=
     (Ctree.bind t1 (fun x_ => match x_ with p => t2 end))
       (at level 62, t1 at next level, p pattern, right associativity) : ctree_scope.
+
+  Notation "'continue'" :=
+    (Ret (inl tt))
+      (at level 60): ctree_scope.
+
+  Notation "'break'" :=
+    (Ret (inr tt))
+      (at level 60): ctree_scope.
+  
+  Notation "'for' i 'to' '∞' b" :=
+    (Ctree.forever void
+       (fun (x: nat) =>
+         b%ctree x ;;
+         Ret (S x)) i%nat) (at level 64, right associativity): ctree_scope.
+  
+  Notation "'loop' b" :=
+    (@Ctree.iter _ _ unit unit
+       (fun 'tt => b) tt) (at level 64): ctree_scope.
+  
 End CTreeNotations.
 
 (*| Common instances for [ctree] |*)

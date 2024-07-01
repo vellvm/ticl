@@ -140,13 +140,13 @@ Section SecurityEx.
 
   (* The (unfair) infinite interleaving of Alice/Bob *)
   Definition sec_system(secret: nat): ctree secE void :=
-    Ctree.forever void
-      (fun (i: nat) =>
+    for 0 to ∞
+      (fun i =>
          (br2
             (sec_alice1 secret i)
             (sec_bob1 i));;
          (* Increase counter by 1 *)
-         Ret (S i)) 0.
+         Ret (S i)).
 
   Definition no_leak(i: Addr) (σ: St): Prop :=
     Nat.Even i -> exists v, lookup i σ = Some (L, v).

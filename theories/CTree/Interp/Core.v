@@ -39,9 +39,9 @@ Arguments interp {E H M MM MI MB} h [X].
 Notation _interp h t :=
   (match observe t with
    | RetF r => Ret r
-   | GuardF t => Guard (interp h t)
-   | BrF n k => Br n (fun x => Guard (interp h (k x)))
-   | VisF e k => h e >>= (fun x => Guard (interp h (k x)))
+   | GuardF t => Guard (interp h%ctree t)
+   | BrF n k => Br n (fun x => Guard (interp h%ctree (k x)))
+   | VisF e k => h e >>= (fun x => Guard (interp h%ctree (k x)))
   end).
 
 Local Typeclasses Transparent equ.
