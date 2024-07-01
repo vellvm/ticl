@@ -40,48 +40,57 @@ Section Election.
 
   Variant netE: Type :=
     | Recv
-    | Send (m: msg)
-    | Seti (id: Id)
-    | Geti.
+    | Send (m: msg).
+  
+  Variant memE: Type :=
+    | Put (id: Id)
+    | Get.
   
   Global Instance encode_netE: Encode netE :=
     fun e => match e with
           | Recv => msg
           | Send _ => unit
-          | Seti _ => unit
-          | Geti => Id
           end.
-  
+
+  Global Instance encode_idE: Encode memE :=
+    fun e => match e with
+          | Put _ => unit
+          | Get => Id
+          end.
+
   Definition send: msg -> ctree netE unit :=
     fun p => Ctree.trigger (Send p).
   
   Definition recv: ctree netE msg :=
     Ctree.trigger Recv.
 
-  Definition set: Id -> ctree netE unit :=
-    fun id => Ctree.trigger (Seti id).
+  Notation sysE := (netE + memE).
 
-  Definition get: ctree netE Id :=
-    Ctree.trigger Geti. 
-    
+  Definition put: Id -> ctree sysE unit :=
+    fun id => Ctree.trigger (Put id).
+
+  Definition get: ctree sysE Id :=
+    Ctree.trigger Get.
+
   Notation Mails := (vec' n msg).
   Notation NetObs := (Id * msg).
   
   (* Local network instrumented semantics, write to [Mails] *)
-  Definition h_netE'(cycle: fin' n -> fin' n): netE ~> stateT (Id * Mails) (ctreeW NetObs) := 
+  Definition h_sysE'(cycle: fin' n -> fin' n)
+    : sysE ~> stateT (Id * Mails) (ctreeW (Id * msg)) := 
     fun e =>
       mkStateT
         (fun '(id, mail) =>
-           match e return ctreeW NetObs (encode e * (fin' n * vec' n msg)) with
-           | Send msg =>
+           match e return ctreeW (Id * msg) (encode e * (fin' n * vec' n msg)) with
+           | inl (Send msg) =>
                log (id, msg) ;;
                Ret (tt, (id, mail @ cycle id := msg))
-           | Recv =>
+           | inl Recv =>
                log (id, mail $ id) ;;
                Ret (mail $ id, (id, mail))
-           | Geti =>
+           | inr Get =>
                Ret (id, (id, mail))
-           | Seti id =>
+           | inr (Put id) =>
                Ret (tt, (id, mail))
            end).
     
@@ -107,14 +116,14 @@ Section Election.
     end.
 
   (* Uniring scheduler, picks initial [i] nondeterministically, then runs forever *)
-  Definition elect_sched'(cycle: fin' n -> fin' n): ctree netE void :=
+  Definition elect_sched'(cycle: fin' n -> fin' n): ctree sysE void :=
     i <- Ctree.branch n ;;
-    set i ;;
+    put i ;;
     Ctree.forever void
       (fun _ =>
          i <- get ;;
-         elect i ;;
-         set (cycle i)
+         resumCtree (elect i) ;;
+         put (cycle i)
       ) tt.
 
 End Election.
@@ -131,7 +140,7 @@ Equations cycle(i: fin' 2) : fin' 2 :=
   cycle (Fin.FS (Fin.FS Fin.F1)) := Fin.F1.
 
 Definition elect_sched := elect_sched' cycle.
-Definition h_netE := h_netE' cycle.
+Definition h_sysE := h_sysE' cycle.
 
 (* Initial mailboxes are [F3, F1, F2] *)
 Definition mailboxes: vec' 2 (fin' 2) := 
@@ -144,42 +153,47 @@ Local Typeclasses Transparent sbisim.
 Ltac run_elect :=
   unfold iter, MonadIter_ctree;
   rewrite interp_state_unfold_iter, interp_state_map, bind_map;
-  rewrite interp_state_bind, bind_bind;
-  rewrite (@interp_state_trigger _ _ _ _ _ _ Geti _); cbn;
-  rewrite bind_bind, bind_ret_l, sb_guard, bind_ret_l, interp_state_bind, bind_bind,
-    interp_state_bind, bind_bind;
-  setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ Recv _); cbn;
+  rewrite interp_state_bind, bind_bind, interp_state_vis, bind_bind;
+  cbn;
+  rewrite bind_ret_l, sb_guard, interp_state_ret, bind_ret_l, interp_state_bind, bind_bind,
+    interp_state_resumCtree, bind_vis, interp_state_vis, bind_bind;
+  cbn;
   repeat setoid_rewrite bind_bind;
   apply aul_log_r; eauto with ctl;
-  rewrite bind_ret_l, sb_guard, bind_ret_l; cbn;
-  setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Send _) _); simpl;
+  rewrite ?bind_ret_l, sb_guard, interp_state_bind, bind_bind,
+    interp_state_ret, bind_ret_l;
+  unfold resum_ret, ReSumRet_refl, ReSumRet_inr;
+  simp cycle; cbn;
+  rewrite interp_state_vis; cbn;
   repeat setoid_rewrite bind_bind;
   eapply aul_log_r; eauto with ctl;
-  rewrite bind_ret_l, sb_guard, bind_ret_l;
-  setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Seti _) _); simpl;
-  setoid_rewrite bind_bind;
-  rewrite bind_ret_l, sb_guard, bind_ret_l, sb_guard;
+  rewrite ?bind_ret_l, sb_guard;
+  rewrite interp_state_ret, bind_ret_l, interp_state_vis, bind_bind;
+  cbn;
+  rewrite bind_ret_l, sb_guard, interp_state_ret, bind_ret_l, sb_guard;
   simp cycle; cbn.
 
 Ltac run_elect' :=
   unfold iter, MonadIter_ctree;
   rewrite interp_state_unfold_iter, interp_state_map, bind_map;
-  rewrite interp_state_bind, bind_bind;
-  rewrite (@interp_state_trigger _ _ _ _ _ _ Geti _); cbn;
-  rewrite bind_bind, bind_ret_l, sb_guard, bind_ret_l, interp_state_bind, bind_bind,
-    interp_state_bind, bind_bind;
-  setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ Recv _); cbn;
-  repeat setoid_rewrite bind_bind;
+  rewrite interp_state_bind, bind_bind, interp_state_vis, bind_bind;
+  cbn;
+  rewrite bind_ret_l, sb_guard, interp_state_ret, bind_ret_l, interp_state_bind, bind_bind,
+    interp_state_resumCtree, bind_vis, interp_state_vis, bind_bind;
+  cbn;
+    repeat setoid_rewrite bind_bind;
   apply aul_log_r; eauto with ctl;
-  rewrite bind_ret_l, sb_guard, bind_ret_l; cbn;
-  rewrite interp_state_ret, bind_ret_l;
-  setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Seti _) _); simpl;
-  setoid_rewrite bind_bind;
-  rewrite bind_ret_l, sb_guard, bind_ret_l, sb_guard;
-  simp cycle; cbn.
+  rewrite ?bind_ret_l, sb_guard, interp_state_bind, bind_bind,
+    interp_state_ret, bind_ret_l;
+  unfold resum_ret, ReSumRet_refl, ReSumRet_inr;
+    simp cycle; cbn;
+    rewrite interp_state_ret, bind_ret_l, interp_state_vis, bind_bind;
+    cbn;
+    rewrite bind_ret_l, sb_guard, interp_state_ret, bind_ret_l, sb_guard;
+    simp cycle; cbn.
 
 Lemma election3_liveness:
-  <( {interp_state h_netE elect_sched (F1, Vector.map Candidate mailboxes)}, Pure |=
+  <( {interp_state h_sysE elect_sched (F1, Vector.map Candidate mailboxes)}, Pure |=
           AF visW {fun '(id, msg) => exists e, msg = Elected e /\ id = e /\ e = FS (FS F1)} )>.
 Proof with auto with ctl.
   intros.
@@ -191,42 +205,46 @@ Proof with auto with ctl.
   apply aul_br; right; split.
   - csplit...
   - intros i.
-    rewrite sb_guard, interp_state_ret, bind_ret_l, interp_state_bind.
-    setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Seti _) _); cbn.
-    rewrite bind_bind, bind_ret_l, bind_guard, sb_guard, bind_ret_l.
-    rewrite interp_state_unfold_iter, interp_state_map, bind_map.
-    rewrite interp_state_bind, bind_bind.
-    setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ Geti _); cbn.
-    rewrite bind_bind, bind_ret_l, sb_guard, bind_ret_, interp_state_bind, bind_bind.
+    unfold send, recv, put, get, Ctree.trigger.
+    rewrite sb_guard, interp_state_ret, bind_ret_l, interp_state_bind,
+      interp_state_vis, bind_bind.
+    cbn.
+    rewrite bind_ret_l, bind_guard, sb_guard, interp_state_ret, bind_ret_l,
+      interp_state_unfold_iter, interp_state_map, bind_map, interp_state_bind, bind_bind,
+      interp_state_vis, bind_bind.
+    cbn.
+    rewrite bind_ret_l, bind_guard, sb_guard, interp_state_ret, bind_ret_l, interp_state_bind,
+       bind_bind, interp_state_resumCtree.    
     (* Get into [elect] *)
     unfold elect.
-    rewrite interp_state_bind, bind_bind. 
-    rewrite (@interp_state_trigger _ _ _ _ _ _ Recv _); cbn.             
+    unfold send, recv, put, get, Ctree.trigger.
+    rewrite interp_state_bind, bind_bind, interp_state_vis, bind_bind.
+    cbn.
     repeat setoid_rewrite bind_bind.
     eapply aul_log_r...
-    rewrite bind_ret_, sb_guard, bind_ret_l.
+    rewrite ?bind_ret_l, sb_guard, interp_state_ret, bind_ret_l. 
+    unfold resum_ret, ReSumRet_refl, ReSumRet_inl.
     ddestruction i; [|ddestruction i; [|ddestruction i]]; simpl; simp cycle.
     + (* Start with F1 *)
-      setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Send (Candidate _)) _); simpl.   
+      rewrite interp_state_vis, bind_bind.
+      cbn.
       repeat setoid_rewrite bind_bind.
       apply aul_log_r...
-      rewrite bind_ret_l, sb_guard, bind_ret_l.
-      setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Seti _) _); simpl.
-      setoid_rewrite bind_bind.
-      rewrite bind_ret_l, sb_guard, bind_ret_l, sb_guard.
+      rewrite ?bind_ret_l, sb_guard, interp_state_ret, bind_ret_l, interp_state_vis, bind_bind.
+      cbn.
+      rewrite bind_ret_l, sb_guard,  interp_state_ret, bind_ret_l, sb_guard.
       simp cycle; cbn.
       (* F2 *)
       run_elect.
       (* F3 *)
       run_elect.
       (* Done *)
-      cleft.
-      csplit.
+      cleft; csplit.
       eexists; intuition.
     + (* F2 *)
-      rewrite interp_state_ret, bind_ret_l.
-      setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Seti _) _); simpl.
-      rewrite bind_bind, bind_ret_l, sb_guard, bind_ret_l, sb_guard.
+      rewrite interp_state_ret, bind_ret_l, interp_state_vis.
+      cbn.
+      rewrite bind_bind, bind_ret_l, sb_guard, interp_state_ret, bind_ret_l, sb_guard.
       (* F3 *)
       run_elect'.
       (* F1 *)
@@ -236,13 +254,12 @@ Proof with auto with ctl.
       (* F3 *)
       run_elect.
       (* Done *)
-      cleft.
-      csplit.
+      cleft; csplit.
       eexists; intuition.
     + (* F3 *)
-      rewrite interp_state_ret, bind_ret_l.
-      setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Seti _) _); simpl.
-      rewrite bind_bind, bind_ret_l, sb_guard, bind_ret_l, sb_guard.
+      rewrite interp_state_ret, bind_ret_l, interp_state_vis.
+      cbn.
+      rewrite bind_bind, bind_ret_l, sb_guard, interp_state_ret, bind_ret_l, sb_guard.
       (* F1 *)
       run_elect.
       (* F2 *)
@@ -250,8 +267,7 @@ Proof with auto with ctl.
       (* F3 *)
       run_elect.
       (* Done *)
-      cleft.
-      csplit.
+      cleft; csplit.
       eexists; intuition.
     + ddestruction i.  
 Qed.

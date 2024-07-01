@@ -532,7 +532,7 @@ Qed.
 
 #[global] Ltac coinduction_g R CIH :=
   let R' := fresh R in
-  setoid_rewrite unfold_entailsL;
+  first [rewrite unfold_entailsL | setoid_rewrite unfold_entailsL];
   coinduction R' CIH;
   try change (cag (entailsL ?X ?p) ?t ?w) with <( t, w |= AG p )> in *;
   try change (ceg (entailsL ?X ?p) ?t ?w) with <( t, w |= EG p )> in *.

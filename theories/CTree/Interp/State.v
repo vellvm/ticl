@@ -30,6 +30,21 @@ Definition h_state `{Encode E} {Σ} (h:E ~> state Σ):
   E ~> stateT Σ (ctree void) :=
   fun e => mkStateT (fun s => Ret (runState (h e) s)).
 
+Definition h_sum `{Encode E} `{Encode F} {A B}
+  (l: E ~> stateT A (ctree void))
+  (r: F ~> stateT B (ctree void)):
+  E + F ~> stateT (A * B) (ctree void) :=
+  fun e => mkStateT
+          (fun '(sl, sr) => 
+             match e return (ctree void (encode e * (A * B))) with
+             | inl e =>
+                 '(x, sl') <- runStateT (l e) sl ;;
+                 Ret (x, (sl', sr))
+             | inr e => 
+                 '(x, sr') <- runStateT (r e) sr ;;
+                 Ret (x, (sl, sr'))
+             end).
+
 (*| Intrument by an evaluation [E ~> stateT Σ ctree] and observation function [obs] |*)
 Definition h_writerA `{Encode E} {W Σ} (h:E ~> stateT Σ (ctree void))
   (obs: forall (e: E), encode e -> Σ -> option W): E ~> stateT Σ (ctreeW W) :=
@@ -143,6 +158,39 @@ Lemma interp_state_tau `{Encode E} `{Encode F} `(h: E ~> stateT W (ctree F)) {X}
   (t : ctree E X) (w : W) :
   interp_state h (Guard t) w ≅ Guard ((interp_state h t w)).
 Proof. rewrite !unfold_interp_state; reflexivity. Qed.
+
+Definition h_resum `{Encode E1}`{Encode E2}`{Encode F}`{ReSum E1 E2}`{ReSumRet E1 E2} {W}
+  (h: E2 ~> stateT W (ctree F)): E1 ~> stateT W (ctree F) :=
+  fun (e: E1) =>
+    mkStateT
+      (fun w => runStateT (h (resum e)) w >>= fun '(x, w) => Ret (resum_ret e x, w)).
+
+Lemma interp_state_resumCtree`{Encode E1}`{Encode E2}`{Encode F}
+  `{ReSum E1 E2}`{ReSumRet E1 E2} {X} `(h: E2 ~> stateT W (ctree F)):
+  forall (t : ctree E1 X) (w : W),
+    interp_state h (resumCtree t) w ≅ interp_state (h_resum h) t w.
+Proof.
+  coinduction RR CIH; intros.
+  rewrite unfold_resumCtree, unfold_interp_state.
+  setoid_rewrite unfold_interp_state.
+  cbn.
+  desobs t; cbn.
+  - reflexivity.
+  - constructor.
+    intro i.
+    step.
+    constructor.
+    apply CIH.
+  - constructor.
+    apply CIH.
+  - cbn.
+    rewrite bind_bind.
+    upto_bind_equ.
+    destruct x.
+    rewrite bind_ret_l.
+    constructor.
+    apply CIH.
+Qed.
 
 Lemma interp_state_ret_inv `{Encode E} `{Encode F}
   `(h: E ~> stateT W (ctree F)) {X}: forall s (t : ctree E X) r,

@@ -10,6 +10,7 @@ From Coinduction Require Import
 
 From CTree Require Import
   CTree.Core
+  Events.Core
   CTree.Eq.Core
   Utils.Utils.
 
@@ -18,34 +19,6 @@ Local Open Scope ctree_scope.
 
 Generalizable All Variables.
 
-(*| Up-to iter principle (unary) |*)
-Section Iter_ctx1.
-  Context {E:Type} `{HE: Encode E} {I R: Type}.
-   
-  Definition iter_ctx1 (Rk: (I -> ctree E (I + R)) -> Prop) (Rx: I -> Prop) :
-    ctree E R -> Prop :=
-    (sup Rk
-       (fun k =>
-          sup Rx
-            (fun x => (fun t => t = iter k x)))).
-
-  Lemma leq_iter_ctx1:
-    forall Rk Rx S, @iter_ctx1 Rk Rx <= S <->
-                (forall k, Rk k -> forall x, Rx x -> S (iter k x)).
-  Proof.
-    intros. unfold iter_ctx1.
-    setoid_rewrite sup_spec.
-    setoid_rewrite sup_spec.
-    firstorder congruence.
-  Qed.
-
-  Lemma in_iter_ctx1 (Rk : (I -> ctree E (I + R)) -> Prop) (Rx : I -> Prop) f x:
-    Rk f -> Rx x -> @iter_ctx1 Rk Rx (iter f x).
-  Proof. intros. epose proof (proj1 (leq_iter_ctx1 Rk Rx _)). apply H1; auto. Qed.
-
-  #[global] Opaque iter_ctx1.
-End Iter_ctx1.
-  
 (*| Up-to bind principle (unary) |*)
 Section Bind_ctx1.
   Context {E:Type} `{HE: Encode E} {X Y: Type}.
@@ -577,30 +550,6 @@ Proof.
   reflexivity.
 Qed.
 
-(*| When |*)
-Lemma unfold_when {n E P} {HE: Encode E}: forall (p: fin' n -> {P} + {~P}),
-    when p ≅ i <- branch n;; if p i then Ret i else Guard (when p).
-Proof.
-  intros.
-  unfold when. 
-  rewrite unfold_iter.
-  rewrite bind_bind.
-  upto_bind_equ.
-  destruct (p x1); now rewrite bind_ret_l.
-Qed.
-
-(*| Unless |*)
-Lemma unfold_unless {n E P} {HE: Encode E}: forall (p: fin' n -> {P} + {~P}),
-    unless p ≅ i <- branch n;; if p i then Guard (unless p) else Ret i.
-Proof.
-  intros.
-  unfold unless.
-  rewrite unfold_iter.
-  rewrite bind_bind.
-  upto_bind_equ.
-  destruct (p x1); now rewrite bind_ret_l.
-Qed.
-
 Lemma br_equ': forall n (E: Type) {HE: Encode E} R (k k': fin' n -> ctree E R) Q,
     (forall t, k t (≅ Q) (k' t)) ->
     Br n k (≅ Q) Br n k'.
@@ -635,6 +584,46 @@ Proof.
   unfold map.
   now rewrite H.
 Qed.
+
+
+#[global] Instance proper_equ_resumCtree {X} `{Encode E1} `{Encode E2}
+  `{ReSum E1 E2} `{ReSumRet E1 E2}:
+  Proper (equ eq ==> equ eq) (@resumCtree E1 E2 _ _ _ _ X).
+Proof with auto.
+  unfold Proper, respectful.
+  coinduction R CIH; intros.
+  rewrite ?unfold_resumCtree.
+  step in H6; cbn in H6; inv H6; constructor...
+Qed.
+
+Lemma resumCtree_bind{E1 E2 : Type} `{ReSumRet E1 E2}
+  {X Y}: forall (t: ctree E1 X) (k : X -> ctree E1 Y),
+  resumCtree (x <- t ;; k x) ≅ x <- resumCtree t ;; resumCtree (k x).
+Proof with eauto.
+  coinduction RR CIH; intros.
+  rewrite (ctree_eta t).
+  desobs t.
+  - rewrite bind_ret_l.
+    setoid_rewrite unfold_resumCtree; cbn.
+    rewrite bind_ret_l...
+  - rewrite bind_br.
+    setoid_rewrite resumCtree_br.
+    rewrite bind_br.
+    constructor.
+    intros i.
+    apply CIH.
+  - rewrite bind_guard.
+    setoid_rewrite resumCtree_guard.
+    rewrite bind_guard.
+    constructor.
+    apply CIH.
+  - rewrite bind_vis.
+    setoid_rewrite resumCtree_vis.
+    rewrite bind_vis.
+    constructor.
+    intros.
+    apply CIH.
+Qed.  
 
 (*| Inversion of [≅] hypotheses |*)
 Ltac subst_hyp_in EQ h :=

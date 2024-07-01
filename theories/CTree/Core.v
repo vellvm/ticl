@@ -141,25 +141,7 @@ Module Ctree.
 
   Definition forever `{HE: Encode E} {R: Type} (X: Type) (k: R -> ctree E R) (x: R) :=
     iter (R:=X) (fun x => map inl (k x)) x.
-
-  (* Continue sampling until non-deterministic choice satisfies [P] *)
-  Definition when `{HE: Encode E} {n P Q} (f: forall (i: fin' n), {P i} + {Q i}): ctree E (fin' n) :=
-    iter (fun _  => bind (branch n)
-                   (fun i =>
-                      if f i then
-                        Ret (inr i)
-                      else
-                        Ret (inl tt))) tt.
   
-  (* Continue sampling until non-deterministic choice satisfies [Q] *)
-  Definition unless `{HE: Encode E} {n P Q} (f: forall (i: fin' n), {P i} + {Q i}): ctree E (fin' n) :=
-    iter (fun _  => bind (branch n)
-                   (fun i =>
-                      if f i then
-                        Ret (inl tt)
-                      else
-                        Ret (inr i))) tt.
-
 End Ctree.
 
 

@@ -393,6 +393,10 @@ Section QueueEx.
         rewrite IHq with (n:=n0)...
   Qed.
   Arguments unique: simpl never.
+
+  Lemma nat_eqb_S: forall n,
+      Nat.eqb n (S n) = false.
+  Proof. induction n; auto. Qed.
   
   Typeclasses Transparent equ.
   Typeclasses Transparent sbisim.
@@ -415,7 +419,11 @@ Section QueueEx.
           (Ri:= fun _ q _ => List.length q > 1 /\ exists i, unique nl q = Some i)
           (f:= fun 'tt q (w: WorldW T) =>
                  match unique nl q with
-                 | Some n => 1 + List.length q - n
+                 | Some n =>
+                     if Nat.eqb n 0 then
+                       List.length q
+                     else 
+                       n
                  | None => List.length q
                  end)...
         * clear Hlen Hi q w Hd i.
@@ -473,23 +481,34 @@ Section QueueEx.
                     apply unique_app_l; auto.
                     cbn; now rewrite Hnl.
                ** cbn in *.
+                  rename q into q'.
                   destruct (t =? nl) eqn:Hnl.
                   --- (* t = nl *)
                     apply unique_head_eq in Hi...
                     rewrite rel_dec_correct in Hnl; subst.
                     rewrite unique_last_eq...
                     rewrite unique_head_eq'...
-                    destruct (length q) eqn:Hl; try lia.
                     rewrite app_length; cbn.
-                    rewrite Hl; cbn.
-                    destruct n; lia.
+                    rewrite PeanoNat.Nat.add_comm.
+                    destruct(length q') eqn:Hlq; cbn; lia.
                   --- (* t <> nl *)
                     rewrite unfold_unique_hd, Hnl in Hi.
-                    destruct (unique nl q) eqn:Hnl'; inv Hi.
+                    destruct (unique nl q') eqn:Hnl'; inv Hi.
                     rewrite unique_last_neq with (n:=n)...
                     rewrite unfold_unique_hd, Hnl, Hnl'.
-                    rewrite app_length.
-                    cbn; destruct n; admit.                    
+                    rewrite app_length; cbn.
+                    rewrite PeanoNat.Nat.add_comm.
+                    cbn.
+                    destruct (Nat.eqb (length q') n) eqn:Hn.
+                    +++ (* length q = n *)
+                      apply PeanoNat.Nat.eqb_eq in Hn; subst.
+                      rewrite nat_eqb_S.
+                      lia.
+                    +++ (* length q <> n *)
+                      destruct (length q') eqn:Hlq; try lia.
+                      rewrite PeanoNat.Nat.eqb_sym.
+                      cbn.
+                      admit.
       + (* Loop invariant *)
         rewrite interp_state_map; unfold map; cbn.
         rewrite interp_state_bind, bind_bind,

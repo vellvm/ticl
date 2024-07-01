@@ -334,14 +334,35 @@ End going_relations.
 Local Open Scope ctree_scope.
 
 (* Resum lemmas *)
+
+Lemma unfold_resumCtree {E1 E2 : Type} `{ReSumRet E1 E2} {R}(t: ctree E1 R):
+  resumCtree t ≅
+    match (observe t) with
+    | RetF r => Ret r
+    | BrF n k => Br n (fun i => resumCtree (k i))
+    | GuardF t =>  Guard (resumCtree t)
+    | VisF e k => Vis (resum e) (fun x => resumCtree (k (resum_ret e x)))
+  end.
+Proof. step; now cbn. Qed.
+
 Lemma resumCtree_ret {E1 E2 : Type} `{ReSumRet E1 E2}
            {R} (r : R) :
   resumCtree (Ret r) ≅ Ret r.
 Proof. step. cbn. constructor. reflexivity. Qed.
 
 Lemma resumCtree_br  {E1 E2 : Type} `{ReSumRet E1 E2}
-           {R} (t : ctree E1 R) (n: nat) (k: fin' n -> ctree E1 R):
+           {R} (n: nat) (k: fin' n -> ctree E1 R):
   resumCtree (Br n k) ≅ Br n (fun x => resumCtree (k x)).
+Proof.
+  step.
+  cbn.
+  constructor.
+  intros.
+  reflexivity.
+Qed.
+
+Lemma resumCtree_guard  {E1 E2 : Type} {R} `{ReSumRet E1 E2} (t: ctree E1 R):
+  resumCtree (Guard t) ≅ Guard (resumCtree t).
 Proof.
   step.
   cbn.
