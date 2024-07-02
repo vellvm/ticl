@@ -116,15 +116,15 @@ Section Election.
     end.
 
   (* Uniring scheduler, picks initial [i] nondeterministically, then runs forever *)
-  Definition elect_sched'(cycle: fin' n -> fin' n): ctree sysE void :=
+  Definition elect_sched'(cycle: fin' n -> fin' n): ctree sysE _ :=
     i <- Ctree.branch n ;;
     put i ;;
-    Ctree.forever void
-      (fun _ =>
-         i <- get ;;
-         resumCtree (elect i) ;;
-         put (cycle i)
-      ) tt.
+    loop (
+        i <- get ;;
+        resumCtree (elect i) ;;
+        put (cycle i);;
+        continue
+      ).
 
 End Election.
 
@@ -150,10 +150,10 @@ Import Vectors.
 Local Typeclasses Transparent equ.
 Local Typeclasses Transparent sbisim.
 
-Ltac run_elect :=
+Ltac run_head :=
   unfold iter, MonadIter_ctree;
-  rewrite interp_state_unfold_iter, interp_state_map, bind_map;
-  rewrite interp_state_bind, bind_bind, interp_state_vis, bind_bind;
+  rewrite interp_state_unfold_iter, interp_state_bind, bind_bind,
+    interp_state_vis, bind_bind;
   cbn;
   rewrite bind_ret_l, sb_guard, interp_state_ret, bind_ret_l, interp_state_bind, bind_bind,
     interp_state_resumCtree, bind_vis, interp_state_vis, bind_bind;
@@ -163,34 +163,27 @@ Ltac run_elect :=
   rewrite ?bind_ret_l, sb_guard, interp_state_bind, bind_bind,
     interp_state_ret, bind_ret_l;
   unfold resum_ret, ReSumRet_refl, ReSumRet_inr;
-  simp cycle; cbn;
+  simp cycle; cbn.
+
+Ltac run_body :=
   rewrite interp_state_vis; cbn;
   repeat setoid_rewrite bind_bind;
   eapply aul_log_r; eauto with ctl;
-  rewrite ?bind_ret_l, sb_guard;
-  rewrite interp_state_ret, bind_ret_l, interp_state_vis, bind_bind;
+  rewrite ?bind_ret_l, sb_guard,
+        interp_state_ret, bind_ret_l, interp_state_bind, bind_bind,
+        interp_state_vis, bind_bind;
   cbn;
-  rewrite bind_ret_l, sb_guard, interp_state_ret, bind_ret_l, sb_guard;
+  rewrite bind_ret_l, sb_guard, interp_state_ret, bind_ret_l, interp_state_ret,
+    bind_ret_l, sb_guard;
   simp cycle; cbn.
 
-Ltac run_elect' :=
-  unfold iter, MonadIter_ctree;
-  rewrite interp_state_unfold_iter, interp_state_map, bind_map;
-  rewrite interp_state_bind, bind_bind, interp_state_vis, bind_bind;
+Ltac run_sched :=
+  rewrite interp_state_ret, bind_ret_l, interp_state_bind,
+    bind_bind, interp_state_vis, bind_bind;
   cbn;
-  rewrite bind_ret_l, sb_guard, interp_state_ret, bind_ret_l, interp_state_bind, bind_bind,
-    interp_state_resumCtree, bind_vis, interp_state_vis, bind_bind;
-  cbn;
-    repeat setoid_rewrite bind_bind;
-  apply aul_log_r; eauto with ctl;
-  rewrite ?bind_ret_l, sb_guard, interp_state_bind, bind_bind,
-    interp_state_ret, bind_ret_l;
-  unfold resum_ret, ReSumRet_refl, ReSumRet_inr;
-    simp cycle; cbn;
-    rewrite interp_state_ret, bind_ret_l, interp_state_vis, bind_bind;
-    cbn;
-    rewrite bind_ret_l, sb_guard, interp_state_ret, bind_ret_l, sb_guard;
-    simp cycle; cbn.
+  rewrite bind_ret_l, sb_guard,  interp_state_ret, bind_ret_l, interp_state_ret,
+    bind_ret_l, sb_guard;
+  simp cycle; cbn.
 
 Lemma election3_liveness:
   <( {interp_state h_sysE elect_sched (F1, Vector.map Candidate mailboxes)}, Pure |=
@@ -210,11 +203,11 @@ Proof with auto with ctl.
       interp_state_vis, bind_bind.
     cbn.
     rewrite bind_ret_l, bind_guard, sb_guard, interp_state_ret, bind_ret_l,
-      interp_state_unfold_iter, interp_state_map, bind_map, interp_state_bind, bind_bind,
+      interp_state_unfold_iter, interp_state_bind, bind_bind,
       interp_state_vis, bind_bind.
     cbn.
-    rewrite bind_ret_l, bind_guard, sb_guard, interp_state_ret, bind_ret_l, interp_state_bind,
-       bind_bind, interp_state_resumCtree.    
+    rewrite bind_ret_l, bind_guard, sb_guard, interp_state_ret, bind_ret_l,
+      interp_state_bind, bind_bind, interp_state_resumCtree.    
     (* Get into [elect] *)
     unfold elect.
     unfold send, recv, put, get, Ctree.trigger.
@@ -230,45 +223,41 @@ Proof with auto with ctl.
       cbn.
       repeat setoid_rewrite bind_bind.
       apply aul_log_r...
-      rewrite ?bind_ret_l, sb_guard, interp_state_ret, bind_ret_l, interp_state_vis, bind_bind.
-      cbn.
-      rewrite bind_ret_l, sb_guard,  interp_state_ret, bind_ret_l, sb_guard.
+      rewrite ?bind_ret_l, sb_guard.
+      (* sched *)
+      run_sched.
       simp cycle; cbn.
       (* F2 *)
-      run_elect.
+      run_head; run_body.
       (* F3 *)
-      run_elect.
+      run_head; run_body.
       (* Done *)
       cleft; csplit.
       eexists; intuition.
-    + (* F2 *)
-      rewrite interp_state_ret, bind_ret_l, interp_state_vis.
-      cbn.
-      rewrite bind_bind, bind_ret_l, sb_guard, interp_state_ret, bind_ret_l, sb_guard.
+    + (* sched *)
+      run_sched.
       (* F3 *)
-      run_elect'.
+      run_head; run_sched.
       (* F1 *)
-      run_elect.
+      run_head; run_body.
       (* F2 *)
-      run_elect.
+      run_head; run_body.
       (* F3 *)
-      run_elect.
+      run_head; run_body.
       (* Done *)
       cleft; csplit.
       eexists; intuition.
     + (* F3 *)
-      rewrite interp_state_ret, bind_ret_l, interp_state_vis.
-      cbn.
-      rewrite bind_bind, bind_ret_l, sb_guard, interp_state_ret, bind_ret_l, sb_guard.
+      run_sched.
       (* F1 *)
-      run_elect.
+      run_head; run_body.
       (* F2 *)
-      run_elect.
+      run_head; run_body.
       (* F3 *)
-      run_elect.
+      run_head; run_body.
       (* Done *)
       cleft; csplit.
       eexists; intuition.
-    + ddestruction i.  
+    + ddestruction i.
 Qed.
 Print Assumptions election3_liveness.
