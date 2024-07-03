@@ -184,7 +184,7 @@ Section QueueEx.
              ++ now (exists (t1 ::x)).
         * apply PeanoNat.Nat.lt_succ_diag_r.
   Qed.
-  
+  Print Assumptions drain_af_pop.
   (* Ex2: Rotate a queue (pop an element from head, add it to tail) *)
   Definition rotate: ctree (queueE T) unit :=
     loop 

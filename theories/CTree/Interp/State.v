@@ -23,43 +23,6 @@ Local Open Scope ctree_scope.
 Set Implicit Arguments.
 Generalizable All Variables.
 
-Notation ctreeW W := (ctree (writerE W)).
-
-(*| Observe 1-to-1 interpretation event-to-state -- [state S] to [stateT S (ctree void)] |*)
-Definition h_state `{Encode E} {Σ} (h:E ~> state Σ):
-  E ~> stateT Σ (ctree void) :=
-  fun e => mkStateT (fun s => Ret (runState (h e) s)).
-
-Definition h_sum `{Encode E} `{Encode F} {A B}
-  (l: E ~> stateT A (ctree void))
-  (r: F ~> stateT B (ctree void)):
-  E + F ~> stateT (A * B) (ctree void) :=
-  fun e => mkStateT
-          (fun '(sl, sr) => 
-             match e return (ctree void (encode e * (A * B))) with
-             | inl e =>
-                 '(x, sl') <- runStateT (l e) sl ;;
-                 Ret (x, (sl', sr))
-             | inr e => 
-                 '(x, sr') <- runStateT (r e) sr ;;
-                 Ret (x, (sl, sr'))
-             end).
-
-(*| Intrument by an evaluation [E ~> stateT Σ ctree] and observation function [obs] |*)
-Definition h_writerA `{Encode E} {W Σ} (h:E ~> stateT Σ (ctree void))
-  (obs: forall (e: E), encode e -> Σ -> option W): E ~> stateT Σ (ctreeW W) :=
-  fun e => mkStateT (fun s =>
-                    '(x, σ) <- resumCtree (runStateT (h e) s) ;;
-                    match obs e x σ with
-                    | Some v => Ctree.trigger (Log v);; Ret (x, σ)
-                    | None => Ret (x, σ)
-                    end).
-
-(*| Observe all states. The [stateT S (ctree void)] to [stateT S (ctree (writerE S))] |*)
-Definition h_writerΣ `{Encode E} {Σ} (h:E ~> stateT Σ (ctree void)):
-  E ~> stateT Σ (ctreeW Σ) :=
-  h_writerA h (fun _ _ s => Some s).
-
 (*| Lemmas about state |*)
 Definition interp_state `{Encode E} `{Encode F} {W}
   (h : E ~> stateT W (ctree F)) {X} (t: ctree E X) (w: W) :
