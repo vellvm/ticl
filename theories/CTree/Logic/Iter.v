@@ -29,17 +29,17 @@ Local Open Scope ctree_scope.
 Section IterLemmas.
   Context {E: Type} {HE: Encode E}.
 
-  (* AX *)
+  (* AN *)
   Lemma axl_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E (I + X)) (φ ψ: ctll E):
     well_founded Rv ->
     Ri i w ->    
     (forall (i: I) w,
         Ri i w ->
-        <( {k i}, w |= φ AX ψ )> \/
-          <[ {k i}, w |= φ AX done
+        <( {k i}, w |= φ AN ψ )> \/
+          <[ {k i}, w |= φ AN done
                       {fun (lr: I + X) (w': World E) => 
                          exists i', lr = inl i' /\ Ri i' w' /\ Rv i' i}]>) ->
-    <( {iter k i}, w |= φ AX ψ )>.
+    <( {iter k i}, w |= φ AN ψ )>.
   Proof with auto with ctl.
     intros WfR Hi H.
     generalize dependent k.
@@ -66,13 +66,13 @@ Section IterLemmas.
     Ri i w ->    
     (forall (i: I) w,
         Ri i w ->
-        <[ {k i}, w |= φ AX done
+        <[ {k i}, w |= φ AN done
                     {fun (lr: I + X) (w': World E) =>
                        match lr with
                        | inl i' => Ri i' w' /\ Rv i' i
-                       | inr r => <[ {Ret r}, w' |= φ AX ψ ]>
+                       | inr r => <[ {Ret r}, w' |= φ AN ψ ]>
                        end} ]>) ->
-    <[ {iter k i}, w |= φ AX ψ ]>.
+    <[ {iter k i}, w |= φ AN ψ ]>.
   Proof with auto with ctl.
     intros WfR Hi H.
     generalize dependent k.
@@ -87,7 +87,7 @@ Section IterLemmas.
         (R:=(fun (lr : I + X) (w' : World E) =>
                match lr with
                | inl i' => Ri i' w' /\ Rv i' i
-               | inr r => <[ {Ret r}, w' |= φ AX ψ ]>
+               | inr r => <[ {Ret r}, w' |= φ AN ψ ]>
                end))...
       intros [i' | r] w'...
       intros (Hi' & Hv). 
@@ -95,17 +95,17 @@ Section IterLemmas.
       apply HindWf...
   Qed.
 
-  (* EX *)
+  (* EN *)
   Typeclasses Transparent sbisim.
   Lemma exl_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E (I + X)) (φ ψ: ctll E):
     well_founded Rv ->
     Ri i w ->    
     (forall (i: I) w,
         Ri i w ->
-        <( {k i}, w |= φ EX ψ )> \/
-          <[ {k i}, w |= φ EX done {fun (lr: I + X) w' =>
+        <( {k i}, w |= φ EN ψ )> \/
+          <[ {k i}, w |= φ EN done {fun (lr: I + X) w' =>
             exists i', lr = inl i' /\ Ri i' w' /\ Rv i' i} ]>) ->
-    <( {iter k i}, w |= φ EX ψ )>.
+    <( {iter k i}, w |= φ EN ψ )>.
   Proof with auto with ctl.    
     intros WfR Hi H.
     generalize dependent k.
@@ -129,12 +129,12 @@ Section IterLemmas.
     Ri i w ->    
     (forall (i: I) w,
         Ri i w ->
-        <[ {k i}, w |= φ EX done {fun (lr: I + X) w' =>
+        <[ {k i}, w |= φ EN done {fun (lr: I + X) w' =>
                                     match lr with
                                     | inl i' => Ri i' w' /\ Rv i' i
-                                    | inr r => <[ {Ret r}, w' |= φ EX ψ ]>
+                                    | inr r => <[ {Ret r}, w' |= φ EN ψ ]>
                                     end}]>) ->
-    <[ {iter k i}, w |= φ EX ψ ]>.
+    <[ {iter k i}, w |= φ EN ψ ]>.
   Proof with auto with ctl.
     intros WfR Hi H.
     generalize dependent k.
@@ -166,7 +166,7 @@ Section IterLemmas.
         not_done w ->
         Ri i w ->
         <( {k i}, w |= φ AU ψ )> \/
-          <[ {k i}, w |= φ AU AN done
+          <[ {k i}, w |= φ AU AX done
                       {fun (lr: I + X) (w': World E) =>
                          exists i', lr = inl i'
                                /\ not_done w'
@@ -210,7 +210,7 @@ Section IterLemmas.
         not_done w ->
         Ri i w ->
         <( {k i}, w |= φ AU ψ )> \/
-          <[ {k i}, w |= φ AU AN done
+          <[ {k i}, w |= φ AU AX done
                       {fun (lr: I + X) (w': World E) =>
                          exists i', lr = inl i'
                                /\ not_done w'
@@ -229,11 +229,11 @@ Section IterLemmas.
     Ri i w ->    
     (forall (i: I) w,
         Ri i w ->
-        <[ {k i}, w |= φ AU AN done
+        <[ {k i}, w |= φ AU AX done
                     {fun (lr: I + X) (w': World E) =>
                        match lr with
                        | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
-                       | inr r => <[ {Ret r}, w' |= ψ \/ φ AX ψ ]>
+                       | inr r => <[ {Ret r}, w' |= ψ \/ φ AN ψ ]>
                        end} ]>) ->
     <[ {iter k i}, w |= φ AU ψ ]>.
   Proof with auto with ctl.
@@ -253,7 +253,7 @@ Section IterLemmas.
       (R:=(fun (lr : I + X) (w' : World E) =>
              match lr with
              | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
-             | inr r => <[ {Ret r}, w' |= ψ \/ φ AX ψ ]>
+             | inr r => <[ {Ret r}, w' |= ψ \/ φ AN ψ ]>
              end))...
     intros [i' | r] w'...
     - intros (Hi' & Hv). 
@@ -269,11 +269,11 @@ Section IterLemmas.
     Ri i w ->    
     (forall (i: I) w,
         Ri i w ->
-        <[ {k i}, w |= φ AU AN done
+        <[ {k i}, w |= φ AU AX done
                     {fun (lr: I + X) (w': World E) =>
                        match lr with
                        | inl i' => Ri i' w' /\ f i' w' < f i w
-                       | inr r => <[ {Ret r}, w' |= ψ \/ φ AX ψ ]>
+                       | inr r => <[ {Ret r}, w' |= ψ \/ φ AN ψ ]>
                        end} ]>) ->
     <[ {iter k i}, w |= φ AU ψ ]>.
   Proof.
@@ -289,7 +289,7 @@ Section IterLemmas.
     (forall (i: I) w,
         Ri i w ->
         <( {k i}, w |= φ EU ψ )> \/
-          <[ {k i}, w |= φ EU EN done
+          <[ {k i}, w |= φ EU EX done
                       {fun (lr: I + X) (w': World E) =>
                          exists i', lr = inl i' /\ Ri i' w' /\ Rv (i', w') (i, w)}]>) ->
     <( {iter k i}, w |= φ EU ψ )>.
@@ -326,11 +326,11 @@ Section IterLemmas.
     Ri i w ->    
     (forall (i: I) w,
         Ri i w ->
-        <[ {k i}, w |= φ EU EN done
+        <[ {k i}, w |= φ EU EX done
                     {fun (lr: I + X) (w': World E) =>
                        match lr with
                        | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
-                       | inr r => <[ {Ret r}, w' |= ψ \/ φ EX ψ ]>
+                       | inr r => <[ {Ret r}, w' |= ψ \/ φ EN ψ ]>
                        end} ]>) ->
     <[ {iter k i}, w |= φ EU ψ ]>.
   Proof with auto with ctl.
@@ -350,7 +350,7 @@ Section IterLemmas.
       (R:=(fun (lr : I + X) (w' : World E) =>
              match lr with
              | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
-             | inr r => <[ {Ret r}, w' |= ψ \/ φ EX ψ ]>
+             | inr r => <[ {Ret r}, w' |= ψ \/ φ EN ψ ]>
              end))...
     intros [i' | r] w'...
     intros (Hi' & Hv). 
@@ -369,7 +369,7 @@ Section IterLemmas.
     (forall (i: I) w,
         R i w ->
         <( {iter k i}, w |= φ)> /\
-          <[ {k i}, w |= AN (φ AU AN done
+          <[ {k i}, w |= AX (φ AU AX done
                       {fun (lr: I + X) (w': World E) =>
                          exists (i': I), lr = inl i' /\ R i' w'}) ]>) ->
     <( {iter k i}, w |= AG φ )>.
@@ -403,8 +403,8 @@ Section IterLemmas.
           rewrite sb_guard. 
           apply CIH...
       + (* [k x] returns *)        
-        specialize (H' _ _ TRt0) as HAX.
-        now apply aur_stuck, axr_stuck in HAX.
+        specialize (H' _ _ TRt0) as HAN.
+        now apply aur_stuck, axr_stuck in HAN.
   Qed.        
 
   (* EG *)
@@ -413,7 +413,7 @@ Section IterLemmas.
     (forall (i: I) w,
         R i w ->
         <( {iter k i}, w |= φ)> /\
-        <[ {k i}, w |= EN (φ EU EN done
+        <[ {k i}, w |= EX (φ EU EX done
                     {fun (lr: I + X) (w': World E) =>
                        exists (i': I), lr = inl i' /\ R i' w'}) ]>) ->
     <( {iter k i}, w |= EG φ )>.

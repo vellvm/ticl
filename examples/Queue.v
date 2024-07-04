@@ -72,13 +72,13 @@ Section QueueEx.
                  end).
 
   Local Open Scope ctree_scope.
-  (* Ex1: Drain a queue until there is nothing left, you should get a needle in the end eventually. *)
+  (* Ex1: Drain a queue until there is nothing left *)
   Definition drain: ctree (queueE T) unit :=
     loop
       (x <- pop ;;
        match x with
        | Some v => continue (* keep popping *)
-       | None => break   (* done *)
+       | None => continue
        end).       
 
   Lemma list_app_nil: forall (s: T) hs,
@@ -96,11 +96,11 @@ Section QueueEx.
   (*| Eventually we get [nl] (needle) to show up
     in the instrumentation. |*)
   Example drain_af_pop: forall (nl: T) (q: list T),
-      <[ {interp_state h_queueE drain (q ++ [nl])}, Pure |=
-         AF finishW {fun 'tt l w => w = nl /\ l = [] }]>.
+      <( {interp_state h_queueE drain (q ++ [nl])}, Pure |=
+         AF visW {fun w => w = nl })>.
   Proof with eauto with ctl.    
     intros.
-    apply aur_state_iter_nat
+    apply aul_state_iter_nat
       with (f:=fun 'tt l _ => List.length l)
            (Ri:=fun 'tt l w => 
                   match w with
@@ -120,22 +120,12 @@ Section QueueEx.
         now apply list_app_nil in H.
       + (* w = Obs e v *)
         destruct e, v.
-        subst.
-        eapply aur_state_bind_r_eq.
-        * rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
-          rewrite bind_ret_l, sb_guard.
-          cleft.
-          apply anr_ret...
-        * cbn.
-          rewrite interp_state_ret.
-          cleft; apply ax_done; split; try csplit...
-          eexists; intuition.
-          cright.
-          apply ax_done; split; try csplit...
-          eexists; intuition...
-          econstructor.
-          eexists; intuition...          
+        rewrite <- Hw in *.
+        left.
+        cleft.
+        now csplit.         
     - (* l = h :: ts *)
+      right.
       eapply aur_state_bind_r_eq.
       + inv Hd.
         * (* w = Pure *)
@@ -154,21 +144,16 @@ Section QueueEx.
         * (* w = Obs e v *)
           rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
           rewrite bind_bind.
-          eapply aur_bind_r_eq.
-          -- unfold log, trigger.
-             apply aur_vis...
-             right; split; try csplit...
-             intros [].
-             cleft.
-             apply anr_ret...
-          -- rewrite bind_ret_l, sb_guard.
-             cleft.
-             apply anr_ret...
+          eapply aur_log_r... 
+          rewrite bind_ret_l, sb_guard.
+          cleft.
+          apply anr_ret...
       + cbn.
         rewrite interp_state_ret.
         cleft.        
-        apply anr_ret; [constructor |split]...
-        split.
+        apply anr_ret...
+        exists tt; intuition.
+        cbn.
         * inv Hd.
           -- destruct Hw.
              apply list_app_cons in H.
@@ -182,9 +167,9 @@ Section QueueEx.
              destruct x; intuition; cbn.
              ++ now (exists []).
              ++ now (exists (t1 ::x)).
-        * apply PeanoNat.Nat.lt_succ_diag_r.
   Qed.
   Print Assumptions drain_af_pop.
+  
   (* Ex2: Rotate a queue (pop an element from head, add it to tail) *)
   Definition rotate: ctree (queueE T) unit :=
     loop 

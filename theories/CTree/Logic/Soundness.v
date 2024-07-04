@@ -45,11 +45,11 @@ Section SyntacticEntailment.
     syntails (Ctree.stuck) w ψ ->
     syntails (Ctree.stuck) w <( φ AU ψ )>
   | SynAuAxRet: forall w φ ψ r,
-      syntails (Ret r) w <( AX ψ )> ->
-      syntails (Ret r) w <( φ AU AX ψ )>
+      syntails (Ret r) w <( AN ψ )> ->
+      syntails (Ret r) w <( φ AU AN ψ )>
   | SynAuRet: forall w φ ψ r,
       syntails (Ret r) w <( φ )> ->
-      syntails (Ret r) w <( AX ψ )> ->
+      syntails (Ret r) w <( AN ψ )> ->
       syntails (Ret r) w <( φ AU ψ )>
   | SynAuBrR: forall w n (k: fin' n -> _) φ ψ,
       not_done w ->
@@ -73,13 +73,13 @@ Section SyntacticEntailment.
       syntails t w <(base φ AU now ψ )> ->
       syntails (x <- t ;; k x) w <( base φ AU now ψ )>
   | SynAuBindR: forall {Y} (t: ctree E Y) (k: Y -> ctree E X) w ψ φ R,
-      syntails t w <( base ψ AU AX done R )> ->
+      syntails t w <( base ψ AU AN done R )> ->
       (forall r w', R r w' -> syntails (k r)  w' <( base ψ AU φ )>) ->
       syntails (x <- t ;; k x) w <( base ψ AU φ )>
   | SynAuIter: forall {I} Ri Rr Rv (i: I) w (k: I -> ctree E (I + X)) φ,
       (forall (i: I) w,
           Ri i w ->
-          syntails (k i) w <( base φ AU AX done
+          syntails (k i) w <( base φ AU AN done
                       {fun (x: I + X) w' =>
                          match x with
                          | inl i' => Ri i' w' /\
@@ -93,7 +93,7 @@ Section SyntacticEntailment.
   (* Define a second "deterministic entailment" for this 
   | SynAuBindDetR: forall {Y} (t: ctree E Y)
                    (k: Y -> ctree E X) w w' r ψ φ,
-      syntails t w <( vis ψ AU AX done= r w' )> ->
+      syntails t w <( vis ψ AU AN done= r w' )> ->
       syntails (k r)  w' <( vis ψ AU φ )> ->
       syntails (x <- t ;; k x) w <( vis ψ AU φ )>. *)
 

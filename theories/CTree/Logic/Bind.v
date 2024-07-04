@@ -43,10 +43,10 @@ Section BindLemmas.
           destruct Hs as (t' & w' & TR').
           eapply can_step_bind_l with t' w'; auto.
           specialize (Hau _ _ TR').
-          change (cau (entailsL Y φ1) (entailsL Y φ2) ?t ?w)
+          change (auc (entailsL Y φ1) (entailsL Y φ2) ?t ?w)
             with <( t, w |= φ1 AU φ2 )> in Hau.
           now eapply ctll_not_done in Hau. 
-        * (* AX AF *)
+        * (* AN AF *)
           intros t_ w' TR_.
           apply ktrans_bind_inv in TR_ as
               [(t' & TR' & Hd & ->) |
@@ -64,7 +64,7 @@ Section BindLemmas.
         * apply ktrans_bind_l...
           now apply ctll_not_done in HInd. 
         * apply HInd.
-    - (* AX *)
+    - (* AN *)
       cdestruct H; csplit...
       + (* can_step *) destruct Hs as (t' & w' & TR).
         apply can_step_bind_l with t' w'...
@@ -76,7 +76,7 @@ Section BindLemmas.
         * apply IHφ2, H...
         * specialize (H _ _ TR').
           inv Hr; apply ctll_not_done in H; inv H.
-    - (* EX *)
+    - (* EN *)
       cdestruct H; csplit...
       exists (x <- t0;; k x), w0; split...
       apply ktrans_bind_l...
@@ -117,11 +117,11 @@ Section BindLemmas.
       cdestruct H; [cleft | cright]...
   Qed.
 
-  (*| Bind lemmas for [AX] |*)
+  (*| Bind lemmas for [AN] |*)
   Theorem axl_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
-      <[ t, w |= φ AX done R ]> ->
-      (forall x w, R x w -> <( {k x}, w |= φ AX ψ )>) ->
-      <( {x <- t ;; k x}, w |= φ AX ψ )>.  
+      <[ t, w |= φ AN done R ]> ->
+      (forall x w, R x w -> <( {k x}, w |= φ AN ψ )>) ->
+      <( {x <- t ;; k x}, w |= φ AN ψ )>.  
   Proof with eauto with ctl.
     intros.
     cdestruct H; csplit...
@@ -151,9 +151,9 @@ Section BindLemmas.
   Qed.
 
   Theorem axr_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
-      <[ t, w |= φ AX done R ]> ->
-      (forall x w, R x w -> <[ {k x}, w |= φ AX ψ ]>) ->
-      <[ {x <- t ;; k x}, w |= φ AX ψ ]>.  
+      <[ t, w |= φ AN done R ]> ->
+      (forall x w, R x w -> <[ {k x}, w |= φ AN ψ ]>) ->
+      <[ {x <- t ;; k x}, w |= φ AN ψ ]>.  
   Proof with eauto with ctl.
     intros.
     cdestruct H; csplit...
@@ -183,21 +183,21 @@ Section BindLemmas.
   Qed.
 
   Theorem axr_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ r w',
-      <[ t, w |= φ AX done= r w' ]> ->
-      <[ {k r}, w' |= φ AX ψ ]> ->
-      <[ {x <- t ;; k x}, w |= φ AX ψ ]>.  
+      <[ t, w |= φ AN done= r w' ]> ->
+      <[ {k r}, w' |= φ AN ψ ]> ->
+      <[ {x <- t ;; k x}, w |= φ AN ψ ]>.  
   Proof with eauto with ctl.
     intros.
     eapply axr_bind_r...
     now intros * [-> ->].
   Qed.
   
-  (*| Bind lemmas for [EX] |*)
+  (*| Bind lemmas for [EN] |*)
   Typeclasses Transparent sbisim.
   Theorem exl_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r,
-      <[ t, w |= φ EX done= r w' ]> ->
-      <( {k r}, w' |= φ EX ψ )> ->
-      <( {x <- t ;; k x}, w |= φ EX ψ )>.
+      <[ t, w |= φ EN done= r w' ]> ->
+      <( {k r}, w' |= φ EN ψ )> ->
+      <( {x <- t ;; k x}, w |= φ EN ψ )>.
   Proof with eauto with ctl.
     intros.
     assert(Hd: <( t, w |= φ )> /\ (exists x : Y, t ~ Ret x /\ r = x /\ w' = w)) by
@@ -207,9 +207,9 @@ Section BindLemmas.
   Qed.
 
   Theorem exr_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r,
-      <[ t, w |= φ EX done= r w' ]> ->
-      <[ {k r}, w' |= φ EX ψ ]> ->
-      <[ {x <- t ;; k x}, w |= φ EX ψ ]>.
+      <[ t, w |= φ EN done= r w' ]> ->
+      <[ {k r}, w' |= φ EN ψ ]> ->
+      <[ {x <- t ;; k x}, w |= φ EN ψ ]>.
   Proof with eauto with ctl.
     intros.
     assert(Hd: <( t, w |= φ )> /\ (exists x : Y, t ~ Ret x /\ r = x /\ w' = w)) by
@@ -221,7 +221,7 @@ Section BindLemmas.
   (*| Bind lemmas for [AU] |*)
   Typeclasses Transparent sbisim.
   Theorem aul_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
-      <[ t, w |= φ AU AN done R ]> ->
+      <[ t, w |= φ AU AX done R ]> ->
       (forall x w, R x w -> <( {k x}, w |= φ AU ψ )>) ->
       <( {x <- t ;; k x}, w |= φ AU ψ )>.  
   Proof with eauto with ctl.
@@ -242,13 +242,13 @@ Section BindLemmas.
               (x & w_ & TR_ & Hr & TRk)].
         * apply HInd...
         * specialize (Hau _ _ TR_).
-          change (cau  (entailsL _ ?φ) (entailsR ?ψ) ?t ?w)
+          change (auc  (entailsL _ ?φ) (entailsR ?ψ) ?t ?w)
             with <[ t, w |= φ AU ψ ]> in Hau.
           now apply aur_stuck, axr_stuck in Hau.
   Qed.
   
   Theorem aul_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ r w',
-      <[ t, w |= φ AU AN done= r w' ]> ->
+      <[ t, w |= φ AU AX done= r w' ]> ->
       <( {k r}, w' |= φ AU ψ )> ->
       <( {x <- t ;; k x}, w |= φ AU ψ )>.
   Proof with eauto with ctl.
@@ -258,7 +258,7 @@ Section BindLemmas.
   Qed.
   
   Theorem aur_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
-      <[ t, w |= φ AU AN done R ]> ->
+      <[ t, w |= φ AU AX done R ]> ->
       (forall x w, R x w -> <[ {k x}, w |= φ AU ψ ]>) ->
       <[ {x <- t ;; k x}, w |= φ AU ψ ]>.  
   Proof with eauto with ctl.
@@ -283,13 +283,13 @@ Section BindLemmas.
               (x & w_ & TR_ & Hr & TRk)].
         * apply HInd...
         * specialize (Hau _ _ TR_).
-          change (cau  (entailsL _ ?φ) (entailsR ?ψ) ?t ?w)
+          change (auc  (entailsL _ ?φ) (entailsR ?ψ) ?t ?w)
             with <[ t, w |= φ AU ψ ]> in Hau.
           now apply aur_stuck, axr_stuck in Hau.
   Qed.
 
   Theorem aur_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ r w',
-      <[ t, w |= φ AU AN done= r w' ]> ->
+      <[ t, w |= φ AU AX done= r w' ]> ->
       <[ {k r}, w' |= φ AU ψ ]> ->
       <[ {x <- t ;; k x}, w |= φ AU ψ ]>.
   Proof with eauto with ctl.
@@ -300,7 +300,7 @@ Section BindLemmas.
   
   (* EU *)
   Theorem eul_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
-      <[ t, w |= φ EU EN done R ]> ->
+      <[ t, w |= φ EU EX done R ]> ->
       (forall r w', R r w' -> <( {k r}, w' |= φ EU ψ )>) ->
       <( {x <- t ;; k x}, w |= φ EU ψ )>.
   Proof with eauto with ctl.
@@ -318,7 +318,7 @@ Section BindLemmas.
   Qed.
 
   Theorem eul_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ r w',
-      <[ t, w |= φ EU EN done= r w' ]> ->
+      <[ t, w |= φ EU EX done= r w' ]> ->
       <( {k r}, w' |= φ EU ψ )> ->
       <( {x <- t ;; k x}, w |= φ EU ψ )>.
   Proof with eauto with ctl.
@@ -328,7 +328,7 @@ Section BindLemmas.
   Qed.
   
   Theorem eur_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
-      <[ t, w |= φ EU EN done R ]> ->
+      <[ t, w |= φ EU EX done R ]> ->
       (forall r w', R r w' -> <[ {k r}, w' |= φ EU ψ ]>) ->
       <[ {x <- t ;; k x}, w |= φ EU ψ ]>.
   Proof with eauto with ctl.
@@ -351,7 +351,7 @@ Section BindLemmas.
   Qed.
 
   Theorem eur_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ r w',
-      <[ t, w |= φ EU EN done= r w' ]> ->
+      <[ t, w |= φ EU EX done= r w' ]> ->
       <[ {k r}, w' |= φ EU ψ ]> ->
       <[ {x <- t ;; k x}, w |= φ EU ψ ]>.
   Proof with eauto with ctl.
@@ -365,7 +365,7 @@ Section BindLemmas.
   Program Definition ag_bind_clos{X Y} φ Post : mon (MP Y) :=
     {| body R t w :=
         bind_ctx1
-          (fun (t: ctree E X) => <[ t, w |= φ AU (AN done Post) ]>)
+          (fun (t: ctree E X) => <[ t, w |= φ AU (AX done Post) ]>)
           (fun (k: X -> ctree E Y) =>
              forall (x: X) (w: World E), Post x w -> R (k x) w)
           t
@@ -377,18 +377,18 @@ Section BindLemmas.
   Qed.
 
   Lemma ag_bind_ag{X Y} (φ: ctll E) (Post: rel X (World E)):
-      ag_bind_clos (Y:=Y) φ Post <= cagt (entailsL Y φ).
+      ag_bind_clos (Y:=Y) φ Post <= agct (entailsL Y φ).
   Proof with auto with ctl.  
     apply Coinduction.
     intros R t w; cbn.
     apply (leq_bind_ctx1 _ _
-             (fun t => cax (entailsL Y φ)
-                      (cagT (entailsL Y φ)
+             (fun t => anc (entailsL Y φ)
+                      (agcT (entailsL Y φ)
                          (ag_bind_clos φ Post) R) t w)).
     clear t.
     intros t Hau k Hk.    
     cinduction Hau.
-    - (* AN done R *)
+    - (* AX done R *)
       apply ax_done in Hp as (Hp & x & Heq & HPost).
       specialize (Hk _ _ HPost); remember (k x) as K;
         destruct Hk; subst; split2.      
@@ -396,11 +396,11 @@ Section BindLemmas.
       + rewrite Heq, bind_ret_l.
         now destruct H0.
       + intros t' w' TR.
-        apply (id_T (cagF (entailsL Y φ))); cbn.
+        apply (id_T (agcF (entailsL Y φ))); cbn.
         destruct H0.
         apply H1.
         eapply ktrans_sbisim_ret with (t:=t); auto.
-    - (* φ AX (φ AU AN done R) *)
+    - (* φ AN (φ AU AX done R) *)
       split2.
       + now apply ctll_bind_l.
       + destruct Hs as (t' & w' & TR).
@@ -413,14 +413,14 @@ Section BindLemmas.
         apply ktrans_bind_inv in TRk as
             [(t0' & TR0 & Hd_ & Heq) | (x & w0 & TRt0 & Hd & TRk)].
         * (* [t0] steps and is not [Ret] *)
-          apply (fT_T (mequ_clos_cag (KS:=KripkeSetoidEqu))).
+          apply (fT_T (mequ_clos_agc (KS:=KripkeSetoidEqu))).
           cbn; eapply mequ_clos_ctor with (t1:=x <- t0';; k x) (w1:=w_); auto.
           clear Heq k_.            
-          eapply (fTf_Tf (cagF (entailsL Y φ))).
+          eapply (fTf_Tf (agcF (entailsL Y φ))).
           apply in_bind_ctx1.
           -- rewrite unfold_entailsR... 
           -- intros.
-             apply (b_T (cagF (entailsL Y φ))); cbn... 
+             apply (b_T (agcF (entailsL Y φ))); cbn... 
         * (* [t0] steps and is [Ret], contradiction *)
           specialize (HInd _ _ TRt0).
           destruct HInd as (Hp' & ? & ?).
@@ -435,7 +435,7 @@ Section BindLemmas.
      then forall x w, R x w -> k x, w satisfies [φ] forever. *)
   Lemma ag_bind_r{X Y}: forall (t: ctree E X)
                           w (k: X -> ctree E Y) φ R,
-      <[ t, w |= φ AU AN done R ]> ->
+      <[ t, w |= φ AU AX done R ]> ->
       (forall (x: X) (w: World E), R x w -> <( {k x}, w |= AG φ )>) ->
       <( {x <- t ;; k x} , w |= AG φ )>.
   Proof.
@@ -450,7 +450,7 @@ Section BindLemmas.
   Program Definition eg_bind_clos{X Y} φ Post: mon (MP Y) :=
     {| body R t w :=
         bind_ctx1
-          (fun (t: ctree E X) => <[ t, w |= φ EU (EN done Post) ]>)
+          (fun (t: ctree E X) => <[ t, w |= φ EU (EX done Post) ]>)
           (fun (k: X -> ctree E Y) => forall r wr, Post r wr -> R (k r) wr)
           t
     |}.
@@ -461,26 +461,26 @@ Section BindLemmas.
   Qed.
 
   Lemma eg_bind_eg{X Y} (φ: ctll E) R:
-      eg_bind_clos (X:=X) (Y:=Y) φ R <= cegt (entailsL Y φ).
+      eg_bind_clos (X:=X) (Y:=Y) φ R <= egct (entailsL Y φ).
   Proof with auto with ctl.  
     apply Coinduction.
     intros p t w; cbn.
     apply (leq_bind_ctx1 _ _
-             (fun t => cex (entailsL Y φ)
-                      (cegT (entailsL Y φ)
+             (fun t => enc (entailsL Y φ)
+                      (egcT (entailsL Y φ)
                          (eg_bind_clos φ R) p) t w)).
     clear t.
     intros t Heu k Hk.
     cinduction Heu; intros.
-    - (* EN done R *)
+    - (* EX done R *)
       apply ex_done in Hp as (Hd & y & Heqt & HPosty). 
       cdestruct Hd; clear H.
       rewrite Heqt, bind_ret_l.
       destruct (Hk _ _ HPosty) as (Hφ & k' & w' & TR & HR).
       split...
       exists k', w'; split...
-      now apply (id_T (cegF (entailsL Y φ))). 
-    - (* EX *)
+      now apply (id_T (egcF (entailsL Y φ))). 
+    - (* EN *)
       destruct HInd as (Hφ' & t_ & w_ & TR_ & Hg).
       split.
       + now apply ctll_bind_l.
@@ -489,7 +489,7 @@ Section BindLemmas.
         * exists (x <- t0 ;; k x), w0.
           split...
           eapply ktrans_bind_r...
-          apply (bT_T (cegF (entailsL Y φ))).
+          apply (bT_T (egcF (entailsL Y φ))).
           split...
           exists t_, w_; split...
           rewrite Heq.
@@ -499,20 +499,20 @@ Section BindLemmas.
           -- inv Hd.
              ++ apply ktrans_to_done in TRt0 as (Heqt & ->).
                 rewrite Heqt, bind_ret_l.
-                apply (bT_T (cegF (entailsL Y φ))).
+                apply (bT_T (egcF (entailsL Y φ))).
                 rewrite Heqt, bind_ret_l in Hφ'.
                 split...
                 exists t_, w_; split...
              ++ apply ktrans_to_finish in TRt0 as (Heqt & ->).
                 rewrite Heqt, bind_ret_l.
-                apply (bT_T (cegF (entailsL Y φ))).
+                apply (bT_T (egcF (entailsL Y φ))).
                 rewrite Heqt, bind_ret_l in Hφ'.
                 split...
                 exists t_, w_; split...
   Qed.
 
   Lemma eg_bind_r{X Y}: forall (t: ctree E X) w (k: X -> ctree E Y) R φ,
-      <[ t, w |= φ EU EN done R ]> ->
+      <[ t, w |= φ EU EX done R ]> ->
       (forall r w', R r w' -> <( {k r}, w' |= EG φ )>) ->
       <( {x <- t ;; k x} , w |= EG φ )>.
   Proof.
@@ -524,7 +524,7 @@ Section BindLemmas.
   
   Lemma eg_bind_r_eq{X Y}: forall (t: ctree E X) r
                           w wr (k: X -> ctree E Y) φ,
-      <[ t, w |= φ EU EN done= r wr ]> ->
+      <[ t, w |= φ EU EX done= r wr ]> ->
       <( {k r}, wr |= EG φ )> ->
       <( {x <- t ;; k x} , w |= EG φ )>.
   Proof.

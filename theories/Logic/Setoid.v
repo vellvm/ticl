@@ -110,8 +110,8 @@ Section EquivSetoid.
     {| body := mequ_clos_body |}.
   Next Obligation. repeat red; intros; destruct H0; subst; eauto. Qed.
 
-  Lemma mequ_clos_cag:
-    mequ_clos <= cagt P.
+  Lemma mequ_clos_agc:
+    mequ_clos <= agct P.
   Proof.
     apply Coinduction; cbn.
     intros R t0 w0 [t1 w1 t2 w2 Heq -> [Hp HR]]. 
@@ -120,13 +120,13 @@ Section EquivSetoid.
     split; [auto | split].
     - now rewrite Heq.
     - intros t' w' TR.
-      eapply (f_Tf (cagF P)). 
+      eapply (f_Tf (agcF P)). 
       ktrans_equ TR.
       eapply mequ_clos_ctor with (t1:=z); eauto. 
   Qed.
 
-  Lemma mequ_clos_ceg:
-    mequ_clos <= cegt P.
+  Lemma mequ_clos_egc:
+    mequ_clos <= egct P.
   Proof.
     apply Coinduction; cbn.
     intros R t0 w0 [t1 w1 t2 w2 Heq -> [Hp HR]]. 
@@ -135,69 +135,69 @@ Section EquivSetoid.
     split; [auto |].
     ktrans_equ TR.
     exists z, w'; split; auto.
-    eapply (f_Tf (cegF P)). 
+    eapply (f_Tf (egcF P)). 
     eapply mequ_clos_ctor with (t1:=t') (w1:=w'); eauto.
     now symmetry.
   Qed.
 
-  Global Add Parametric Morphism RR: (cagt P RR) with signature
+  Global Add Parametric Morphism RR: (agct P RR) with signature
          (meq ==> eq ==> iff) as proper_agt_equ.
   Proof.
-    intros t t' Heqm w'; split; intro G; apply (ft_t mequ_clos_cag).
+    intros t t' Heqm w'; split; intro G; apply (ft_t mequ_clos_agc).
     - eapply mequ_clos_ctor with (t1:=t); eauto.
       now symmetry.
     - eapply mequ_clos_ctor with (t1:=t'); eauto.
   Qed.
   
-  Global Add Parametric Morphism RR f: (cagT P f RR)
+  Global Add Parametric Morphism RR f: (agcT P f RR)
          with signature (meq ==> eq ==> iff) as proper_agT_equ.
   Proof.
-    intros t t' Heqt w'; split; intro G; apply (fT_T mequ_clos_cag).
+    intros t t' Heqt w'; split; intro G; apply (fT_T mequ_clos_agc).
     - eapply mequ_clos_ctor with (t1:=t); eauto.
       now symmetry.
     - eapply mequ_clos_ctor with (t1:=t'); eauto.
   Qed.
   
-  Global Add Parametric Morphism: (cag P)
+  Global Add Parametric Morphism: (agc P)
          with signature (meq ==> eq ==> iff) as proper_ag_equ.
   Proof.
-    intros t t' Heqt w'; split; intro G; apply (ft_t mequ_clos_cag).
+    intros t t' Heqt w'; split; intro G; apply (ft_t mequ_clos_agc).
     - eapply mequ_clos_ctor with (t1:=t); eauto.
       now symmetry.
     - eapply mequ_clos_ctor with (t1:=t'); eauto.
   Qed.      
 
-  Global Add Parametric Morphism RR: (cegt P RR)
+  Global Add Parametric Morphism RR: (egct P RR)
          with signature (meq ==> eq ==> iff) as proper_egt_equ.
   Proof.
-    intros t t' Heqt w'; split; intro G; apply (ft_t mequ_clos_ceg).
+    intros t t' Heqt w'; split; intro G; apply (ft_t mequ_clos_egc).
     - eapply mequ_clos_ctor with (t1:=t); eauto.
       now symmetry.
     - eapply mequ_clos_ctor with (t1:=t'); eauto.
   Qed.
 
-  Global Add Parametric Morphism RR f: (cegT P f RR)
+  Global Add Parametric Morphism RR f: (egcT P f RR)
          with signature (meq ==> eq ==> iff) as proper_egT_equ.
   Proof.
-    intros t t' Heqt w'; split; intro G; apply (fT_T mequ_clos_ceg).
+    intros t t' Heqt w'; split; intro G; apply (fT_T mequ_clos_egc).
     - eapply mequ_clos_ctor with (t1:=t); eauto.
       now symmetry.
     - eapply mequ_clos_ctor with (t1:=t'); eauto.
   Qed.
   
-  Global Add Parametric Morphism: (ceg P)
+  Global Add Parametric Morphism: (egc P)
          with signature (meq ==> eq ==> iff) as proper_er_equ.
   Proof.
-    intros t t' Heqt w'; split; intro G; apply (ft_t mequ_clos_ceg).
+    intros t t' Heqt w'; split; intro G; apply (ft_t mequ_clos_egc).
     - eapply mequ_clos_ctor with (t1:=t); eauto.
       now symmetry.
     - eapply mequ_clos_ctor with (t1:=t'); eauto.
   Qed.
 
-  (*| Binary modalities AX, EX, AU, EU |*)
+  (*| Binary modalities AN, EN, AU, EU |*)
   Context {Q: MP} {HQ: Proper (meq ==> eq ==> iff) Q}.
 
-  Global Add Parametric Morphism: (cax P Q)
+  Global Add Parametric Morphism: (anc P Q)
          with signature (meq ==> eq ==> iff) as proper_ax_equ.
   Proof.
     intros x y Heqt w; split; intros (Hp & Hs & HN). 
@@ -213,7 +213,7 @@ Section EquivSetoid.
       now rewrite EQ.
   Qed.      
     
-  Global Add Parametric Morphism: (cex P Q)
+  Global Add Parametric Morphism: (enc P Q)
          with signature (meq ==> eq ==> iff) as proper_ex_equ.
   Proof.
     intros x y Heqt w; split; intros (Hp & x' & z & TR & HP');
@@ -228,7 +228,7 @@ Section EquivSetoid.
         now rewrite <- EQ.
   Qed.
   
-  Global Add Parametric Morphism: (cau P Q)
+  Global Add Parametric Morphism: (auc P Q)
         with signature (meq ==> eq ==> iff) as proper_au_equ.
   Proof.
     intros x y EQ; split; intros * au.
@@ -260,7 +260,7 @@ Section EquivSetoid.
           now symmetry.
   Qed.
 
-  Global Add Parametric Morphism: (ceu P Q)
+  Global Add Parametric Morphism: (euc P Q)
         with signature (meq ==> eq ==> iff) as proper_eu_equ.
   Proof.
     intros x y EQ; split; intro eu.

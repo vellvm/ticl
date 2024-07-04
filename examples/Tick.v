@@ -54,7 +54,7 @@ Section TickTock.
     (forall (i: I) w,
         R i w ->
         <( {iter k i}, w |= φ)> \/
-          <[ {k i}, w |= φ AX (φ AR AN done
+          <[ {k i}, w |= φ AN (φ AR AX done
                       {fun (lr: I + X) (w': World E) =>
                          exists (i': I), lr = inl i' /\ R i' w'}) ]>) ->
     <( {iter k i}, w |= AG φ )>.

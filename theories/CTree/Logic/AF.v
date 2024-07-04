@@ -52,7 +52,7 @@ Section BasicLemmas.
   Qed.
   
   Lemma aul_ret: forall (r: X) w φ ψ,
-      <( {Ret r}, w |= ψ \/ φ AX ψ )> <->
+      <( {Ret r}, w |= ψ \/ φ AN ψ )> <->
       <( {Ret r}, w |= φ AU ψ )>.
   Proof with auto with ctl.
     split; intros H; cdestruct H.
@@ -84,7 +84,7 @@ Section BasicLemmas.
   Qed.
   
   Lemma aur_ret: forall (r: X) w φ ψ,
-      <[ {Ret r}, w |= ψ \/ φ AX ψ ]> <->
+      <[ {Ret r}, w |= ψ \/ φ AN ψ ]> <->
       <[ {Ret r}, w |= φ AU ψ ]>.
   Proof with auto with ctl.
     split; intros H; cdestruct H.
@@ -265,7 +265,7 @@ Section BasicLemmas.
   Qed.
   
   Lemma aur_not_done: forall φ ψ ξ (t: ctree E X) (w: World E),
-      <[ t, w |= φ AU (ψ AX ξ) ]> ->
+      <[ t, w |= φ AU (ψ AN ξ) ]> ->
       not_done w.
   Proof.
     intros.

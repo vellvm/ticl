@@ -369,7 +369,7 @@ Section CtllEquations.
   Qed.
 
   Lemma ctll_au_ax: forall (p q: ctll E),
-      <( p AU q )> ⩸ <( q \/ (p AX (p AU q)) )>.
+      <( p AU q )> ⩸ <( q \/ (p AN (p AU q)) )>.
   Proof.
     intros p q; split; intros t w Hind.
     - cinduction Hind.
@@ -382,7 +382,7 @@ Section CtllEquations.
   Qed.
 
   Lemma ctll_eu_ex: forall (p q: ctll E),
-      <( p EU q )> ⩸ <( q \/ (p EX (p EU q)) )>.
+      <( p EU q )> ⩸ <( q \/ (p EN (p EU q)) )>.
   Proof.
     intros p q; split; intros t w Hind.
     - cinduction Hind.
@@ -431,7 +431,7 @@ Section CtllEquations.
   Qed.
 
   Lemma ctll_ag_ax: forall (p: ctll E),
-      <( AG p )> ⩸ <( p AX (AG p) )>.
+      <( AG p )> ⩸ <( p AN (AG p) )>.
   Proof.
     split; intros t w Hp.
     - step in Hp; inv Hp; split; auto.
@@ -440,7 +440,7 @@ Section CtllEquations.
   Qed.
 
   Lemma ctll_eg_ex: forall (p: ctll E),
-      <( EG p )> ⩸ <( p EX (EG p) )>.
+      <( EG p )> ⩸ <( p EN (EG p) )>.
   Proof.
     split; intros t w Hp.
     - split; step in Hp; inv Hp; auto.
@@ -449,7 +449,7 @@ Section CtllEquations.
   Qed.
 
   Lemma ctll_auax_axau: forall (p q: ctll E),
-      <( p AU (p AX q) )> ⋖ <( p AX (p AU q) )>.
+      <( p AU (p AN q) )> ⋖ <( p AN (p AU q) )>.
   Proof.
     intros * t w H.
     cinduction H.
@@ -641,7 +641,7 @@ Section CtlrEquations.
   Qed.
 
   Lemma ctlr_au_ax: forall (p: ctll E) (q: ctlr E X),
-      <[ p AU q ]> ⩸ <[ q \/ (p AX (p AU q)) ]>.
+      <[ p AU q ]> ⩸ <[ q \/ (p AN (p AU q)) ]>.
   Proof with auto with ctl.
     intros p q; split; intros t w Hind.
     - cinduction Hind.
@@ -654,7 +654,7 @@ Section CtlrEquations.
   Qed.
 
   Lemma ctlr_eu_ex: forall (p: ctll E) (q: ctlr E X),
-      <[ p EU q ]> ⩸ <[ q \/ (p EX (p EU q)) ]>.
+      <[ p EU q ]> ⩸ <[ q \/ (p EN (p EU q)) ]>.
   Proof.
     intros p q; split; intros t w Hind.
     - cinduction Hind.
@@ -669,7 +669,7 @@ Section CtlrEquations.
   Qed.
 
   Lemma ctlr_auax_axau: forall (p: ctll E) (q: ctlr E X) (t: MS) w,
-      <[ t, w |= p AU (p AX q) ]> -> <[ t, w |= p AX (p AU q) ]>.
+      <[ t, w |= p AU (p AN q) ]> -> <[ t, w |= p AN (p AU q) ]>.
   Proof with auto with ctl.
     intros * H.
     cinduction H.

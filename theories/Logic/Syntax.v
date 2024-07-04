@@ -138,11 +138,11 @@ Module CtlNotations.
                     (in custom ctlr at level 76): ctl_scope.
   
   (* Temporal syntax *)
-  Notation "p 'EX' q" := (CxL Q_E p q) (in custom ctll at level 75): ctl_scope.
-  Notation "p 'AX' q" := (CxL Q_A p q) (in custom ctll at level 75): ctl_scope.
+  Notation "p 'EN' q" := (CxL Q_E p q) (in custom ctll at level 75): ctl_scope.
+  Notation "p 'AN' q" := (CxL Q_A p q) (in custom ctll at level 75): ctl_scope.
 
-  Notation "p 'EX' q" := (CxR Q_E p q) (in custom ctlr at level 75): ctl_scope.
-  Notation "p 'AX' q" := (CxR Q_A p q) (in custom ctlr at level 75): ctl_scope.
+  Notation "p 'EN' q" := (CxR Q_E p q) (in custom ctlr at level 75): ctl_scope.
+  Notation "p 'AN' q" := (CxR Q_A p q) (in custom ctlr at level 75): ctl_scope.
 
   Notation "p 'EU' q" := (CuL Q_E p q) (in custom ctll at level 75): ctl_scope.
   Notation "p 'AU' q" := (CuL Q_A p q) (in custom ctll at level 75): ctl_scope.
@@ -163,11 +163,11 @@ Module CtlNotations.
   Notation "'EF' p" := <[ ⊤ EU p ]> (in custom ctlr at level 74): ctl_scope.
   Notation "'AF' p" := <[ ⊤ AU p ]> (in custom ctlr at level 74): ctl_scope.
 
-  Notation "'EN' p" := <( ⊤ EX p )> (in custom ctll at level 74): ctl_scope.
-  Notation "'AN' p" := <( ⊤ AX p )> (in custom ctll at level 74): ctl_scope.
+  Notation "'EX' p" := <( ⊤ EN p )> (in custom ctll at level 74): ctl_scope.
+  Notation "'AX' p" := <( ⊤ AN p )> (in custom ctll at level 74): ctl_scope.
 
-  Notation "'EN' p" := <[ ⊤ EX p ]> (in custom ctlr at level 74): ctl_scope.
-  Notation "'AN' p" := <[ ⊤ AX p ]> (in custom ctlr at level 74): ctl_scope.
+  Notation "'EX' p" := <[ ⊤ EN p ]> (in custom ctlr at level 74): ctl_scope.
+  Notation "'AX' p" := <[ ⊤ AN p ]> (in custom ctlr at level 74): ctl_scope.
   
   (* Propositional syntax *)
   Notation "p '/\' q" := (CAndL p q)

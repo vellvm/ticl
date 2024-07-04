@@ -52,11 +52,11 @@ Section StateLemmas.
     now apply ctll_bind_l.
   Qed.
 
-  (*| Bind lemmas for [AX] |*)
+  (*| Bind lemmas for [AN] |*)
   Theorem axl_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
-      <[ {interp_state h t σ}, w |= φ AX done {fun '(x, σ) => R x σ} ]> ->
-      (forall x σ w, R x σ w -> <( {interp_state h (k x) σ}, w |= φ AX ψ )>) ->
-      <( {interp_state h (x <- t ;; k x) σ}, w |= φ AX ψ )>.  
+      <[ {interp_state h t σ}, w |= φ AN done {fun '(x, σ) => R x σ} ]> ->
+      (forall x σ w, R x σ w -> <( {interp_state h (k x) σ}, w |= φ AN ψ )>) ->
+      <( {interp_state h (x <- t ;; k x) σ}, w |= φ AN ψ )>.  
   Proof with eauto with ctl.
     intros.
     rewrite interp_state_bind.
@@ -65,9 +65,9 @@ Section StateLemmas.
   Qed.    
   
   Theorem axr_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
-      <[ {interp_state h t σ}, w |= φ AX done {fun '(x, σ) => R x σ} ]> ->
-      (forall x σ w, R x σ w -> <[ {interp_state h (k x) σ}, w |= φ AX ψ ]>) ->
-      <[ {interp_state h (x <- t ;; k x) σ}, w |= φ AX ψ ]>.  
+      <[ {interp_state h t σ}, w |= φ AN done {fun '(x, σ) => R x σ} ]> ->
+      (forall x σ w, R x σ w -> <[ {interp_state h (k x) σ}, w |= φ AN ψ ]>) ->
+      <[ {interp_state h (x <- t ;; k x) σ}, w |= φ AN ψ ]>.  
   Proof with eauto with ctl.
     intros.
     rewrite interp_state_bind.
@@ -76,9 +76,9 @@ Section StateLemmas.
   Qed.
 
   Theorem axr_state_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r σ',
-      <[ {interp_state h t σ}, w |= φ AX done= {(r, σ')} w' ]> ->
-      <[ {interp_state h (k r) σ'}, w' |= φ AX ψ ]> ->
-      <[ {interp_state h (x <- t ;; k x) σ}, w |= φ AX ψ ]>.  
+      <[ {interp_state h t σ}, w |= φ AN done= {(r, σ')} w' ]> ->
+      <[ {interp_state h (k r) σ'}, w' |= φ AN ψ ]> ->
+      <[ {interp_state h (x <- t ;; k x) σ}, w |= φ AN ψ ]>.  
   Proof with eauto with ctl.
     intros.
     rewrite interp_state_bind.
@@ -86,12 +86,12 @@ Section StateLemmas.
     intros [y σ_] w_ (Hinv & HR); inv Hinv; subst...
   Qed.
   
-  (*| Bind lemmas for [EX] |*)
+  (*| Bind lemmas for [EN] |*)
   Typeclasses Transparent sbisim.
   Theorem exl_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r σ',
-      <[ {interp_state h t σ}, w |= φ EX done= {(r,σ')} w' ]> ->
-      <( {interp_state h (k r) σ'}, w' |= φ EX ψ )> ->
-      <( {interp_state h (x <- t ;; k x) σ}, w |= φ EX ψ )>.
+      <[ {interp_state h t σ}, w |= φ EN done= {(r,σ')} w' ]> ->
+      <( {interp_state h (k r) σ'}, w' |= φ EN ψ )> ->
+      <( {interp_state h (x <- t ;; k x) σ}, w |= φ EN ψ )>.
   Proof with eauto with ctl.
     intros.
     rewrite interp_state_bind.
@@ -99,9 +99,9 @@ Section StateLemmas.
   Qed.
 
   Theorem exr_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r σ',
-      <[ {interp_state h t σ}, w |= φ EX done= {(r,σ')} w' ]> ->
-      <[ {interp_state h (k r) σ'}, w' |= φ EX ψ ]> ->
-      <[ {interp_state h (x <- t ;; k x) σ}, w |= φ EX ψ ]>.
+      <[ {interp_state h t σ}, w |= φ EN done= {(r,σ')} w' ]> ->
+      <[ {interp_state h (k r) σ'}, w' |= φ EN ψ ]> ->
+      <[ {interp_state h (x <- t ;; k x) σ}, w |= φ EN ψ ]>.
   Proof with eauto with ctl.
     intros.
     rewrite interp_state_bind.
@@ -110,7 +110,7 @@ Section StateLemmas.
   
   (*| Bind lemmas for [AU] |*)
   Theorem aul_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
-      <[ {interp_state h t σ}, w |= φ AU AN done {fun '(r,σ) => R r σ} ]> ->
+      <[ {interp_state h t σ}, w |= φ AU AX done {fun '(r,σ) => R r σ} ]> ->
       (forall x σ w, R x σ w -> <( {interp_state h (k x) σ}, w |= φ AU ψ )>) ->
       <( {interp_state h (x <- t ;; k x) σ}, w |= φ AU ψ )>.  
   Proof with eauto with ctl.
@@ -121,7 +121,7 @@ Section StateLemmas.
   Qed.
 
   Theorem aul_state_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ x' σ' w',
-      <[ {interp_state h t σ}, w |= φ AU AN done= {(x',σ')} w' ]> ->
+      <[ {interp_state h t σ}, w |= φ AU AX done= {(x',σ')} w' ]> ->
       <( {interp_state h (k x') σ'}, w' |= φ AU ψ )> ->
       <( {interp_state h (x <- t ;; k x) σ}, w |= φ AU ψ )>.  
   Proof with eauto with ctl.
@@ -132,7 +132,7 @@ Section StateLemmas.
   Qed.
   
   Theorem aur_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
-      <[ {interp_state h t σ}, w |= φ AU AN done {fun '(r,σ) => R r σ} ]> ->
+      <[ {interp_state h t σ}, w |= φ AU AX done {fun '(r,σ) => R r σ} ]> ->
       (forall x σ w, R x σ w -> <[ {interp_state h (k x) σ}, w |= φ AU ψ ]>) ->
       <[ {interp_state h (x <- t ;; k x) σ}, w |= φ AU ψ ]>.  
   Proof with eauto with ctl.
@@ -143,7 +143,7 @@ Section StateLemmas.
   Qed.
 
   Theorem aur_state_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ x' σ' w',
-      <[ {interp_state h t σ}, w |= φ AU AN done= {(x',σ')} w' ]> ->
+      <[ {interp_state h t σ}, w |= φ AU AX done= {(x',σ')} w' ]> ->
       <[ {interp_state h (k x') σ'}, w' |= φ AU ψ ]> ->
       <[ {interp_state h (x <- t ;; k x) σ}, w |= φ AU ψ ]>.  
   Proof with eauto with ctl.
@@ -155,7 +155,7 @@ Section StateLemmas.
   
   (*| Bind lemmas for [EU] |*)
   Theorem eul_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
-      <[ {interp_state h t σ}, w |= φ EU EN done {fun '(r,σ) => R r σ} ]> ->
+      <[ {interp_state h t σ}, w |= φ EU EX done {fun '(r,σ) => R r σ} ]> ->
       (forall r σ w, R r σ w -> <( {interp_state h (k r) σ}, w |= φ EU ψ )>) ->
       <( {interp_state h (x <- t ;; k x) σ}, w |= φ EU ψ )>.
   Proof with eauto with ctl.
@@ -166,7 +166,7 @@ Section StateLemmas.
   Qed.
 
   Theorem eur_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
-      <[ {interp_state h t σ}, w |= φ EU EN done {fun '(r,σ) => R r σ} ]> ->
+      <[ {interp_state h t σ}, w |= φ EU EX done {fun '(r,σ) => R r σ} ]> ->
       (forall r σ w, R r σ w -> <[ {interp_state h (k r) σ}, w |= φ EU ψ ]>) ->
       <[ {interp_state h (x <- t ;; k x) σ}, w |= φ EU ψ ]>.
   Proof with eauto with ctl.
@@ -178,7 +178,7 @@ Section StateLemmas.
 
   (*| Bind lemma for [AG] |*)
   Theorem ag_state_bind_r{X Y}: forall (t: ctree E X) w (k: X -> ctree E Y) φ R,
-      <[ {interp_state h t σ}, w |= φ AU AN done {fun '(r, σ) => R r σ} ]> ->
+      <[ {interp_state h t σ}, w |= φ AU AX done {fun '(r, σ) => R r σ} ]> ->
       (forall (x: X) σ w, R x σ w -> <( {interp_state h (k x) σ}, w |= AG φ )>) ->
       <( {interp_state h (x <- t ;; k x) σ} , w |= AG φ )>.
   Proof with auto with ctl.
@@ -190,7 +190,7 @@ Section StateLemmas.
 
   (*| Bind lemma for [EG] |*)
   Theorem eg_state_bind_r{X Y}: forall (t: ctree E X) w (k: X -> ctree E Y) R φ,
-      <[ {interp_state h t σ}, w |= φ EU EN done {fun '(r, σ) => R r σ} ]> ->
+      <[ {interp_state h t σ}, w |= φ EU EX done {fun '(r, σ) => R r σ} ]> ->
       (forall r σ w, R r σ w -> <( {interp_state h (k r) σ}, w |= EG φ )>) ->
       <( {interp_state h (x <- t ;; k x) σ} , w |= EG φ )>.
   Proof with auto with ctl.
@@ -200,18 +200,18 @@ Section StateLemmas.
     intros [y σ'] * HR...
   Qed.
 
-  (*| Iter lemmas for [AX] |*)
+  (*| Iter lemmas for [AN] |*)
   Theorem axl_state_iter{X I} Ri (Rv: relation I) (i: I) w
     (k: I -> ctree E (I + X)) (φ ψ: ctllW W):
     well_founded Rv ->
     Ri i σ w ->    
     (forall (i: I) σ w,
         Ri i σ w ->
-        <( {interp_state h (k i) σ}, w |= φ AX ψ )> \/
-          <[ {interp_state h (k i) σ}, w |= φ AX done
+        <( {interp_state h (k i) σ}, w |= φ AN ψ )> \/
+          <[ {interp_state h (k i) σ}, w |= φ AN done
                       {fun '(lr, σ') w' => 
                          exists (i': I), lr = inl i' /\ Ri i' σ' w' /\ Rv i' i}]>) ->
-    <( {interp_state h (Ctree.iter k i) σ}, w |= φ AX ψ )>.
+    <( {interp_state h (Ctree.iter k i) σ}, w |= φ AN ψ )>.
   Proof with auto with ctl.
     intros WfR Hi H.
     generalize dependent k.
@@ -239,13 +239,13 @@ Section StateLemmas.
     Ri i σ w ->    
     (forall (i: I) σ w,
         Ri i σ w ->
-        <[ {interp_state h (k i) σ}, w |= φ AX done
+        <[ {interp_state h (k i) σ}, w |= φ AN done
                                        {fun '(lr, σ') (w': WorldW W) =>
                                           match lr with
                                           | inl i' => Ri i' σ' w' /\ Rv i' i
-                                          | inr r => <[ {Ret (r, σ')}, w' |= φ AX ψ ]>
+                                          | inr r => <[ {Ret (r, σ')}, w' |= φ AN ψ ]>
                                           end} ]>) ->
-    <[ {interp_state h (Ctree.iter k i) σ}, w |= φ AX ψ ]>.
+    <[ {interp_state h (Ctree.iter k i) σ}, w |= φ AN ψ ]>.
   Proof with auto with ctl.
     intros WfR Hi H.
     generalize dependent k.
@@ -260,7 +260,7 @@ Section StateLemmas.
         (R:=fun '(lr, σ') w' =>
                match lr with
                | inl i' => Ri i' σ' w' /\ Rv i' i
-               | inr r => <[ {Ret (r, σ')}, w' |= φ AX ψ ]>
+               | inr r => <[ {Ret (r, σ')}, w' |= φ AN ψ ]>
                end)...
     intros [[i' | r] σ'] w'.            
     - intros (Hi' & Hv). 
@@ -269,18 +269,18 @@ Section StateLemmas.
     - auto.
   Qed.
 
-  (*| Iter lemmas for [EX] |*)
+  (*| Iter lemmas for [EN] |*)
   Theorem exl_state_iter{X I} Ri (Rv: relation I) (i: I) w
     (k: I -> ctree E (I + X)) (φ ψ: ctllW W):
     well_founded Rv ->
     Ri i σ w ->    
     (forall (i: I) σ w,
         Ri i σ w ->
-        <( {interp_state h (k i) σ}, w |= φ EX ψ )> \/
-          <[ {interp_state h (k i) σ}, w |= φ EX done
+        <( {interp_state h (k i) σ}, w |= φ EN ψ )> \/
+          <[ {interp_state h (k i) σ}, w |= φ EN done
                       {fun '(lr, σ') w' => 
                          exists (i': I), lr = inl i' /\ Ri i' σ' w' /\ Rv i' i}]>) ->
-    <( {interp_state h (Ctree.iter k i) σ}, w |= φ EX ψ )>.
+    <( {interp_state h (Ctree.iter k i) σ}, w |= φ EN ψ )>.
   Proof with auto with ctl.
     intros WfR Hi H.
     generalize dependent k.
@@ -302,13 +302,13 @@ Section StateLemmas.
     Ri i σ w ->    
     (forall (i: I) σ w,
         Ri i σ w ->
-        <[ {interp_state h (k i) σ}, w |= φ EX done
+        <[ {interp_state h (k i) σ}, w |= φ EN done
                                        {fun '(lr, σ') (w': WorldW W) =>
                                           match lr with
                                           | inl i' => Ri i' σ' w' /\ Rv i' i
-                                          | inr r => <[ {Ret (r, σ')}, w' |= φ EX ψ ]>
+                                          | inr r => <[ {Ret (r, σ')}, w' |= φ EN ψ ]>
                                           end} ]>) ->
-    <[ {interp_state h (Ctree.iter k i) σ}, w |= φ EX ψ ]>.
+    <[ {interp_state h (Ctree.iter k i) σ}, w |= φ EN ψ ]>.
   Proof with auto with ctl.
     intros WfR Hi H.
     generalize dependent k.
@@ -337,7 +337,7 @@ Section StateLemmas.
         not_done w ->
         Ri i σ w ->
         <( {interp_state h (k i) σ}, w |= φ AU ψ )> \/
-          <[ {interp_state h (k i) σ}, w |= φ AU AN done
+          <[ {interp_state h (k i) σ}, w |= φ AU AX done
                       {fun '(lr, σ') (w': WorldW W) =>
                          exists i', lr = inl i'
                                /\ not_done w'
@@ -384,11 +384,11 @@ Section StateLemmas.
     (forall (i: I) σ w,
         not_done w ->
         Ri i σ w ->
-        <[ {interp_state h (k i) σ}, w |= φ AU AN done
+        <[ {interp_state h (k i) σ}, w |= φ AU AX done
                     {fun '(lr, σ') (w': WorldW W) =>
                        match lr with
                        | inl i' => not_done w' /\ Ri i' σ' w' /\ Rv (i', σ', w') (i, σ, w)
-                       | inr r => <[ {Ret (r, σ')}, w' |= ψ \/ φ AX ψ ]>
+                       | inr r => <[ {Ret (r, σ')}, w' |= ψ \/ φ AN ψ ]>
                        end} ]>) ->
     <[ {interp_state h (iter k i) σ}, w |= φ AU ψ ]>.
   Proof with auto with ctl.
@@ -409,7 +409,7 @@ Section StateLemmas.
       (R:=fun '(lr, σ') w' =>
              match lr with
              | inl i' => not_done w' /\ Ri i' σ' w' /\ Rv (i', σ', w') (i, σ, w)
-             | inr r => <[ {Ret (r, σ')}, w' |= ψ \/ φ AX ψ ]>
+             | inr r => <[ {Ret (r, σ')}, w' |= ψ \/ φ AN ψ ]>
              end)...
     intros [[i' | r] σ'] w'...
     - intros (Hd' & Hi' & Hv). 
@@ -432,7 +432,7 @@ Section StateLemmas.
         not_done w ->
         Ri i σ w ->
         <( {interp_state h (k i) σ}, w |= φ EU ψ )> \/
-          <[ {interp_state h (k i) σ}, w |= φ EU EN done
+          <[ {interp_state h (k i) σ}, w |= φ EU EX done
                       {fun '(lr, σ') w' =>
                          exists i', lr = inl i'
                                /\ not_done w'
@@ -478,11 +478,11 @@ Section StateLemmas.
     (forall (i: I) σ w,
         not_done w ->
         Ri i σ w ->
-        <[ {interp_state h (k i) σ}, w |= φ EU EN done
+        <[ {interp_state h (k i) σ}, w |= φ EU EX done
                     {fun '(lr, σ') w' =>
                        match lr with
                        | inl i' => not_done w' /\ Ri i' σ' w' /\ Rv (i', σ', w') (i, σ, w)
-                       | inr r => <[ {Ret (r, σ')}, w' |= ψ \/ φ EX ψ ]>
+                       | inr r => <[ {Ret (r, σ')}, w' |= ψ \/ φ EN ψ ]>
                        end} ]>) ->
     <[ {interp_state h (iter k i) σ}, w |= φ EU ψ ]>.
   Proof with auto with ctl.
@@ -503,7 +503,7 @@ Section StateLemmas.
       (R:=fun '(lr, σ') w' =>
             match lr with
             | inl i' => not_done w' /\ Ri i' σ' w' /\ Rv (i', σ', w') (i, σ, w)
-            | inr r => <[ {Ret (r, σ')}, w' |= ψ \/ φ EX ψ ]>
+            | inr r => <[ {Ret (r, σ')}, w' |= ψ \/ φ EN ψ ]>
              end)...
     intros [[i' | r] σ'] w'...
     - intros (Hd' & Hi' & Hv). 
@@ -525,7 +525,7 @@ Section StateLemmas.
         not_done w ->
         R i σ w ->
         <( {interp_state h (iter k i) σ}, w |= φ )> /\
-        <[ {interp_state h (k i) σ}, w |= AN (φ AU AN done
+        <[ {interp_state h (k i) σ}, w |= AX (φ AU AX done
                     {fun '(lr, σ') w' =>
                        exists (i': I), lr = inl i' /\ not_done w' /\ R i' σ' w'}) ]>) ->
     <( {interp_state h (Ctree.iter k i) σ}, w |= AG φ )>.
@@ -560,8 +560,8 @@ Section StateLemmas.
           rewrite sb_guard.
           apply CIH...
       + (* [k x] returns *)        
-        specialize (H1' _ _ TRt0) as HAX.
-        now apply aur_stuck, axr_stuck in HAX.
+        specialize (H1' _ _ TRt0) as HAN.
+        now apply aur_stuck, axr_stuck in HAN.
   Qed.
 
   (*| Iter lemma for [EG] |*)
@@ -572,7 +572,7 @@ Section StateLemmas.
         not_done w ->
         R i σ w ->
         <( {interp_state h (iter k i) σ}, w |= φ )> /\
-        <[ {interp_state h (k i) σ}, w |= EN (φ EU EN done
+        <[ {interp_state h (k i) σ}, w |= EX (φ EU EX done
                     {fun '(lr, σ') w' =>
                        exists (i': I), lr = inl X i' /\ not_done w' /\ R i' σ' w'}) ]>) ->
     <( {interp_state h (iter k i) σ}, w |= EG φ )>.
@@ -614,7 +614,7 @@ Section StateLemmas.
         not_done w ->
         Ri i σ w ->
         <( {interp_state h (k i) σ}, w |= φ AU ψ )> \/
-          <[ {interp_state h (k i) σ}, w |= φ AU AN done
+          <[ {interp_state h (k i) σ}, w |= φ AU AX done
                       {fun '(lr, σ') (w': WorldW W) =>
                          exists i', lr = inl i'
                                /\ not_done w'
@@ -634,13 +634,13 @@ Section StateLemmas.
     (forall (i: I) σ w,
         not_done w ->
         Ri i σ w ->
-        <[ {interp_state h (k i) σ}, w |= φ AU AN done
+        <[ {interp_state h (k i) σ}, w |= φ AU AX done
                                        {fun '(lr, σ') (w': WorldW W) =>
                                           match lr with
                                           | inl i' => not_done w'
                                                      /\ Ri i' σ' w'
                                                      /\ f i' σ' w' < f i σ w
-                                          | inr r => <[ {Ret (r, σ')}, w' |= ψ \/ φ AX ψ ]>
+                                          | inr r => <[ {Ret (r, σ')}, w' |= ψ \/ φ AN ψ ]>
                                           end} ]>) ->
     <[ {interp_state h (Ctree.iter k i) σ}, w |= φ AU ψ ]>.
   Proof.
@@ -658,7 +658,7 @@ Section StateLemmas.
         not_done w ->
         Ri i σ w ->
         <( {interp_state h (k i) σ}, w |= φ EU ψ )> \/
-          <[ {interp_state h (k i) σ}, w |= φ EU EN done
+          <[ {interp_state h (k i) σ}, w |= φ EU EX done
                       {fun '(lr, σ') w' =>
                          exists i', lr = inl i'
                                /\ not_done w'
@@ -678,11 +678,11 @@ Section StateLemmas.
     (forall (i: I) σ w,
         not_done w ->
         Ri i σ w ->
-        <[ {interp_state h (k i) σ}, w |= φ EU EN done
+        <[ {interp_state h (k i) σ}, w |= φ EU EX done
                     {fun '(lr, σ') w' =>
                        match lr with
                        | inl i' => not_done w' /\ Ri i' σ' w' /\ f i' σ' w' < f i σ w
-                       | inr r => <[ {Ret (r, σ')}, w' |= ψ \/ φ EX ψ ]>
+                       | inr r => <[ {Ret (r, σ')}, w' |= ψ \/ φ EN ψ ]>
                        end} ]>) ->
     <[ {interp_state h (iter k i) σ}, w |= φ EU ψ ]>.
   Proof.

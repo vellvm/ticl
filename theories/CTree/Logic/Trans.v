@@ -193,7 +193,7 @@ Section CTreeTrans.
   (* Here I define two setoid instaces, one for [equ eq]
      and one for [sbisim eq]. Even though [equ eq] is a subrelation
      of [sbisim eq], I had to delete the subrelation instance and
-     duplicate here because instance resolution became extremely slow. *)
+     duplicate here beaucse instance resolution became extremely slow. *)
   Global Instance KripkeSetoidEqu {X}:
     @KripkeSetoid ctree E HE ctree_kripke X (equ eq) _.
   Proof.

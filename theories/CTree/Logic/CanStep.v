@@ -155,7 +155,7 @@ Section CanStepCtrees.
 
   Typeclasses Opaque equ.
   Lemma can_step_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w R,      
-      <[ t, w |= AF AN done R ]> ->
+      <[ t, w |= AF AX done R ]> ->
       (forall y w, R y w -> can_step (k y) w) ->
       can_step (x <- t ;; k x) w.
   Proof with eauto with ctl. 

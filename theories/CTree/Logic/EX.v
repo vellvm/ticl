@@ -23,12 +23,12 @@ Import CTreeNotations CtlNotations.
 Local Open Scope ctl_scope.
 Local Open Scope ctree_scope.
   
-(*| CTL EX lemmas on ctrees |*)
+(*| CTL EN lemmas on ctrees |*)
 Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
   Lemma exl_stuck: forall w φ ψ,
-      <( {Ctree.stuck: ctree E X}, w |= φ EX ψ )> ->
+      <( {Ctree.stuck: ctree E X}, w |= φ EN ψ )> ->
       <( {Ctree.stuck: ctree E X}, w |= ψ )>.
   Proof.
     intros.
@@ -38,7 +38,7 @@ Section BasicLemmas.
 
   Lemma exl_br: forall n (k: fin' n -> ctree E X) w φ ψ,
       (<( {Br n k}, w |= φ )> /\ (exists (i: fin' n), <( {k i}, w |= ψ )>)) <->
-    <( {Br n k}, w |= φ EX ψ )>.
+    <( {Br n k}, w |= φ EN ψ )>.
   Proof with auto with ctl.
     split; intros.
     - destruct H as (Hφ & i & H).
@@ -55,7 +55,7 @@ Section BasicLemmas.
   Qed.
 
   Lemma exl_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ ψ,
-      <( {Vis e k}, w |= φ EX ψ )> <->        
+      <( {Vis e k}, w |= φ EN ψ )> <->        
         <( {Vis e k}, w |= φ )> /\ (exists (v: encode e), <( {k v}, {Obs e v} |= ψ )>).
   Proof with eauto with ctl.
     split; intros.
@@ -72,7 +72,7 @@ Section BasicLemmas.
   Qed.
 
   Lemma exr_stuck: forall w φ ψ,
-      <[ {Ctree.stuck: ctree E X}, w |= φ EX ψ ]> ->
+      <[ {Ctree.stuck: ctree E X}, w |= φ EN ψ ]> ->
       <[ {Ctree.stuck: ctree E X}, w |= ψ ]>.
   Proof.
     intros.
@@ -82,7 +82,7 @@ Section BasicLemmas.
 
   Lemma exr_br: forall n (k: fin' n -> ctree E X) w φ ψ,
       (<( {Br n k}, w |= φ )> /\ (exists (i: fin' n), <[ {k i}, w |= ψ ]>)) <->
-        <[ {Br n k}, w |= φ EX ψ ]>.
+        <[ {Br n k}, w |= φ EN ψ ]>.
   Proof with auto with ctl.
     split; intros.
     - destruct H as (Hφ & i & H).
@@ -99,7 +99,7 @@ Section BasicLemmas.
   Qed.
 
   Lemma exr_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ ψ,
-      <[ {Vis e k}, w |= φ EX ψ ]> <->        
+      <[ {Vis e k}, w |= φ EN ψ ]> <->        
         <( {Vis e k}, w |= φ )> /\ (exists (v: encode e), <[ {k v}, {Obs e v} |= ψ ]>).
   Proof with eauto with ctl.
     split; intros.
@@ -116,7 +116,7 @@ Section BasicLemmas.
   Qed.
 
   Lemma ex_done: forall (t: ctree E X) φ ψ w,
-      <[ t, w |= φ EX done ψ ]> <-> <( t, w |= φ )> /\ (exists (x: X), t ~ Ret x /\ ψ x w).
+      <[ t, w |= φ EN done ψ ]> <-> <( t, w |= φ )> /\ (exists (x: X), t ~ Ret x /\ ψ x w).
   Proof with eauto with ctl.
     split; intros.
     - cdestruct H.
@@ -154,7 +154,7 @@ Section BasicLemmas.
   Qed.
 
   Lemma exl_ret: forall (r: X) w φ ψ,
-      ~ <( {Ret r}, w |= φ EX ψ )>.
+      ~ <( {Ret r}, w |= φ EN ψ )>.
   Proof.
     intros * H.
     cdestruct H.
@@ -167,7 +167,7 @@ Section BasicLemmas.
   Qed.
   
   Lemma exr_ret: forall (r: X) w φ ψ,
-      <[ {Ret r}, w |= φ EX ψ ]> ->
+      <[ {Ret r}, w |= φ EN ψ ]> ->
         <( {Ret r}, w |= φ )>
         /\ exists (w': World E), done_with (fun x w' => x = r /\ w = w') w'
         /\ <[ Ctree.stuck, w' |= ψ ]>.

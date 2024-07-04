@@ -53,7 +53,7 @@ Section BasicLemmas.
   Qed.
 
   Lemma eul_ret: forall (r: X) w φ ψ,
-      <( {Ret r}, w |= ψ \/ φ EX ψ )> <->
+      <( {Ret r}, w |= ψ \/ φ EN ψ )> <->
       <( {Ret r}, w |= φ EU ψ )>.
   Proof with auto with ctl.
     split; intros H; cdestruct H.
@@ -87,7 +87,7 @@ Section BasicLemmas.
   Qed.
 
   Lemma eur_ret: forall (r: X) w φ ψ,
-      <[ {Ret r}, w |= ψ \/ φ EX ψ ]> <->
+      <[ {Ret r}, w |= ψ \/ φ EN ψ ]> <->
       <[ {Ret r}, w |= φ EU ψ ]>.
   Proof with auto with ctl.
     split; intros H; cdestruct H.
@@ -224,7 +224,7 @@ Section BasicLemmas.
   Qed.
 
   Lemma eur_not_done: forall φ ψ (t: ctree E X) (w: World E),
-      <[ t, w |= φ EU EN ψ ]> ->
+      <[ t, w |= φ EU EX ψ ]> ->
       not_done w.
   Proof.
     intros.
