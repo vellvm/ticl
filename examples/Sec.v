@@ -155,6 +155,7 @@ Section SecurityEx.
      label [al ≺ ml], or there does not exist a low intruction that reads from
      high-security memory *)
   Typeclasses Transparent equ.
+  Typeclasses Transparent sbisim.
   Theorem ag_safety_sec: forall (secret: nat) (σ: St),
       (forall i, no_leak i σ) ->
       <( {interp_state h_secE (sec_system secret) σ},
@@ -167,21 +168,22 @@ Section SecurityEx.
             exists (obs: SecObs), w = Obs (Log obs) tt
                              /\ obs.(al) ⪯ obs.(ml)
                              /\ forall i, no_leak i σ)...
-    intros i σ' w Hd (obs & -> & Hobs & Hσ0). 
+    unfold no_leak in *.
+    intros i σ' w Hd (obs & -> & Hobs & Hσ0).    
     rewrite interp_state_map; unfold map.
     split; [csplit; auto|].
     unfold br2; cbn...
-    rewrite interp_state_bind, interp_state_br, ?bind_br.
+    rewrite interp_state_bind, bind_bind, interp_state_bind, bind_bind,
+      interp_state_br, bind_br.
     apply axr_br; split; [csplit; auto|].
     intro c. (* Choice witness *)
-    rewrite bind_bind, bind_guard, sb_guard.
-    ddestruction c; unfold sec_alice1, sec_bob1;
+    rewrite sb_guard; ddestruction c; unfold sec_alice1, sec_bob1;
       destruct (Nat.Even_Odd_dec i).
     - (* Alice runs, [i] is even *)
       rewrite (@interp_state_trigger _ _ _ _ _ _ (Write H (S i) secret) _); cbn.
       rewrite bind_bind, bind_ret_l, bind_guard, sb_guard, bind_ret_l,
-        interp_state_ret, bind_ret_l.
-      cleft; apply anr_ret...
+        interp_state_ret, bind_ret_l, interp_state_ret, bind_ret_l.
+      cleft; apply anr_ret...      
       eexists; split2...
       eexists; split2...
       intros i0 Heven.
@@ -199,7 +201,7 @@ Section SecurityEx.
     - (* Alice runs, [i] is odd *)
       rewrite (@interp_state_trigger _ _ _ _ _ _ (Write H i secret) _); cbn.
       rewrite bind_bind, bind_ret_l, bind_guard, sb_guard, bind_ret_l,
-        interp_state_ret, bind_ret_l.
+        interp_state_ret, bind_ret_l, interp_state_ret, bind_ret_l.
       cleft; apply anr_ret...
       eexists; split2...
       eexists; split2...
@@ -218,23 +220,17 @@ Section SecurityEx.
       rewrite interp_state_bind, bind_bind.
       rewrite (@interp_state_trigger _ _ _ _ _ _ (Read L i) _); cbn.
       rewrite bind_bind.
-      destruct (lookup i σ') eqn:Hlook.
-      + destruct p as (l, a).
-        eapply aur_bind_r_eq; [eapply aur_bind_r_eq|].
-        * apply aur_vis...
-          right; split.
-          -- apply ctll_vis...
-          -- intros [].
-             cleft; apply anr_ret...
-        * cleft; apply anr_ret... 
-        * rewrite bind_guard, sb_guard, bind_ret_l, interp_state_ret, bind_ret_l,
-            interp_state_ret, bind_ret_l.
-          cleft; apply anr_ret... 
-          eexists; intuition.
-          eexists; intuition; cbn.
-          apply sec_lte_L.
-      + rewrite bind_ret_l, bind_guard, sb_guard, bind_ret_l, interp_state_ret,
-          bind_ret_l, interp_state_ret, bind_ret_l.
+      destruct (Hσ0 _ e) as (v & ?).
+      rewrite H1.
+      eapply aur_bind_r_eq; [eapply aur_bind_r_eq|].
+      + apply aur_vis...
+        right; split.
+        * apply ctll_vis...
+        * intros [].
+          cleft; apply anr_ret...
+      + cleft; apply anr_ret... 
+      + rewrite sb_guard, bind_ret_l, interp_state_ret,
+          bind_ret_l, interp_state_ret, bind_ret_l, interp_state_ret, bind_ret_l.
         cleft; apply anr_ret... 
         eexists; intuition.
         eexists; intuition.
@@ -252,13 +248,13 @@ Section SecurityEx.
              cleft; apply anr_ret... 
         * cleft; apply anr_ret... 
         * rewrite bind_guard, sb_guard, bind_ret_l, interp_state_ret, bind_ret_l,
-            interp_state_ret, bind_ret_l.
+            interp_state_ret, bind_ret_l, interp_state_ret, bind_ret_l.
           cleft; apply anr_ret... 
           eexists; intuition.
           eexists; intuition; cbn.
           apply sec_lte_L.
       + rewrite bind_ret_l, bind_guard, sb_guard, bind_ret_l, interp_state_ret,
-          bind_ret_l, interp_state_ret, bind_ret_l.
+          bind_ret_l, interp_state_ret, bind_ret_l, interp_state_ret, bind_ret_l.
         cleft; apply anr_ret... 
         eexists; intuition.
         eexists; intuition.

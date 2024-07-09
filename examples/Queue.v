@@ -76,10 +76,7 @@ Section QueueEx.
   Definition drain: ctree (queueE T) unit :=
     loop
       (x <- pop ;;
-       match x with
-       | Some v => continue (* keep popping *)
-       | None => continue
-       end).       
+       continue).
 
   Lemma list_app_nil: forall (s: T) hs,
       ~ [] = hs ++ [s].  
@@ -119,35 +116,19 @@ Section QueueEx.
         destruct Hw.
         now apply list_app_nil in H.
       + (* w = Obs e v *)
-        destruct e, v.
-        rewrite <- Hw in *.
+        destruct e, v. subst.
         left.
         cleft.
         now csplit.         
     - (* l = h :: ts *)
       right.
       eapply aur_state_bind_r_eq.
-      + inv Hd.
-        * (* w = Pure *)
-          rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
-          rewrite bind_bind.
-          eapply aur_bind_r_eq.
-          -- unfold log, trigger.
-             apply aur_vis...
-             right; split; try csplit...
-             intros [].
-             cleft.
-             apply anr_ret...
-          -- rewrite bind_ret_l, sb_guard.
-             cleft.
-             apply anr_ret...
-        * (* w = Obs e v *)
-          rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
-          rewrite bind_bind.
-          eapply aur_log_r... 
-          rewrite bind_ret_l, sb_guard.
-          cleft.
-          apply anr_ret...
+      + rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
+        rewrite bind_bind.
+        eapply aur_log_r...
+        rewrite bind_ret_l, sb_guard.
+        cleft.
+        apply anr_ret...
       + cbn.
         rewrite interp_state_ret.
         cleft.        
@@ -405,12 +386,8 @@ Section QueueEx.
           (Ri:= fun _ q _ => List.length q > 1 /\ exists i, unique nl q = Some i)
           (f:= fun 'tt q (w: WorldW T) =>
                  match unique nl q with
-                 | Some n =>
-                     if Nat.eqb (List.length q) (S n) then
-                       List.length q
-                     else 
-                       n
-                 | None => List.length q
+                 | Some n => length q - n
+                 | None => length q
                  end)...
         * clear Hlen Hi q w Hd i.
           intros [] q w Hd (Hlen & i & Hi).
@@ -472,32 +449,20 @@ Section QueueEx.
                     apply unique_head_eq in Hi...
                     rewrite rel_dec_correct in Hnl; subst.
                     rewrite unique_last_eq...
-                    rewrite unique_head_eq'...
+                    rewrite unfold_unique_hd.
+                    rewrite rel_dec_eq_true, Hi...
                     rewrite app_length; cbn.
-                    rewrite PeanoNat.Nat.add_comm.
-                    cbn.
-                    rewrite PeanoNat.Nat.eqb_refl.
-                    destruct(length q') eqn:Hlq; cbn.
-                    +++ lia.
-                    +++ admit.
+                    lia.
                   --- (* t <> nl *)
                     rewrite unfold_unique_hd, Hnl in Hi.
                     destruct (unique nl q') eqn:Hnl'; inv Hi.
-                    rewrite unique_last_neq with (n:=n)...
                     rewrite unfold_unique_hd, Hnl, Hnl'.
                     rewrite app_length; cbn.
                     rewrite PeanoNat.Nat.add_comm.
                     cbn.
-                    destruct (Nat.eqb (length q') n) eqn:Hn.
-                    +++ (* length q = n *)
-                      apply PeanoNat.Nat.eqb_eq in Hn; subst.
-                      rewrite nat_eqb_S.
-                      admit.
-                    +++ (* length q <> n *)
-                      destruct (length q') eqn:Hlq; try lia.
-                      rewrite PeanoNat.Nat.eqb_sym.
-                      cbn.
-                      admit.
+                    rewrite unique_app_l with (n:=n); auto.
+                    +++ admit.
+                    +++ cbn; now rewrite Hnl.
       + (* Loop invariant *)
         rewrite interp_state_bind,
           (@interp_state_trigger _ _ _ _ _ _ Pop _), bind_bind; cbn...
