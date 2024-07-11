@@ -30,25 +30,27 @@ Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
   Lemma aul_stuck: forall w φ ψ,
-      <( {Ctree.stuck: ctree E X}, w |= φ AU ψ )> ->
-      <( {Ctree.stuck: ctree E X}, w |= ψ )>.
+      <( {Ctree.stuck: ctree E X}, w |= ψ )> <->
+      <( {Ctree.stuck: ctree E X}, w |= φ AU ψ )>.
   Proof.
-    intros * H.
-    remember (Ctree.stuck) as S.
-    cinduction H; subst.
-    - apply Hp.
-    - now apply can_step_stuck in Hs.
+    split; intros * H.
+    - now cleft.
+    - remember (Ctree.stuck) as S.
+      cinduction H; subst.
+      + apply Hp.
+      + now apply can_step_stuck in Hs.
   Qed.
 
   Lemma aur_stuck: forall w φ ψ,
-      <[ {Ctree.stuck: ctree E X}, w |= φ AU ψ ]> ->
-      <[ {Ctree.stuck: ctree E X}, w |= ψ ]>.
+      <[ {Ctree.stuck: ctree E X}, w |= ψ ]> <->
+      <[ {Ctree.stuck: ctree E X}, w |= φ AU ψ ]>.
   Proof.
-    intros * H.
-    remember (Ctree.stuck) as S.
-    cinduction H; subst.
-    - apply Hp.
-    - now apply can_step_stuck in Hs.
+    split; intros * H.
+    - now cleft.
+    - remember (Ctree.stuck) as S.
+      cinduction H; subst.
+      + apply Hp.
+      + now apply can_step_stuck in Hs.
   Qed.
 
   Lemma aul_ret: forall (r: X) w φ ψ,
@@ -273,4 +275,3 @@ Section BasicLemmas.
       now apply can_step_not_done with t.
   Qed.
 End BasicLemmas.
-

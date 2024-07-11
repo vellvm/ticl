@@ -285,20 +285,22 @@ Section IterLemmas.
   (* EU *)
   Lemma eul_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E (I + X)) (φ ψ: ctll E):
     well_founded Rv ->
-    Ri i w ->    
+    Ri i w ->
+    not_done w ->
     (forall (i: I) w,
         Ri i w ->
+        not_done w ->
         <( {k i}, w |= φ EU ψ )> \/
           <[ {k i}, w |= φ EU EX done
                       {fun (lr: I + X) (w': World E) =>
-                         exists i', lr = inl i' /\ Ri i' w' /\ Rv (i', w') (i, w)}]>) ->
+                         exists i', lr = inl i' /\ not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)}]>) ->
     <( {iter k i}, w |= φ EU ψ )>.
   Proof with auto with ctl.
     remember (i, w) as P.
     replace i with (fst P) by now subst.
     replace w with (snd P) by now subst.
     clear HeqP i w.
-    intros WfR Hi H.
+    intros WfR Hi Hd H.
     generalize dependent k.
     induction P using (well_founded_induction WfR);
       destruct P as (i, w); cbn in *. 
@@ -306,30 +308,32 @@ Section IterLemmas.
     intros.
     unfold iter, MonadIter_ctree.
     rewrite unfold_iter.
-    destruct (H _ _ Hi).
+    destruct (H _ _ Hi)...
     - now eapply ctll_bind_l.
     - eapply eul_bind_r with
         (R:=fun (lr: I + X) (w': World E) =>
-              exists i' : I, lr = inl i' /\ Ri i' w' /\ Rv (i', w') (i, w))... 
+              exists i' : I, lr = inl i' /\ not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w))... 
       intros [i' | r] w'.            
-      + intros (j & Hinv & Hi' & Hv); inv Hinv.
+      + intros (j & Hinv & Hd' & Hi' & Hv); inv Hinv.
         rewrite sb_guard.
         remember (j, w') as y.
         replace j with (fst y) in Hi' |- * by now subst.
-        replace w' with (snd y) in Hi' |- * by now subst.
+        replace w' with (snd y) in Hi',Hd' |- * by now subst.
         apply HindWf...
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
 
   Lemma eur_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E (I + X)) (φ: ctll E) (ψ: ctlr E X):
     well_founded Rv ->
-    Ri i w ->    
+    Ri i w ->
+    not_done w ->
     (forall (i: I) w,
         Ri i w ->
+        not_done w ->
         <[ {k i}, w |= φ EU EX done
                     {fun (lr: I + X) (w': World E) =>
                        match lr with
-                       | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
+                       | inl i' => not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)
                        | inr r => <[ {Ret r}, w' |= ψ \/ φ EN ψ ]>
                        end} ]>) ->
     <[ {iter k i}, w |= φ EU ψ ]>.
@@ -338,7 +342,7 @@ Section IterLemmas.
     replace i with (fst P) by now subst.
     replace w with (snd P) by now subst.
     clear HeqP i w.
-    intros WfR Hi H.
+    intros WfR Hi Hd H.
     generalize dependent k.
     induction P using (well_founded_induction WfR);
       destruct P as (i, w); cbn in *. 
@@ -349,15 +353,15 @@ Section IterLemmas.
     eapply eur_bind_r with
       (R:=(fun (lr : I + X) (w' : World E) =>
              match lr with
-             | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
+             | inl i' => not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)
              | inr r => <[ {Ret r}, w' |= ψ \/ φ EN ψ ]>
              end))...
     intros [i' | r] w'...
-    intros (Hi' & Hv). 
+    intros (Hd' & Hi' & Hv). 
     rewrite sb_guard.
     remember (i', w') as y.
     replace i' with (fst y) in Hi' |- * by now subst.
-    replace w' with (snd y) in Hi' |- * by now subst.
+    replace w' with (snd y) in Hi',Hd' |- * by now subst.
     apply HindWf...
     apply eur_ret.
   Qed.
