@@ -540,25 +540,62 @@ Section BindLemmas.
 
   Theorem ctll_map{X Y}: forall (t: ctree E X) (f: X -> Y) (φ: ctll E) w,
       <( {Ctree.map f t}, w |= φ )> <-> <( t, w |= φ )>.
-  *)
-  Lemma aul_log_l{S}: forall (x: S) w φ,
-      φ x ->
+   *)
+  Typeclasses Transparent equ.
+  Lemma axl_log{X S}: forall (s: S) (k: ctree (writerE S) X) w φ,
       not_done w ->
-      <( {log x}, w |= AF visW φ )>.
-  Proof with auto.
+      <( k, {Obs (Log s) tt} |= φ )> ->
+      <( {log s;; k }, w |= AX φ )>.
+  Proof with eauto with ctl.
     intros.
-    cright.
     csplit.
     - csplit...
-    - apply can_step_vis...
+    - eapply can_step_bind_l.
+      apply ktrans_vis...
+      constructor.
     - intros * TR.
-      apply ktrans_vis in TR as (-> & -> & <- & ?).
-      cleft; csplit.
-      now cbn.
+      apply ktrans_bind_inv in TR as
+              [(t_ & TR' & Hd & ->) |
+                (x & ? & TR' & Hr & TRk)].
+      + apply ktrans_vis in TR' as (-> & -> & ? & ?).
+        unfold resum_ret, ReSumRet_refl in H1.
+        rewrite <- H1, bind_ret_l.
+        unfold resum, ReSum_refl.
+        apply H0.
+      + apply ktrans_vis in TR' as (-> & -> & ? & ?).
+        inv Hr.
+        Unshelve.
+        exact tt.
   Qed.
-
+  
+  Lemma axr_log{X S}: forall (s: S) (k: ctree (writerE S) X) w φ,
+      not_done w ->
+      <[ k, {Obs (Log s) tt} |= φ ]> ->
+      <[ {log s;; k }, w |= AX φ ]>.
+  Proof with eauto with ctl.
+    intros.
+    csplit.
+    - csplit...
+    - eapply can_step_bind_l.
+      apply ktrans_vis...
+      constructor.
+    - intros * TR.
+      apply ktrans_bind_inv in TR as
+              [(t_ & TR' & Hd & ->) |
+                (x & ? & TR' & Hr & TRk)].
+      + apply ktrans_vis in TR' as (-> & -> & ? & ?).
+        unfold resum_ret, ReSumRet_refl in H1.
+        rewrite <- H1, bind_ret_l.
+        unfold resum, ReSum_refl.
+        apply H0.
+      + apply ktrans_vis in TR' as (-> & -> & ? & ?).
+        inv Hr.
+        Unshelve.
+        exact tt.
+  Qed.
+  
   Typeclasses Transparent equ.
-  Lemma aul_log_r{X S}: forall (s: S) (k: ctree (writerE S) X) w φ,
+  Lemma afl_log{X S}: forall (s: S) (k: ctree (writerE S) X) w φ,
       not_done w ->
       <( k, {Obs (Log s) tt} |= AF φ )> ->
       <( {log s;; k }, w |= AF φ )>.
@@ -585,7 +622,7 @@ Section BindLemmas.
         exact tt.
   Qed.
   
-  Lemma aur_log_r{X S}: forall (s: S) (k: ctree (writerE S) X) w φ,
+  Lemma afr_log{X S}: forall (s: S) (k: ctree (writerE S) X) w φ,
       not_done w ->
       <[ k, {Obs (Log s) tt} |= AF φ ]> ->
       <[ {log s;; k }, w |= AF φ ]>.

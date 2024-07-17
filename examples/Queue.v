@@ -125,7 +125,7 @@ Section QueueEx.
       eapply aur_state_bind_r_eq.
       + rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
         rewrite bind_bind.
-        eapply aur_log_r...
+        eapply afr_log...
         rewrite bind_ret_l, sb_guard.
         cleft.
         apply anr_ret...
@@ -162,356 +162,197 @@ Section QueueEx.
        | None => continue
        end).
 
-  (* Element [t] does not appear in [l] *)
-  Fixpoint not_inb(t: T)(l: list T): bool :=
-    match l with
-    | nil => true
-    | h :: ts =>
-        if h =? t then
-          false
-        else
-          not_inb t ts
-    end.
-
   (* Element [t] appears unique in [l] in some position *)
-  Fixpoint unique(t: T) (l: list T): option nat :=
+  Fixpoint find(t: T) (l: list T): option nat :=
     match l with
     | nil => None
     | h :: ts => if h =? t then
-                 if not_inb t ts then
-                   Some 0
-                 else
-                   None
+                 Some 0
                else
-                 option_map S (unique t ts)
+                 option_map S (find t ts)
     end.
 
-  Fixpoint last_error(l: list T): option T :=
-    match l with
-    | nil => None
-    | v :: nil => Some v
-    | _ :: ts => last_error ts
-    end.
-  
-  Lemma unfold_unique_hd: forall t h ts,
-      unique t (h :: ts) =
+  Lemma unfold_find_hd: forall t h ts,
+      find t (h :: ts) =
         (if h =? t then
-                 if not_inb t ts then
-                   Some 0
-                 else
-                   None
-               else
-                 option_map S (unique t ts)).
-  Proof.
-    reflexivity.
-  Qed.
-  
-  Lemma unique_head_eq': forall nl q,
-      not_inb nl q = true ->
-      unique nl (nl :: q) = Some 0.
-  Proof with auto.
-    intros; cbn.
-    rewrite rel_dec_eq_true...
-    now rewrite H.
-  Qed.
-  
-  Lemma unique_head_eq: forall nl t q i,      
-      unique nl (t :: q) = Some i ->
-      (t =? nl) = true ->
-      not_inb nl q = true.
-  Proof.
-    intros.
-    cbn in H.
-    rewrite H0 in H.
-    destruct (not_inb nl q); inv H.
-    reflexivity.
+           Some 0
+         else
+           option_map S (find t ts)).
+  Proof. reflexivity. Qed.
+
+  Lemma find_last_ex: forall nl ts,
+    exists i0 : nat, find nl (ts ++ [nl]) = Some i0.
+  Proof with eauto with ctl.
+    induction ts.
+    - exists 0; cbn.
+      rewrite rel_dec_eq_true...
+    - destruct IHts.
+      destruct (a =? nl) eqn:Hnl.
+      + rewrite rel_dec_correct in Hnl; subst.
+        exists 0; cbn.
+        rewrite rel_dec_eq_true...
+      + exists (S x); cbn.
+        rewrite Hnl, H.
+        reflexivity.
   Qed.
 
-  Lemma unique_head_neq': forall nl t q i,
-      (t =? nl) = false ->
-      unique nl q = Some i ->
-      unique nl (t :: q) = Some (S i).
-  Proof.
-    intros.
-    cbn.
-    rewrite H, H0.
-    reflexivity.
-  Qed.
-  
-  Lemma unique_head_neq: forall nl t q i,
-      unique nl (t :: q) = Some i ->
-      (t =? nl) = false ->      
-      unique nl q = Some (i - 1).
-  Proof.
-    induction q; cbn; intros;
-      rewrite H0 in *.
-    inv H.
-    destruct (a =? nl) eqn:Ha.
-    - apply rel_dec_correct in Ha; subst.
-      destruct (not_inb nl q); inv H.
-      reflexivity. 
-    - destruct (unique nl q) eqn:Hnl; cbn in *; inv H.
-      rewrite H0 in IHq.
-      reflexivity.
-  Qed.
-  
-  Lemma unique_last_eq: forall q nl,
-      not_inb nl q = true ->
-      unique nl (q ++ [nl]) = Some (List.length q).
-  Proof with auto.
-    induction q; cbn; intros.
-    - rewrite rel_dec_eq_true...
-    - destruct (a =? nl); inv H.
-      rewrite IHq...
-  Qed.
-
-  Lemma not_inb_last_false: forall q nl,
-      not_inb nl (q ++ [nl]) = false.
-  Proof with auto.
-    induction q; cbn; intros.
-    - rewrite rel_dec_eq_true...
-    - destruct (a =? nl)...
-  Qed.
-  
-  Lemma unique_last_none: forall q nl i,
-      unique nl q = Some i ->
-      unique nl (q ++ [nl]) = None.
-  Proof with auto.
-    induction q; cbn; intros.
+  Lemma find_app_l: forall nl ts n l,
+    find nl ts = Some n ->
+    find nl (ts ++ l) = Some n.
+  Proof with eauto.
+    induction ts; intros.
     - inv H.
-    - destruct (a =? nl) eqn:Hnl, (not_inb nl q) eqn:Hin; inv H.
-      + rewrite not_inb_last_false...
-      + destruct (unique nl q) eqn:Hnl'; inv H1.
-        erewrite IHq with (i:=n)...
-      + destruct (unique nl q) eqn:Hnl'; inv H1.
-        erewrite IHq with (i:=n)...
+    - cbn.
+      rewrite unfold_find_hd in H.
+      destruct (a =? nl) eqn:Hnl...
+      destruct (find nl ts); inv H.
+      rewrite IHts with (n:=n0)...
   Qed.
   
-  Lemma not_inb_unique_none: forall q nl,
-      not_inb nl q = true ->
-      unique nl q = None.
-  Proof with auto.
-    induction q; intros; cbn...
-    cbn in H.
-    destruct (a =? nl); inv H.
-    rewrite IHq...
-  Qed.
-
-  Lemma not_inb_app_true: forall nl q q',
-      not_inb nl q = true ->
-      not_inb nl q' = true ->
-      not_inb nl (q ++ q') = true.
-  Proof with auto.
-    induction q; intros; cbn in *...
-    destruct (a =? nl); inv H.
-    rewrite H2...
-  Qed.
-
-  Lemma not_inb_app_false_l: forall nl q q',
-      not_inb nl q = false ->
-      not_inb nl (q ++ q') = false.
-  Proof with auto.
-    induction q; intros; cbn in *...
-    inv H.
-    destruct (a =? nl); inv H...
-    rewrite IHq...
-  Qed.
-
-  Lemma not_inb_app_false_r: forall nl q q',
-      not_inb nl q' = false ->
-      not_inb nl (q ++ q') = false.
-  Proof with auto.
-    induction q; intros; cbn in *...
-    inv H.
-    destruct (a =? nl)... 
-    rewrite IHq...
-  Qed.
-  
-  Lemma unique_app_l: forall q q' nl n,
-      unique nl q = Some n ->
-      not_inb nl q' = true ->
-      unique nl (q ++ q') = Some n.
-  Proof with auto.
-    induction q; intros; cbn...
-    - inv H.
-    - cbn in H.
-      destruct (a =? nl).
-      destruct (not_inb nl q) eqn:Hin; inv H.
-      rewrite not_inb_app_true...
-      destruct (unique nl q) eqn:Hq.
-      + rewrite IHq with (n:=n0)...
-      + inv H.
-  Qed.
-
-  Lemma unique_last_neq: forall q t nl n,
-      (t =? nl) = false ->
-      unique nl q = Some n ->
-      unique nl (q ++ [t]) = Some n.
-  Proof with auto.
-    induction q; cbn; intros.
-    - inv H0.
-    - destruct (a =? nl) eqn:Ha...
-      + destruct (not_inb nl q) eqn:Hnl; inv H0.
-        rewrite rel_dec_correct in Ha; subst.
-        rewrite not_inb_app_true...
-        cbn.
-        now rewrite H.
-      + destruct (unique nl q) eqn:Hnl; inv H0.
-        rewrite IHq with (n:=n0)...
-  Qed.
-  Arguments unique: simpl never.
-
   Lemma nat_eqb_S: forall n,
       Nat.eqb n (S n) = false.
   Proof. induction n; auto. Qed.
-  
+
+  Variable (nl: T).
   Typeclasses Transparent equ.
   Typeclasses Transparent sbisim.
-  Theorem rotate_agaf_pop: forall q nl i,
-      unique nl q = Some i ->
-      List.length q > 1 ->
-      <( {interp_state h_queueE rotate q}, Pure |= AG AF visW {fun h => h = nl} )>.
+  
+  Theorem rotate_agaf_pop: forall q i,
+      find nl q = Some i ->
+      <( {interp_state h_queueE rotate q}, Pure |=
+                       AG AF visW {fun h => h = nl} )>.
   Proof with eauto with ctl.
     intros.
-    unfold rotate, forever. 
+    unfold rotate, forever, Classes.iter, MonadIter_ctree.
     apply ag_state_iter with
-      (R:= fun _ q _ => List.length q > 1 /\ exists i, unique nl q = Some i). 
-    - constructor.
-    - split... 
-    - clear H H0 q i.
-      intros [] q w Hd (Hlen & i & Hi).
-      split.
-      + (* Eventually *)
-        eapply aul_state_iter_nat with
-          (Ri:= fun _ q _ => List.length q > 1 /\ exists i, unique nl q = Some i)
-          (f:= fun 'tt q (w: WorldW T) =>
-                 match unique nl q with
-                 | Some n => length q - n
-                 | None => length q
-                 end)...
-        * clear Hlen Hi q w Hd i.
-          intros [] q w Hd (Hlen & i & Hi).
-          rewrite interp_state_bind. 
+      (R:= fun 'tt q w => exists h ts, q = h :: ts /\ (h = nl \/ (h <> nl /\ exists i, find nl ts = Some i)))...
+    - destruct q; try solve [ inv H ].
+      exists t, q; intuition.
+      rewrite unfold_find_hd in H.
+      destruct (t =? nl) eqn:Hnl; inv H.
+      + apply rel_dec_correct in Hnl.
+        left...
+      + right.
+        destruct (find nl q) eqn:Hq, i; inv H1.
+        apply neg_rel_dec_correct in Hnl; split...
+    - clear H q.
+      unfold Classes.iter, MonadIter_ctree.
+      intros [] q w Hd (h & ts & -> & [-> | (Hnl & Hi)]).
+      + (* t = nl *)
+        split.
+        * (* iter |= AF *)
+          rewrite interp_state_unfold_iter.
+          apply ctll_bind_l.
+          rewrite interp_state_bind.
           setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
-          rewrite bind_bind.
-          setoid_rewrite sb_guard.
-          setoid_rewrite bind_ret_l.
-          destruct q.
-          -- (* q' = nl :: ts *)
-            left.
-            inv Hi.
-          -- (* q' = h :: ts, index ts nl n *)
-            right.
-            rewrite bind_bind.
-            eapply aur_bind_r_eq.
-            ++ eapply aur_vis...
-               right; split.
-               ** csplit...
-               ** intros [].
-                  cleft.
-                  apply anr_ret...
-            ++ rewrite bind_ret_l.
-               rewrite interp_state_bind.
-               setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Push t) _);
-                 simpl runStateT.
-               rewrite bind_bind, bind_ret_l, sb_guard, bind_ret_l,
-                 interp_state_ret.
-               cleft.
-               apply anr_ret...
-               exists tt; intuition.
-               ** rewrite app_length.
-                  cbn in *.
-                  lia.
-               ** cbn in Hi; destruct (t =? nl) eqn:Hnl;
-                    destruct (not_inb nl q) eqn:Hinb; inv Hi...
-                  --- (* t = nl, nl not in q *)
-                    apply rel_dec_correct in Hnl; subst.
-                    exists (List.length q).
-                    now apply unique_last_eq.
-                  --- (* t = nl, nl in q *)
-                    apply rel_dec_correct in Hnl; subst.
-                    unfold unique in H0; cbn in H0.
-                    rewrite rel_dec_eq_true in H0...
-                    rewrite Hinb in H0; inv H0.
-                  --- (* t <> nl, nl not in q *)
-                    apply not_inb_unique_none in Hinb.
-                    apply unique_head_neq in H0...
-                    rewrite Hinb in H0; inv H0.
-                  --- (* t <> nl, nl in q *)
-                    apply unique_head_neq in H0...
-                    exists (i - 1).
-                    apply unique_app_l; auto.
-                    cbn; now rewrite Hnl.
-               ** cbn in *.
-                  rename q into q'.
-                  destruct (t =? nl) eqn:Hnl.
-                  --- (* t = nl *)
-                    apply unique_head_eq in Hi...
-                    rewrite rel_dec_correct in Hnl; subst.
-                    rewrite unique_last_eq...
-                    rewrite unfold_unique_hd.
-                    rewrite rel_dec_eq_true, Hi...
-                    rewrite app_length; cbn.
-                    lia.
-                  --- (* t <> nl *)
-                    rewrite unfold_unique_hd, Hnl in Hi.
-                    destruct (unique nl q') eqn:Hnl'; inv Hi.
-                    rewrite unfold_unique_hd, Hnl, Hnl'.
-                    rewrite app_length; cbn.
-                    rewrite PeanoNat.Nat.add_comm.
-                    cbn.
-                    rewrite unique_app_l with (n:=n); auto.
-                    +++ admit.
-                    +++ cbn; now rewrite Hnl.
-      + (* Loop invariant *)
-        rewrite interp_state_bind,
-          (@interp_state_trigger _ _ _ _ _ _ Pop _), bind_bind; cbn...
-        setoid_rewrite sb_guard.
-        setoid_rewrite bind_ret_l.
-        destruct q; cbn in Hlen; try lia.
-        rewrite unfold_unique_hd in Hi.
-        destruct (t =? nl) eqn:Ht.
-        destruct (not_inb nl q) eqn:Hinb; inv Hi.
-        * (* q = nl :: ts *)
-          rewrite bind_bind.
-          unfold log, trigger.
-          rewrite bind_vis.
-          apply axr_vis...
-          split.
+          rewrite ?bind_bind.
+          apply afl_log...
+          cleft.
+          csplit...
+        * (* body variant/invariant *)
+          rewrite interp_state_bind.
+          setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
+          rewrite ?bind_bind.
+          apply axr_log...
+          rewrite bind_ret_l, sb_guard, bind_ret_l, interp_state_bind.          
+          setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Push nl) _); cbn.
+          rewrite ?bind_bind.
+          rewrite bind_ret_l, sb_guard, bind_ret_l.
+          cleft.
+          rewrite interp_state_ret.
+          apply axr_ret.
           -- csplit...
-          -- intros [].
-             rewrite ?bind_ret_l.
-             rewrite interp_state_bind, interp_state_vis, bind_bind.
-             cbn.
-             rewrite bind_ret_l, sb_guard, interp_state_ret, bind_ret_l,
-               interp_state_ret.
-             cleft.
-             apply anr_ret...
-             exists tt; intuition.
-             ++ rewrite app_length; cbn; lia.
-             ++ exists (List.length q).
-                rewrite rel_dec_correct in Ht; subst.
-                now apply unique_last_eq.
-        * (* q = h :: ts *)          
-          rewrite bind_bind.
-          unfold log, trigger.
-          rewrite bind_vis.
-          apply axr_vis...
-          split.
+          -- exists tt; split2...
+             destruct ts.
+             ++ exists nl, []...
+             ++ exists t, (ts ++ [nl]); split...
+                destruct (t =? nl) eqn:Hnl.
+                ** left.
+                   now apply rel_dec_correct.
+                ** right.
+                   apply neg_rel_dec_correct in Hnl; split...
+                   apply find_last_ex.
+      + (* t <> nl *)
+        split.
+        * clear i.
+          destruct Hi as (i & Hi).
+          eapply aul_state_iter_nat with
+            (Ri:=fun 'tt q _ =>
+                   exists h ts, q = h :: ts /\ (h = nl \/ (h <> nl /\ exists i, find nl ts = Some i)))
+            (f:=fun 'tt q _ =>
+                  match find nl q with
+                  | None => length q
+                  | Some v => v
+                  end)...
+          -- exists h, ts; split...
+          -- intros [] q w' Hw' (h' & ts' & -> & [-> | (Hnl' & ?)]).
+             ++ left.
+                rewrite interp_state_bind.
+                setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
+                rewrite ?bind_bind.
+                apply afl_log...
+                rewrite bind_ret_l, sb_guard, bind_ret_l, interp_state_bind.
+                setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Push nl) _); cbn.
+                rewrite ?bind_bind, bind_ret_l, sb_guard, bind_ret_l, interp_state_ret.
+                cleft.
+                csplit...
+             ++ right.
+                rewrite interp_state_bind.
+                setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
+                rewrite ?bind_bind.
+                apply afr_log...
+                rewrite bind_ret_l, sb_guard, bind_ret_l, interp_state_bind.
+                setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Push h') _); cbn.
+                rewrite ?bind_bind, bind_ret_l, sb_guard, bind_ret_l, interp_state_ret.
+                apply aur_ret.
+                cleft.
+                apply axr_ret.
+                csplit...
+                exists tt; intuition.
+                ** destruct ts'; cbn.
+                   --- exists h', []...
+                   --- exists t, (ts' ++ [h']); split... 
+                       destruct H as (j & H1).
+                       rewrite unfold_find_hd in H1.
+                       destruct (t =? nl) eqn:Hnl''; inv H1.
+                       +++ apply rel_dec_correct in Hnl''.
+                           now left.
+                       +++ right; split.
+                           now apply neg_rel_dec_correct in Hnl''.
+                           destruct (find nl ts') eqn:Hts'; inv H0.
+                           exists n.
+                           now apply find_app_l.
+                ** (* variant *)
+                  cbn.
+                  eapply rel_dec_neq_false in Hnl'...
+                  destruct H.
+                  rewrite Hnl', H.
+                  cbn.
+                  erewrite find_app_l...
+        * rewrite interp_state_bind.
+          setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
+          rewrite ?bind_bind.
+          apply axr_log...
+          rewrite bind_ret_l, sb_guard, bind_ret_l, interp_state_bind.
+          setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Push h) _); cbn.
+          rewrite ?bind_bind, bind_ret_l, sb_guard, bind_ret_l, interp_state_ret.
+          apply aur_ret; cleft.
+          apply axr_ret.
           -- csplit...
-          -- intros [].
-             rewrite ?bind_ret_l.
-             rewrite interp_state_bind, interp_state_vis, bind_bind.
-             cbn.
-             rewrite bind_ret_l, sb_guard, interp_state_ret, bind_ret_l,
-               interp_state_ret.
-             cleft.
-             apply anr_ret...
-             exists tt; intuition.
-             ++ rewrite app_length; cbn; lia.
-             ++ destruct (unique nl q) eqn:Hnl; inv Hi.
-                exists n.
-                now apply unique_last_neq...
-  Admitted.
+          -- exists tt; intuition...
+             destruct Hi.
+             destruct ts; try solve [inv H].
+             exists t, (ts ++ [h]); intuition.
+             destruct (t =? nl) eqn:Hnl'; inv H.
+             ++ apply rel_dec_correct in Hnl'.
+                now left.
+             ++ right.                
+                rewrite Hnl' in H1.
+                destruct (find nl ts) eqn:Hts; inv H1.
+                split.
+                ** now apply neg_rel_dec_correct.
+                ** exists n.
+                   now apply find_app_l.
+  Qed.
 End QueueEx.
   
