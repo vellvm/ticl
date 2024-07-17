@@ -159,7 +159,7 @@ Ltac run_head :=
     interp_state_resumCtree, bind_vis, interp_state_vis, bind_bind;
   cbn;
   repeat setoid_rewrite bind_bind;
-  apply aul_log_r; eauto with ctl;
+  apply afl_log; eauto with ctl;
   rewrite ?bind_ret_l, sb_guard, interp_state_bind, bind_bind,
     interp_state_ret, bind_ret_l;
   unfold resum_ret, ReSumRet_refl, ReSumRet_inr;
@@ -168,7 +168,7 @@ Ltac run_head :=
 Ltac run_body :=
   rewrite interp_state_vis; cbn;
   repeat setoid_rewrite bind_bind;
-  eapply aul_log_r; eauto with ctl;
+  eapply afl_log; eauto with ctl;
   rewrite ?bind_ret_l, sb_guard,
         interp_state_ret, bind_ret_l, interp_state_bind, bind_bind,
         interp_state_vis, bind_bind;
@@ -214,7 +214,7 @@ Proof with auto with ctl.
     rewrite interp_state_bind, bind_bind, interp_state_vis, bind_bind.
     cbn.
     repeat setoid_rewrite bind_bind.
-    eapply aul_log_r...
+    eapply afl_log...
     rewrite ?bind_ret_l, sb_guard, interp_state_ret, bind_ret_l. 
     unfold resum_ret, ReSumRet_refl, ReSumRet_inl.
     ddestruction i; [|ddestruction i; [|ddestruction i]]; simpl; simp cycle.
@@ -222,7 +222,7 @@ Proof with auto with ctl.
       rewrite interp_state_vis, bind_bind.
       cbn.
       repeat setoid_rewrite bind_bind.
-      apply aul_log_r...
+      apply afl_log...
       rewrite ?bind_ret_l, sb_guard.
       (* sched *)
       run_sched.
