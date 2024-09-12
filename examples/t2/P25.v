@@ -95,13 +95,22 @@ Module Clang.
     unfold p25.
     cright.
     eapply aul_state_bind_r_eq.
-    - cleft.
-      csplit...
-      + csplit...
-      + eapply can_step_state_bind_l.
-        * unfold get, trigger; rewrite interp_state_vis.
-          cbn; apply ktrans_vis.
+    - cright.
+      eapply axr_state_bind_r_eq.
+      + unfold get, trigger.
+        
+        rewrite interp_state_vis; cbn.
+        eapply axr_state_bind_r_eq.
+        csplit.
+        * csplit...
+        * unfold get, trigger.        
+          rewrite interp_state_vis.
+          cbn.
+          eapply can_step_bind_l...
+          apply ktrans_bind_l...
+          apply ktrans_vis.
           exists tt; intuition.
-        * constructor.
+        * intros.
+        
       + intros.
         
