@@ -2,6 +2,7 @@ From CTree Require Import
   Events.Core
   CTree.Core
   CTree.Equ
+  Logic.Ctl
   CTree.SBisim
   CTree.Interp.State
   CTree.Events.Writer
@@ -14,7 +15,7 @@ From CTree Require Import
   CTree.Logic.EF
   CTree.Logic.AG
   CTree.Logic.EX
-  Logic.Ctl.
+  Events.StateE.
 
 From Coq Require Import Arith.Wf_nat.
 From Coq Require Import Program.Tactics.
@@ -85,6 +86,10 @@ Section StateLemmas.
     eapply axr_bind_r... 
     intros [y σ_] w_ (Hinv & HR); inv Hinv; subst...
   Qed.
+
+  Theorem axr_state_get: forall w,
+      not_done w ->
+      <[ {interp_state h Ctree.get σ}, w |= AX done={(σ, σ)} {Obs (Log σ) tt} ]>.
   
   (*| Bind lemmas for [EN] |*)
   Typeclasses Transparent sbisim.

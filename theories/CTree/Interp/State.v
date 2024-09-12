@@ -28,6 +28,9 @@ Definition interp_state `{Encode E} `{Encode F} {W}
   (h : E ~> stateT W (ctree F)) {X} (t: ctree E X) (w: W) :
   ctree F (X*W) := runStateT (interp h t) w.
 
+Definition instr_stateE {Σ X} (t: ctree (stateE Σ) X) (σ: Σ): ctreeW Σ (X * Σ) :=
+  interp_state h_stateW t σ.
+
 (*| Unfolding of [interp_state] given state [s] *)
 Notation interp_state_ h t s :=
   (match observe t with

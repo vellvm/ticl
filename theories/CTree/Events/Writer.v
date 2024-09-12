@@ -21,12 +21,13 @@ Generalizable All Variables.
 Definition log {S}: S -> ctree (writerE S) unit := fun s => Ctree.trigger (Log s).
 
 Notation ctreeW Φ := (ctree (writerE Φ)).
+Notation InstrM Φ Σ := (stateT Σ (ctreeW Φ)).
 
 Import CTreeNotations.
 Local Open Scope ctree_scope.
 
 Definition h_instr `{Encode E} {W Σ} (h:E ~> stateT Σ (ctree void))
-  (obs: forall (e: E), encode e -> Σ -> option W): E ~> stateT Σ (ctree (writerE W)) :=
+  (obs: forall (e: E), encode e -> Σ -> option W): E ~> InstrM W Σ :=
   fun e => mkStateT
           (fun s =>
              '(x, σ) <- resumCtree (runStateT (h e) s) ;;
@@ -34,6 +35,11 @@ Definition h_instr `{Encode E} {W Σ} (h:E ~> stateT Σ (ctree void))
              | Some w => Vis (Log w) (fun 'tt => Ret (x, σ))
              | None => Ret (x, σ)
              end).
+
+Definition h_stateW{S}: stateE S ~> InstrM S S :=
+  fun e => mkStateT (fun s => let '(r, s') := runState (h_stateE e) s in
+                        log s' ;;
+                        Ret (r, s')).
 
 
 #[global] Instance ReSum_inlW {A B} : ReSum (writerE A) (writerE (A + B)) :=

@@ -239,6 +239,29 @@ End CanStepCtrees.
 Section CanStepInterp.
   Context {E F S: Type} {HE: Encode E} {HF: Encode F} (h: E ~> stateT S (ctree F)) (s: S).
 
+  Lemma can_step_state_bind_l{X Y}: forall (k: X -> ctree E Y) (s: S) (t: ctree E X) t' w w',
+      [interp_state h t s, w] ↦ [t', w'] ->
+      not_done w' ->
+      can_step (interp_state h (x <- t ;; k x) s) w.
+  Proof.
+    intros k i t t' w w' TR Hd. 
+    rewrite interp_state_bind.
+    apply can_step_bind_l with t' w'; auto.   
+  Qed.
+
+  Lemma can_step_state_bind_r{X Y}: forall (k: X -> ctree E Y) (s s': S) (t: ctree E X) x w w',
+      <[ {interp_state h t s}, w |= AF AX done= {(x,s')} w' ]> ->
+      can_step (interp_state h (k x) s') w' ->
+      can_step (interp_state h (x <- t ;; k x) s) w.
+  Proof.
+    intros.
+    rewrite interp_state_bind.
+    apply can_step_bind_r with (R:= fun p w => (x, s') = p /\ w' = w); auto.
+    intros.
+    destruct H1, y; subst.
+    inv H1; auto.
+  Qed.
+  
   Lemma can_step_state_iter{I X}: forall (k: I -> ctree E (I+X)) (i: I) t' w w',
       [interp_state h (k i) s, w] ↦ [t', w'] ->
       not_done w' ->

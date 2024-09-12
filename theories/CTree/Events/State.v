@@ -6,6 +6,9 @@ From CTree Require Export
   Events.Core
   Events.StateE.
 
+Import CTreeNotations.
+Local Open Scope ctree_scope.
+
 Definition get {S}: ctree (stateE S) S :=
   @Ctree.trigger (stateE S) (stateE S) _ _ (ReSum_refl) (ReSumRet_refl) Get.
 
