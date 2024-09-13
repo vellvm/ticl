@@ -1,6 +1,7 @@
 
 From CTree Require Import
   CTree.Core
+  Events.State
   Events.Writer
   Logic.Ctl
   CTree.Equ
@@ -28,13 +29,7 @@ Local Open Scope ctree_scope.
 Local Open Scope ctl_scope.
 Local Open Scope Z_scope.
 
-
 (*
-// OK
-// (varC <= 5) || ([AF](varR > 5))
-// -ctl "OR{varC <= 5}{AF{varR > 5}}
-// -joinbwd 6
-
 void main() {
 
     int varC; // assume varC >= 1
@@ -55,62 +50,38 @@ void main() {
 
 }
  *)
+Require Import Clang.
 
-Module Clang.
+From ExtLib Require Import String.
+From Coq Require Import Strings.String.
 
-  Record Mem := { varC : Z; varR : Z; varCS: Z }.
-
-  Definition setC (c: Z): ctree (stateE Mem) unit :=
-    m <- get ;;
-    put {| varC := c; varR := m.(varR); varCS := m.(varCS) |}.
+Module P25.
+  Include Clang.Clang.
   
-  Definition setR (r: Z): ctree (stateE Mem) unit :=
-    m <- get ;;
-    put {| varC := m.(varC); varR := r; varCS := m.(varCS) |}.
+  Local Open Scope clang_scope.
+  
+  Definition c: string := "c".
+  Definition r: string := "r".
+  Definition cs: string := "cs".
+  
+  Definition p25: ctree Mem unit :=
+    [[
+        r := 0 ;;;
+        cs := 8 ;;;
+        while cs ?> 0 do
+          c ::= c - 1 ;;;
+          r ::= r + 1
+          done
+    ]].
 
-  Definition setCS (cs: Z): ctree (stateE Mem) unit :=
-    m <- get ;;
-    put {| varC := m.(varC); varR := m.(varR); varCS := cs |}.
-
-  Definition p25: ctree (stateE Mem) unit :=
-    setR 0%Z ;;
-    setCS 8%Z ;;
-    iter (fun _ =>
-            m <- get;;
-            if (0%Z <? m.(varCS)) then (
-                   setC (m.(varC) - 1) ;;
-                   setR (m.(varR) + 1) ;;
-                   setCS (m.(varCS) - 1) ;;
-                   continue
-                 )
-            else break) tt.
 
   (* // (varC <= 5) || ([AF](varR > 5)) *)
-  Lemma p25_spec: forall c r cs,
-      c >= 1%Z ->
-      <( {instr_stateE p25 {| varC := c; varR := r; varCS := cs |} }, Pure |=
-           (visW {fun m => m.(varC) <= 5%Z} \/ AF visW {fun m => m.(varR) > 5}) )>.
+  Lemma p25_spec: forall cval,
+      cval >= 1%Z ->
+      <( {instr_stateE p25 (M.add c cval M.empty)}, Pure |=
+           (visW {assert c (fun cv => cv <= 5)} \/ AF visW {assert r (fun rv => rv > 5)}) )>.
   Proof with eauto with ctl.
     intros.
     unfold p25.
-    cright.
-    eapply aul_state_bind_r_eq.
-    - cright.
-      eapply axr_state_bind_r_eq.
-      + unfold get, trigger.
-        
-        rewrite interp_state_vis; cbn.
-        eapply axr_state_bind_r_eq.
-        csplit.
-        * csplit...
-        * unfold get, trigger.        
-          rewrite interp_state_vis.
-          cbn.
-          eapply can_step_bind_l...
-          apply ktrans_bind_l...
-          apply ktrans_vis.
-          exists tt; intuition.
-        * intros.
-        
-      + intros.
-        
+  Admitted.
+End P25.        
