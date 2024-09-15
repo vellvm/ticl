@@ -15,7 +15,7 @@
  (synopsis "Library for representing recursive, non-deterministic and impure programs with equational reasoning")
  (version 0.1)
  (depends
-  (coq (>= 8.15))
+  (coq (>= 8.19))
   (coq-ext-lib (>= 0.11.3))
   (coq-coinduction (>= 1.3))
   (coq-relation-algebra (>= 1.7))
