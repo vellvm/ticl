@@ -17,7 +17,8 @@ From CTree Require Import
   CTree.Logic.CanStep
   CTree.Interp.State
   CTree.Events.State
-  CTree.Events.Writer.
+  CTree.Events.Writer
+  Lang.Clang.
 
 From Coq Require Import
   ZArith.
@@ -25,8 +26,8 @@ From Coq Require Import
 Generalizable All Variables.
 
 Import Ctree CTreeNotations CtlNotations.
-Local Open Scope ctree_scope.
 Local Open Scope ctl_scope.
+Local Open Scope ctree_scope.
 Local Open Scope Z_scope.
 
 (*
@@ -50,16 +51,13 @@ void main() {
 
 }
  *)
-Require Import Clang.
 
 From ExtLib Require Import String.
 From Coq Require Import Strings.String.
 
 Module P25.
-  Include Clang.Clang.
-  
+  Import Clang.Clang.
   Local Open Scope clang_scope.
-  
   Definition c: string := "c".
   Definition r: string := "r".
   Definition cs: string := "cs".
@@ -83,5 +81,6 @@ Module P25.
   Proof with eauto with ctl.
     intros.
     unfold p25.
+    
   Admitted.
 End P25.        

@@ -50,7 +50,58 @@ Module Clang.
     | Some v => put (M.add a (f v) m)
     | None => put (M.add a (f 0%Z) m)
     end.
-  
+
+  Inductive CExp :=
+  | CVar (x: string)
+  | CConst (z: Z)
+  | CAdd (x y: CExp)
+  | CSub (x y: CExp).
+
+  Inductive CStmt :=
+  | CAssgn (x: string) (e: CExp)
+  | CIfGte (l r: CExp) (t: CStmt) (e: CStmt)
+  | CWhileGt (l r: CExp) (b: CStmt).
+
+  Definition CProg := list CStmt.
+
+  Fixpoint cdenote_exp(e: CExp): ctree Mem Z :=
+    match e with
+    | CVar v => load v
+    | CConst z => Ret z
+    | CAdd a b =>
+        x <- cdenote_exp a ;;
+        y <- cdenote_exp b ;;
+        Ret (x + y)
+    | CSub a b =>
+        x <- cdenote_exp a ;;
+        y <- cdenote_exp b ;;
+        Ret (x - y)
+    end.
+
+  Fixpoint cdenote_stmt (s: CStmt): ctree Mem unit :=
+    match s with
+    | CAssgn x e =>
+        v <- cdenote_exp e ;;
+        store x v
+    | CIfGte l r t e =>
+        vl <- cdenote_exp l ;;
+        vr <- cdenote_exp r ;;
+        if vr <=? vl then
+          cdenote_stmt t
+        else
+          cdenote_stmt e
+    | CWhileGt l r b =>
+        vl <- cdenote_exp l ;;
+        vr <- cdenote_exp r ;;
+        Ctree.iter
+          (fun _ =>
+             if vr <? vl then
+               cdenote_stmt b ;;
+               continue
+             else
+               break) tt
+    end.
+
   Declare Scope clang_scope.
   Local Open Scope clang_scope.
   Declare Custom Entry clang.
@@ -80,4 +131,8 @@ Module Clang.
        ) tt) (in custom clang at level 63): ctree_scope.
 
   Notation "t1 ;;; t2" := (Ctree.bind t1 (fun _ => t2)) (in custom clang at level 62, right associativity): clang_scope.
+
+  Lemma clang_instr_mem_seq: forall a b ctx w,
+      
+    <( {instr_stateE [[ a ;;; b ]] ctx}, w |= AF φ )>
 End Clang.
