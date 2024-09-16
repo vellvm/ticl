@@ -12,9 +12,13 @@ From CTree Require Import
   CTree.Events.State
   CTree.Events.Writer.
 
+From CTree Require Import
+  Logic.Ctl
+  CTree.Logic.State.
+
 Generalizable All Variables.
 
-Import Ctree CTreeNotations.
+Import Ctree CTreeNotations CtlNotations.
 Local Open Scope ctl_scope.
 Local Open Scope ctree_scope.
 Local Open Scope Z_scope.
@@ -57,12 +61,11 @@ Module Clang.
   | CAdd (x y: CExp)
   | CSub (x y: CExp).
 
-  Inductive CStmt :=
+  Inductive CProg :=
   | CAssgn (x: string) (e: CExp)
-  | CIfGte (l r: CExp) (t: CStmt) (e: CStmt)
-  | CWhileGt (l r: CExp) (b: CStmt).
-
-  Definition CProg := list CStmt.
+  | CIfGte (l r: CExp) (t: CProg) (e: CProg)
+  | CWhileGt (l r: CExp) (b: CProg)
+  | CSeq (l r: CProg).
 
   Fixpoint cdenote_exp(e: CExp): ctree Mem Z :=
     match e with
@@ -78,7 +81,7 @@ Module Clang.
         Ret (x - y)
     end.
 
-  Fixpoint cdenote_stmt (s: CStmt): ctree Mem unit :=
+  Fixpoint cdenote (s: CProg ): ctree Mem unit :=
     match s with
     | CAssgn x e =>
         v <- cdenote_exp e ;;
@@ -87,23 +90,33 @@ Module Clang.
         vl <- cdenote_exp l ;;
         vr <- cdenote_exp r ;;
         if vr <=? vl then
-          cdenote_stmt t
+          cdenote t
         else
-          cdenote_stmt e
+          cdenote e
     | CWhileGt l r b =>
         vl <- cdenote_exp l ;;
         vr <- cdenote_exp r ;;
         Ctree.iter
           (fun _ =>
              if vr <? vl then
-               cdenote_stmt b ;;
+               cdenote b ;;
                continue
              else
                break) tt
+    | CSeq l r =>
+        cdenote l ;;
+        cdenote r
     end.
 
+  Definition instr_cexp(p: CExp) (ctx: Ctx): ctreeW Ctx (Z * Ctx) :=
+    instr_stateE (cdenote_exp p) ctx.
+
+  Definition instr_cprog(p: CProg) (ctx: Ctx) : ctreeW Ctx (unit * Ctx) :=
+    instr_stateE (cdenote p) ctx.
+  
   Declare Scope clang_scope.
   Local Open Scope clang_scope.
+
   Declare Custom Entry clang.
   
   Notation "[[ e ]]" := e (at level 0, e custom clang at level 95) : clang_scope.
@@ -120,19 +133,77 @@ Module Clang.
   Notation "x ::= y '-' c" := (update x y (fun z => z - c))
                                 (in custom clang at level 60, right associativity) : clang_scope.
   
-  Notation "'while' c '?>' z 'do' b 'done'" :=
-    (@Ctree.iter _ _ unit unit
-       (fun 'tt =>
-          x <- load c;;
-          if x >? z then
-            b ;; continue
-          else
-            break
-       ) tt) (in custom clang at level 63): ctree_scope.
+  Notation "'if' c '>=' z 'then' t 'else' e" :=
+    (CIfGte c z t e) (in custom clang at level 63): ctree_scope.
 
-  Notation "t1 ;;; t2" := (Ctree.bind t1 (fun _ => t2)) (in custom clang at level 62, right associativity): clang_scope.
+  Notation "'while' c '>' z 'do' b 'done'" :=
+    (CWhileGt c z b) (in custom clang at level 63): ctree_scope.
 
-  Lemma clang_instr_mem_seq: forall a b ctx w,
-      
-    <( {instr_stateE [[ a ;;; b ]] ctx}, w |= AF φ )>
+  Notation "t1 ;;; t2" := (CSeq t1 t2) (in custom clang at level 62, right associativity): clang_scope.
+
+  Lemma aul_cprog_seq: forall a b ctx ctx' w w' φ ψ,
+      <[ {instr_cprog a ctx}, w |= φ AU AX done= {(tt,ctx')} w' ]> ->
+      <( {instr_cprog b ctx'}, w' |= φ AU ψ )> ->
+      <( {instr_cprog [[ a ;;; b ]] ctx}, w |= φ AU ψ )>.
+  Proof.
+    unfold instr_cprog, instr_stateE.
+    intros; cbn.
+    eapply aul_state_bind_r_eq; eauto.
+  Qed.
+
+  (*| Sequence: structural temporal lemmas |*)
+  Lemma aur_cprog_seq: forall a b ctx ctx' w w' φ ψ,
+      <[ {instr_cprog a ctx}, w |= φ AU AX done= {(tt,ctx')} w' ]> ->
+      <[ {instr_cprog b ctx'}, w' |= φ AU ψ ]> ->
+      <[ {instr_cprog [[ a ;;; b ]] ctx}, w |= φ AU ψ ]>.
+  Proof.
+    unfold instr_cprog, instr_stateE.
+    intros; cbn.
+    eapply aur_state_bind_r_eq; eauto.
+  Qed.
+
+  Lemma ag_cprog_seq: forall a b ctx ctx' w w' φ,
+      <[ {instr_cprog a ctx}, w |= φ AU AX done= {(tt,ctx')} w' ]> ->
+      <( {instr_cprog b ctx'}, w' |= AG φ )> ->
+      <( {instr_cprog [[ a ;;; b ]] ctx}, w |= AG φ )>.
+  Proof.
+    unfold instr_cprog, instr_stateE.
+    intros; cbn.
+    eapply ag_state_bind_r_eq; eauto.
+  Qed.
+  
+  (*| Conditional: structural temporal lemmas |*)
+  Lemma aur_cprog_ite_left: forall a b ctx w φ ψ za zb t f,
+      <[ {instr_cexp a ctx}, w |= AX done={(za, ctx)} w ]> ->
+      <[ {instr_cexp b ctx}, w |= AX done={(zb, ctx)} w ]> ->
+      za >= zb ->
+      <[ {instr_cprog t ctx}, w |= φ AU ψ ]> ->
+      <[ {instr_cprog [[ if a >= b then t else f ]] ctx}, w |= φ AU ψ ]>.
+  Proof with eauto with ctl.
+    unfold instr_cprog, instr_cexp, instr_stateE.
+    intros; cbn.
+    eapply aur_state_bind_r_eq.
+    - cleft...
+    - eapply aur_state_bind_r_eq.
+      + cleft...
+      + rewrite Zge_is_le_bool in H1.
+        rewrite H1...
+  Qed.
+
+  Lemma aur_cprog_ite_right: forall a b ctx w φ ψ za zb t f,
+      <[ {instr_cexp a ctx}, w |= AX done={(za, ctx)} w ]> ->
+      <[ {instr_cexp b ctx}, w |= AX done={(zb, ctx)} w ]> ->
+      za < zb ->
+      <[ {instr_cprog f ctx}, w |= φ AU ψ ]> ->
+      <[ {instr_cprog [[ if a >= b then t else f ]] ctx}, w |= φ AU ψ ]>.
+  Proof with eauto with ctl.
+    unfold instr_cprog, instr_cexp, instr_stateE.
+    intros; cbn.
+    eapply aur_state_bind_r_eq.
+    - cleft...
+    - eapply aur_state_bind_r_eq.
+      + cleft...
+      + rewrite <- Z.leb_gt in H1.
+        rewrite H1...
+  Qed.
 End Clang.

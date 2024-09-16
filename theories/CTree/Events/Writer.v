@@ -36,11 +36,13 @@ Definition h_instr `{Encode E} {W Σ} (h:E ~> stateT Σ (ctree void))
              | None => Ret (x, σ)
              end).
 
+(*| Only log on changes |*)
 Definition h_stateW{S}: stateE S ~> InstrM S S :=
-  fun e => mkStateT (fun s => let '(r, s') := runState (h_stateE e) s in
-                        log s' ;;
-                        Ret (r, s')).
-
+  fun e => mkStateT (fun s =>
+                    match e return ctreeW S (encode e * S) with
+                    | Get => Ret (s, s)
+                    | Put s' => log s' ;; Ret (tt, s')
+                    end).
 
 #[global] Instance ReSum_inlW {A B} : ReSum (writerE A) (writerE (A + B)) :=
   fun '(Log a) => Log (inl a).

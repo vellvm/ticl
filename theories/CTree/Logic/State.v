@@ -187,7 +187,18 @@ Section StateLemmas.
     apply ag_bind_r with (R:=fun '(r, σ) => R r σ)...
     intros [y σ'] * HR...
   Qed.
-
+  
+  Theorem ag_state_bind_r_eq{X Y}: forall (t: ctree E X) w w' (k: X -> ctree E Y) φ x' σ',
+      <[ {interp_state h t σ}, w |= φ AU AX done= {(x',σ')} w' ]> ->
+      <( {interp_state h (k x') σ'}, w' |= AG φ )> ->
+      <( {interp_state h (x <- t ;; k x) σ} , w |= AG φ )>.
+  Proof with eauto with ctl.
+    intros.
+    rewrite interp_state_bind.
+    eapply ag_bind_r...
+    intros [y σ''] * [Heq HR]; inv Heq...    
+  Qed.
+  
   (*| Bind lemma for [EG] |*)
   Theorem eg_state_bind_r{X Y}: forall (t: ctree E X) w (k: X -> ctree E Y) R φ,
       <[ {interp_state h t σ}, w |= φ EU EX done {fun '(r, σ) => R r σ} ]> ->
@@ -200,6 +211,17 @@ Section StateLemmas.
     intros [y σ'] * HR...
   Qed.
 
+  Theorem eg_state_bind_r_eq{X Y}: forall (t: ctree E X) w w' (k: X -> ctree E Y) φ x' σ',
+      <[ {interp_state h t σ}, w |= φ EU EX done= {(x',σ')} w' ]> ->
+      <( {interp_state h (k x') σ'}, w' |= EG φ )> ->
+      <( {interp_state h (x <- t ;; k x) σ} , w |= EG φ )>.
+  Proof with eauto with ctl.
+    intros.
+    rewrite interp_state_bind.
+    eapply eg_bind_r...
+    intros [y σ''] * [Heq HR]; inv Heq...    
+  Qed.
+  
   (*| Iter lemmas for [AN] |*)
   Theorem axl_state_iter{X I} Ri (Rv: relation I) (i: I) w
     (k: I -> ctree E (I + X)) (φ ψ: ctllW W):
