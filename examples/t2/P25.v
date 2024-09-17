@@ -66,10 +66,9 @@ Module P25.
     [[
         r := 0 ;;;
         cs := 8 ;;;
-        while cs ?> 0 do
+        while cs > 0 do
           c ::= c - 1 ;;;
           r ::= r + 1
-          done
     ]].
 
 

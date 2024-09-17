@@ -13,6 +13,7 @@ From CTree Require Import
   CTree.SBisim
   CTree.Logic.Trans
   CTree.Logic.CanStep
+  CTree.Events.Writer
   Logic.Ctl
   Logic.Kripke
   Logic.Setoid.
@@ -28,21 +29,21 @@ Local Open Scope ctree_scope.
 Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
-  Lemma axl_stuck: forall w φ ψ,
+  Lemma anl_stuck: forall w φ ψ,
       ~ <( {Ctree.stuck: ctree E X}, w |= φ AN ψ )>.
   Proof.
     intros * H; cdestruct H.
     now apply can_step_stuck in Hs.
   Qed.
 
-  Lemma axr_stuck: forall w φ ψ,
+  Lemma anr_stuck: forall w φ ψ,
       ~ <[ {Ctree.stuck: ctree E X}, w |= φ AN ψ ]>.
   Proof.
     intros * H; cdestruct H.
     now apply can_step_stuck in Hs.
   Qed.
 
-  Lemma axl_br: forall n (k: fin' n -> ctree E X) w φ ψ,
+  Lemma anl_br: forall n (k: fin' n -> ctree E X) w φ ψ,
       <( {Br n k}, w |= φ AN ψ )> <->
         <( {Br n k}, w |= φ)>
         /\ (forall (i: fin' n), <( {k i}, w |= ψ )>).
@@ -61,7 +62,7 @@ Section BasicLemmas.
         apply H0.
   Qed.
 
-  Lemma axr_br: forall n (k: fin' n -> ctree E X) w φ ψ,
+  Lemma anr_br: forall n (k: fin' n -> ctree E X) w φ ψ,
       <[ {Br n k}, w |= φ AN ψ ]> <->
         <( {Br n k}, w |= φ)>
         /\ (forall (i: fin' n), <[ {k i}, w |= ψ ]>).
@@ -80,7 +81,7 @@ Section BasicLemmas.
         apply H0.
   Qed.
 
-  Lemma axl_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ ψ,
+  Lemma anl_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ ψ,
       <( {Vis e k}, w |= φ AN ψ )> <->
         <( {Vis e k}, w |= φ )> /\ (forall (v: encode e), <( {k v}, {Obs e v} |= ψ )>).
   Proof with auto with ctl.
@@ -100,7 +101,7 @@ Section BasicLemmas.
         apply H0.
   Qed.
 
-  Lemma axr_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ ψ,
+  Lemma anr_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ ψ,
       <[ {Vis e k}, w |= φ AN ψ ]> <->
         <( {Vis e k}, w |= φ )> /\ (forall (v: encode e), <[ {k v}, {Obs e v} |= ψ ]>).
   Proof with auto with ctl.
@@ -121,7 +122,7 @@ Section BasicLemmas.
   Qed.
 
   Typeclasses Transparent equ.
-  Lemma ax_done: forall (t: ctree E X) φ ψ w,
+  Lemma anr_done: forall (t: ctree E X) φ ψ w,
       <[ t, w |= φ AN done ψ ]> <-> <( t, w |= φ )> /\ (exists (x: X), t ~ Ret x /\ ψ x w).
   Proof with auto with ctl.
     split; intros.
@@ -166,7 +167,7 @@ Section BasicLemmas.
            apply ctlr_done...
   Qed.
 
-  Lemma axl_ret: forall (r: X) w φ ψ,
+  Lemma anl_ret: forall (r: X) w φ ψ,
       ~ <( {Ret r}, w |= φ AN ψ )>.
   Proof.
     intros * H.
@@ -181,27 +182,27 @@ Section BasicLemmas.
       apply ctll_not_done in H; inv H.
   Qed.
 
-  Lemma axr_ret: forall (r: X) (R: rel X (World E)) φ w,
+  Lemma anr_ret: forall (r: X) (R: rel X (World E)) φ w,
       <( {Ret r}, w |= φ )> ->
       R r w ->
       <[ {Ret r}, w |= φ AN done R ]>.
   Proof with auto with ctl.
     intros.
-    apply ax_done; split...
+    apply anr_done; split...
     exists r...
   Qed.
   
-  Lemma anr_ret: forall (r: X) (R: rel X (World E)) w,
+  Lemma axr_ret: forall (r: X) (R: rel X (World E)) w,
       not_done w ->
       R r w ->
       <[ {Ret r}, w |= AX done R ]>.
   Proof with auto with ctl.
     intros.
-    apply axr_ret...
+    apply anr_ret...
     csplit...
   Qed.
   
-  Lemma axr_ret_inv: forall (r: X) w φ ψ,
+  Lemma anr_ret_inv: forall (r: X) w φ ψ,
       <[ {Ret r}, w |= φ AN ψ ]> ->
         <( {Ret r}, w |= φ )>
         /\ exists (w': World E), done_with (fun x w' => x = r /\ w = w') w'

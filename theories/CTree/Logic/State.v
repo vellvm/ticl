@@ -53,59 +53,59 @@ Section StateLemmas.
   Qed.
 
   (*| Bind lemmas for [AN] |*)
-  Theorem axl_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
+  Theorem anl_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
       <[ {interp_state h t σ}, w |= φ AN done {fun '(x, σ) => R x σ} ]> ->
       (forall x σ w, R x σ w -> <( {interp_state h (k x) σ}, w |= φ AN ψ )>) ->
       <( {interp_state h (x <- t ;; k x) σ}, w |= φ AN ψ )>.  
   Proof with eauto with ctl.
     intros.
     rewrite interp_state_bind.
-    apply axl_bind_r with (R:=fun '(x, σ) => R x σ)...
+    apply anl_bind_r with (R:=fun '(x, σ) => R x σ)...
     intros [y σ'] w' HR...
   Qed.    
   
-  Theorem axr_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
+  Theorem anr_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
       <[ {interp_state h t σ}, w |= φ AN done {fun '(x, σ) => R x σ} ]> ->
       (forall x σ w, R x σ w -> <[ {interp_state h (k x) σ}, w |= φ AN ψ ]>) ->
       <[ {interp_state h (x <- t ;; k x) σ}, w |= φ AN ψ ]>.  
   Proof with eauto with ctl.
     intros.
     rewrite interp_state_bind.
-    apply axr_bind_r with (R:=fun '(x, σ) => R x σ)...
+    apply anr_bind_r with (R:=fun '(x, σ) => R x σ)...
     intros [y σ'] w' HR...
   Qed.
 
-  Theorem axr_state_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r σ',
+  Theorem anr_state_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r σ',
       <[ {interp_state h t σ}, w |= φ AN done= {(r, σ')} w' ]> ->
       <[ {interp_state h (k r) σ'}, w' |= φ AN ψ ]> ->
       <[ {interp_state h (x <- t ;; k x) σ}, w |= φ AN ψ ]>.  
   Proof with eauto with ctl.
     intros.
     rewrite interp_state_bind.
-    eapply axr_bind_r... 
+    eapply anr_bind_r... 
     intros [y σ_] w_ (Hinv & HR); inv Hinv; subst...
   Qed.
 
   (*| Bind lemmas for [EN] |*)
   Typeclasses Transparent sbisim.
-  Theorem exl_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r σ',
+  Theorem enl_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r σ',
       <[ {interp_state h t σ}, w |= φ EN done= {(r,σ')} w' ]> ->
       <( {interp_state h (k r) σ'}, w' |= φ EN ψ )> ->
       <( {interp_state h (x <- t ;; k x) σ}, w |= φ EN ψ )>.
   Proof with eauto with ctl.
     intros.
     rewrite interp_state_bind.
-    eapply exl_bind_r...
+    eapply enl_bind_r...
   Qed.
 
-  Theorem exr_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r σ',
+  Theorem enr_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r σ',
       <[ {interp_state h t σ}, w |= φ EN done= {(r,σ')} w' ]> ->
       <[ {interp_state h (k r) σ'}, w' |= φ EN ψ ]> ->
       <[ {interp_state h (x <- t ;; k x) σ}, w |= φ EN ψ ]>.
   Proof with eauto with ctl.
     intros.
     rewrite interp_state_bind.
-    eapply exr_bind_r...
+    eapply enr_bind_r...
   Qed.
   
   (*| Bind lemmas for [AU] |*)
@@ -223,7 +223,7 @@ Section StateLemmas.
   Qed.
   
   (*| Iter lemmas for [AN] |*)
-  Theorem axl_state_iter{X I} Ri (Rv: relation I) (i: I) w
+  Theorem anl_state_iter{X I} Ri (Rv: relation I) (i: I) w
     (k: I -> ctree E (I + X)) (φ ψ: ctllW W):
     well_founded Rv ->
     Ri i σ w ->    
@@ -245,7 +245,7 @@ Section StateLemmas.
     rewrite interp_state_unfold_iter.
     destruct (H _ _ _ Hi).
     - now eapply ctll_bind_l.
-    - eapply axl_bind_r with
+    - eapply anl_bind_r with
         (R:=fun '(lr, σ') w' =>
               exists i' : I, lr = inl i' /\ Ri i' σ' w' /\ Rv i' i)... 
       intros [[i' | r] σ'] w'.            
@@ -255,7 +255,7 @@ Section StateLemmas.
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
 
-  Theorem axr_state_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E (I + X))
+  Theorem anr_state_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E (I + X))
     (φ: ctllW W) (ψ: ctlrW W (X * Σ)):
     well_founded Rv ->
     Ri i σ w ->    
@@ -278,7 +278,7 @@ Section StateLemmas.
     intros.
     rewrite interp_state_unfold_iter.
     destruct (H _ _ _ Hi) as (Hφ & Hs & H').
-    eapply axr_bind_r with
+    eapply anr_bind_r with
         (R:=fun '(lr, σ') w' =>
                match lr with
                | inl i' => Ri i' σ' w' /\ Rv i' i
@@ -292,7 +292,7 @@ Section StateLemmas.
   Qed.
 
   (*| Iter lemmas for [EN] |*)
-  Theorem exl_state_iter{X I} Ri (Rv: relation I) (i: I) w
+  Theorem enl_state_iter{X I} Ri (Rv: relation I) (i: I) w
     (k: I -> ctree E (I + X)) (φ ψ: ctllW W):
     well_founded Rv ->
     Ri i σ w ->    
@@ -314,12 +314,12 @@ Section StateLemmas.
     rewrite interp_state_unfold_iter.
     destruct (H _ _ _ Hi).
     - now eapply ctll_bind_l.
-    - apply ex_done in H0 as (Hφ & [[l | r] σ'] & Heqt & i' & Hinv & HRi & HRv); inv Hinv.
+    - apply enr_done in H0 as (Hφ & [[l | r] σ'] & Heqt & i' & Hinv & HRi & HRv); inv Hinv.
       rewrite Heqt, bind_ret_l, sb_guard.
       apply HindWf...
   Qed.
 
-  Theorem exr_state_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E (I + X)) φ ψ:
+  Theorem enr_state_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E (I + X)) φ ψ:
     well_founded Rv ->
     Ri i σ w ->    
     (forall (i: I) σ w,
@@ -341,7 +341,7 @@ Section StateLemmas.
     intros.
     rewrite interp_state_unfold_iter.
     pose proof (H _ _ _ Hi) as H'.
-    apply ex_done in H' as (Hφ & [[l | r] σ'] & Heqt & H').
+    apply enr_done in H' as (Hφ & [[l | r] σ'] & Heqt & H').
     - destruct H'.
       rewrite Heqt, bind_ret_l, sb_guard.
       apply HindWf...
@@ -583,7 +583,7 @@ Section StateLemmas.
           apply CIH...
       + (* [k x] returns *)        
         specialize (H1' _ _ TRt0) as HAN.
-        now apply aur_stuck, axr_stuck in HAN.
+        now apply aur_stuck, anr_stuck in HAN.
   Qed.
 
   (*| Iter lemma for [EG] |*)

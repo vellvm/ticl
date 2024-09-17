@@ -30,7 +30,7 @@ Section IterLemmas.
   Context {E: Type} {HE: Encode E}.
 
   (* AN *)
-  Lemma axl_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E (I + X)) (φ ψ: ctll E):
+  Lemma anl_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E (I + X)) (φ ψ: ctll E):
     well_founded Rv ->
     Ri i w ->    
     (forall (i: I) w,
@@ -51,7 +51,7 @@ Section IterLemmas.
     rewrite unfold_iter.
     destruct (H _ _ Hi).
     - now eapply ctll_bind_l.
-    - eapply axl_bind_r with
+    - eapply anl_bind_r with
         (R:=fun (lr: I + X) (w': World E) =>
               exists i' : I, lr = inl i' /\ Ri i' w' /\ Rv i' i)... 
       intros [i' | r] w'.            
@@ -61,7 +61,7 @@ Section IterLemmas.
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
 
-  Lemma axr_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E (I + X)) (φ: ctll E) (ψ: ctlr E X):
+  Lemma anr_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E (I + X)) (φ: ctll E) (ψ: ctlr E X):
     well_founded Rv ->
     Ri i w ->    
     (forall (i: I) w,
@@ -83,7 +83,7 @@ Section IterLemmas.
     unfold iter, MonadIter_ctree.
     rewrite unfold_iter.
     destruct (H _ _ Hi).
-    - eapply axr_bind_r with
+    - eapply anr_bind_r with
         (R:=(fun (lr : I + X) (w' : World E) =>
                match lr with
                | inl i' => Ri i' w' /\ Rv i' i
@@ -97,7 +97,7 @@ Section IterLemmas.
 
   (* EN *)
   Typeclasses Transparent sbisim.
-  Lemma exl_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E (I + X)) (φ ψ: ctll E):
+  Lemma enl_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E (I + X)) (φ ψ: ctll E):
     well_founded Rv ->
     Ri i w ->    
     (forall (i: I) w,
@@ -118,12 +118,12 @@ Section IterLemmas.
     rewrite unfold_iter.
     destruct (H _ _ Hi).
     - now eapply ctll_bind_l.
-    - apply ex_done in H0 as (Hφ & [l | r] & Heqt & i' & Hinv & HRi & HRv); inv Hinv.
+    - apply enr_done in H0 as (Hφ & [l | r] & Heqt & i' & Hinv & HRi & HRv); inv Hinv.
       rewrite Heqt, bind_ret_l, sb_guard.
       apply HindWf...
   Qed.
 
-  Lemma exr_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E (I + X))
+  Lemma enr_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E (I + X))
     (φ: ctll E) (ψ: ctlr E X):
     well_founded Rv ->
     Ri i w ->    
@@ -146,7 +146,7 @@ Section IterLemmas.
     unfold iter, MonadIter_ctree.
     rewrite unfold_iter.    
     pose proof (H _ _ Hi) as H'.
-    apply ex_done in H' as (Hφ & [l | r] & Heqt & Hi'). 
+    apply enr_done in H' as (Hφ & [l | r] & Heqt & Hi'). 
     - destruct Hi' as (HRi & HRv).
       rewrite Heqt, bind_ret_l, sb_guard.
       apply HindWf...
@@ -408,7 +408,7 @@ Section IterLemmas.
           apply CIH...
       + (* [k x] returns *)        
         specialize (H' _ _ TRt0) as HAN.
-        now apply aur_stuck, axr_stuck in HAN.
+        now apply aur_stuck, anr_stuck in HAN.
   Qed.        
 
   (* EG *)

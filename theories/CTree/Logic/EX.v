@@ -12,6 +12,7 @@ From CTree Require Import
   CTree.SBisim
   CTree.Logic.Trans
   CTree.Logic.CanStep
+  CTree.Events.Writer
   Logic.Ctl
   Logic.Kripke
   Logic.Setoid.
@@ -27,7 +28,7 @@ Local Open Scope ctree_scope.
 Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
-  Lemma exl_stuck: forall w φ ψ,
+  Lemma enl_stuck: forall w φ ψ,
       <( {Ctree.stuck: ctree E X}, w |= φ EN ψ )> ->
       <( {Ctree.stuck: ctree E X}, w |= ψ )>.
   Proof.
@@ -36,7 +37,7 @@ Section BasicLemmas.
     now apply ktrans_stuck in TR.
   Qed.
 
-  Lemma exl_br: forall n (k: fin' n -> ctree E X) w φ ψ,
+  Lemma enl_br: forall n (k: fin' n -> ctree E X) w φ ψ,
       (<( {Br n k}, w |= φ )> /\ (exists (i: fin' n), <( {k i}, w |= ψ )>)) <->
     <( {Br n k}, w |= φ EN ψ )>.
   Proof with auto with ctl.
@@ -54,7 +55,7 @@ Section BasicLemmas.
       exists i...
   Qed.
 
-  Lemma exl_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ ψ,
+  Lemma enl_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ ψ,
       <( {Vis e k}, w |= φ EN ψ )> <->        
         <( {Vis e k}, w |= φ )> /\ (exists (v: encode e), <( {k v}, {Obs e v} |= ψ )>).
   Proof with eauto with ctl.
@@ -71,7 +72,7 @@ Section BasicLemmas.
       now apply ctll_not_done in Hd.
   Qed.
 
-  Lemma exr_stuck: forall w φ ψ,
+  Lemma enr_stuck: forall w φ ψ,
       <[ {Ctree.stuck: ctree E X}, w |= φ EN ψ ]> ->
       <[ {Ctree.stuck: ctree E X}, w |= ψ ]>.
   Proof.
@@ -80,7 +81,7 @@ Section BasicLemmas.
     now apply ktrans_stuck in TR.
   Qed.
 
-  Lemma exr_br: forall n (k: fin' n -> ctree E X) w φ ψ,
+  Lemma enr_br: forall n (k: fin' n -> ctree E X) w φ ψ,
       (<( {Br n k}, w |= φ )> /\ (exists (i: fin' n), <[ {k i}, w |= ψ ]>)) <->
         <[ {Br n k}, w |= φ EN ψ ]>.
   Proof with auto with ctl.
@@ -98,7 +99,7 @@ Section BasicLemmas.
       exists i...
   Qed.
 
-  Lemma exr_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ ψ,
+  Lemma enr_vis: forall (e: E) (k: encode e -> ctree E X) (_: encode e) w φ ψ,
       <[ {Vis e k}, w |= φ EN ψ ]> <->        
         <( {Vis e k}, w |= φ )> /\ (exists (v: encode e), <[ {k v}, {Obs e v} |= ψ ]>).
   Proof with eauto with ctl.
@@ -115,7 +116,7 @@ Section BasicLemmas.
       now apply ctll_not_done in Hd.
   Qed.
 
-  Lemma ex_done: forall (t: ctree E X) φ ψ w,
+  Lemma enr_done: forall (t: ctree E X) φ ψ w,
       <[ t, w |= φ EN done ψ ]> <-> <( t, w |= φ )> /\ (exists (x: X), t ~ Ret x /\ ψ x w).
   Proof with eauto with ctl.
     split; intros.
@@ -153,7 +154,7 @@ Section BasicLemmas.
         * now csplit.
   Qed.
 
-  Lemma exl_ret: forall (r: X) w φ ψ,
+  Lemma enl_ret: forall (r: X) w φ ψ,
       ~ <( {Ret r}, w |= φ EN ψ )>.
   Proof.
     intros * H.
@@ -166,7 +167,7 @@ Section BasicLemmas.
       apply ctll_not_done in H; inv H.
   Qed.
   
-  Lemma exr_ret: forall (r: X) w φ ψ,
+  Lemma enr_ret_inv: forall (r: X) w φ ψ,
       <[ {Ret r}, w |= φ EN ψ ]> ->
         <( {Ret r}, w |= φ )>
         /\ exists (w': World E), done_with (fun x w' => x = r /\ w = w') w'
@@ -187,3 +188,23 @@ Section BasicLemmas.
   Qed.
 End BasicLemmas.
 
+Section WriterLemmas.
+              
+  Lemma exr_log{S}: forall (x: S) w,
+      not_done w ->
+      <[ {log x}, w |= EX EX done=tt {Obs (Log x) tt} ]>.
+  Proof with eauto with ctl.
+    intros.
+    unfold log, Ctree.trigger.
+    apply enr_vis...
+    intuition.
+    - csplit...
+    - exists tt.
+      apply enr_done; intuition.
+      + csplit...
+      + exists tt.
+        unfold resum_ret, resum, ReSum_refl, ReSumRet_refl.
+        intuition.
+  Qed.
+
+End WriterLemmas.

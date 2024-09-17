@@ -36,15 +36,15 @@ Section RetLemmas.
           eapply aul_ret in H.
           cdestruct H.
           -- cleft; apply IHφ2 with x...
-          -- cright; now apply axl_ret in H.
+          -- cright; now apply anl_ret in H.
         * apply eul_ret.
           apply eul_ret in H.
           cdestruct H.
           -- cleft; apply IHφ2 with x...
-          -- cright; now apply exl_ret in H.
+          -- cright; now apply enl_ret in H.
       + (* X *) destruct q.
-        * now apply axl_ret in H.
-        * now apply exl_ret in H.
+        * now apply anl_ret in H.
+        * now apply enl_ret in H.
       + (* G *) destruct q.
         * now apply ag_ret in H.
         * now apply eg_ret in H.
@@ -66,15 +66,15 @@ Section RetLemmas.
           eapply aul_ret in H.
           cdestruct H.
           -- cleft; apply IHφ2 with y...
-          -- cright; now apply axl_ret in H.
+          -- cright; now apply anl_ret in H.
         * apply eul_ret.
           apply eul_ret in H.
           cdestruct H.
           -- cleft; apply IHφ2 with y...
-          -- cright; now apply exl_ret in H.
+          -- cright; now apply enl_ret in H.
       + (* X *) destruct q.
-        * now apply axl_ret in H.
-        * now apply exl_ret in H.
+        * now apply anl_ret in H.
+        * now apply enl_ret in H.
       + (* G *) destruct q.
         * now apply ag_ret in H.
         * now apply eg_ret in H.

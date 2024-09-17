@@ -118,7 +118,7 @@ Section BindLemmas.
   Qed.
 
   (*| Bind lemmas for [AN] |*)
-  Theorem axl_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
+  Theorem anl_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
       <[ t, w |= φ AN done R ]> ->
       (forall x w, R x w -> <( {k x}, w |= φ AN ψ )>) ->
       <( {x <- t ;; k x}, w |= φ AN ψ )>.  
@@ -150,7 +150,7 @@ Section BindLemmas.
           cdestruct Hax...
   Qed.
 
-  Theorem axr_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
+  Theorem anr_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
       <[ t, w |= φ AN done R ]> ->
       (forall x w, R x w -> <[ {k x}, w |= φ AN ψ ]>) ->
       <[ {x <- t ;; k x}, w |= φ AN ψ ]>.  
@@ -182,38 +182,38 @@ Section BindLemmas.
           cdestruct Hax...
   Qed.
 
-  Theorem axr_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ r w',
+  Theorem anr_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ r w',
       <[ t, w |= φ AN done= r w' ]> ->
       <[ {k r}, w' |= φ AN ψ ]> ->
       <[ {x <- t ;; k x}, w |= φ AN ψ ]>.  
   Proof with eauto with ctl.
     intros.
-    eapply axr_bind_r...
+    eapply anr_bind_r...
     now intros * [-> ->].
   Qed.
   
   (*| Bind lemmas for [EN] |*)
   Typeclasses Transparent sbisim.
-  Theorem exl_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r,
+  Theorem enl_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r,
       <[ t, w |= φ EN done= r w' ]> ->
       <( {k r}, w' |= φ EN ψ )> ->
       <( {x <- t ;; k x}, w |= φ EN ψ )>.
   Proof with eauto with ctl.
     intros.
     assert(Hd: <( t, w |= φ )> /\ (exists x : Y, t ~ Ret x /\ r = x /\ w' = w)) by
-      (apply ex_done in H as (? & ?); split; auto).
+      (apply enr_done in H as (? & ?); split; auto).
     destruct Hd as (? & y & Heqt & -> & ->).
     now rewrite Heqt, bind_ret_l.
   Qed.
 
-  Theorem exr_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r,
+  Theorem enr_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r,
       <[ t, w |= φ EN done= r w' ]> ->
       <[ {k r}, w' |= φ EN ψ ]> ->
       <[ {x <- t ;; k x}, w |= φ EN ψ ]>.
   Proof with eauto with ctl.
     intros.
     assert(Hd: <( t, w |= φ )> /\ (exists x : Y, t ~ Ret x /\ r = x /\ w' = w)) by
-      (apply ex_done in H as (? & ?); split; auto).
+      (apply enr_done in H as (? & ?); split; auto).
     destruct Hd as (? & y & Heqt & -> & ->).
     now rewrite Heqt, bind_ret_l.
   Qed.
@@ -227,7 +227,7 @@ Section BindLemmas.
   Proof with eauto with ctl.
     intros.
     cinduction H. 
-    - apply ax_done in Hp as (Hp & y & Heqt & HR).
+    - apply anr_done in Hp as (Hp & y & Heqt & HR).
       rewrite Heqt, bind_ret_l.
       now apply H0.
     - cright; csplit.
@@ -244,7 +244,7 @@ Section BindLemmas.
         * specialize (Hau _ _ TR_).
           change (auc  (entailsL _ ?φ) (entailsR ?ψ) ?t ?w)
             with <[ t, w |= φ AU ψ ]> in Hau.
-          now apply aur_stuck, axr_stuck in Hau.
+          now apply aur_stuck, anr_stuck in Hau.
   Qed.
   
   Theorem aul_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ r w',
@@ -264,7 +264,7 @@ Section BindLemmas.
   Proof with eauto with ctl.
     intros.
     cinduction H. 
-    - apply ax_done in Hp as (Hp & y & Heqt & HR).
+    - apply anr_done in Hp as (Hp & y & Heqt & HR).
       rewrite Heqt, bind_ret_l.
       now apply H0.
     - cright; csplit.
@@ -285,7 +285,7 @@ Section BindLemmas.
         * specialize (Hau _ _ TR_).
           change (auc  (entailsL _ ?φ) (entailsR ?ψ) ?t ?w)
             with <[ t, w |= φ AU ψ ]> in Hau.
-          now apply aur_stuck, axr_stuck in Hau.
+          now apply aur_stuck, anr_stuck in Hau.
   Qed.
 
   Theorem aur_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ r w',
@@ -306,7 +306,7 @@ Section BindLemmas.
   Proof with eauto with ctl.
     intros.
     cinduction H; intros.
-    - apply ex_done in Hp as (Hw & ? & Heqt & Hp). 
+    - apply enr_done in Hp as (Hw & ? & Heqt & Hp). 
       rewrite Heqt in Hw |- *.
       rewrite bind_ret_l.
       now apply H0.
@@ -334,7 +334,7 @@ Section BindLemmas.
   Proof with eauto with ctl.
     intros.
     cinduction H; intros.
-    - apply ex_done in Hp as (Hw & ? & Heqt & Hp).
+    - apply enr_done in Hp as (Hw & ? & Heqt & Hp).
       rewrite Heqt in Hw |- *.
       rewrite bind_ret_l.
       now apply H0.
@@ -389,7 +389,7 @@ Section BindLemmas.
     intros t Hau k Hk.    
     cinduction Hau.
     - (* AX done R *)
-      apply ax_done in Hp as (Hp & x & Heq & HPost).
+      apply anr_done in Hp as (Hp & x & Heq & HPost).
       specialize (Hk _ _ HPost); remember (k x) as K;
         destruct Hk; subst; split2.      
       + rewrite Heq, bind_ret_l; auto. 
@@ -473,7 +473,7 @@ Section BindLemmas.
     intros t Heu k Hk.
     cinduction Heu; intros.
     - (* EX done R *)
-      apply ex_done in Hp as (Hd & y & Heqt & HPosty). 
+      apply enr_done in Hp as (Hd & y & Heqt & HPosty). 
       cdestruct Hd; clear H.
       rewrite Heqt, bind_ret_l.
       destruct (Hk _ _ HPosty) as (Hφ & k' & w' & TR & HR).
