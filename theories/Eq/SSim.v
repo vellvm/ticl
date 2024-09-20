@@ -1155,6 +1155,40 @@ Inversion principles
     now simple apply ss_vis_l_inv with (x := x) in H.
   Qed.
 
+  Lemma ss_step_inv {F D Y} {L: rel (label E) (label F)} {R : Chain (@ss E F C D X Y L)}
+        (t1 : ctree E C X) (t2 : ctree F D Y) :
+    ss L (elem R) (Step t1) (Step t2) ->
+    (elem R t1 t2).
+  Proof.
+    intros EQ.
+    edestruct EQ as (l & t & TR & REL & HL); etrans.
+    now inv_trans.
+  Qed.
+
+  Lemma ssim_step_inv {F D Y} {L: rel (label E) (label F)}
+        (t1 : ctree E C X) (t2 : ctree F D Y) :
+    ssim L (Step t1) (Step t2) ->
+    ssim L t1 t2.
+  Proof.
+    intros EQ. step in EQ. now apply ss_step_inv.
+  Qed.
+
+  Lemma ss_step_l_inv {F D Y L R} :
+    forall (t : ctree E C X) (u : ctree F D Y),
+    ss L R (Step t) u ->
+    exists l' u', trans l' u u' /\ R t u' /\ L τ l'.
+  Proof.
+    etrans.
+  Qed.
+
+  Lemma ssim_step_l_inv {F D Y L} :
+    forall (t : ctree E C X) (u : ctree F D Y),
+    Step t (≲L) u ->
+    exists l' u', trans l' u u' /\ t (≲L) u' /\ L τ l'.
+  Proof.
+    intros. step in H. etrans.
+  Qed.
+
   Lemma ssbt_brS_inv {F D Y} {L: rel (label E) (label F)} {R : Chain (@ss E F C D X Y L)}
         n m (cn: C n) (cm: D m) (k1 : n -> ctree E C X) (k2 : m -> ctree F D Y) :
     ss L (elem R) (BrS cn k1) (BrS cm k2) ->
