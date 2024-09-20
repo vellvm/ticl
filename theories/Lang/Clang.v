@@ -1,10 +1,10 @@
-From ExtLib Require
-  Structures.Maps.
-From ExtLib Require Import Data.String.
-
 From Coq Require Import
   ZArith.ZArith
   Strings.String.
+
+From ExtLib Require Import
+  Structures.Maps
+  Data.String.
 
 From CTree Require Import
   CTree.Core
@@ -30,33 +30,32 @@ Local Open Scope Z_scope.
 Generalizable All Variables.
 
 Module Clang.
-  Module M := Maps.
-  Context `{MM: @M.Map string Z Ctx}.
+  Context `{MM: @Map string Z Ctx} {MOk: MapOk eq MM}. 
   Definition Mem := stateE Ctx.
 
   Definition assert(k: string)(p: Z -> Prop)(m: Ctx): Prop :=
-    match M.lookup k m with
+    match lookup k m with
     | Some v => p v
     | None => False
     end.
   
   Definition load(k: string): ctree Mem Z :=
     m <- get ;;
-    match M.lookup k m with
+    match lookup k m with
     | Some v => Ret v
     | None => Ret 0%Z
     end.
 
   Definition store(k: string) (v: Z): ctree Mem unit :=
     m <- get ;;    
-    put (M.add k v m).
+    put (add k v m).
 
   (* a := f b *)
   Definition update(a: string) (b: string) (f: Z -> Z): ctree Mem unit :=
     m <- get ;;
-    match M.lookup b m with
-    | Some v => put (M.add a (f v) m)
-    | None => put (M.add a (f 0%Z) m)
+    match lookup b m with
+    | Some v => put (add a (f v) m)
+    | None => put (add a (f 0%Z) m)
     end.
 
   Inductive CExp :=
@@ -149,11 +148,7 @@ Module Clang.
 
   Notation "x := c" := (CAssgn x c)
                          (in custom clang at level 60, right associativity) : clang_scope.
-  
-  
-  Notation "x ::= y '-' c" := (update x y (fun z => z - c))
-                                (in custom clang at level 60, right associativity) : clang_scope.
-  
+    
   Notation "'if' c '>=' z 'then' t 'else' e" :=
     (CIf CGte c z t e) (in custom clang at level 63): ctree_scope.
 
@@ -177,31 +172,136 @@ Module Clang.
 
   Notation "t1 ;;; t2" := (CSeq t1 t2) (in custom clang at level 62, right associativity): clang_scope.
 
+  (*| Assertion (base case) |*)
+  Lemma vis_c_assert{X}: forall (p: ctreeW Ctx X) c v m φ,
+      φ v ->
+      <( p, {Obs (Log (add c v m)) tt} |= visW {assert c φ} )>.
+  Proof.
+    intros.
+    apply ctll_vis; constructor.
+    unfold assert.
+    pose proof (MOk.(mapsto_lookup) c v (add c v m)).
+    pose proof (MOk.(mapsto_add_eq) m c v).
+    rewrite <- H0 in H1.
+    now rewrite H1.
+  Qed.
+  
   (*| Assignment: structural temporal lemmas |*)
-  Lemma axr_cprog_assgn: forall x a za ctx w,
+  Lemma afr_cprog_assgn: forall x a za ctx ctx' w,
       <[ {instr_cexp a ctx}, w |= AX done={(za, ctx)} w ]> ->
-      <[ {instr_cprog [[ x := a ]] ctx}, w |= AX AX done={(tt, M.add x za ctx)} {Obs (Log (M.add x za ctx)) tt} ]>.
+      ctx' =  add x za ctx ->
+      <[ {instr_cprog [[ x := a ]] ctx}, w |= AF AX done={(tt, ctx')}
+                                                           {Obs (Log ctx') tt} ]>.
   Proof with eauto with ctl.
-    unfold instr_cprog, instr_stateE.
-    intros; cbn.
-    eapply anr_state_bind_r_eq...
-    unfold store.
-    eapply anr_state_bind_r_eq...
-    - unfold get, trigger.
+    unfold instr_cprog, instr_cexp, instr_stateE.
+    intros; cbn; subst.
+    eapply aur_state_bind_r_eq...
+    - cleft...
+    - unfold store, get, put, trigger.
+      rewrite bind_vis.
       rewrite interp_state_vis; cbn.
-      rewrite bind_ret_l, sb_guard, interp_state_ret.
-      apply anr_done; intuition...
-    - unfold put, trigger.
-      rewrite interp_state_vis; cbn.
+      rewrite bind_ret_l, sb_guard, bind_ret_l, interp_state_vis.
+      cbn.
       rewrite bind_bind.
-      unfold resum_ret, ReSumRet_refl.
-      apply axr_log.
+      eapply afr_log.
       + cdestruct H.
         now apply can_step_not_done in Hs.
       + rewrite bind_ret_l, sb_guard, interp_state_ret.
+        cleft.
         apply axr_ret...
   Qed.
-        
+
+  Lemma afr_cprog_assgn_incr: forall x z m w,
+      not_done w ->
+      mapsto x z m ->
+      <[ {instr_cprog [[ x := x + 1 ]] m}, w |=
+              AF AX done={(tt, add x (z+1) m)} {Obs (Log (add x (z+1) m)) tt} ]>.
+  Proof with eauto with ctl.
+    intros.
+    eapply afr_cprog_assgn.
+    - unfold instr_cexp, instr_stateE; cbn.
+      eapply anr_state_bind_r_eq.
+      + unfold load, get, trigger.
+        eapply anr_state_bind_r_eq.
+        * rewrite interp_state_vis; cbn.
+          rewrite bind_ret_l, sb_guard, interp_state_ret.
+          apply axr_ret...
+        * unfold resum_ret, ReSumRet_refl.
+          pose proof (MOk.(mapsto_lookup) x z m). 
+          rewrite <- H1 in H0.
+          rewrite H0, interp_state_ret.
+          apply axr_ret...
+      + rewrite bind_ret_l, interp_state_ret.
+        apply axr_ret...
+    - reflexivity.
+  Qed.
+
+  (* Tactics to normalize dictionaries *)
+  Tactic Notation "mapsto_tac" :=
+    repeat (apply mapsto_add_eq || apply mapsto_add_neq; [intros Hcontra; inv Hcontra|]);
+    apply mapsto_add_eq.
+
+  Lemma afr_cprog_assgn_decr: forall x z m w,
+      not_done w ->
+      mapsto x z m ->
+      <[ {instr_cprog [[ x := x - 1 ]] m}, w |=
+              AF AX done={(tt, add x (z-1) m)} {Obs (Log (add x (z-1) m)) tt} ]>.
+  Proof with eauto with ctl.
+    intros.
+    eapply afr_cprog_assgn.
+    - unfold instr_cexp, instr_stateE; cbn.
+      eapply anr_state_bind_r_eq.
+      + unfold load, get, trigger.
+        eapply anr_state_bind_r_eq.
+        * rewrite interp_state_vis; cbn.
+          rewrite bind_ret_l, sb_guard, interp_state_ret.
+          apply axr_ret...
+        * unfold resum_ret, ReSumRet_refl.
+          pose proof (MOk.(mapsto_lookup) x z m). 
+          rewrite <- H1 in H0.
+          rewrite H0, interp_state_ret.
+          apply axr_ret...
+      + rewrite bind_ret_l, interp_state_ret.
+        apply axr_ret...
+    - reflexivity.
+  Qed.
+  
+  Lemma axr_cexp_const: forall w (z: Z) m,
+      not_done w ->
+      <[ {instr_cexp z m}, w |= AX (done= {(z, m)} w) ]>.
+  Proof with eauto with ctl.
+    intros; subst.
+    unfold instr_cexp, instr_stateE.
+    cbn.
+    rewrite interp_state_ret.
+    apply axr_ret...
+  Qed.
+  
+  Lemma axr_cexp_var: forall (c: string) v m w,
+      not_done w ->
+      mapsto c v m ->
+      <[ {instr_cexp c m}, w |= AX done={(v, m)} w ]>.
+  Proof.
+    intros.
+    unfold instr_cexp, instr_stateE; cbn.
+    unfold load.
+    eapply anr_state_bind_r_eq.
+    unfold get, trigger.
+    rewrite interp_state_vis; cbn.    
+    rewrite bind_ret_l, sb_guard, interp_state_ret.
+    apply anr_ret.
+    - csplit; intuition...
+    - split; reflexivity.
+    - unfold resum_ret, ReSumRet_refl.
+      pose proof (MOk.(mapsto_lookup) c v m).
+      rewrite <- H1 in H0. 
+      rewrite H0.
+      rewrite interp_state_ret.
+      apply anr_ret.
+      * csplit; intuition...
+      * intuition.
+  Qed.
+  
   (*| Sequence: structural temporal lemmas |*)
   Lemma aur_cprog_seq: forall a b ctx ctx' w w' φ ψ,
       <[ {instr_cprog a ctx}, w |= φ AU AX done= {(tt,ctx')} w' ]> ->
@@ -253,6 +353,24 @@ Module Clang.
       + pose proof (Zge_cases za zb); destruct (za >=? zb)...
   Qed.
 
+  Lemma aul_cprog_ite_gt: forall a b ctx w φ ψ za zb t f,
+      <[ {instr_cexp a ctx}, w |= AX done={(za, ctx)} w ]> ->
+      <[ {instr_cexp b ctx}, w |= AX done={(zb, ctx)} w ]> ->
+      (if za >? zb then        
+         <( {instr_cprog t ctx}, w |= φ AU ψ )>
+       else
+         <( {instr_cprog f ctx}, w |= φ AU ψ )>) ->
+      <( {instr_cprog [[ if a > b then t else f ]] ctx}, w |= φ AU ψ )>.
+  Proof with eauto with ctl.
+    unfold instr_cprog, instr_cexp, instr_stateE.
+    intros; cbn.
+    eapply aul_state_bind_r_eq.
+    - cleft...
+    - eapply aul_state_bind_r_eq.
+      + cleft...
+      + pose proof (Zlt_cases za zb); destruct (za >? zb)...
+  Qed.
+  
   Lemma aur_cprog_ite_gt: forall a b ctx w φ ψ za zb t f,
       <[ {instr_cexp a ctx}, w |= AX done={(za, ctx)} w ]> ->
       <[ {instr_cexp b ctx}, w |= AX done={(zb, ctx)} w ]> ->
@@ -271,7 +389,7 @@ Module Clang.
       + pose proof (Zgt_cases za zb); destruct (za >? zb)...
   Qed.
 
-  
+ 
   Lemma aur_cprog_ite_gtee: forall a b ctx w φ ψ za zb t f,
       <[ {instr_cexp a ctx}, w |= AX done={(za, ctx)} w ]> ->
       <[ {instr_cexp b ctx}, w |= AX done={(zb, ctx)} w ]> ->

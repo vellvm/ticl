@@ -20,6 +20,9 @@ From CTree Require Import
   CTree.Events.Writer
   Lang.Clang.
 
+From ExtLib Require Import
+  Structures.Maps.
+
 From Coq Require Import
   ZArith.
 
@@ -56,30 +59,54 @@ From ExtLib Require Import String.
 From Coq Require Import Strings.String.
 
 Module P25.
-  Import Clang.Clang.
+  Include Clang.Clang.
   Local Open Scope clang_scope.
   Definition c: string := "c".
   Definition r: string := "r".
   Definition cs: string := "cs".
   
-  Definition p25: ctree Mem unit :=
+  Definition p25: CProg :=
     [[
         r := 0 ;;;
         cs := 8 ;;;
         while cs > 0 do
-          c ::= c - 1 ;;;
-          r ::= r + 1
+          c := c - 1 ;;;
+          r := r + 1
     ]].
 
-
+  Ltac p25_unfold := rewrite instr_cprog_while_unfold;
+          eapply aul_cprog_ite_gt;
+            [ solve [eapply axr_cexp_var; auto with ctl; mapsto_tac]
+            | solve [eapply axr_cexp_const; auto with ctl]
+            | cbn; eapply aul_cprog_seq];
+            [eapply aur_cprog_seq|];          
+            [eapply afr_cprog_assgn_decr; auto with ctl; mapsto_tac
+            |eapply afr_cprog_assgn_incr; auto with ctl; mapsto_tac
+            |].
+  
   (* // (varC <= 5) || ([AF](varR > 5)) *)
+  Definition init cval := add c cval empty.
+  
   Lemma p25_spec: forall cval,
       cval >= 1%Z ->
-      <( {instr_stateE p25 (M.add c cval M.empty)}, Pure |=
+      <( {instr_cprog p25 (init cval)}, {Obs (Log (init cval)) tt} |=
            (visW {assert c (fun cv => cv <= 5)} \/ AF visW {assert r (fun rv => rv > 5)}) )>.
   Proof with eauto with ctl.
     intros.
-    unfold p25.
-    
-  Admitted.
+    unfold p25, init.
+    destruct (Z.le_gt_cases cval 5).
+    - cleft. (* cv <= 5 *)
+      now eapply vis_c_assert.
+    - cright. (* cv > 5 *)
+      eapply aul_cprog_seq.
+      + eapply afr_cprog_assgn...
+        eapply axr_cexp_const...
+      + eapply aul_cprog_seq.
+        * eapply afr_cprog_assgn...
+          eapply axr_cexp_const...
+        * do 7 p25_unfold.
+          cleft.
+          apply vis_c_assert...
+  Qed.
+
 End P25.        
