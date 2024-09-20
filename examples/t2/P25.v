@@ -24,6 +24,7 @@ From ExtLib Require Import
   Structures.Maps.
 
 From Coq Require Import
+  Strings.String
   ZArith.
 
 Generalizable All Variables.
@@ -36,7 +37,7 @@ Local Open Scope Z_scope.
 (*
 void main() {
 
-    int varC; // assume varC >= 1
+    int varC; // assume varC >= 1 (LEF: looks like this isn't needed?)
     int varR = 0;
     int varCS = 8;
 
@@ -55,12 +56,10 @@ void main() {
 }
  *)
 
-From ExtLib Require Import String.
-From Coq Require Import Strings.String.
-
 Module P25.
   Include Clang.Clang.
   Local Open Scope clang_scope.
+
   Definition c: string := "c".
   Definition r: string := "r".
   Definition cs: string := "cs".
@@ -88,7 +87,6 @@ Module P25.
   Definition init cval := add c cval empty.
   
   Lemma p25_spec: forall cval,
-      cval >= 1%Z ->
       <( {instr_cprog p25 (init cval)}, {Obs (Log (init cval)) tt} |=
            (visW {assert c (fun cv => cv <= 5)} \/ AF visW {assert r (fun rv => rv > 5)}) )>.
   Proof with eauto with ctl.

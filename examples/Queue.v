@@ -128,11 +128,11 @@ Section QueueEx.
         eapply afr_log...
         rewrite bind_ret_l, sb_guard.
         cleft.
-        apply anr_ret...
+        apply axr_ret...
       + cbn.
         rewrite interp_state_ret.
         cleft.        
-        apply anr_ret...
+        apply axr_ret...
         exists tt; intuition.
         cbn.
         * inv Hd.
@@ -260,18 +260,17 @@ Section QueueEx.
           rewrite bind_ret_l, sb_guard, bind_ret_l.
           cleft.
           rewrite interp_state_ret.
-          apply axr_ret.
-          -- csplit...
-          -- exists tt; split2...
-             destruct ts.
-             ++ exists nl, []...
-             ++ exists t, (ts ++ [nl]); split...
-                destruct (t =? nl) eqn:Hnl.
-                ** left.
-                   now apply rel_dec_correct.
-                ** right.
-                   apply neg_rel_dec_correct in Hnl; split...
-                   apply find_last_ex.
+          apply axr_ret...
+          exists tt; split2...
+          destruct ts.
+          -- exists nl, []...
+          -- exists t, (ts ++ [nl]); split...
+             destruct (t =? nl) eqn:Hnl.
+             ++ left.
+                now apply rel_dec_correct.
+             ++ right.
+                apply neg_rel_dec_correct in Hnl; split...
+                apply find_last_ex.
       + (* t <> nl *)
         split.
         * clear i.
@@ -306,8 +305,7 @@ Section QueueEx.
                 rewrite ?bind_bind, bind_ret_l, sb_guard, bind_ret_l, interp_state_ret.
                 apply aur_ret.
                 cleft.
-                apply axr_ret.
-                csplit...
+                apply axr_ret...
                 exists tt; intuition.
                 ** destruct ts'; cbn.
                    --- exists h', []...
@@ -337,22 +335,21 @@ Section QueueEx.
           setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Push h) _); cbn.
           rewrite ?bind_bind, bind_ret_l, sb_guard, bind_ret_l, interp_state_ret.
           apply aur_ret; cleft.
-          apply axr_ret.
-          -- csplit...
-          -- exists tt; intuition...
-             destruct Hi.
-             destruct ts; try solve [inv H].
-             exists t, (ts ++ [h]); intuition.
-             destruct (t =? nl) eqn:Hnl'; inv H.
-             ++ apply rel_dec_correct in Hnl'.
-                now left.
-             ++ right.                
-                rewrite Hnl' in H1.
-                destruct (find nl ts) eqn:Hts; inv H1.
-                split.
-                ** now apply neg_rel_dec_correct.
-                ** exists n.
-                   now apply find_app_l.
+          apply axr_ret...
+          exists tt; intuition...
+          destruct Hi.
+          destruct ts; try solve [inv H].
+          exists t, (ts ++ [h]); intuition.
+          destruct (t =? nl) eqn:Hnl'; inv H.
+          -- apply rel_dec_correct in Hnl'.
+             now left.
+          -- right.                
+             rewrite Hnl' in H1.
+             destruct (find nl ts) eqn:Hts; inv H1.
+             split.
+             ++ now apply neg_rel_dec_correct.
+             ++ exists n.
+                now apply find_app_l.
   Qed.
 End QueueEx.
   
