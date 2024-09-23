@@ -11,7 +11,8 @@ From CTree Require Import
   CTree.Events.Writer
   CTree.Logic.Trans
   CTree.Events.State
-  CTree.Equ.
+  CTree.Equ
+  CTree.SBisim.
 
 From Coinduction Require Import
   coinduction.
@@ -239,3 +240,27 @@ Proof.
     reflexivity.
 Qed.
 
+Lemma interp_state_get {S}: forall (s: S),
+  interp_state h_stateW get s ~ Ret (s, s).
+Proof.
+  intros.
+  rewrite unfold_interp_state.
+  cbn.
+  rewrite bind_ret_l, sb_guard.
+  rewrite interp_state_ret.
+  reflexivity.
+Qed.
+
+Lemma interp_state_put {S}: forall (s s': S),
+  interp_state h_stateW (put s') s ~ log s' ;; Ret (tt, s').
+Proof with eauto.
+  intros.
+  rewrite unfold_interp_state.
+  cbn.
+  rewrite bind_bind.
+  __upto_bind_sbisim...
+  intros [].
+  rewrite bind_ret_l.
+  rewrite sb_guard, interp_state_ret.
+  reflexivity.
+Qed.

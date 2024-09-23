@@ -88,24 +88,46 @@ Section StateLemmas.
 
   (*| Bind lemmas for [EN] |*)
   Typeclasses Transparent sbisim.
-  Theorem enl_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r σ',
+  Theorem enl_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
+      <[ {interp_state h t σ}, w |= φ EN done {fun '(r,σ) => R r σ}  ]> ->
+      (forall x σ w, R x σ w -> <( {interp_state h (k x) σ}, w |= φ EN ψ )>) ->
+      <( {interp_state h (x <- t ;; k x) σ}, w |= φ EN ψ )>.
+  Proof with eauto with ctl.
+    intros.
+    rewrite interp_state_bind.
+    eapply enl_bind_r...
+    intros [y σ'] * HR...
+  Qed.
+  
+  Theorem enl_state_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r σ',
       <[ {interp_state h t σ}, w |= φ EN done= {(r,σ')} w' ]> ->
       <( {interp_state h (k r) σ'}, w' |= φ EN ψ )> ->
       <( {interp_state h (x <- t ;; k x) σ}, w |= φ EN ψ )>.
   Proof with eauto with ctl.
     intros.
     rewrite interp_state_bind.
-    eapply enl_bind_r...
+    eapply enl_bind_r_eq...
   Qed.
 
-  Theorem enr_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r σ',
+  Theorem enr_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
+      <[ {interp_state h t σ}, w |= φ EN done {fun '(r,σ) => R r σ}  ]> ->
+      (forall x σ w, R x σ w -> <[ {interp_state h (k x) σ}, w |= φ EN ψ ]>) ->
+      <[ {interp_state h (x <- t ;; k x) σ}, w |= φ EN ψ ]>.
+  Proof with eauto with ctl.
+    intros.
+    rewrite interp_state_bind.
+    eapply enr_bind_r...
+    intros [y σ'] * HR...
+  Qed.
+
+  Theorem enr_state_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' r σ' φ ψ,
       <[ {interp_state h t σ}, w |= φ EN done= {(r,σ')} w' ]> ->
       <[ {interp_state h (k r) σ'}, w' |= φ EN ψ ]> ->
       <[ {interp_state h (x <- t ;; k x) σ}, w |= φ EN ψ ]>.
   Proof with eauto with ctl.
     intros.
     rewrite interp_state_bind.
-    eapply enr_bind_r...
+    eapply enr_bind_r_eq...
   Qed.
   
   (*| Bind lemmas for [AU] |*)
@@ -165,6 +187,17 @@ Section StateLemmas.
     intros [y σ'] * HR...
   Qed.
 
+  Theorem eul_state_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ x' σ' w',
+      <[ {interp_state h t σ}, w |= φ EU EX done= {(x',σ')} w' ]> ->
+      <( {interp_state h (k x') σ'}, w' |= φ EU ψ )> ->
+      <( {interp_state h (x <- t ;; k x) σ}, w |= φ EU ψ )>.
+  Proof with eauto with ctl.
+    intros.
+    rewrite interp_state_bind.
+    eapply eul_bind_r... 
+    intros [y σ''] * [Heq ->]; inv Heq... 
+  Qed.
+  
   Theorem eur_state_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
       <[ {interp_state h t σ}, w |= φ EU EX done {fun '(r,σ) => R r σ} ]> ->
       (forall r σ w, R r σ w -> <[ {interp_state h (k r) σ}, w |= φ EU ψ ]>) ->
@@ -174,6 +207,17 @@ Section StateLemmas.
     rewrite interp_state_bind.
     apply eur_bind_r with (R:=fun '(x, σ) => R x σ)...
     intros [y σ'] * HR...
+  Qed.
+
+  Theorem eur_state_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ x' σ' w',
+      <[ {interp_state h t σ}, w |= φ EU EX done= {(x',σ')} w' ]> ->
+      <[ {interp_state h (k x') σ'}, w' |= φ EU ψ ]> ->
+      <[ {interp_state h (x <- t ;; k x) σ}, w |= φ EU ψ ]>.
+  Proof with eauto with ctl.
+    intros.
+    rewrite interp_state_bind.
+    eapply eur_bind_r... 
+    intros [y σ''] * [Heq ->]; inv Heq... 
   Qed.
 
   (*| Bind lemma for [AG] |*)

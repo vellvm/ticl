@@ -194,28 +194,44 @@ Section BindLemmas.
   
   (*| Bind lemmas for [EN] |*)
   Typeclasses Transparent sbisim.
-  Theorem enl_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r,
+  Theorem enl_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
+      <[ t, w |= φ EN done R ]> ->
+      (forall r w', R r w' -> <( {k r}, w' |= φ EN ψ )>) ->
+      <( {x <- t ;; k x}, w |= φ EN ψ )>.
+  Proof with eauto with ctl.
+    intros.
+    apply enr_done in H as (Hφ & r & Heq & HR).
+    rewrite Heq, bind_ret_l...
+  Qed.
+
+  Theorem enl_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r,
       <[ t, w |= φ EN done= r w' ]> ->
       <( {k r}, w' |= φ EN ψ )> ->
       <( {x <- t ;; k x}, w |= φ EN ψ )>.
   Proof with eauto with ctl.
     intros.
-    assert(Hd: <( t, w |= φ )> /\ (exists x : Y, t ~ Ret x /\ r = x /\ w' = w)) by
-      (apply enr_done in H as (? & ?); split; auto).
-    destruct Hd as (? & y & Heqt & -> & ->).
-    now rewrite Heqt, bind_ret_l.
+    apply enl_bind_r with (R:=fun x w => r = x /\ w' = w)...
+    intros r_ w_ (-> & ->)...
   Qed.
-
-  Theorem enr_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r,
+  
+  Theorem enr_bind_r{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w φ ψ R,
+      <[ t, w |= φ EN done R ]> ->
+      (forall r w', R r w' -> <[ {k r}, w' |= φ EN ψ ]>) ->
+      <[ {x <- t ;; k x}, w |= φ EN ψ ]>.
+  Proof with eauto with ctl.
+    intros.
+    apply enr_done in H as (Hφ & r & Heq & HR).
+    rewrite Heq, bind_ret_l...
+  Qed.
+  
+  Theorem enr_bind_r_eq{X Y}: forall (t: ctree E Y) (k: Y -> ctree E X) w w' φ ψ r,
       <[ t, w |= φ EN done= r w' ]> ->
       <[ {k r}, w' |= φ EN ψ ]> ->
       <[ {x <- t ;; k x}, w |= φ EN ψ ]>.
   Proof with eauto with ctl.
     intros.
-    assert(Hd: <( t, w |= φ )> /\ (exists x : Y, t ~ Ret x /\ r = x /\ w' = w)) by
-      (apply enr_done in H as (? & ?); split; auto).
-    destruct Hd as (? & y & Heqt & -> & ->).
-    now rewrite Heqt, bind_ret_l.
+    apply enr_bind_r with (R:=fun x w => r = x /\ w' = w)...
+    intros r_ w_ (-> & ->)...
   Qed.
   
   (*| Bind lemmas for [AU] |*)
@@ -621,16 +637,16 @@ Section BindLemmas.
         Unshelve.
         exact tt.
   Qed.
-  
-  Lemma afr_log{X S}: forall (s: S) (k: ctree (writerE S) X) w φ,
+
+  Lemma aur_log{X S}: forall (s: S) (k: ctree (writerE S) X) w ψ φ,
       not_done w ->
-      <[ k, {Obs (Log s) tt} |= AF φ ]> ->
-      <[ {log s;; k }, w |= AF φ ]>.
-  Proof with eauto.
+      <[ k, {Obs (Log s) tt} |= ψ AU φ ]> ->
+      <( {log s;; k }, w |= ψ )> ->
+      <[ {log s;; k }, w |= ψ AU φ ]>.  
+  Proof with eauto with ctl.
     intros.
     cright.
-    csplit.
-    - csplit...
+    csplit...
     - eapply can_step_bind_l.
       + apply ktrans_vis...
       + constructor.
@@ -640,7 +656,7 @@ Section BindLemmas.
                 (x & ? & TR' & Hr & TRk)].
       + apply ktrans_vis in TR' as (-> & -> & ? & ?).
         unfold resum_ret, ReSumRet_refl in H1.
-        rewrite <- H1, bind_ret_l.
+        rewrite <- H2, bind_ret_l.
         unfold resum, ReSum_refl.
         apply H0.
       + apply ktrans_vis in TR' as (-> & -> & ? & ?).
@@ -648,4 +664,42 @@ Section BindLemmas.
         Unshelve.
         exact tt.
   Qed.
+  
+  Lemma afr_log{X S}: forall (s: S) (k: ctree (writerE S) X) w φ,
+      not_done w ->
+      <[ k, {Obs (Log s) tt} |= AF φ ]> ->
+      <[ {log s;; k }, w |= AF φ ]>.
+  Proof with eauto.
+    intros.
+    eapply aur_log...
+    csplit...
+  Qed.
+
+  Lemma eur_log{X S}: forall (s: S) (k: ctree (writerE S) X) w ψ φ,
+      ψ w ->
+      not_done w ->
+      <[ k, {Obs (Log s) tt} |= <( now ψ )> EU φ ]> ->
+      <[ {log s;; k }, w |= <( now ψ )> EU φ ]>.
+  Proof with eauto with ctl.
+    intros.
+    cright.
+    csplit...
+    - now apply ctll_now.
+    - eexists; exists (Obs (Log s) tt); split.
+      apply ktrans_bind_r...
+      unfold log, Ctree.trigger, resum, ReSum_refl.
+      apply ktrans_vis.
+      exists tt; intuition.
+    + now rewrite bind_ret_l.
+  Qed.
+
+  Lemma efr_log{X S}: forall (s: S) (k: ctree (writerE S) X) w φ,
+      not_done w ->
+      <[ k, {Obs (Log s) tt} |= EF φ ]> ->
+      <[ {log s;; k }, w |= EF φ ]>.
+  Proof with eauto.
+    intros.
+    eapply eur_log...
+  Qed.
+  
 End BindLemmas.

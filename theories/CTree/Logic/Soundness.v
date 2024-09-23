@@ -201,9 +201,9 @@ Section SyntacticEntailment.
       syntailsL (Vis e k) w φ ->
       (exists (x: encode e), <( {k x}, {Obs e x} |= ψ )>) ->
       syntailsL (Vis e k) w <( φ EN ψ )>
-  | SynEnBindR: forall {Y} (t: ctree E Y) (k: Y -> ctree E X) φ ψ w r w',
-      <[ t, w |= φ EN done= r w' ]> ->
-      (syntailsL (k r)  w' <( φ EN ψ )>) ->
+  | SynEnBindR: forall {Y} (t: ctree E Y) (k: Y -> ctree E X) φ ψ w R,
+      <[ t, w |= φ EN done R ]> ->
+      (forall r w', R r w' -> syntailsL (k r)  w' <( φ EN ψ )>) ->
       syntailsL (x <- t ;; k x) w <( φ EN ψ )>
   | SynEnIter: forall {I} Ri Rv (i: I) w (k: I -> ctree E (I + X)) φ ψ,
       well_founded Rv ->
@@ -315,7 +315,7 @@ Section SyntacticEntailment.
     - contradiction.
     - apply enl_br...
     - destruct H1; apply enl_vis...
-    - apply enl_bind_r with w' r...
+    - apply enl_bind_r with R...
     - apply enl_iter with Ri Rv...
     - contradiction.
     - contradiction.

@@ -166,6 +166,26 @@ Section BasicLemmas.
     - apply ktrans_finish in TR as (-> & Heqt); rewrite Heqt in H.
       apply ctll_not_done in H; inv H.
   Qed.
+
+  Lemma enr_ret: forall (r: X) (R: rel X (World E)) φ w,
+      <( {Ret r}, w |= φ )> ->
+      R r w ->
+      <[ {Ret r}, w |= φ EN done R ]>.
+  Proof with auto with ctl.
+    intros.
+    apply enr_done; split...
+    exists r...
+  Qed.
+  
+  Lemma exr_ret: forall (r: X) (R: rel X (World E)) w,
+      not_done w ->
+      R r w ->
+      <[ {Ret r}, w |= EX done R ]>.
+  Proof with auto with ctl.
+    intros.
+    apply enr_ret...
+    csplit...
+  Qed.
   
   Lemma enr_ret_inv: forall (r: X) w φ ψ,
       <[ {Ret r}, w |= φ EN ψ ]> ->

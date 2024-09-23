@@ -21,7 +21,8 @@ From CTree Require Import
   Lang.Clang.
 
 From ExtLib Require Import
-  Structures.Maps.
+  Structures.Maps
+  Data.Map.FMapAList.
 
 From Coq Require Import
   Strings.String
@@ -57,7 +58,7 @@ void main() {
  *)
 
 Module P25.
-  Include Clang.Clang.
+  Import Clang.Clang.
   Local Open Scope clang_scope.
 
   Definition c: string := "c".
@@ -73,21 +74,10 @@ Module P25.
           r := r + 1
     ]].
 
-  Ltac p25_unfold := rewrite instr_cprog_while_unfold;
-          eapply aul_cprog_ite_gt;
-            [ solve [eapply axr_cexp_var; auto with ctl; mapsto_tac]
-            | solve [eapply axr_cexp_const; auto with ctl]
-            | cbn; eapply aul_cprog_seq];
-            [eapply aur_cprog_seq|];          
-            [eapply afr_cprog_assgn_decr; auto with ctl; mapsto_tac
-            |eapply afr_cprog_assgn_incr; auto with ctl; mapsto_tac
-            |].
-  
   (* // (varC <= 5) || ([AF](varR > 5)) *)
-  Definition init cval := add c cval empty.
-  
   Lemma p25_spec: forall cval,
-      <( {instr_cprog p25 (init cval)}, {Obs (Log (init cval)) tt} |=
+      let init := add c cval empty in
+      <( {instr_cprog p25 init}, {Obs (Log init) tt} |=
            (visW {assert c (fun cv => cv <= 5)} \/ AF visW {assert r (fun rv => rv > 5)}) )>.
   Proof with eauto with ctl.
     intros.
@@ -98,11 +88,12 @@ Module P25.
     - cright. (* cv > 5 *)
       eapply aul_cprog_seq.
       + eapply afr_cprog_assgn...
-        eapply axr_cexp_const...
       + eapply aul_cprog_seq.
         * eapply afr_cprog_assgn...
-          eapply axr_cexp_const...
-        * do 7 p25_unfold.
+        * do 6 (
+              eapply afl_cprog_while_unfold; auto with ctl;
+              [eapply aur_cprog_seq; eapply afr_cprog_assgn; auto with ctl|]; cbn
+            ).
           cleft.
           apply vis_c_assert...
   Qed.
