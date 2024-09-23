@@ -98,11 +98,18 @@ Module P26.
       + eapply eg_cprog_seq.
         * eapply eur_cprog_assgn_eq...
           constructor; cbn; lia.
-        * cbn.
-          (* unfolding doesn't work, need [eg_iter] lemma *)
-          eapply eg_cprog_while_gt with
-            (R:=fun ctx => ctx = ((cs, 3) :: (r, 1) :: (c, cval - 1) :: nil)%list \/
-                          ctx = ((cs, 4) :: (r, 0) :: (c, cval) :: nil)%list)...
+        * (* unfolding doesn't work, need [eg_iter] lemma *)
+          cbn.
+          evar (RR: Ctx -> Prop).
+          eapply eg_cprog_while_gt with (R:= fun ctx' => assert r (fun rv => rv <= 5) ctx' /\ RR ctx')...
+          -- split.
+             ++ cbn; lia.
+             ++ admit. 
+          -- intros ctx' (Hr & HR); split. 
+             ++ apply ctll_vis; constructor...
+             ++ apply enr_cprog_ite_gte.
+             apply mapsto_lookup in Hr. rewrite Hr.
+             apply vis_c_assert.
           -- right; reflexivity. cbn; lia.
           -- eapply eur_cprog_ite_gte; cbn.
              pose proof (Zge_cases cval 4); destruct (cval >=? 4).

@@ -357,12 +357,13 @@ Module Clang.
     - destruct (cdenote_exp a ctx >? cdenote_exp b ctx)...
   Qed.
 
-  Lemma eur_cprog_ite_gte: forall a b ctx w φ ψ t f,
+  Lemma eur_cprog_ite_gte: forall a b ctx w φ t f R1 R2 R,
       (if cdenote_exp a ctx >=? cdenote_exp b ctx then        
-         <[ {instr_cprog t ctx}, w |= φ EU EX ψ ]>
+         <[ {instr_cprog t ctx}, w |= EX (φ EU EX done R1) ]>
        else
-         <[ {instr_cprog f ctx}, w |= φ EU EX ψ ]>) ->
-      <[ {instr_cprog [[ if a >= b then t else f ]] ctx}, w |= φ EU EX ψ ]>.
+         <[ {instr_cprog f ctx}, w |= EX (φ EU EX done R2) ]>) ->
+      (forall ctx, R1 (tt, ctx) (Obs (Log ctx) tt) \/ R2 (tt, ctx) (Obs (Log ctx) tt) -> R (tt, ctx) (Obs (Log ctx) tt)) ->
+      <[ {instr_cprog [[ if a >= b then t else f ]] ctx}, w |= φ EU EX done R ]>.
   Proof with eauto with ctl.
     unfold instr_cprog, instr_stateE.
     intros; cbn.
@@ -373,8 +374,7 @@ Module Clang.
       rewrite interp_state_ret.
       cleft.
       eapply exr_ret.
-      + destruct (cdenote_exp a ctx >=? cdenote_exp b ctx);
-          now eapply eur_not_done in H.
+      + destruct (cdenote_exp a ctx >=? cdenote_exp b ctx); cdestruct H; now apply ktrans_not_done in TR.
       + intuition.
     - unfold resum_ret, ReSumRet_refl.
       destruct (cdenote_exp a ctx >=? cdenote_exp b ctx)...
