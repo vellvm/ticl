@@ -101,13 +101,60 @@ Module P26.
         * (* unfolding doesn't work, need [eg_iter] lemma *)
           cbn.
           evar (RR: Ctx -> Prop).
-          eapply eg_cprog_while_gt with (R:= fun ctx' => assert r (fun rv => rv <= 5) ctx' /\ RR ctx')...
+          eapply eg_cprog_while_gt with
+            (R:= fun ctx' =>
+                   assert r (fun rv => rv + 1 <= 5) ctx'
+                   /\ assert c (fun cv => cv <= 5) ctx'
+                   /\ RR ctx')...
           -- split.
              ++ cbn; lia.
-             ++ admit. 
-          -- intros ctx' (Hr & HR); split. 
+             ++ split; cbn; try lia.
+                admit. 
+          -- intros ctx' (Hr & Hc & HR); split. 
              ++ apply ctll_vis; constructor...
-             ++ apply enr_cprog_ite_gte.
+                unfold assert in *.
+                destruct (lookup r ctx'); lia.
+             ++ apply eur_cprog_ite_gte.
+                pose proof (Zge_cases (cdenote_exp c ctx') (cdenote_exp cs ctx')).
+                destruct (cdenote_exp c ctx' >=? cdenote_exp cs ctx') eqn:Hab.
+                assert (impl_ctll (unit*Ctx) <( visW {assert r (fun rv : Z => rv <= 5)} )> <( ⊤ )>).
+                { unfold impl_ctll; intros; csplit; intuition. }
+                ** eapply (impl_ctlr_next Q_E _ _ _ _ H1); [reflexivity|]; clear H1.
+                   apply ctlr_euex_exeu.
+                   eapply eur_cprog_seq.
+                   --- eapply eur_cprog_assgn_eq...
+                       constructor.
+                       unfold assert in *.
+                       destruct (lookup r ctx'); lia.
+                   --- eapply eur_cprog_seq.
+                       +++ eapply eur_cprog_assgn_eq...
+                           constructor; unfold assert.
+                           cbn.
+                           rewrite remove_neq_alist; intuition.
+                           inv H1.
+                       +++ cleft.
+                           apply enr_cprog_assgn...
+                           *** constructor; unfold assert, lookup in *; cbn.
+                               rewrite remove_neq_alist; intuition; cbn in Hr.
+                               destruct (alist_find RelDec_string r ctx') eqn:Hr';
+                                 intuition.
+                               inv H1.
+                           *** Opaque alist_remove.
+                               cbn.
+                               split.
+                               
+                           constructor.
+                           
+                   unfold instr_cprog, instr_stateE.
+                - rewrite H1.
+                
+                   cbn.
+                   setoid_rewrite bind_bind.
+                   rewrite interp_state_bind.
+                   unfold State.get, Ctree.trigger.
+                   setoid_rewrite interp_state_vis.
+CC                   setoid_rewrite interp_state_get.
+                   apply exr_cprog_assgn.
              apply mapsto_lookup in Hr. rewrite Hr.
              apply vis_c_assert.
           -- right; reflexivity. cbn; lia.

@@ -675,6 +675,22 @@ Section BindLemmas.
     csplit...
   Qed.
 
+  Lemma enr_log{X S}: forall (s: S) (k: ctree (writerE S) X) w ψ φ,
+      <[ k, {Obs (Log s) tt} |= EX ψ ]> ->
+      <( {log s;; k }, w |= φ )> ->
+      <[ {log s;; k }, w |= φ EN EX ψ ]>.
+  Proof with eauto with ctl.
+    intros.
+    csplit...
+    do 2 eexists; split.
+    - apply ktrans_bind_l...
+      unfold log, Ctree.trigger, resum, ReSum_refl.
+      apply ktrans_vis.
+      exists tt; intuition.
+      now apply ctll_not_done in H0.
+    - now rewrite bind_ret_l.
+  Qed.
+  
   Lemma eur_log{X S}: forall (s: S) (k: ctree (writerE S) X) w ψ φ,
       ψ w ->
       not_done w ->

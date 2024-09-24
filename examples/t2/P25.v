@@ -72,6 +72,7 @@ Module P25.
         while cs > 0 do
           c := c - 1 ;;;
           r := r + 1
+        done
     ]].
 
   (* // (varC <= 5) || ([AF](varR > 5)) *)
@@ -87,12 +88,15 @@ Module P25.
       now eapply vis_c_assert.
     - cright. (* cv > 5 *)
       eapply aul_cprog_seq.
-      + eapply afr_cprog_assgn...
+      + eapply aur_cprog_assgn...
+        csplit...
       + eapply aul_cprog_seq.
-        * eapply afr_cprog_assgn...
+        * eapply aur_cprog_assgn...
+          csplit...
         * do 6 (
               eapply afl_cprog_while_unfold; auto with ctl;
-              [eapply aur_cprog_seq; eapply afr_cprog_assgn; auto with ctl|]; cbn
+              [eapply aur_cprog_seq; eapply aur_cprog_assgn; auto with ctl;
+               csplit; auto with ctl|]; cbn
             ).
           cleft.
           apply vis_c_assert...

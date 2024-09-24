@@ -668,10 +668,10 @@ Section CtlrEquations.
         now right.
   Qed.
 
-  Lemma ctlr_auax_axau: forall (p: ctll E) (q: ctlr E X) (t: MS) w,
-      <[ t, w |= p AU (p AN q) ]> -> <[ t, w |= p AN (p AU q) ]>.
+  Lemma ctlr_auax_axau: forall (p: ctll E) (q: ctlr E X),
+      <[ p AU (p AN q) ]> ⋖ <[ p AN (p AU q) ]>.
   Proof with auto with ctl.
-    intros * H.
+    intros p q t w H.
     cinduction H.
     - apply ctlr_ax in Hp as (? & ? & ?).
       rewrite unfold_entailsR.
@@ -686,6 +686,26 @@ Section CtlrEquations.
       intros t' w' TR.
       apply ctlr_au_ax; apply ctlr_or.
       right; auto.
+  Qed.
+
+  Lemma ctlr_euex_exeu: forall (p: ctll E) (q: ctlr E X),
+      <[ p EU (p EN q) ]> ⋖ <[ p EN (p EU q) ]>.
+  Proof with auto with ctl.
+    intros p q t w H.
+    cinduction H.
+    - apply ctlr_ex in Hp as (? & t' & w' & TR & ?).
+      rewrite unfold_entailsR.
+      split...
+      exists t', w'.
+      split...
+      rewrite ctlr_eu_ex, ctlr_or.
+      now left.
+    - rewrite ctlr_ex.
+      split...
+      exists t0, w0.
+      split...
+      rewrite ctlr_eu_ex, ctlr_or.
+      right...
   Qed.
 
   Lemma ctlr_au_idem: forall (p: ctll E) (q: ctlr E X),
