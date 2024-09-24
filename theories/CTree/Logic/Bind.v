@@ -558,30 +558,54 @@ Section BindLemmas.
       <( {Ctree.map f t}, w |= φ )> <-> <( t, w |= φ )>.
    *)
   Typeclasses Transparent equ.
+  Lemma anl_log{X S}: forall (s: S) (k: ctreeW S X) w ψ φ,
+      <( k, {Obs (Log s) tt} |= ψ )> ->
+      <( {log s;; k }, w |= φ )> ->
+      <( {log s;; k }, w |= φ AN ψ )>.
+  Proof with eauto with ctl.
+    intros.
+    unfold log, Ctree.trigger, resum, ReSum_refl, resum_ret, ReSumRet_refl.
+    csplit...
+    - eapply can_step_bind_l...
+      apply ktrans_vis.
+      exists tt; intuition.
+      now apply ctll_not_done in H0.
+    - intros.
+      apply ktrans_bind_inv in H1 as [(? & ? & ? & ->) | (? & ? & ? & ? & ?)].
+      + apply ktrans_vis in H1 as ([] & -> & <- & ?).
+        now rewrite bind_ret_l.
+      + apply ktrans_vis in H1 as ([] & -> & ? & ?).
+        inv H2.
+  Qed.
+  
   Lemma axl_log{X S}: forall (s: S) (k: ctree (writerE S) X) w φ,
       not_done w ->
       <( k, {Obs (Log s) tt} |= φ )> ->
       <( {log s;; k }, w |= AX φ )>.
   Proof with eauto with ctl.
     intros.
-    csplit.
-    - csplit...
-    - eapply can_step_bind_l.
-      apply ktrans_vis...
-      constructor.
-    - intros * TR.
-      apply ktrans_bind_inv in TR as
-              [(t_ & TR' & Hd & ->) |
-                (x & ? & TR' & Hr & TRk)].
-      + apply ktrans_vis in TR' as (-> & -> & ? & ?).
-        unfold resum_ret, ReSumRet_refl in H1.
-        rewrite <- H1, bind_ret_l.
-        unfold resum, ReSum_refl.
-        apply H0.
-      + apply ktrans_vis in TR' as (-> & -> & ? & ?).
-        inv Hr.
-        Unshelve.
-        exact tt.
+    apply anl_log...
+    csplit...
+  Qed.
+  
+  Lemma anr_log{X S}: forall (s: S) (k: ctreeW S X) w ψ φ,
+      <[ k, {Obs (Log s) tt} |= ψ ]> ->
+      <( {log s;; k }, w |= φ )> ->
+      <[ {log s;; k }, w |= φ AN ψ ]>.
+  Proof with eauto with ctl.
+    intros.
+    unfold log, Ctree.trigger, resum, ReSum_refl, resum_ret, ReSumRet_refl.
+    csplit...
+    - eapply can_step_bind_l...
+      apply ktrans_vis.
+      exists tt; intuition.
+      now apply ctll_not_done in H0.
+    - intros.
+      apply ktrans_bind_inv in H1 as [(? & ? & ? & ->) | (? & ? & ? & ? & ?)].
+      + apply ktrans_vis in H1 as ([] & -> & <- & ?).
+        now rewrite bind_ret_l.
+      + apply ktrans_vis in H1 as ([] & -> & ? & ?).
+        inv H2.
   Qed.
   
   Lemma axr_log{X S}: forall (s: S) (k: ctree (writerE S) X) w φ,
@@ -590,24 +614,8 @@ Section BindLemmas.
       <[ {log s;; k }, w |= AX φ ]>.
   Proof with eauto with ctl.
     intros.
-    csplit.
-    - csplit...
-    - eapply can_step_bind_l.
-      apply ktrans_vis...
-      constructor.
-    - intros * TR.
-      apply ktrans_bind_inv in TR as
-              [(t_ & TR' & Hd & ->) |
-                (x & ? & TR' & Hr & TRk)].
-      + apply ktrans_vis in TR' as (-> & -> & ? & ?).
-        unfold resum_ret, ReSumRet_refl in H1.
-        rewrite <- H1, bind_ret_l.
-        unfold resum, ReSum_refl.
-        apply H0.
-      + apply ktrans_vis in TR' as (-> & -> & ? & ?).
-        inv Hr.
-        Unshelve.
-        exact tt.
+    apply anr_log...
+    csplit...
   Qed.
   
   Typeclasses Transparent equ.

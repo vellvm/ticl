@@ -89,5 +89,7 @@ Module And_test.
       eapply ag_cprog_seq.
       + eapply aur_cprog_while_unfold...
         * apply aur_cprog_assgn...
+          cright.
+          apply anl_cprog_assgn.
 
 End And_test.        

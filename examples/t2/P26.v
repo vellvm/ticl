@@ -78,6 +78,7 @@ Module P26.
             cs := cs - 1
           else
             cs := cs - 1
+        done
     ]].
 
   Arguments alist_add /.

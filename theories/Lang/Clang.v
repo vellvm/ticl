@@ -1,5 +1,6 @@
 From Coq Require Import
   ZArith.ZArith
+  ZArith.Zwf
   Strings.String.
 
 From ExtLib Require Import
@@ -233,6 +234,31 @@ Module Clang.
     apply axr_ret...
   Qed.
 
+  Lemma aul_cprog_assgn: forall x a ctx ctx' w φ ψ,
+      ctx' = add x (cdenote_exp a ctx) ctx ->
+      <( {instr_cprog [[ x := a ]] ctx}, w |= ψ )> ->
+      <( {instr_cprog [[ skip ]] ctx'}, {Obs (Log ctx') tt} |= φ )> ->
+      <( {instr_cprog [[ x := a ]] ctx}, w |= ψ AU φ )>.
+  Proof with eauto with ctl.
+    unfold instr_cprog, instr_stateE.
+    cbn; intros; subst. 
+    unfold get, put, trigger in *.
+    rewrite bind_vis in *.
+    rewrite interp_state_vis in *; cbn in *.
+    rewrite bind_ret_l in *.
+    rewrite sb_guard in *.
+    rewrite bind_ret_l in *.
+    rewrite interp_state_vis in *; cbn in *.
+    rewrite bind_bind in *.
+    unfold resum_ret, ReSumRet_refl in *.
+    cright.
+    apply anl_log...
+    rewrite bind_ret_l, sb_guard.
+    rewrite interp_state_ret in H1 |- *.
+    apply aul_ret.
+    cleft...
+  Qed.
+  
   Lemma eur_cprog_assgn: forall x a ctx w φ R,
       φ w ->
       not_done w ->
@@ -525,6 +551,26 @@ Module Clang.
       rewrite unfold_interp_state; cbn.
       rewrite sb_guard.
       apply H2.
+  Qed.
+
+  (* Termination *)
+  Theorem aur_cprog_while (Ri: Ctx -> Prop) ctx (f: Ctx -> Z) (lim: Z) (t: CProg) a b φ ψ:
+    Ri ctx ->    
+    (forall ctx,
+        Ri ctx ->
+        <[ {instr_cprog t ctx}, {Obs (Log ctx) tt} |= φ AU AX done
+                                  {fun '(_, ctx') w' =>
+                                     w' = Obs (Log ctx') tt
+                                     /\ if cdenote_exp a ctx' >? cdenote_exp b ctx' then
+                                         Ri ctx' /\ f ctx' < f ctx
+                                       else
+                                         <[ {Ret (tt, ctx')}, {Obs (Log ctx') tt} |= ψ \/ φ AN ψ ]>} ]>) ->
+    <[ {instr_cprog [[ while a > b do t done ]] ctx}, {Obs (Log ctx) tt} |= φ AU ψ ]>.
+  Proof.
+    unfold instr_cprog, instr_stateE; cbn; intros.
+    Check aur_state_iter.
+    eapply aur_state_iter with Ri (Rv:=fun '(i',s',w') '(i,s,w) => f s' s) (Zwf lim). _ (fun '(i, σ, w) => f σ); auto.
+    apply well_founded_ltof.
   Qed.
   
   Lemma ag_cprog_while_gt: forall a b (t: CProg) R ctx w' φ,
