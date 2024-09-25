@@ -87,8 +87,61 @@ Module And_test.
     csplit.
     - unfold and_test.
       eapply ag_cprog_seq.
-      + eapply aur_cprog_while_unfold...
-        * apply aur_cprog_assgn...
+      + eapply aur_cprog_while; cbn.
+        * apply Z.gtb_gt in H.
+          rewrite H...
+        * cbn; intros.
+          assert (Hd: not_done w').
+          { destruct (load n ctx >? 0) eqn:Hv...          
+            cdestruct H0.
+            now apply can_step_not_done in Hs.
+          }.
+          eapply aur_cprog_assgn...
+          -- eapply aul_cprog_assgn...
+             ++ csplit...
+             ++ apply vis_c_assert.
+                cbn.
+                admit.
+          -- unfold instr_cprog, instr_stateE.
+             cbn.
+             rewrite interp_state_ret.
+             apply axr_ret...
+             split.
+             eapply aul_cprog_assgn...
+             csplit...
+             ++ destruct (match alist_find RelDec_string n ctx with
+                          | Some v => v
+                          | None => 0
+                          end >? 0) eqn:Hv...
+                cdestruct H0.
+                now apply can_step_not_done in Hs.
+             ++ admit.
+          -- unfold instr_cprog, instr_stateE; cbn.
+             eapply can_step_state_bind_r.
+             ++ rewrite interp_state_get.
+                cleft.
+                apply axr_ret...
+                destruct (match alist_find RelDec_string n ctx with
+                          | Some v => v
+                          | None => 0
+                          end >? 0) eqn:Hv...
+                cdestruct H0.
+                now apply can_step_not_done in Hs.
+             ++ rewrite interp_state_put.
+                eapply can_step_bind_l...              
+                apply ktrans_vis.
+                exists tt; intuition...
+                destruct (match alist_find RelDec_string n ctx with
+                          | Some v => v
+                          | None => 0
+                          end >? 0) eqn:Hv...
+                cdestruct H0.
+                now apply can_step_not_done in Hs.
+          -- intros.
+             
+               apply vis_c_assert.
+                cbn.
+          eapply aur_cprog_assgn...
           cright.
           apply anl_cprog_assgn.
 

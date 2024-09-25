@@ -45,7 +45,13 @@ Module Clang.
     | Some v => p v
     | None => False
     end.
-  
+
+  Definition load(k: string)(m: Ctx): Z :=
+    match lookup k m with
+    | Some v => v
+    | None => 0%Z
+    end.
+    
   Inductive CExp :=
   | CVar (x: string)
   | CConst (z: Z)
@@ -73,11 +79,7 @@ Module Clang.
 
   Fixpoint cdenote_exp(e: CExp)(ctx: Ctx): Z :=
     match e with
-    | CVar v =>
-        match lookup v ctx with
-        | Some v => v
-        | None => 0%Z
-        end
+    | CVar v => load v ctx
     | CConst z => z
     | CAdd a b =>
         let x := cdenote_exp a ctx in
@@ -210,12 +212,11 @@ Module Clang.
       + apply ctll_now; intuition.
   Qed.
 
-  Lemma aur_cprog_assgn: forall x a ctx ctx' w ψ,
-      not_done w ->
+  Lemma aur_cprog_assgn: forall x a ctx ctx' w φ ψ,
       ctx' = add x (cdenote_exp a ctx) ctx ->
       <( {instr_cprog [[ x := a ]] ctx}, w |= ψ )> ->
-      <[ {instr_cprog [[ x := a ]] ctx}, w |= ψ AU AX done={(tt, ctx')}
-                                                           {Obs (Log ctx') tt} ]>.
+      <[ {instr_cprog [[ skip ]] ctx'}, {Obs (Log ctx') tt} |= φ ]> ->
+      <[ {instr_cprog [[ x := a ]] ctx}, w |= ψ AU φ ]>.
   Proof with eauto with ctl.
     unfold instr_cprog, instr_stateE.
     cbn; intros; subst. 
@@ -228,12 +229,14 @@ Module Clang.
     rewrite interp_state_vis in *; cbn in *.
     rewrite bind_bind in *.
     unfold resum_ret, ReSumRet_refl in *.
-    apply aur_log...
-    rewrite bind_ret_l, sb_guard, interp_state_ret.
-    cleft.
-    apply axr_ret...
+    cright.
+    apply anr_log...
+    rewrite bind_ret_l, sb_guard.
+    rewrite interp_state_ret in H1 |- *.
+    apply aur_ret.
+    cleft...
   Qed.
-
+  
   Lemma aul_cprog_assgn: forall x a ctx ctx' w φ ψ,
       ctx' = add x (cdenote_exp a ctx) ctx ->
       <( {instr_cprog [[ x := a ]] ctx}, w |= ψ )> ->
@@ -554,23 +557,73 @@ Module Clang.
   Qed.
 
   (* Termination *)
-  Theorem aur_cprog_while (Ri: Ctx -> Prop) ctx (f: Ctx -> Z) (lim: Z) (t: CProg) a b φ ψ:
-    Ri ctx ->    
-    (forall ctx,
-        Ri ctx ->
-        <[ {instr_cprog t ctx}, {Obs (Log ctx) tt} |= φ AU AX done
-                                  {fun '(_, ctx') w' =>
-                                     w' = Obs (Log ctx') tt
-                                     /\ if cdenote_exp a ctx' >? cdenote_exp b ctx' then
-                                         Ri ctx' /\ f ctx' < f ctx
-                                       else
-                                         <[ {Ret (tt, ctx')}, {Obs (Log ctx') tt} |= ψ \/ φ AN ψ ]>} ]>) ->
-    <[ {instr_cprog [[ while a > b do t done ]] ctx}, {Obs (Log ctx) tt} |= φ AU ψ ]>.
-  Proof.
+  Theorem aur_cprog_while ctx (t: CProg) w a b φ ψ:    
+    (if cdenote_exp a ctx >? cdenote_exp b ctx then
+       not_done w
+    else
+      <[ {Ret (tt, ctx)}, w |= φ AN ψ ]>)
+      ->
+    (forall ctx w',
+        (if cdenote_exp a ctx >? cdenote_exp b ctx then
+          not_done w'
+        else
+          <[ {Ret (tt, ctx)}, w' |= φ AN ψ ]>)
+      ->
+        <[ {instr_cprog t ctx}, w' |= φ AU AX done
+          {fun '(_, ctx') w' =>
+             let va := cdenote_exp a ctx in
+             let vb := cdenote_exp b ctx in
+             let va' := cdenote_exp a ctx' in
+             let vb' := cdenote_exp b ctx' in             
+             (Z.abs_nat (va' - vb') < Z.abs_nat (va - vb))%nat
+             /\ if va' >? vb' then
+                 not_done w'
+               else 
+                 <[ {Ret (tt, ctx')}, w'|= φ AN ψ ]>
+        } ]>) ->
+    <[ {instr_cprog [[ while a > b do t done ]] ctx}, w |= φ AU ψ ]>.
+  Proof with eauto with ctl.
     unfold instr_cprog, instr_stateE; cbn; intros.
-    Check aur_state_iter.
-    eapply aur_state_iter with Ri (Rv:=fun '(i',s',w') '(i,s,w) => f s' s) (Zwf lim). _ (fun '(i, σ, w) => f σ); auto.
-    apply well_founded_ltof.
+    eapply aur_state_iter_nat with
+      (Ri:= fun 'tt ctx' w' =>
+              if cdenote_exp a ctx' >? cdenote_exp b ctx' then
+                not_done w'
+              else 
+                <[ {Ret (tt, ctx')}, w' |= φ AN ψ ]>
+      )
+      (f:= fun _ ctx _ =>             
+             Z.abs_nat (cdenote_exp a ctx - cdenote_exp b ctx))...
+    - destruct (cdenote_exp a ctx >? cdenote_exp b ctx) eqn:Hab.
+      + intuition.
+      + cdestruct H.
+        now apply can_step_not_done in Hs.
+    - intros [] ctx' w' Hd Hif. 
+      eapply aur_state_bind_r_eq.
+      + rewrite interp_state_get.
+        cleft.
+        apply axr_ret...
+      + specialize (H0 ctx' w' Hif).
+        destruct (cdenote_exp a ctx' >? cdenote_exp b ctx') eqn:Hab.
+        * eapply aur_state_bind_r.
+          -- apply H0...
+          -- intros [] ctx_ w_  Hif'.
+             destruct Hif' as (Hf & Hif').
+             rewrite interp_state_ret.
+             cleft.
+             destruct (cdenote_exp a ctx_ >? cdenote_exp b ctx_) eqn:Heq_;
+               apply axr_ret...
+             ++ intuition.
+                rewrite Heq_...
+             ++ cdestruct Hif'.
+                now apply can_step_not_done in Hs.
+             ++ split2...
+                ** cdestruct Hif'.
+                   now apply can_step_not_done in Hs.
+                ** rewrite Heq_...
+        * rewrite interp_state_ret.
+          cleft.
+          apply axr_ret...
+          now cright.
   Qed.
   
   Lemma ag_cprog_while_gt: forall a b (t: CProg) R ctx w' φ,
