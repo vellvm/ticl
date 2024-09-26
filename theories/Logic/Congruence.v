@@ -348,6 +348,8 @@ Section EquivCtlrFormulas.
     intros [] p q [pq qp] p' q' [pq' qp']; split; try (rewrite pq, pq' || rewrite qp, qp'); reflexivity.
   Qed.
 
+
+        
 End EquivCtlrFormulas.
 
 (*| Equations of CTL (left) |*)
@@ -640,6 +642,46 @@ Section CtlrEquations.
         destruct H as (e' & v' & Hinv & ?); ddestruction Hinv...
   Qed.
 
+  Lemma ctlr_or_injL: forall (p q: ctlr E X),
+      <[ p ]> ⋖ <[ p \/ q ]>.
+  Proof.
+    intros p q t w R.
+    apply ctlr_or.
+    now left.
+  Qed.
+
+  Lemma ctlr_or_injR: forall (p q: ctlr E X),
+      <[ q ]> ⋖ <[ p \/ q ]>.
+  Proof.
+    intros p q t w R.
+    apply ctlr_or.
+    now right.
+  Qed.
+  
+  Lemma ctlr_or_impl_or: forall p q R,      
+      <[ p \/ q ]> ⋖ R -> <[ p ]> ⋖ R \/ <[ q ]> ⋖ R.
+  Proof.
+    unfold impl_ctlr.
+    intros.
+    left; intros.
+    apply H.
+    apply ctlr_or.
+    now left.
+  Qed.
+
+  Lemma ctlr_or_impl_and: forall p q R,
+      <[ p ]> ⋖ R /\ <[ q ]> ⋖ R ->
+      <[ p \/ q ]> ⋖ R.
+  Proof.
+    unfold impl_ctlr.
+    intros.
+    destruct H.
+    apply ctlr_or in H0.
+    destruct H0.
+    - now apply H.
+    - now apply H1.
+  Qed.
+      
   Lemma ctlr_au_ax: forall (p: ctll E) (q: ctlr E X),
       <[ p AU q ]> ⩸ <[ q \/ (p AN (p AU q)) ]>.
   Proof with auto with ctl.
@@ -747,3 +789,8 @@ Section CtlrEquations.
 
 
 End CtlrEquations.
+
+Infix "⋖L" := (impl_ctll _) (in custom ctll at level 79, left associativity): ctl_scope.
+Infix "⩸L" := (equiv_ctll _ ) (in custom ctll at level 79, left associativity): ctl_scope.
+Infix "⋖R" := (impl_ctlr _) (in custom ctlr at level 79, left associativity): ctl_scope.
+Infix "⩸R" := (equiv_ctlr _ ) (in custom ctlr at level 79, left associativity): ctl_scope.
