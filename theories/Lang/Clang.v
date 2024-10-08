@@ -1,6 +1,5 @@
 From Coq Require Import
-  ZArith.ZArith
-  ZArith.Zwf
+  Nat
   Strings.String.
 
 From ExtLib Require Import
@@ -32,52 +31,48 @@ Generalizable All Variables.
 Import Ctree CTreeNotations CtlNotations.
 Local Open Scope ctl_scope.
 Local Open Scope ctree_scope.
-Local Open Scope Z_scope.
+Local Open Scope nat_scope.
 
 Generalizable All Variables.
 
 Module Clang.
-  Definition Ctx := alist string Z.
+  Definition Ctx := alist string nat.
   Definition Mem := stateE Ctx.
 
-  Definition assert(k: string)(p: Z -> Prop)(m: Ctx): Prop :=
+  Definition assert(k: string)(p: nat -> Prop)(m: Ctx): Prop :=
     match lookup k m with
     | Some v => p v
     | None => False
     end.
 
-  Definition load(k: string)(m: Ctx): Z :=
+  Definition load(k: string)(m: Ctx): nat :=
     match lookup k m with
     | Some v => v
-    | None => 0%Z
+    | None => 0
     end.
     
   Inductive CExp :=
   | CVar (x: string)
-  | CConst (z: Z)
+  | CConst (z: nat)
   | CAdd (x y: CExp)
   | CSub (x y: CExp).
 
   Coercion CVar: string >-> CExp.
-  Coercion CConst: Z >-> CExp.
+  Coercion CConst: nat >-> CExp.
   
-  Variant CComp := CEq | CGte | CGt.
+  Variant CComp :=
+    | CEq  (l r: CExp)
+    | CLe (l r: CExp)
+    | CLt  (l r: CExp).
   
   Inductive CProg :=
   | CAssgn (x: string) (e: CExp)
-  | CIf (c: CComp) (l r: CExp) (t: CProg) (e: CProg)
-  | CWhile (c: CComp) (l r: CExp) (b: CProg)
+  | CIf (c: CComp) (t: CProg) (e: CProg)
+  | CDoWhile (b: CProg) (c: CComp)
   | CSkip
   | CSeq (l r: CProg).
 
-  Definition cdenote_comp(c: CComp): Z -> Z -> bool :=
-    match c with
-    | CGte => fun a b => a >=? b
-    | CGt => fun a b => a >? b
-    | CEq => fun a b => a =? b
-    end.
-
-  Fixpoint cdenote_exp(e: CExp)(ctx: Ctx): Z :=
+  Fixpoint cdenote_exp(e: CExp)(ctx: Ctx): nat :=
     match e with
     | CVar v => load v ctx
     | CConst z => z
@@ -91,28 +86,31 @@ Module Clang.
         (x - y)
     end.
 
-  Fixpoint cdenote (s: CProg ): ctree Mem unit :=
+  Definition cdenote_comp(c: CComp)(ctx: Ctx): bool :=
+    match c with
+    | CEq l r => (cdenote_exp l ctx) =? (cdenote_exp r ctx)
+    | CLe l r => (cdenote_exp l ctx) <=? (cdenote_exp r ctx)
+    | CLt l r => (cdenote_exp l ctx) <? (cdenote_exp r ctx)
+    end.
+
+  Fixpoint cdenote (s: CProg): ctree Mem unit :=
     match s with
     | CAssgn x e =>
         m <- get ;;    
         let v := cdenote_exp e m in
         put (add x v m)
-    | CIf c l r t e =>
+    | CIf c t e =>
         m <- get ;;    
-        let vl := cdenote_exp l m in
-        let vr := cdenote_exp r m in
-        if cdenote_comp c vl vr then
+        if cdenote_comp c m then
           cdenote t
         else
           cdenote e
-    | CWhile c l r b =>       
+    | CDoWhile b c =>       
         Ctree.iter
           (fun _ =>
-             m <- get ;;    
-             let vl := cdenote_exp l m in
-             let vr := cdenote_exp r m in
-             if cdenote_comp c vl vr then
-               cdenote b ;;
+             cdenote b ;;
+             m <- get ;;
+             if cdenote_comp c m then
                continue
              else
                break) tt
@@ -144,33 +142,26 @@ Module Clang.
   Notation "x := c" := (CAssgn x c)
                          (in custom clang at level 60, right associativity) : clang_scope.
 
-
-  Notation "'if' c '=' z 'then' t 'else' e" :=
-    (CIf CEq c z t e) (in custom clang at level 63): ctree_scope.
-
-  Notation "'if' c '>=' z 'then' t 'else' e" :=
-    (CIf CGte c z t e) (in custom clang at level 63): ctree_scope.
-
-  Notation "'if' c '>' z 'then' t 'else' e" :=
-    (CIf CGt c z t e) (in custom clang at level 63): ctree_scope.
-
-  Notation "'if' c '>=' z 'then' t 'done'" :=
-    (CIf CGte c z t CSkip) (in custom clang at level 63): ctree_scope.
-
-  Notation "'if' c '>' z 'then' t 'done'" :=
-    (CIf CGt c z t CSkip) (in custom clang at level 63): ctree_scope.
-
-  Notation "'if' c '=' z 'then' t 'done'" :=
-    (CIf CEq c z t CSkip) (in custom clang at level 63): ctree_scope.
-
-  Notation "'while' c '=' z 'do' b 'done'" :=
-    (CWhile CEq c z b) (in custom clang at level 63): ctree_scope.
+  Notation "a =? b" := (CEq a b)
+                         (in custom clang at level 52, left associativity) : clang_scope.
+  Notation "a >=? b" := (CLe b a)
+                          (in custom clang at level 52, left associativity) : clang_scope.
+  Notation "a >? b" := (CLt b a)
+                         (in custom clang at level 52, left associativity) : clang_scope.
+  Notation "a <=? b" := (CLe a b)
+                          (in custom clang at level 52, left associativity) : clang_scope.
+  Notation "a <? b" := (CLt a b)
+                         (in custom clang at level 52, left associativity) : clang_scope.
   
-  Notation "'while' c '>' z 'do' b 'done'" :=
-    (CWhile CGt c z b) (in custom clang at level 63): ctree_scope.
+  
+  Notation "'if' c 'then' t 'else' e" :=
+    (CIf c t e) (in custom clang at level 63): ctree_scope.
 
-  Notation "'while' c '>=' z 'do' b 'done'" :=
-    (CWhile CGte c z b) (in custom clang at level 63): ctree_scope.
+  Notation "'if' c 'then' t 'done'" :=
+    (CIf c t CSkip) (in custom clang at level 63): ctree_scope.
+
+  Notation "'do' b 'while' c 'done'" :=
+    (CDoWhile b c) (in custom clang at level 63): ctree_scope.
 
   Notation "'skip'" :=
     (CSkip) (in custom clang at level 63): ctree_scope.
@@ -190,7 +181,7 @@ Module Clang.
     rewrite <- H0 in H1.
     now rewrite H1.
   Qed.
-  
+
   (*| Assignment: structural temporal lemmas |*)
   Lemma enr_cprog_assgn: forall x a ctx w φ R,
       not_done w ->
@@ -215,7 +206,7 @@ Module Clang.
   Lemma aur_cprog_assgn: forall x a ctx ctx' w φ ψ,
       ctx' = add x (cdenote_exp a ctx) ctx ->
       <( {instr_cprog [[ x := a ]] ctx}, w |= ψ )> ->
-      <[ {instr_cprog [[ skip ]] ctx'}, {Obs (Log ctx') tt} |= φ ]> ->
+      <[ {Ret (tt, ctx')}, {Obs (Log ctx') tt} |= φ ]> ->
       <[ {instr_cprog [[ x := a ]] ctx}, w |= ψ AU φ ]>.
   Proof with eauto with ctl.
     unfold instr_cprog, instr_stateE.
@@ -232,7 +223,7 @@ Module Clang.
     cright.
     apply anr_log...
     rewrite bind_ret_l, sb_guard.
-    rewrite interp_state_ret in H1 |- *.
+    rewrite interp_state_ret. 
     apply aur_ret.
     cleft...
   Qed.
@@ -240,7 +231,7 @@ Module Clang.
   Lemma aul_cprog_assgn: forall x a ctx ctx' w φ ψ,
       ctx' = add x (cdenote_exp a ctx) ctx ->
       <( {instr_cprog [[ x := a ]] ctx}, w |= ψ )> ->
-      <( {instr_cprog [[ skip ]] ctx'}, {Obs (Log ctx') tt} |= φ )> ->
+      <( {Ret (tt, ctx')}, {Obs (Log ctx') tt} |= φ )> ->
       <( {instr_cprog [[ x := a ]] ctx}, w |= ψ AU φ )>.
   Proof with eauto with ctl.
     unfold instr_cprog, instr_stateE.
@@ -257,72 +248,22 @@ Module Clang.
     cright.
     apply anl_log...
     rewrite bind_ret_l, sb_guard.
-    rewrite interp_state_ret in H1 |- *.
+    rewrite interp_state_ret. 
     apply aul_ret.
     cleft...
   Qed.
-  
-  Lemma eur_cprog_assgn: forall x a ctx w φ R,
-      φ w ->
-      not_done w ->
-      R (add x (cdenote_exp a ctx) ctx) ->
-      <[ {instr_cprog [[ x := a ]] ctx}, w
-          |= <( now φ )> EU EX done {fun '(_, ctx') w' =>
-                                        R ctx' /\ w' = Obs (Log ctx') tt} ]>.
-  Proof with eauto with ctl.
-    unfold instr_cprog, instr_stateE.
-    cbn; intros; subst.
-    eapply eur_state_bind_r_eq...
-    - cleft...
-      unfold get, put, trigger.
-      rewrite interp_state_vis; cbn.
-      rewrite bind_ret_l, sb_guard, interp_state_ret.
-      eapply enr_done; intuition.
-      + csplit...
-      + exists (ctx, ctx); intuition.
-    - unfold put, trigger.
-      rewrite interp_state_vis; cbn.
-      rewrite bind_bind.
-      eapply eur_log...
-      + rewrite bind_ret_l, sb_guard, interp_state_ret.
-        cleft.
-        eapply enr_done; intuition.
-        * csplit...
-        * exists (tt, add x (cdenote_exp a ctx) ctx).
-          intuition.
-  Qed.
-
-  Lemma eur_cprog_assgn_eq: forall x a ctx w φ,
-      φ w ->
-      not_done w ->
-      let ctx' := add x (cdenote_exp a ctx) ctx in
-      <[ {instr_cprog [[ x := a ]] ctx}, w
-          |= <( now φ )> EU EX done= {(tt, ctx')}
-                                        {Obs (Log ctx') tt} ]>.
-  Proof with eauto with ctl.
-    unfold instr_cprog, instr_stateE.
-    cbn; intros; subst.
-    eapply eur_state_bind_r_eq...
-    - cleft...
-      unfold get, put, trigger.
-      rewrite interp_state_vis; cbn.
-      rewrite bind_ret_l, sb_guard, interp_state_ret.
-      eapply enr_done; intuition.
-      + csplit...
-      + exists (ctx, ctx); intuition.
-    - unfold put, trigger.
-      rewrite interp_state_vis; cbn.
-      rewrite bind_bind.
-      eapply eur_log...
-      + rewrite bind_ret_l, sb_guard, interp_state_ret.
-        cleft.
-        eapply enr_done; intuition.
-        * csplit...
-        * exists (tt, add x (cdenote_exp a ctx) ctx).
-          intuition.
-  Qed.
-    
+      
   (*| Sequence: structural temporal lemmas |*)
+  Lemma anr_cprog_seq: forall a b ctx ctx' w w' φ ψ,
+      <[ {instr_cprog a ctx}, w |= ψ AN done= {(tt,ctx')} w' ]> ->
+      <[ {instr_cprog b ctx'}, w' |= ψ AN φ ]> ->
+      <[ {instr_cprog [[ a ;;; b ]] ctx}, w |= ψ AN φ ]>.
+  Proof.
+    unfold instr_cprog, instr_stateE.
+    intros; cbn.
+    eapply anr_state_bind_r_eq; eauto.
+  Qed.
+  
   Lemma enr_cprog_seq: forall a b ctx ctx' w w' φ ψ,
       <[ {instr_cprog a ctx}, w |= ψ EN done= {(tt,ctx')} w' ]> ->
       <[ {instr_cprog b ctx'}, w' |= ψ EN φ ]> ->
@@ -384,12 +325,12 @@ Module Clang.
   Qed.
   
   (*| Conditional: structural temporal lemmas |*)
-  Lemma aul_cprog_ite_gte: forall a b ctx w φ ψ t f,
-      (if cdenote_exp a ctx >=? cdenote_exp b ctx then        
+  Lemma aul_cprog_ite: forall c ctx w φ ψ t f,
+      (if cdenote_comp c ctx then
          <( {instr_cprog t ctx}, w |= φ AU ψ )>
        else
-         <( {instr_cprog f ctx}, w |= φ AU ψ )>) ->
-      <( {instr_cprog [[ if a >= b then t else f ]] ctx}, w |= φ AU ψ )>.
+         <( {instr_cprog f ctx}, w |= φ AU ψ )>) ->         
+      <( {instr_cprog [[ if c then t else f ]] ctx}, w |= φ AU ψ )>.
   Proof with eauto with ctl.
     unfold instr_cprog, instr_stateE.
     intros; cbn.
@@ -400,85 +341,43 @@ Module Clang.
       rewrite interp_state_ret.
       cleft.
       eapply axr_ret.
-      destruct (cdenote_exp a ctx >=? cdenote_exp b ctx).
+      destruct (cdenote_comp c ctx) eqn:Hc. 
       + now apply ctll_not_done in H.
       + now apply ctll_not_done in H.
       + unfold resum_ret, ReSumRet_refl.
         intuition.
-    - destruct (cdenote_exp a ctx >=? cdenote_exp b ctx)...
+    - destruct (cdenote_comp c ctx) eqn:Hc... 
   Qed.
 
-  Lemma aul_cprog_ite_gt: forall a b ctx w φ ψ t f,
-      (if cdenote_exp a ctx >? cdenote_exp b ctx then        
-         <( {instr_cprog t ctx}, w |= φ AU ψ )>
+  Lemma aur_cprog_ite: forall c ctx w φ ψ t f,
+      (if cdenote_comp c ctx then
+         <[ {instr_cprog t ctx}, w |= φ AU AX ψ ]>
        else
-         <( {instr_cprog f ctx}, w |= φ AU ψ )>) ->
-      <( {instr_cprog [[ if a > b then t else f ]] ctx}, w |= φ AU ψ )>.
+         <[ {instr_cprog f ctx}, w |= φ AU AX ψ ]>) ->   
+      <[ {instr_cprog [[ if c then t else f ]] ctx}, w |= φ AU AX ψ ]>.
   Proof with eauto with ctl.
     unfold instr_cprog, instr_stateE.
     intros; cbn.
-    eapply aul_state_bind_r_eq.
+    eapply aur_state_bind_r_eq.
     - unfold get, trigger.
       rewrite interp_state_vis; cbn.
       rewrite bind_ret_l, sb_guard.
       rewrite interp_state_ret.
       cleft.
       eapply axr_ret.
-      destruct (cdenote_exp a ctx >? cdenote_exp b ctx).
-      + now apply ctll_not_done in H.
-      + now apply ctll_not_done in H.
+      + destruct (cdenote_comp c ctx) eqn:Hc; 
+          now eapply aur_not_done in H.
       + unfold resum_ret, ReSumRet_refl.
         intuition.
-    - destruct (cdenote_exp a ctx >? cdenote_exp b ctx)...
+    - destruct (cdenote_comp c ctx) eqn:Hc... 
   Qed.
 
-  Lemma eur_cprog_ite_gte: forall a b ctx w φ t f R,
-      (if cdenote_exp a ctx >=? cdenote_exp b ctx then        
-         <[ {instr_cprog t ctx}, w |= EX (φ EU EX done R) ]>
-       else
-         <[ {instr_cprog f ctx}, w |= EX (φ EU EX done R) ]>) ->
-      <[ {instr_cprog [[ if a >= b then t else f ]] ctx}, w |= EX (φ EU EX done R) ]>.
-  Proof with eauto with ctl.
-    unfold instr_cprog, instr_stateE.
-    intros; cbn.
-    eapply enr_state_bind_r_eq.
-    - rewrite interp_state_get.
-      apply exr_ret.
-      + destruct (cdenote_exp a ctx >=? cdenote_exp b ctx); cdestruct H;
-          now apply ktrans_not_done in TR.
-      + intuition.
-    - destruct (cdenote_exp a ctx >=? cdenote_exp b ctx)...
-  Qed.
-
-  Lemma eur_cprog_ite_gt: forall a b ctx w φ ψ t f,
-      (if cdenote_exp a ctx >? cdenote_exp b ctx then        
-         <[ {instr_cprog t ctx}, w |= φ EU EX ψ ]>
-       else
-         <[ {instr_cprog f ctx}, w |= φ EU EX ψ ]>) ->
-      <[ {instr_cprog [[ if a > b then t else f ]] ctx}, w |= φ EU EX ψ ]>.
-  Proof with eauto with ctl.
-    unfold instr_cprog, instr_stateE.
-    intros; cbn.
-    eapply eur_state_bind_r_eq.
-    - unfold get, trigger.
-      rewrite interp_state_vis; cbn.
-      rewrite bind_ret_l, sb_guard.
-      rewrite interp_state_ret.
-      cleft.
-      eapply exr_ret.
-      + destruct (cdenote_exp a ctx >? cdenote_exp b ctx);
-          now eapply eur_not_done in H.
-      + intuition.
-    - unfold resum_ret, ReSumRet_refl.
-      destruct (cdenote_exp a ctx >? cdenote_exp b ctx)...
-  Qed.
-  
-  Lemma eul_cprog_ite_gt: forall a b ctx w φ ψ t f,
-      (if cdenote_exp a ctx >? cdenote_exp b ctx then        
+  Lemma eul_cprog_ite: forall c ctx w φ ψ t f,
+      (if cdenote_comp c ctx then
          <( {instr_cprog t ctx}, w |= φ EU ψ )>
        else
-         <( {instr_cprog f ctx}, w |= φ EU ψ )>) ->
-      <( {instr_cprog [[ if a > b then t else f ]] ctx}, w |= φ EU ψ )>.
+         <( {instr_cprog f ctx}, w |= φ EU ψ )>) ->   
+      <( {instr_cprog [[ if c then t else f ]] ctx}, w |= φ EU ψ )>.
   Proof with eauto with ctl.
     unfold instr_cprog, instr_stateE.
     intros; cbn.
@@ -489,323 +388,274 @@ Module Clang.
       rewrite interp_state_ret.
       cleft.
       eapply exr_ret.
-      destruct (cdenote_exp a ctx >? cdenote_exp b ctx).
-      + now apply ctll_not_done in H.
-      + now apply ctll_not_done in H.
-      + unfold resum_ret, ReSumRet_refl.
-        intuition.
-    - destruct (cdenote_exp a ctx >? cdenote_exp b ctx)...
+      + destruct (cdenote_comp c ctx) eqn:Hc;
+          now eapply ctll_not_done in H.
+      + intuition.
+    - unfold resum_ret, ReSumRet_refl.
+      destruct (cdenote_comp c ctx)... 
   Qed.
-
+  
+  Lemma eur_cprog_ite: forall c ctx w φ ψ t f,
+      (if cdenote_comp c ctx then
+         <[ {instr_cprog t ctx}, w |= φ EU EX ψ ]>
+       else
+         <[ {instr_cprog f ctx}, w |= φ EU EX ψ ]>) ->   
+      <[ {instr_cprog [[ if c then t else f ]] ctx}, w |= φ EU EX ψ ]>.
+  Proof with eauto with ctl.
+    unfold instr_cprog, instr_stateE.
+    intros; cbn.
+    eapply eur_state_bind_r_eq.
+    - unfold get, trigger.
+      rewrite interp_state_vis; cbn.
+      rewrite bind_ret_l, sb_guard.
+      rewrite interp_state_ret.
+      cleft.
+      eapply exr_ret.
+      + destruct (cdenote_comp c ctx) eqn:Hc;
+          now eapply eur_not_done in H.
+      + intuition.
+    - unfold resum_ret, ReSumRet_refl.
+      destruct (cdenote_comp c ctx)... 
+  Qed.
+  
   (*| While loops |*)
-  Lemma afl_cprog_while_unfold: forall a b t w w' φ ctx ctx',
-      cdenote_exp a ctx > cdenote_exp b ctx ->
-      not_done w' ->
-      <[ {instr_cprog t ctx}, w |= AF AX done={(tt, ctx')} w' ]> ->
-      <( {instr_cprog [[ while a > b do t done ]] ctx'}, w' |= AF φ )> ->   
-      <( {instr_cprog [[ while a > b do t done ]] ctx}, w |= AF φ )>.
+  Lemma aul_cprog_do_while_true: forall c t w w' φ ψ ctx ctx',
+      <[ {instr_cprog t ctx}, w |= φ AU AX done={(tt, ctx')} w' ]> ->
+      cdenote_comp c ctx' = true ->
+      <( {instr_cprog [[ do t while c done ]] ctx'}, w' |= φ AU ψ )> ->   
+      <( {instr_cprog [[ do t while c done ]] ctx}, w |= φ AU ψ )>.
   Proof with eauto with ctl.
     unfold instr_cprog, instr_stateE; cbn; intros.
     rewrite unfold_iter.
     eapply aul_state_bind_r_eq.
     - rewrite interp_state_bind.
-      eapply aur_bind_r_eq.
+      eapply aur_bind_r_eq...
+      cbn.
+      eapply aur_state_bind_r_eq.
       + rewrite interp_state_get.
         cleft...
-        apply axr_ret.
-        * now apply aur_not_done in H1.
-        * intuition.
-      + cbn.
-        apply Z.gtb_gt in H; rewrite H.
-        eapply aur_state_bind_r_eq...
+        apply axr_ret...
+        now apply ctll_not_done in H1.
+      + destruct (cdenote_comp c ctx'); inv H0.
         rewrite interp_state_ret.
-        cleft.
-        eapply axr_ret...
+        cleft...
+        apply axr_ret...
+        now apply ctll_not_done in H1.
     - cbn.
       rewrite unfold_interp_state; cbn.
-      rewrite sb_guard.
-      apply H2.
+      rewrite sb_guard...
   Qed.
 
-  Lemma aur_cprog_while_unfold: forall a b t w w' φ ψ ctx ctx',
-      cdenote_exp a ctx > cdenote_exp b ctx ->
-      not_done w' ->
-      <[ {instr_cprog t ctx}, w |= ψ AU AX done={(tt, ctx')} w' ]> ->
-      <[ {instr_cprog [[ while a > b do t done ]] ctx'}, w' |= ψ AU φ ]> ->   
-      <[ {instr_cprog [[ while a > b do t done ]] ctx}, w |= ψ AU φ ]>.
+  Lemma aul_cprog_do_while_false: forall c t w w' φ ψ ctx ctx',
+      <[ {instr_cprog t ctx}, w |= φ AU AX done={(tt, ctx')} w' ]> ->
+      cdenote_comp c ctx' = false ->
+      <( {Ret (tt, ctx')}, w' |= ψ )> ->   
+      <( {instr_cprog [[ do t while c done ]] ctx}, w |= φ AU ψ )>.
+  Proof with eauto with ctl.
+    unfold instr_cprog, instr_stateE; cbn; intros.
+    rewrite unfold_iter.
+    eapply aul_state_bind_r_eq.
+    - rewrite interp_state_bind.
+      eapply aur_bind_r_eq...
+      cbn.
+      eapply aur_state_bind_r_eq.
+      + rewrite interp_state_get.
+        cleft...
+        apply axr_ret...
+        now apply ctll_not_done in H1.
+      + destruct (cdenote_comp c ctx'); inv H0.
+        rewrite interp_state_ret.
+        cleft...
+        apply axr_ret...
+        now apply ctll_not_done in H1.
+    - cbn.
+      rewrite interp_state_ret.
+      now cleft.      
+  Qed.  
+
+  Lemma aur_cprog_do_while_true: forall c t w w' φ ψ ctx ctx',
+      <[ {instr_cprog t ctx}, w |= φ AU AX done={(tt, ctx')} w' ]> ->
+      cdenote_comp c ctx' = true ->
+      <[ {instr_cprog [[ do t while c done ]] ctx'}, w' |= φ AU AX ψ ]> ->   
+      <[ {instr_cprog [[ do t while c done ]] ctx}, w |= φ AU AX ψ ]>.
   Proof with eauto with ctl.
     unfold instr_cprog, instr_stateE; cbn; intros.
     rewrite unfold_iter.
     eapply aur_state_bind_r_eq.
     - rewrite interp_state_bind.
-      eapply aur_bind_r_eq.
+      eapply aur_bind_r_eq...
+      cbn.
+      eapply aur_state_bind_r_eq.
       + rewrite interp_state_get.
         cleft...
-        apply axr_ret.
-        * now apply aur_not_done in H1.
-        * intuition.
-      + cbn.
-        apply Z.gtb_gt in H; rewrite H.
-        eapply aur_state_bind_r_eq...
+        apply axr_ret...
+        now apply aur_not_done in H1.
+      + destruct (cdenote_comp c ctx'); inv H0.
         rewrite interp_state_ret.
-        cleft.
-        eapply axr_ret...
+        cleft...
+        apply axr_ret...
+        now apply aur_not_done in H1.
     - cbn.
       rewrite unfold_interp_state; cbn.
-      rewrite sb_guard.
-      apply H2.
+      rewrite sb_guard...
+  Qed.
+
+  Lemma aur_cprog_do_while_false: forall c t w w' φ ψ ctx ctx',
+      <[ {instr_cprog t ctx}, w |= φ AU AX done={(tt, ctx')} w' ]> ->
+      cdenote_comp c ctx' = false ->
+      <[ {Ret (tt, ctx')}, w' |= AX ψ ]> ->   
+      <[ {instr_cprog [[ do t while c done ]] ctx}, w |= φ AU AX ψ ]>.
+  Proof with eauto with ctl.
+    unfold instr_cprog, instr_stateE; cbn; intros.
+    rewrite unfold_iter.
+    eapply aur_state_bind_r_eq.
+    - rewrite interp_state_bind.
+      eapply aur_bind_r_eq...
+      cbn.
+      eapply aur_state_bind_r_eq.
+      + rewrite interp_state_get.
+        cleft...
+        apply axr_ret...
+        cdestruct H1.
+        now apply can_step_not_done in Hs.
+      + destruct (cdenote_comp c ctx'); inv H0.
+        rewrite interp_state_ret.
+        cleft...
+        apply axr_ret...
+        cdestruct H1.
+        now apply can_step_not_done in Hs.
+    - cbn.
+      rewrite interp_state_ret; cbn.
+      apply aur_ret.
+      now cleft.
   Qed.
 
   (* Termination *)
-  Theorem aur_cprog_while ctx (t: CProg) w a b φ ψ:    
-    (if cdenote_exp a ctx >? cdenote_exp b ctx then
-       not_done w
-    else
-      <[ {Ret (tt, ctx)}, w |= φ AN ψ ]>)
-      ->
-    (forall ctx w',
-        (if cdenote_exp a ctx >? cdenote_exp b ctx then
-          not_done w'
-        else
-          <[ {Ret (tt, ctx)}, w' |= φ AN ψ ]>)
-      ->
-        <[ {instr_cprog t ctx}, w' |= φ AU AX done
-          {fun '(_, ctx') w' =>
-             let va := cdenote_exp a ctx in
-             let vb := cdenote_exp b ctx in
-             let va' := cdenote_exp a ctx' in
-             let vb' := cdenote_exp b ctx' in             
-             (Z.abs_nat (va' - vb') < Z.abs_nat (va - vb))%nat
-             /\ if va' >? vb' then
-                 not_done w'
-               else 
-                 <[ {Ret (tt, ctx')}, w'|= φ AN ψ ]>
-        } ]>) ->
-    <[ {instr_cprog [[ while a > b do t done ]] ctx}, w |= φ AU ψ ]>.
+  Theorem aur_cprog_do_while_term ctx (t: CProg) Ri f w c φ ψ:    
+      not_done w ->
+      Ri ctx ->
+      (forall ctx w,
+          not_done w ->
+          Ri ctx ->
+          <[ {instr_cprog t ctx}, w |= φ AU AX done {fun '(_, ctx') w' =>
+                                                       if cdenote_comp c ctx' then
+                                                         not_done w' /\ Ri ctx' /\ f ctx' < f ctx
+                                                       else
+                                                         <[ {Ret (tt, ctx')}, w' |= φ AN ψ ]>} ]>) -> 
+      <[ {instr_cprog [[ do t while c done ]] ctx}, w |= φ AU ψ ]>.
   Proof with eauto with ctl.
     unfold instr_cprog, instr_stateE; cbn; intros.
     eapply aur_state_iter_nat with
-      (Ri:= fun 'tt ctx' w' =>
-              if cdenote_exp a ctx' >? cdenote_exp b ctx' then
-                not_done w'
-              else 
-                <[ {Ret (tt, ctx')}, w' |= φ AN ψ ]>
-      )
-      (f:= fun _ ctx _ =>             
-             Z.abs_nat (cdenote_exp a ctx - cdenote_exp b ctx))...
-    - destruct (cdenote_exp a ctx >? cdenote_exp b ctx) eqn:Hab.
-      + intuition.
-      + cdestruct H.
-        now apply can_step_not_done in Hs.
-    - intros [] ctx' w' Hd Hif. 
-      eapply aur_state_bind_r_eq.
+      (Ri:= fun 'tt ctx' w' => Ri ctx')
+      (f:= fun _ ctx _ => f ctx)...             
+    - intros [] ctx' w' Hd HR. 
+      eapply aur_state_bind_r.
+      + apply H1...
+      + intros [] ctx_ w_  Hif'.
+        eapply aur_state_bind_r_eq.
+        * rewrite interp_state_get.
+          cleft.
+          apply axr_ret...
+          destruct (cdenote_comp c ctx_) eqn:Hc.
+          -- now destruct Hif'.
+          -- cdestruct Hif'.
+             now apply can_step_not_done in Hs.
+        * destruct (cdenote_comp c ctx_) eqn:Hc;
+            rewrite interp_state_ret.
+          -- cleft.
+             apply axr_ret...
+             destruct Hif'...
+          -- cleft.
+             apply axr_ret...
+             cdestruct Hif'.
+             now apply can_step_not_done in Hs.
+  Qed.
+
+  (* Infinite loops *)
+  Lemma ag_cprog_do_while: forall c (t: CProg) R ctx w φ,
+      R ctx ->
+      not_done w ->
+      (forall ctx w,
+          R ctx ->
+          not_done w ->
+          <( {instr_cprog [[do t while c done ]] ctx}, w |= φ )> /\
+            <[ {instr_cprog t ctx}, w |= AX (φ AU AX done
+                                               {fun '(_, ctx') w' =>
+                                                  cdenote_comp c ctx'
+                                                  /\ not_done w'
+                                                  /\ R ctx' }) ]>) ->
+    <( {instr_cprog [[ do t while c done ]] ctx}, w |= AG φ )>.
+  Proof with eauto with ctl.
+    unfold instr_cprog, instr_stateE.
+    intros; subst.
+    cbn.
+    eapply ag_state_iter with (R:=fun 'tt ctx' w' => R ctx')...    
+    intros [] ctx' w' Hd HR.
+    destruct (H1 _ w' HR Hd); split...
+    cdestruct H3.
+    rewrite interp_state_bind.
+    csplit...
+    - destruct Hs as (? & ? & TR').
+      eapply can_step_bind_l...
+      specialize (H3 _ _ TR').
+      cdestruct H3; cdestruct H3; now apply can_step_not_done in Hs.
+    - intros t_ w_ TR_...
+      apply ktrans_bind_inv in TR_ as [(? & ? & ? & ?) | (? & ? & ? & ?)].
+      + rewrite H6.
+        apply aur_bind_r with (R:=fun '(_, ctx') (w' : WorldW Ctx) =>
+                                    cdenote_comp c ctx' /\ not_done w' /\ R ctx')...
+        intros [_ ctx_] w'' (Hcmp_ & Hd'' & ?).
+        eapply aur_state_bind_r_eq.
+        * rewrite interp_state_get.
+          cleft.
+          apply axr_ret...
+        * destruct (cdenote_comp c ctx_); inv Hcmp_.
+          rewrite interp_state_ret.
+          cleft.
+          apply axr_ret...
+      + destruct H5, x.
+        specialize (H3 _ _ H4).
+        apply aur_stuck in H3.
+        now apply anr_stuck in H3.
+  Qed.
+  
+  Lemma eg_cprog_do_while: forall c (t: CProg) R ctx w φ,
+      R ctx ->
+      not_done w ->
+      (forall ctx w,
+          R ctx ->
+          not_done w ->
+          <( {instr_cprog [[do t while c done ]] ctx}, w |= φ )> /\
+            <[ {instr_cprog t ctx}, w |= EX (φ EU EX done
+                                               {fun '(_, ctx') w' =>
+                                                  cdenote_comp c ctx'
+                                                  /\ not_done w'
+                                                  /\ R ctx' }) ]>) ->
+    <( {instr_cprog [[ do t while c done ]] ctx}, w |= EG φ )>.
+  Proof with eauto with ctl.
+    unfold instr_cprog, instr_stateE.
+    intros; subst.
+    cbn.
+    eapply eg_state_iter with (R:=fun 'tt ctx' w' => R ctx')...    
+    intros [] ctx' w' Hd HR.
+    destruct (H1 _ w' HR Hd); split...
+    cdestruct H3.
+    rewrite interp_state_bind.
+    csplit...
+    exists ('(_, s) <- t0 ;; interp_state h_stateW (m <- get;; (if cdenote_comp c m then continue else break)) s), w0.
+    split...
+    - apply ktrans_bind_l...
+      now apply eur_not_done in H3.
+    - eapply eur_bind_r...
+      intros [_ ctx_] w_ (Hcmp' & Hd' & HR').
+      eapply eur_state_bind_r_eq.
       + rewrite interp_state_get.
         cleft.
-        apply axr_ret...
-      + specialize (H0 ctx' w' Hif).
-        destruct (cdenote_exp a ctx' >? cdenote_exp b ctx') eqn:Hab.
-        * eapply aur_state_bind_r.
-          -- apply H0...
-          -- intros [] ctx_ w_  Hif'.
-             destruct Hif' as (Hf & Hif').
-             rewrite interp_state_ret.
-             cleft.
-             destruct (cdenote_exp a ctx_ >? cdenote_exp b ctx_) eqn:Heq_;
-               apply axr_ret...
-             ++ intuition.
-                rewrite Heq_...
-             ++ cdestruct Hif'.
-                now apply can_step_not_done in Hs.
-             ++ split2...
-                ** cdestruct Hif'.
-                   now apply can_step_not_done in Hs.
-                ** rewrite Heq_...
-        * rewrite interp_state_ret.
-          cleft.
-          apply axr_ret...
-          now cright.
-  Qed.
-  
-  Lemma ag_cprog_while_gt: forall a b (t: CProg) R ctx w' φ,
-      R ctx ->
-      cdenote_exp a ctx > cdenote_exp b ctx ->
-      w' = Obs (Log ctx) tt ->
-      (forall ctx,
-          R ctx ->
-          <( {instr_cprog [[ while a > b do t done ]] ctx}, {Obs (Log ctx) tt} |= φ )> /\
-            <[ {instr_cprog t ctx}, {Obs (Log ctx) tt} |= AX (φ AU AX done
-             {fun '(_, ctx') w' =>
-                cdenote_exp a ctx' > cdenote_exp b ctx'
-                /\ w' = Obs (Log ctx') tt
-                /\ R ctx' }) ]>) ->
-    <( {instr_cprog [[ while a > b do t done ]] ctx}, w' |= AG φ )>.
-  Proof with eauto with ctl.
-    intros; subst.
-    eapply ag_state_iter with (R:=fun 'tt ctx' w' =>
-                                    cdenote_exp a ctx' > cdenote_exp b ctx'
-                                    /\ w' = Obs (Log ctx') tt
-                                    /\ R ctx')...
-    intros [] ctx' w' Hd (Hcmp & -> & HR).
-    destruct (H2 _ HR); split...
-    eapply anr_state_bind_r_eq.
-    - rewrite interp_state_get.
-      apply axr_ret...
-    - cbn.
-      apply Z.gtb_gt in Hcmp; rewrite Hcmp.
-      rewrite interp_state_bind.      
-      cdestruct H3.
-      csplit...
-      + destruct Hs as (? & ? & TR').
-        eapply can_step_bind_l...
-        specialize (H3 _ _ TR').
-        cdestruct H3; cdestruct H3; now apply can_step_not_done in Hs.
-      + intros t' w' TR'...
-        apply ktrans_bind_inv in TR' as [(? & ? & ? & ?) | (? & ? & ? & ?)].
-        * rewrite H6.
-          apply aur_bind_r with (R:=fun '(_, ctx') (w'0 : WorldW Ctx) =>
-                       cdenote_exp a ctx' > cdenote_exp b ctx' /\
-                         w'0 = Obs (Log ctx') tt /\ R ctx')...
-          intros [_ ctx_] w_ (Hcmp_ & -> & ?).
-          rewrite interp_state_ret.
-          cleft.
-          apply axr_ret...
-          exists tt; intuition.
-        * destruct H5, x; rewrite interp_state_ret in H6.
-          specialize (H3 _ _ H4).
-          apply aur_stuck in H3.
-          now apply anr_stuck in H3.
-  Qed.
-
- Lemma ag_cprog_while_eq: forall a b (t: CProg) R ctx w' φ,
-      R ctx ->
-      cdenote_exp a ctx = cdenote_exp b ctx ->
-      w' = Obs (Log ctx) tt ->
-      (forall ctx,
-          R ctx ->
-          <( {instr_cprog [[ while a = b do t done ]] ctx}, {Obs (Log ctx) tt} |= φ )> /\
-            <[ {instr_cprog t ctx}, {Obs (Log ctx) tt} |= AX (φ AU AX done
-             {fun '(_, ctx') w' =>
-                cdenote_exp a ctx' = cdenote_exp b ctx'
-                /\ w' = Obs (Log ctx') tt
-                /\ R ctx' }) ]>) ->
-    <( {instr_cprog [[ while a = b do t done ]] ctx}, w' |= AG φ )>.
-  Proof with eauto with ctl.
-    intros; subst.
-    eapply ag_state_iter with (R:=fun 'tt ctx' w' =>
-                                    cdenote_exp a ctx' = cdenote_exp b ctx'
-                                    /\ w' = Obs (Log ctx') tt
-                                    /\ R ctx')...
-    intros [] ctx' w' Hd (Hcmp & -> & HR).
-    destruct (H2 _ HR); split...
-    eapply anr_state_bind_r_eq.
-    - rewrite interp_state_get.
-      apply axr_ret...
-    - cbn.
-      rewrite Hcmp, Z.eqb_refl.
-      rewrite interp_state_bind.      
-      cdestruct H3.
-      csplit...
-      + destruct Hs as (? & ? & TR').
-        eapply can_step_bind_l...
-        specialize (H3 _ _ TR').
-        cdestruct H3; cdestruct H3; now apply can_step_not_done in Hs.
-      + intros t' w' TR'...
-        apply ktrans_bind_inv in TR' as [(? & ? & ? & ?) | (? & ? & ? & ?)].
-        * rewrite H6.
-          apply aur_bind_r with (R:=fun '(_, ctx') (w'0 : WorldW Ctx) =>
-                       cdenote_exp a ctx' = cdenote_exp b ctx' /\
-                         w'0 = Obs (Log ctx') tt /\ R ctx')...
-          intros [_ ctx_] w_ (Hcmp_ & -> & ?).
-          rewrite interp_state_ret.
-          cleft.
-          apply axr_ret...
-          exists tt; intuition.
-        * destruct H5, x; rewrite interp_state_ret in H6.
-          specialize (H3 _ _ H4).
-          apply aur_stuck in H3.
-          now apply anr_stuck in H3.
-  Qed.
-  
-  Lemma eg_cprog_while_gt: forall a b (t: CProg) R ctx w' φ,
-      R ctx ->
-      cdenote_exp a ctx > cdenote_exp b ctx ->
-      w' = Obs (Log ctx) tt ->
-      (forall ctx,
-          R ctx ->
-          <( {instr_cprog [[ while a > b do t done ]] ctx}, {Obs (Log ctx) tt} |= φ )> /\
-            <[ {instr_cprog t ctx}, {Obs (Log ctx) tt} |= EX (φ EU EX done
-             {fun '(_, ctx') w' =>
-                cdenote_exp a ctx' > cdenote_exp b ctx'
-                /\ w' = Obs (Log ctx') tt
-                /\ R ctx' }) ]>) ->
-    <( {instr_cprog [[ while a > b do t done]] ctx}, w' |= EG φ )>.
-  Proof with eauto with ctl.
-    intros; subst.
-    eapply eg_state_iter with (R:=fun 'tt ctx' w' =>
-                                    cdenote_exp a ctx' > cdenote_exp b ctx'
-                                    /\ w' = Obs (Log ctx') tt
-                                    /\ R ctx')...
-    intros [] ctx' w' Hd (Hcmp & -> & HR).
-    destruct (H2 _ HR); split...
-    eapply enr_state_bind_r_eq.
-    - rewrite interp_state_get.
-      apply exr_ret...
-    - cbn.
-      apply Z.gtb_gt in Hcmp; rewrite Hcmp.
-      rewrite interp_state_bind.
-      cdestruct H3.
-      csplit...
-      exists ('(_, s) <- t0 ;; interp_state h_stateW (continue) s), w.
-      split.
-      + apply ktrans_bind_l...
-        now apply eur_not_done in H3.
-      + eapply eur_bind_r...
-        intros [_ ctx_] w_ (Hcmp' & -> & HR').
+        apply exr_ret...
+      + destruct (cdenote_comp c ctx_); inv Hcmp'.
         rewrite interp_state_ret.
         cleft.
         apply exr_ret...
-        exists tt; intuition.
-  Qed.
-
-  Lemma eg_cprog_while_eq: forall a b (t: CProg) R ctx w' φ,
-      R ctx ->
-      cdenote_exp a ctx = cdenote_exp b ctx ->
-      w' = Obs (Log ctx) tt ->
-      (forall ctx,
-          R ctx ->
-          <( {instr_cprog [[ while a = b do t done ]] ctx}, {Obs (Log ctx) tt} |= φ )> /\
-            <[ {instr_cprog t ctx}, {Obs (Log ctx) tt} |= EX (φ EU EX done
-             {fun '(_, ctx') w' =>
-                cdenote_exp a ctx' = cdenote_exp b ctx'
-                /\ w' = Obs (Log ctx') tt
-                /\ R ctx' }) ]>) ->
-    <( {instr_cprog [[ while a = b do t done ]] ctx}, w' |= EG φ )>.
-  Proof with eauto with ctl.
-    intros; subst.
-    eapply eg_state_iter with (R:=fun 'tt ctx' w' =>
-                                    cdenote_exp a ctx' = cdenote_exp b ctx'
-                                    /\ w' = Obs (Log ctx') tt
-                                    /\ R ctx')...
-    intros [] ctx' w' Hd (Hcmp & -> & HR).
-    destruct (H2 _ HR); split...
-    eapply enr_state_bind_r_eq.
-    - rewrite interp_state_get.
-      apply exr_ret...
-    - cbn.
-      rewrite Hcmp; cbn; rewrite Z.eqb_refl.
-      rewrite interp_state_bind.
-      cdestruct H3.
-      csplit...
-      exists ('(_, s) <- t0 ;; interp_state h_stateW (continue) s), w.
-      split.
-      + apply ktrans_bind_l...
-        now apply eur_not_done in H3.
-      + eapply eur_bind_r...
-        intros [_ ctx_] w_ (Hcmp' & -> & HR').
-        rewrite interp_state_ret.
-        cleft.
-        apply exr_ret...
-        exists tt; intuition.
   Qed.
 
 End Clang.

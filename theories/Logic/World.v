@@ -49,6 +49,19 @@ Global Hint Constructors done_with: ctl.
 Definition done_eq `{Encode E} {X} (x: X): World E -> Prop :=
   @done_with E H X (fun x' w' => x = x').
 
+Variant done_of `{Encode E} {X} (x: X): relation (World E) :=
+  | PureWithDone:
+      done_of x Pure (Done x)
+  | ObsWithFinish: forall (e: E) (v: encode e),
+      done_of x (Obs e v) (Finish e v x).
+Global Hint Constructors done_of: ctl.
+
+Lemma done_of_eq`{Encode E} {X}: forall (x: X) w wd,
+    done_of x w wd <-> done_with (fun x' w' => x = x' /\ w = w') wd.
+Proof.
+  split; intros; inversion H0; intuition auto with ctl; subst; constructor.
+Qed.
+
 Definition finish_with `{Encode E} {X} (R: X -> forall (e:E), encode e -> Prop) : X -> World E -> Prop :=
   fun x w => exists (e: E) (v: encode e), w = Obs e v /\ R x e v.
 Global Hint Unfold done_eq finish_with: ctl.

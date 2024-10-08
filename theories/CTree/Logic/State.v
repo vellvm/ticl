@@ -454,7 +454,7 @@ Section StateLemmas.
                     {fun '(lr, σ') (w': WorldW W) =>
                        match lr with
                        | inl i' => not_done w' /\ Ri i' σ' w' /\ Rv (i', σ', w') (i, σ, w)
-                       | inr r => <[ {Ret (r, σ')}, w' |= ψ \/ φ AN ψ ]>
+                       | inr r => <[ {Ret (r, σ')}, w' |= φ AN ψ ]>
                        end} ]>) ->
     <[ {interp_state h (iter k i) σ}, w |= φ AU ψ ]>.
   Proof with auto with ctl.
@@ -475,7 +475,7 @@ Section StateLemmas.
       (R:=fun '(lr, σ') w' =>
              match lr with
              | inl i' => not_done w' /\ Ri i' σ' w' /\ Rv (i', σ', w') (i, σ, w)
-             | inr r => <[ {Ret (r, σ')}, w' |= ψ \/ φ AN ψ ]>
+             | inr r => <[ {Ret (r, σ')}, w' |= φ AN ψ ]>
              end)...
     intros [[i' | r] σ'] w'...
     - intros (Hd' & Hi' & Hv). 
@@ -485,7 +485,7 @@ Section StateLemmas.
       replace σ' with (snd (fst y)) in Hi' |- * by now subst.
       replace w' with (snd y) in Hi', Hd' |- * by now subst.
       apply HindWf...
-    - apply aur_ret.
+    - apply ctlr_an_au. 
   Qed.
   
   (*| Iter lemmas for [EU] |*)
@@ -548,7 +548,7 @@ Section StateLemmas.
                     {fun '(lr, σ') w' =>
                        match lr with
                        | inl i' => not_done w' /\ Ri i' σ' w' /\ Rv (i', σ', w') (i, σ, w)
-                       | inr r => <[ {Ret (r, σ')}, w' |= ψ \/ φ EN ψ ]>
+                       | inr r => <[ {Ret (r, σ')}, w' |= φ EN ψ ]>
                        end} ]>) ->
     <[ {interp_state h (iter k i) σ}, w |= φ EU ψ ]>.
   Proof with auto with ctl.
@@ -569,7 +569,7 @@ Section StateLemmas.
       (R:=fun '(lr, σ') w' =>
             match lr with
             | inl i' => not_done w' /\ Ri i' σ' w' /\ Rv (i', σ', w') (i, σ, w)
-            | inr r => <[ {Ret (r, σ')}, w' |= ψ \/ φ EN ψ ]>
+            | inr r => <[ {Ret (r, σ')}, w' |= φ EN ψ ]>
              end)...
     intros [[i' | r] σ'] w'...
     - intros (Hd' & Hi' & Hv). 
@@ -579,7 +579,7 @@ Section StateLemmas.
       replace σ' with (snd (fst y)) in Hi' |- * by now subst.
       replace w' with (snd y) in Hd', Hi' |- * by now subst.
       apply HindWf...
-    - apply eur_ret.
+    - apply ctlr_en_eu.
   Qed.
 
   (*| Iter lemma for [AG] |*)
@@ -706,7 +706,7 @@ Section StateLemmas.
                                           | inl i' => not_done w'
                                                      /\ Ri i' σ' w'
                                                      /\ f i' σ' w' < f i σ w
-                                          | inr r => <[ {Ret (r, σ')}, w' |= ψ \/ φ AN ψ ]>
+                                          | inr r => <[ {Ret (r, σ')}, w' |= φ AN ψ ]>
                                           end} ]>) ->
     <[ {interp_state h (Ctree.iter k i) σ}, w |= φ AU ψ ]>.
   Proof.
@@ -748,7 +748,7 @@ Section StateLemmas.
                     {fun '(lr, σ') w' =>
                        match lr with
                        | inl i' => not_done w' /\ Ri i' σ' w' /\ f i' σ' w' < f i σ w
-                       | inr r => <[ {Ret (r, σ')}, w' |= ψ \/ φ EN ψ ]>
+                       | inr r => <[ {Ret (r, σ')}, w' |= φ EN ψ ]>
                        end} ]>) ->
     <[ {interp_state h (iter k i) σ}, w |= φ EU ψ ]>.
   Proof.

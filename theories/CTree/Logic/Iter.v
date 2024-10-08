@@ -233,7 +233,7 @@ Section IterLemmas.
                     {fun (lr: I + X) (w': World E) =>
                        match lr with
                        | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
-                       | inr r => <[ {Ret r}, w' |= ψ \/ φ AN ψ ]>
+                       | inr r => <[ {Ret r}, w' |= φ AN ψ ]>
                        end} ]>) ->
     <[ {iter k i}, w |= φ AU ψ ]>.
   Proof with auto with ctl.
@@ -253,7 +253,7 @@ Section IterLemmas.
       (R:=(fun (lr : I + X) (w' : World E) =>
              match lr with
              | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
-             | inr r => <[ {Ret r}, w' |= ψ \/ φ AN ψ ]>
+             | inr r => <[ {Ret r}, w' |= φ AN ψ ]>
              end))...
     intros [i' | r] w'...
     - intros (Hi' & Hv). 
@@ -262,7 +262,7 @@ Section IterLemmas.
       replace i' with (fst y) in Hi' |- * by now subst.
       replace w' with (snd y) in Hi' |- * by now subst.
       apply HindWf...
-    - apply aur_ret.
+    - apply ctlr_an_au. 
   Qed.
 
   Lemma aur_iter_nat{X I} Ri (f: I -> World E -> nat) (i: I) w (k: I -> ctree E (I + X)) (φ: ctll E) (ψ: ctlr E X):
@@ -273,7 +273,7 @@ Section IterLemmas.
                     {fun (lr: I + X) (w': World E) =>
                        match lr with
                        | inl i' => Ri i' w' /\ f i' w' < f i w
-                       | inr r => <[ {Ret r}, w' |= ψ \/ φ AN ψ ]>
+                       | inr r => <[ {Ret r}, w' |= φ AN ψ ]>
                        end} ]>) ->
     <[ {iter k i}, w |= φ AU ψ ]>.
   Proof.
@@ -334,7 +334,7 @@ Section IterLemmas.
                     {fun (lr: I + X) (w': World E) =>
                        match lr with
                        | inl i' => not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)
-                       | inr r => <[ {Ret r}, w' |= ψ \/ φ EN ψ ]>
+                       | inr r => <[ {Ret r}, w' |= φ EN ψ ]>
                        end} ]>) ->
     <[ {iter k i}, w |= φ EU ψ ]>.
   Proof with auto with ctl.
@@ -354,7 +354,7 @@ Section IterLemmas.
       (R:=(fun (lr : I + X) (w' : World E) =>
              match lr with
              | inl i' => not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)
-             | inr r => <[ {Ret r}, w' |= ψ \/ φ EN ψ ]>
+             | inr r => <[ {Ret r}, w' |= φ EN ψ ]>
              end))...
     intros [i' | r] w'...
     intros (Hd' & Hi' & Hv). 
@@ -363,7 +363,7 @@ Section IterLemmas.
     replace i' with (fst y) in Hi' |- * by now subst.
     replace w' with (snd y) in Hi',Hd' |- * by now subst.
     apply HindWf...
-    apply eur_ret.
+    apply ctlr_en_eu.
   Qed.
   
   (* AG *)

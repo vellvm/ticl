@@ -370,7 +370,7 @@ Section CtllEquations.
     - intros * [(e & v & -> & Hφ) Hd]; split; auto with ctl.
   Qed.
 
-  Lemma ctll_au_ax: forall (p q: ctll E),
+  Lemma ctll_au_an: forall (p q: ctll E),
       <( p AU q )> ⩸ <( q \/ (p AN (p AU q)) )>.
   Proof.
     intros p q; split; intros t w Hind.
@@ -383,14 +383,14 @@ Section CtllEquations.
         now right.
   Qed.
 
-  Lemma ctll_eu_ex: forall (p q: ctll E),
+  Lemma ctll_eu_en: forall (p q: ctll E),
       <( p EU q )> ⩸ <( q \/ (p EN (p EU q)) )>.
   Proof.
     intros p q; split; intros t w Hind.
     - cinduction Hind.
       + now left.
       + rewrite ctll_or; right.
-        rewrite ctll_ex; split; auto.
+        rewrite ctll_en; split; auto.
         exists t0, w0; split; auto.
     - rewrite unfold_entailsL in Hind; destruct Hind.
       + now left.
@@ -432,7 +432,7 @@ Section CtllEquations.
     - now left.
   Qed.
 
-  Lemma ctll_ag_ax: forall (p: ctll E),
+  Lemma ctll_ag_an: forall (p: ctll E),
       <( AG p )> ⩸ <( p AN (AG p) )>.
   Proof.
     split; intros t w Hp.
@@ -441,7 +441,7 @@ Section CtllEquations.
       destruct H0; step; now constructor.
   Qed.
 
-  Lemma ctll_eg_ex: forall (p: ctll E),
+  Lemma ctll_eg_en: forall (p: ctll E),
       <( EG p )> ⩸ <( p EN (EG p) )>.
   Proof.
     split; intros t w Hp.
@@ -450,23 +450,23 @@ Section CtllEquations.
       step; now constructor.
   Qed.
 
-  Lemma ctll_auax_axau: forall (p q: ctll E),
+  Lemma ctll_auan_anau: forall (p q: ctll E),
       <( p AU (p AN q) )> ⋖ <( p AN (p AU q) )>.
   Proof.
     intros * t w H.
     cinduction H.
-    + apply ctll_ax in Hp as (? & ? & ?).
+    + apply ctll_an in Hp as (? & ? & ?).
       rewrite unfold_entailsL.
       split2; auto.
       intros t' w' TR.
-      apply ctll_au_ax.
+      apply ctll_au_an.
       rewrite ctll_or.
       left.
       now apply H1.
-    + rewrite ctll_ax.
+    + rewrite ctll_an.
       split2; auto.
       intros t' w' TR.
-      apply ctll_au_ax; apply ctll_or.
+      apply ctll_au_an; apply ctll_or.
       right; auto.
   Qed.
   
@@ -474,7 +474,7 @@ Section CtllEquations.
       <( AG p )> ⋖ p.
   Proof.
     unfold impl_ctll; intros.
-    rewrite ctll_ag_ax, ctll_ax in H.
+    rewrite ctll_ag_an, ctll_an in H.
     now destruct H.
   Qed.
 
@@ -482,7 +482,7 @@ Section CtllEquations.
       <( EG p )> ⋖ p.
   Proof.
     unfold impl_ctll; intros.
-    rewrite ctll_eg_ex, ctll_ex in H.
+    rewrite ctll_eg_en, ctll_en in H.
     now destruct H.
   Qed.
 
@@ -490,29 +490,29 @@ Section CtllEquations.
       <( p AU q )> ⩸ <( p AU (p AU q) )>.
   Proof.
     split; unfold impl_ctll; intros; cinduction H.
-    - apply ctll_au_ax, ctll_or.
+    - apply ctll_au_an, ctll_or.
       left.
-      apply ctll_au_ax, ctll_or.
+      apply ctll_au_an, ctll_or.
       now left.
-    - apply ctll_au_ax, ctll_or.
+    - apply ctll_au_an, ctll_or.
       right.
-      apply ctll_ax; split; auto.
+      apply ctll_an; split; auto.
     - apply Hp.
-    - apply ctll_au_ax; right; split; auto.
+    - apply ctll_au_an; right; split; auto.
   Qed.
 
   Lemma ctll_eu_idem: forall (p q: ctll E),
       <( p EU q )> ⩸ <( p EU (p EU q) )>.
   Proof.
     split; unfold impl_ctll; intros; cinduction H.
-    - apply ctll_eu_ex, ctll_or; left.
-      apply ctll_eu_ex, ctll_or.
+    - apply ctll_eu_en, ctll_or; left.
+      apply ctll_eu_en, ctll_or.
       now left.
-    - apply ctll_eu_ex, ctll_or; right.
-      apply ctll_ex; split; eauto.
+    - apply ctll_eu_en, ctll_or; right.
+      apply ctll_en; split; eauto.
     - apply Hp.
-    - apply ctll_eu_ex, ctll_or; right.
-      apply ctll_ex; split; eauto.
+    - apply ctll_eu_en, ctll_or; right.
+      apply ctll_en; split; eauto.
   Qed.
 
   Lemma ctll_ag_idem: forall (p: ctll E),
@@ -522,7 +522,7 @@ Section CtllEquations.
     - unfold impl_ctll; intros;
         revert H; revert t w; coinduction R CIH; intros t' w' Hag.
       constructor; auto.
-      apply ctll_ag_ax in Hag; rewrite unfold_entailsL in Hag; destruct Hag, H0.
+      apply ctll_ag_an in Hag; rewrite unfold_entailsL in Hag; destruct Hag, H0.
       split; auto.
     - apply ctll_ag_refl.
   Qed.
@@ -534,7 +534,7 @@ Section CtllEquations.
     - unfold impl_ctll; intros;
         revert H; revert t w; coinduction R CIH; intros t' w' Heg.
       constructor; auto.
-      apply ctll_eg_ex in Heg; rewrite unfold_entailsL in Heg; destruct Heg, H0 as (t_ & w_  & TR & H0).
+      apply ctll_eg_en in Heg; rewrite unfold_entailsL in Heg; destruct Heg, H0 as (t_ & w_  & TR & H0).
       exists t_, w_; intuition.
     - apply ctll_eg_refl.
   Qed.
@@ -547,20 +547,20 @@ Section CtllEquations.
       + generalize dependent t.
         generalize dependent w.
         coinduction R CIH; intros.
-        apply ctll_ag_ax, ctll_ax in H as (Hp & Hs & Hg).
+        apply ctll_ag_an, ctll_an in H as (Hp & Hs & Hg).
         split2...
         now apply ctll_and in Hp as (Hp & Hq).
       + generalize dependent t.
         generalize dependent w.
         coinduction R CIH; intros.
-        apply ctll_ag_ax, ctll_ax in H as (Hp & Hs & Hg).
+        apply ctll_ag_an, ctll_an in H as (Hp & Hs & Hg).
         split2...
         now apply ctll_and in Hp as (Hp & Hq).
     - unfold impl_ctll; intros; revert H; revert t w.
       coinduction R CIH; intros.
       destruct H as (Hp & Hq).
-      apply ctll_ag_ax, ctll_ax in Hp as (Hp & Hs & Hgp).
-      apply ctll_ag_ax, ctll_ax in Hq as (Hq & _ & Hgq).
+      apply ctll_ag_an, ctll_an in Hp as (Hp & Hs & Hgp).
+      apply ctll_ag_an, ctll_an in Hq as (Hq & _ & Hgq).
       split2...
       apply ctll_and...
   Qed.
@@ -573,13 +573,13 @@ Section CtllEquations.
     + generalize dependent t.
       generalize dependent w.
       coinduction R CIH; intros.
-      apply ctll_eg_ex, ctll_ex in H as (Hp & t' & w' & TR & Hg).
+      apply ctll_eg_en, ctll_en in H as (Hp & t' & w' & TR & Hg).
       split...
       now apply ctll_and in Hp as (Hp & Hq).
     + generalize dependent t.
       generalize dependent w.
       coinduction R CIH; intros.
-      apply ctll_eg_ex, ctll_ex in H as (Hp & t' & w' & TR & Hg).
+      apply ctll_eg_en, ctll_en in H as (Hp & t' & w' & TR & Hg).
       split...
       now apply ctll_and in Hp as (Hp & Hq).
   Qed.
@@ -591,13 +591,13 @@ Section CtllEquations.
     + generalize dependent t.
       generalize dependent w.
       coinduction R CIH; intros.
-      apply ctll_ag_ax, ctll_ax in H as (Hp & Hs & Hg).
+      apply ctll_ag_an, ctll_an in H as (Hp & Hs & Hg).
       split2...
       apply ctll_or; now left. 
     + generalize dependent t.
       generalize dependent w.
       coinduction R CIH; intros.
-      apply ctll_ag_ax, ctll_ax in H as (Hp & Hs & Hg).
+      apply ctll_ag_an, ctll_an in H as (Hp & Hs & Hg).
       split2...
       apply ctll_or; now right.
   Qed.
@@ -609,13 +609,13 @@ Section CtllEquations.
     + generalize dependent t.
       generalize dependent w.
       coinduction R CIH; intros.
-      apply ctll_eg_ex, ctll_ex in H as (Hp & t' & w' & TR & Hg).
+      apply ctll_eg_en, ctll_en in H as (Hp & t' & w' & TR & Hg).
       split...
       apply ctll_or; now left.
     + generalize dependent t.
       generalize dependent w.
       coinduction R CIH; intros.
-      apply ctll_eg_ex, ctll_ex in H as (Hp & t' & w' & TR & Hg).
+      apply ctll_eg_en, ctll_en in H as (Hp & t' & w' & TR & Hg).
       split...
       apply ctll_or; now right.
   Qed.
@@ -682,7 +682,7 @@ Section CtlrEquations.
     - now apply H1.
   Qed.
       
-  Lemma ctlr_au_ax: forall (p: ctll E) (q: ctlr E X),
+  Lemma ctlr_au_an: forall (p: ctll E) (q: ctlr E X),
       <[ p AU q ]> ⩸ <[ q \/ (p AN (p AU q)) ]>.
   Proof with auto with ctl.
     intros p q; split; intros t w Hind.
@@ -695,14 +695,14 @@ Section CtlrEquations.
         now right.
   Qed.
 
-  Lemma ctlr_eu_ex: forall (p: ctll E) (q: ctlr E X),
+  Lemma ctlr_eu_en: forall (p: ctll E) (q: ctlr E X),
       <[ p EU q ]> ⩸ <[ q \/ (p EN (p EU q)) ]>.
   Proof.
     intros p q; split; intros t w Hind.
     - cinduction Hind.
       + now left.
       + rewrite ctlr_or; right.
-        rewrite ctlr_ex; split; auto.
+        rewrite ctlr_en; split; auto.
         exists t0, w0; split; auto.
     - rewrite unfold_entailsR in Hind; destruct Hind.
       + now left.
@@ -710,43 +710,43 @@ Section CtlrEquations.
         now right.
   Qed.
 
-  Lemma ctlr_auax_axau: forall (p: ctll E) (q: ctlr E X),
+  Lemma ctlr_auan_anau: forall (p: ctll E) (q: ctlr E X),
       <[ p AU (p AN q) ]> ⋖ <[ p AN (p AU q) ]>.
   Proof with auto with ctl.
     intros p q t w H.
     cinduction H.
-    - apply ctlr_ax in Hp as (? & ? & ?).
+    - apply ctlr_an in Hp as (? & ? & ?).
       rewrite unfold_entailsR.
       split2; auto.
       intros t' w' TR.
-      apply ctlr_au_ax.
+      apply ctlr_au_an.
       rewrite ctlr_or.
       left.
       now apply H1.
-    - rewrite ctlr_ax.
+    - rewrite ctlr_an.
       split2; auto.
       intros t' w' TR.
-      apply ctlr_au_ax; apply ctlr_or.
+      apply ctlr_au_an; apply ctlr_or.
       right; auto.
   Qed.
 
-  Lemma ctlr_euex_exeu: forall (p: ctll E) (q: ctlr E X),
+  Lemma ctlr_euen_eneu: forall (p: ctll E) (q: ctlr E X),
       <[ p EU (p EN q) ]> ⋖ <[ p EN (p EU q) ]>.
   Proof with auto with ctl.
     intros p q t w H.
     cinduction H.
-    - apply ctlr_ex in Hp as (? & t' & w' & TR & ?).
+    - apply ctlr_en in Hp as (? & t' & w' & TR & ?).
       rewrite unfold_entailsR.
       split...
       exists t', w'.
       split...
-      rewrite ctlr_eu_ex, ctlr_or.
+      rewrite ctlr_eu_en, ctlr_or.
       now left.
-    - rewrite ctlr_ex.
+    - rewrite ctlr_en.
       split...
       exists t0, w0.
       split...
-      rewrite ctlr_eu_ex, ctlr_or.
+      rewrite ctlr_eu_en, ctlr_or.
       right...
   Qed.
 
@@ -754,29 +754,29 @@ Section CtlrEquations.
       <[ p AU q ]> ⩸ <[ p AU (p AU q) ]>.
   Proof.
     split; intros * t w H; cinduction H.
-    - apply ctlr_au_ax, ctlr_or.
+    - apply ctlr_au_an, ctlr_or.
       left.
-      apply ctlr_au_ax, ctlr_or.
+      apply ctlr_au_an, ctlr_or.
       now left.
-    - apply ctlr_au_ax, ctlr_or.
+    - apply ctlr_au_an, ctlr_or.
       right.
-      apply ctlr_ax; split; auto.
+      apply ctlr_an; split; auto.
     - apply Hp.
-    - apply ctlr_au_ax; right; split; auto.
+    - apply ctlr_au_an; right; split; auto.
   Qed.
 
   Lemma ctlr_eu_idem: forall (p: ctll E) (q: ctlr E X),
       <[ p EU q ]> ⩸ <[ p EU (p EU q) ]>.
   Proof.
     split; unfold impl_ctlr; intros; cinduction H.
-    - apply ctlr_eu_ex, ctlr_or; left.
-      apply ctlr_eu_ex, ctlr_or.
+    - apply ctlr_eu_en, ctlr_or; left.
+      apply ctlr_eu_en, ctlr_or.
       now left.
-    - apply ctlr_eu_ex, ctlr_or; right.
-      apply ctlr_ex; split; eauto.
+    - apply ctlr_eu_en, ctlr_or; right.
+      apply ctlr_en; split; eauto.
     - apply Hp.
-    - apply ctlr_eu_ex, ctlr_or; right.
-      apply ctlr_ex; split; eauto.
+    - apply ctlr_eu_en, ctlr_or; right.
+      apply ctlr_en; split; eauto.
   Qed.
 
   Lemma ctlr_modus: forall q q' (t: M E HE X) w,
@@ -786,7 +786,6 @@ Section CtlrEquations.
   Proof.
     eauto.
   Qed.
-
 
 End CtlrEquations.
 

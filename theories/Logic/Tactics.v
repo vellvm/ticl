@@ -21,13 +21,13 @@ Generalizable All Variables.
       rewrite ctlr_and; split
                                  
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CxL Q_A ?p ?q) ?t ?w =>      
-      rewrite ctll_ax; split2
+      rewrite ctll_an; split2
   | |- @entailsR ?M ?W ?HE ?KMS ?X (CxR Q_A ?p ?q) ?t ?w =>
-      rewrite ctlr_ax; split2
+      rewrite ctlr_an; split2
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CxL Q_E ?p ?q) ?t ?w =>
-      rewrite ctll_ex; split
+      rewrite ctll_en; split
   | |- @entailsR ?M ?W ?HE ?KMS ?X (CxR Q_E ?p ?q) ?t ?w =>
-      rewrite ctlr_ex; split
+      rewrite ctlr_en; split
   (* Quantifier is a variable, destruct it *)
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CxL ?c ?p ?q) ?t ?w =>
       is_var c; destruct c; csplit
@@ -35,9 +35,9 @@ Generalizable All Variables.
       is_var c; destruct c; csplit
                               
   | |- @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_A ?p) ?t ?w =>
-      rewrite ctll_ag_ax, ctll_ax; split2
+      rewrite ctll_ag_an, ctll_an; split2
   | |- @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_E ?p) ?t ?w =>
-      rewrite ctll_eg_ex, ctll_ex; split
+      rewrite ctll_eg_en, ctll_en; split
   (* Quantifier is a variable, destruct it *)
   | |- @entailsL ?M ?W ?HE ?KMS ?X (Cg ?c ?p ?q) ?t ?w =>
       is_var c; destruct c; csplit
@@ -61,13 +61,13 @@ Generalizable All Variables.
   | |- @entailsR ?M ?W ?HE ?KMS ?X (COrR ?p ?q) ?t ?w =>
       rewrite ctlr_or; left                          
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_A ?p ?q) ?t ?w =>
-      rewrite ctll_au_ax, ctll_or; left
+      rewrite ctll_au_an, ctll_or; left
   | |- @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_A ?p ?q) ?t ?w =>
-      rewrite ctlr_au_ax, ctlr_or; left
+      rewrite ctlr_au_an, ctlr_or; left
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_E ?p ?q) ?t ?w =>
-      rewrite ctll_eu_ex, ctll_or; left
+      rewrite ctll_eu_en, ctll_or; left
   | |- @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_E ?p ?q) ?t ?w =>
-      rewrite ctlr_eu_ex, ctlr_or; left
+      rewrite ctlr_eu_en, ctlr_or; left
   (* Quantifier is a variable, destruct it *)
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL ?c ?p ?q) ?t ?w =>
       is_var c; destruct c; cleft
@@ -82,13 +82,13 @@ end.
   | |- @entailsR ?M ?W ?HE ?KMS ?X (COrR ?p ?q) ?t ?w =>
       rewrite ctlr_or; right
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_A ?p ?q) ?t ?w =>
-      rewrite ctll_au_ax, ctll_or; right
+      rewrite ctll_au_an, ctll_or; right
   | |- @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_A ?p ?q) ?t ?w =>
-      rewrite ctlr_au_ax, ctlr_or; right
+      rewrite ctlr_au_an, ctlr_or; right
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_E ?p ?q) ?t ?w =>
-      rewrite ctll_eu_ex, ctll_or; right
+      rewrite ctll_eu_en, ctll_or; right
   | |- @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_E ?p ?q) ?t ?w =>
-      rewrite ctlr_eu_ex, ctlr_or; right
+      rewrite ctlr_eu_en, ctlr_or; right
   (* Quantifier is a variable, destruct it *)
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL ?c ?p ?q) ?t ?w =>
       is_var c; destruct c; cright
@@ -126,23 +126,23 @@ end.
   | @entailsL ?M ?W ?HE ?KMS ?X (CxL Q_A ?p ?q) ?t ?w =>
       let Hs' := fresh "Hs" in
       let Hp' := fresh "Hp" in
-      rewrite ctll_ax in H; destruct H as (Hp' & Hs' & H)
+      rewrite ctll_an in H; destruct H as (Hp' & Hs' & H)
   | @entailsL ?M ?W ?HE ?KMS ?X (CxL Q_E ?p ?q) ?t ?w =>
       let t' := fresh "t" in
       let w' := fresh "w" in
       let TR' := fresh "TR" in
       let Hp := fresh "Hp" in
-      rewrite ctll_ex in H; destruct H as (Hp & t' & w' & TR' & H)
+      rewrite ctll_en in H; destruct H as (Hp & t' & w' & TR' & H)
   | @entailsR ?M ?W ?HE ?KMS ?X (CxR Q_A ?p ?q) ?t ?w =>
       let Hs' := fresh "Hs" in
       let Hp := fresh "Hp" in
-      rewrite ctlr_ax in H; destruct H as (Hp & Hs' & H)
+      rewrite ctlr_an in H; destruct H as (Hp & Hs' & H)
   | @entailsR ?M ?W ?HE ?KMS ?X (CxR Q_E ?p ?q) ?t ?w =>
       let t' := fresh "t" in
       let w' := fresh "w" in
       let TR' := fresh "TR" in
       let Hp := fresh "Hp" in
-      rewrite ctlr_ex in H; destruct H as (Hp & t' & w' & TR' & H)
+      rewrite ctlr_en in H; destruct H as (Hp & t' & w' & TR' & H)
   (* Quantifier is a variable, destruct it *)
   | @entailsL ?M ?W ?HE ?KMS ?X (CxL ?c ?p ?q) ?t ?w =>
       is_var c; destruct c; cdestruct H
@@ -150,13 +150,13 @@ end.
       is_var c; destruct c; cdestruct H
   (* U *)
   | @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_A ?p ?q) ?t ?w =>
-      rewrite ctll_au_ax, ctll_or in H; destruct H
+      rewrite ctll_au_an, ctll_or in H; destruct H
   | @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_A ?p ?q) ?t ?w =>
-      rewrite ctlr_au_ax, ctlr_or in H; destruct H
+      rewrite ctlr_au_an, ctlr_or in H; destruct H
   | @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_E ?p ?q) ?t ?w =>
-      rewrite ctll_eu_ex, ctll_or in H; destruct H
+      rewrite ctll_eu_en, ctll_or in H; destruct H
   | @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_E ?p ?q) ?t ?w =>
-      rewrite ctlr_eu_ex, ctlr_or in H; destruct H
+      rewrite ctlr_eu_en, ctlr_or in H; destruct H
   (* Quantifier is a variable, destruct it *)
   | @entailsL ?M ?W ?HE ?KMS ?X (CuL ?c ?p ?q) ?t ?w =>
       is_var c; destruct c; cdestruct H
@@ -167,14 +167,14 @@ end.
   | @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_A ?φ) ?t ?w =>
       let Hp := fresh "Hp" in
       let Hs := fresh "Hs" in
-      rewrite ctll_ag_ax, unfold_entailsL in H; destruct H as (Hp & Hs & H)
+      rewrite ctll_ag_an, unfold_entailsL in H; destruct H as (Hp & Hs & H)
   | @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_E ?φ) ?t ?w =>
       let Hp := fresh "Hp" in
       let Hs := fresh "Hs" in
       let t' := fresh "t" in
       let w' := fresh "w" in
       let TR' := fresh "TR" in
-      rewrite ctll_eg_ex, unfold_entailsL in H; destruct H as (Hp & t' & w' & TR' & H)
+      rewrite ctll_eg_en, unfold_entailsL in H; destruct H as (Hp & t' & w' & TR' & H)
   | @entailsL ?M ?W ?HE ?KMS ?X (Cg ?c ?p) ?t ?w =>
       is_var c; destruct c; cdestruct H
   end.

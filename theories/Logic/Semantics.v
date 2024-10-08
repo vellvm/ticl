@@ -265,27 +265,27 @@ Proof. intros; auto. Qed.
 Global Hint Resolve ctlr_finish: ctlr.
 
 (*| AN, WX, EN unfold |*)
-Lemma ctll_ax `{KMS: Kripke M E} X:
+Lemma ctll_an `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (p q: ctll E),
     <( t, w |= p AN q )> <-> <( t, w |= p)> /\ can_step t w /\ forall t' w', [t, w] ↦ [t',w'] -> <( t',w' |= q )>.
 Proof. intros; auto. Qed.
 
-Lemma ctll_ex `{KMS: Kripke M E} X:
+Lemma ctll_en `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (p q: ctll E),
     <( t,w |= p EN q )> <-> <( t, w|= p)> /\ exists t' w', [t,w] ↦ [t',w'] /\ <( t',w' |= q )>.
 Proof. intros; auto. Qed.
-Global Hint Resolve ctll_ax ctll_ex: ctl.
+Global Hint Resolve ctll_an ctll_en: ctl.
 
-Lemma ctlr_ax `{KMS: Kripke M E} X:
+Lemma ctlr_an `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (p: ctll E) (q: ctlr E X),
     <[ t, w |= p AN q ]> <-> <( t, w |= p)> /\ can_step t w /\ forall t' w', [t, w] ↦ [t',w'] -> <[ t',w' |= q ]>.
 Proof. intros; auto. Qed.
 
-Lemma ctlr_ex `{KMS: Kripke M E} X:
+Lemma ctlr_en `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (p: ctll E) (q: ctlr E X),
     <[ t,w |= p EN q ]> <-> <( t, w |= p )> /\ exists t' w', [t,w] ↦ [t',w'] /\ <[ t',w' |= q ]>.
 Proof. intros; eauto. Qed.
-Global Hint Resolve ctlr_ax ctlr_ex: ctl.
+Global Hint Resolve ctlr_an ctlr_en: ctl.
 
 (*| Propositional statements |*)
 Lemma ctll_and  `{KMS: Kripke M E} X:
@@ -314,12 +314,12 @@ Lemma ctlr_impll  `{KMS: Kripke M E} X:
 Proof. intros t w p q; rewrite unfold_entailsR; intros [H H']; auto. Qed. 
 
 (* [AN φ] is stronger than [EN φ] *)
-Lemma ctll_ax_ex `{KMS: Kripke M E} X:
+Lemma ctll_an_en `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (p q: ctll E),
     <( t, w |= p AN q )> -> <( t, w |= p EN q )>.
 Proof.
   intros.
-  rewrite ctll_ax, ctll_ex in *.
+  rewrite ctll_an, ctll_en in *.
   destruct H as (Hp & (m' & w' & TR) & ?).
   split; [|exists m', w']; auto.
 Qed.
@@ -339,12 +339,12 @@ Proof.
     exists x, x0; split; auto.
 Qed.
 
-Lemma ctlr_ax_ex `{KMS: Kripke M E} X:
+Lemma ctlr_an_en `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (p: ctll E) (q: ctlr E X),
     <[ t, w |= p AN q ]> -> <[ t, w |= p EN q ]>.
 Proof.
   intros.
-  rewrite ctlr_ax, ctlr_ex in *.
+  rewrite ctlr_an, ctlr_en in *.
   destruct H as (H & (m' & w' & TR) & ?).
   intuition.
   exists m', w'; auto.
@@ -365,6 +365,34 @@ Proof.
     exists x, x0; split; auto.
 Qed.
 
+(* [AN φ] implies [AU φ] *)
+Lemma ctlr_an_au `{KMS: Kripke M E} X: forall (t: M E HE X) w φ ψ,
+    <[ t, w |= φ AN ψ ]> ->
+    <[ t, w |= φ AU ψ ]>.
+Proof.
+  intros.
+  rewrite ctlr_an in H.
+  destruct H as (H & (m' & w' & TR) & ?).
+  rewrite unfold_entailsR.
+  apply StepA; split; auto.
+  split.
+  - now (exists m', w').
+  - intros.
+    apply MatchA; auto.
+Qed.
+
+Lemma ctlr_en_eu `{KMS: Kripke M E} X: forall (t: M E HE X) w φ ψ,
+    <[ t, w |= φ EN ψ ]> ->
+    <[ t, w |= φ EU ψ ]>.
+Proof.
+  intros.
+  rewrite ctlr_en in H.
+  destruct H as (H & (m' & w' & TR & ?)).
+  rewrite unfold_entailsR.
+  apply StepE; split; auto.
+  exists m', w'; intuition.
+Qed.
+  
 (*| Bot is false |*)
 Lemma ctll_sound `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
     ~ <( t, w |= ⊥ )>.
