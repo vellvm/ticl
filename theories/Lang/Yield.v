@@ -16,20 +16,20 @@ From ExtLib Require Import
 From Coinduction Require Import
   coinduction rel tactics.
 
-From CTree Require Import
-  CTree.Core
+From ICTL Require Import
+  ICTree.Core
   Equ
   SBisim
   Lang.Vec
   Lang.Par
-  CTree.Interp.State.
+  ICTree.Interp.State.
 
 From Equations Require Import Equations.
 
 Import ListNotations.
-Import CTreeNotations.
+Import ICTreeNotations.
 
-Local Open Scope ctree_scope.
+Local Open Scope ictree_scope.
 Local Open Scope string_scope.
 
 Definition var : Set := string.
@@ -72,16 +72,16 @@ Global Instance encode_memE: Encode memE :=
 Section Denote1.
   Context (E := yieldE + forkE + memE).
 
-  Definition while (step : ctree E (unit + unit)) : ctree E unit :=
-    Ctree.iter (fun _ => step) tt.
+  Definition while (step : ictree E (unit + unit)) : ictree E unit :=
+    ICtree.iter (fun _ => step) tt.
 
-  Definition read (v: var) : ctree E nat :=
-    Ctree.trigger (rd v).
-  Definition write (v: var) (x: value) : ctree E unit :=
-    Ctree.trigger (wr v x).
+  Definition read (v: var) : ictree E nat :=
+    ICtree.trigger (rd v).
+  Definition write (v: var) (x: value) : ictree E unit :=
+    ICtree.trigger (wr v x).
   
-  Program Definition yield : ctree E unit :=
-    @Ctree.trigger yieldE E _ _ _ _ Par.Yield.
+  Program Definition yield : ictree E unit :=
+    @ICtree.trigger yieldE E _ _ _ _ Par.Yield.
   Next Obligation.
     exact unit.
   Defined.
@@ -89,8 +89,8 @@ Section Denote1.
     exact (inl (inl Par.Yield)).
   Defined.  
 
-  Program Definition fork : ctree E bool :=
-    @Ctree.trigger forkE E _ _ _ _ Par.Fork.
+  Program Definition fork : ictree E bool :=
+    @ICtree.trigger forkE E _ _ _ _ Par.Fork.
   Next Obligation.
     exact bool.
   Defined.
@@ -99,7 +99,7 @@ Section Denote1.
   Defined.
 
 
-  Fixpoint denote_expr (e : expr) : ctree E value :=
+  Fixpoint denote_expr (e : expr) : ictree E value :=
     match e with
     | Var v     => x <- read v ;; yield;; Ret x
     | Lit n     => Ret n
@@ -108,7 +108,7 @@ Section Denote1.
     | Mult a b  => l <- denote_expr a ;; r <- denote_expr b ;; Ret (l * r)%nat
     end.
 
-  Definition denote_cond (c: cond): ctree E bool :=
+  Definition denote_cond (c: cond): ictree E bool :=
     match c with
     | EqC l r =>
         vl <- denote_expr l ;;
@@ -151,13 +151,13 @@ Section Denote1.
   Definition interp_concurrency (t : stmt) : completed :=
     schedule 1 (fun _ => denote_imp t) (Some Fin.F1).
 
-  (* specific case for ctree rather than generic monad M *)
-  #[global] Instance MonadBr_stateT {S E} : Utils.MonadBr (Monads.stateT S (ctree E)) :=
+  (* specific case for ictree rather than generic monad M *)
+  #[global] Instance MonadBr_stateT {S E} : Utils.MonadBr (Monads.stateT S (ictree E)) :=
     fun b n s =>
       f <- mbr b n;;
       ret (s, f).
 
-  Definition handle_spawn : (yieldE +' spawnE +' MemE) ~> ctree (yieldE +' MemE) :=
+  Definition handle_spawn : (yieldE +' spawnE +' MemE) ~> ictree (yieldE +' MemE) :=
     fun _ e =>
       match e with
       | inl1 y => trigger y
@@ -165,30 +165,30 @@ Section Denote1.
       | inr1 (inr1 m) => trigger m
       end.
 
-  Definition interp_spawn : completed -> ctree (yieldE +' MemE) unit :=
+  Definition interp_spawn : completed -> ictree (yieldE +' MemE) unit :=
     interp handle_spawn (T:=unit).
 
-  Definition handle_yield : (yieldE +' MemE) ~> ctree MemE :=
+  Definition handle_yield : (yieldE +' MemE) ~> ictree MemE :=
     fun _ e =>
       match e with
       | inl1 s => match s with Yield => ret tt end (* erase yield events *)
       | inr1 m => trigger m
       end.
 
-  Definition interp_yield : ctree (yieldE +' MemE) unit -> ctree MemE unit :=
+  Definition interp_yield : ictree (yieldE +' MemE) unit -> ictree MemE unit :=
     interp handle_yield (T:=unit).
 
   (* list of key value pairs *)
   Definition env := alist var value.
 
-  Definition handle_state : MemE ~> Monads.stateT env (ctree void1) :=
+  Definition handle_state : MemE ~> Monads.stateT env (ictree void1) :=
     fun _ e s =>
       match e with
       | rd x => Ret (s, lookup_default x 0%nat s)
       | wr x v => Ret (Maps.add x v s, tt)
       end.
 
-  Definition interp_imp (t : stmt) : Monads.stateT env (ctree void1) unit :=
+  Definition interp_imp (t : stmt) : Monads.stateT env (ictree void1) unit :=
     interp_state handle_state (interp_yield (interp_spawn (interp_concurrency t))).
 
   Lemma denote_expr_bounded e :
@@ -245,7 +245,7 @@ Section Denote1.
                      None)).
   Proof.
     rewrite rewrite_schedule. simp schedule_match.
-    cbn. CTree.fold_subst.
+    cbn. ICTree.fold_subst.
     unfold trigger.
     step. cbn. constructor. intros [].
 
@@ -258,7 +258,7 @@ Section Denote1.
 
     apply equ_schedule. intro i.
     dependent destruction i.
-    - simp remove_vec. simp cons_vec. CTree.fold_subst.
+    - simp remove_vec. simp cons_vec. ICTree.fold_subst.
       rewrite bind_ret_l. reflexivity.
     - dependent destruction i; [| inv i].
       simp remove_vec. simp cons_vec.
@@ -277,7 +277,7 @@ Section Denote1.
     - dependent destruction i. simp p; auto. inv i.
   Qed.
 
-  Lemma schedule_order (t1 t1' t2 t2' : ctree E unit)
+  Lemma schedule_order (t1 t1' t2 t2' : ictree E unit)
     (Hbound1 : brD_bound 1 t1)
     (Hbound2 : brD_bound 1 t2)
     (Hbound1' : brD_bound 1 t1')
@@ -303,7 +303,7 @@ Section Denote1.
                   [| dependent destruction i0; [| inv i0]]; simp p; simp cons_vec; symmetry; auto].
   Qed.
 
-  Lemma schedule_order' (t1 t1' t2 t2' : ctree E unit)
+  Lemma schedule_order' (t1 t1' t2 t2' : ictree E unit)
     (Hbound1 : brD_bound 1 t1)
     (Hbound2 : brD_bound 1 t2)
     (Hbound1' : brD_bound 1 t1')
@@ -329,7 +329,7 @@ Section Denote1.
                   [| dependent destruction i0; [| inv i0]]; simp p; simp cons_vec; symmetry; auto].
   Qed.
 
-  Lemma schedule_order'' (t1 t1' t2 t2' : ctree E unit)
+  Lemma schedule_order'' (t1 t1' t2 t2' : ictree E unit)
         (Hbound1 : brD_bound 1 t1)
         (Hbound2 : brD_bound 1 t2)
         (Hbound1' : brD_bound 1 t1')
@@ -378,15 +378,15 @@ Section Denote1.
     step. cbn. constructor. intros [].
 
     rewrite rewrite_schedule. simp schedule_match.
-    CTree.fold_subst. rewrite (bind_ret_l tt).
+    ICTree.fold_subst. rewrite (bind_ret_l tt).
     simp cons_vec. cbn. rewrite remove_vec_cons_2.
     step. cbn. constructor. intros _.
 
     rewrite rewrite_schedule. simp schedule_match.
-    CTree.fold_subst. rewrite (bind_ret_l tt).
+    ICTree.fold_subst. rewrite (bind_ret_l tt).
     step. cbn. constructor. intros [].
 
-    CTree.fold_subst. rewrite (bind_ret_l tt).
+    ICTree.fold_subst. rewrite (bind_ret_l tt).
     step. constructor.
     dependent destruction i. 2: inv i.
     apply equ_schedule. repeat intro. rewrite bind_ret_l. reflexivity.
@@ -401,16 +401,16 @@ Section Denote1.
     unfold interp_concurrency. cbn.
 
     rewrite rewrite_schedule. simp schedule_match.
-    cbn. CTree.fold_subst.
+    cbn. ICTree.fold_subst.
     rewrite replace_vec_unary.
     step. cbn. constructor. intros _.
-    CTree.fold_subst.
+    ICTree.fold_subst.
 
     rewrite rewrite_schedule. simp schedule_match.
     step. cbn. constructor.
     intros [].
 
-    CTree.fold_subst.
+    ICTree.fold_subst.
     step. cbn. constructor.
     dependent destruction i. 2: inv i.
     apply equ_schedule. repeat intro. rewrite bind_ret_l. reflexivity.
@@ -555,7 +555,7 @@ Section Denote1.
     unfold interp_concurrency. cbn.
 
     rewrite rewrite_schedule. simp schedule_match.
-    cbn. CTree.fold_subst.
+    cbn. ICTree.fold_subst.
     step. constructor. intros [].
 
     rewrite rewrite_schedule. simp schedule_match.
@@ -572,12 +572,12 @@ Section Denote1.
     unfold interp_concurrency. cbn.
 
     rewrite rewrite_schedule. simp schedule_match.
-    cbn. CTree.fold_subst.
+    cbn. ICTree.fold_subst.
     rewrite replace_vec_unary.
     step. cbn. constructor. intros [].
 
     rewrite rewrite_schedule. simp schedule_match.
-    CTree.fold_subst.
+    ICTree.fold_subst.
     simp cons_vec. cbn.
     step. cbn. constructor. intros [].
 
@@ -586,7 +586,7 @@ Section Denote1.
     step. constructor. intros _.
 
     rewrite rewrite_schedule. simp schedule_match.
-    step. cbn. constructor. CTree.fold_subst. intros [].
+    step. cbn. constructor. ICTree.fold_subst. intros [].
 
     step. cbn. constructor. intros i.
 
@@ -640,7 +640,7 @@ Section Denote1.
     rewrite bind_ret_l. apply sb_guard_l.
 
     (* push the yield and spawn interps all the way down *)
-    CTree.fold_subst. repeat rewrite bind_ret_l.
+    ICTree.fold_subst. repeat rewrite bind_ret_l.
     setoid_rewrite interp_bind. cbn. setoid_rewrite bind_ret_l.
     setoid_rewrite interp_ret.
     setoid_rewrite bind_ret_l.
@@ -665,27 +665,27 @@ Section Denote1.
     do 2 rewrite unfold_interp_state. cbn.
     rewrite bind_ret_l.
     apply sb_guard_l.
-    CTree.fold_subst. cbn. repeat rewrite bind_ret_l.
+    ICTree.fold_subst. cbn. repeat rewrite bind_ret_l.
 
     rewrite unfold_interp_state. cbn.
     do 2 apply sb_guard_l.
 
     rewrite unfold_interp_state. cbn.
-    CTree.fold_subst. setoid_rewrite bind_bind. do 2 setoid_rewrite bind_ret_l.
-    do 2 apply sb_guard_l.
-
-    rewrite unfold_interp_state. cbn.
-    do 2 apply sb_guard_l.
-
-    rewrite unfold_interp_state. cbn.
-    CTree.fold_subst. repeat setoid_rewrite bind_ret_l.
+    ICTree.fold_subst. setoid_rewrite bind_bind. do 2 setoid_rewrite bind_ret_l.
     do 2 apply sb_guard_l.
 
     rewrite unfold_interp_state. cbn.
     do 2 apply sb_guard_l.
 
     rewrite unfold_interp_state. cbn.
-    CTree.fold_subst. setoid_rewrite bind_bind. do 2 setoid_rewrite bind_ret_l.
+    ICTree.fold_subst. repeat setoid_rewrite bind_ret_l.
+    do 2 apply sb_guard_l.
+
+    rewrite unfold_interp_state. cbn.
+    do 2 apply sb_guard_l.
+
+    rewrite unfold_interp_state. cbn.
+    ICTree.fold_subst. setoid_rewrite bind_bind. do 2 setoid_rewrite bind_ret_l.
     do 2 apply sb_guard_l.
 
     rewrite unfold_interp_state. cbn.

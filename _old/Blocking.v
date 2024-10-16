@@ -3,7 +3,7 @@ From Coq Require Import
   Classes.RelationPairs
   Classes.RelationClasses.
 
-From CTree Require Import
+From ICTL Require Import
   KTree.Core
   KTree.Logic.Trans
   KTree.Equ

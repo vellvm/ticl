@@ -7,30 +7,30 @@ From ExtLib Require Import
   Data.Map.FMapAList
   Data.String.
 
-From CTree Require Import
-  CTree.Core
-  CTree.SBisim
-  CTree.Equ
-  CTree.Interp.State
-  CTree.Events.State
-  CTree.Events.Writer.
+From ICTL Require Import
+  ICTree.Core
+  ICTree.SBisim
+  ICTree.Equ
+  ICTree.Interp.State
+  ICTree.Events.State
+  ICTree.Events.Writer.
 
-From CTree Require Import
+From ICTL Require Import
   Logic.Ctl
   Logic.Trans
-  CTree.Logic.AX
-  CTree.Logic.AF
-  CTree.Logic.EX
-  CTree.Logic.EF
-  CTree.Logic.Bind
-  CTree.Logic.CanStep
-  CTree.Logic.State.
+  ICTree.Logic.AX
+  ICTree.Logic.AF
+  ICTree.Logic.EX
+  ICTree.Logic.EF
+  ICTree.Logic.Bind
+  ICTree.Logic.CanStep
+  ICTree.Logic.State.
 
 Generalizable All Variables.
 
-Import Ctree CTreeNotations CtlNotations.
+Import ICtree ICTreeNotations CtlNotations.
 Local Open Scope ctl_scope.
-Local Open Scope ctree_scope.
+Local Open Scope ictree_scope.
 Local Open Scope nat_scope.
 
 Generalizable All Variables.
@@ -93,7 +93,7 @@ Module Clang.
     | CLt l r => (cdenote_exp l ctx) <? (cdenote_exp r ctx)
     end.
 
-  Fixpoint cdenote (s: CProg): ctree Mem unit :=
+  Fixpoint cdenote (s: CProg): ictree Mem unit :=
     match s with
     | CAssgn x e =>
         m <- get ;;    
@@ -106,7 +106,7 @@ Module Clang.
         else
           cdenote e
     | CDoWhile b c =>       
-        Ctree.iter
+        ICtree.iter
           (fun _ =>
              cdenote b ;;
              m <- get ;;
@@ -120,7 +120,7 @@ Module Clang.
         cdenote r
     end.
 
-  Definition instr_cprog(p: CProg) (ctx: Ctx) : ctreeW Ctx (unit * Ctx) :=
+  Definition instr_cprog(p: CProg) (ctx: Ctx) : ictreeW Ctx (unit * Ctx) :=
     instr_stateE (cdenote p) ctx.
   
   Declare Scope clang_scope.
@@ -155,21 +155,21 @@ Module Clang.
   
   
   Notation "'if' c 'then' t 'else' e" :=
-    (CIf c t e) (in custom clang at level 63): ctree_scope.
+    (CIf c t e) (in custom clang at level 63): ictree_scope.
 
   Notation "'if' c 'then' t 'done'" :=
-    (CIf c t CSkip) (in custom clang at level 63): ctree_scope.
+    (CIf c t CSkip) (in custom clang at level 63): ictree_scope.
 
   Notation "'do' b 'while' c 'done'" :=
-    (CDoWhile b c) (in custom clang at level 63): ctree_scope.
+    (CDoWhile b c) (in custom clang at level 63): ictree_scope.
 
   Notation "'skip'" :=
-    (CSkip) (in custom clang at level 63): ctree_scope.
+    (CSkip) (in custom clang at level 63): ictree_scope.
 
   Notation "t1 ;;; t2" := (CSeq t1 t2) (in custom clang at level 62, right associativity): clang_scope.
 
   (*| Assertion (base case) |*)
-  Lemma vis_c_assert{X}: forall (p: ctreeW Ctx X) c v m φ,
+  Lemma vis_c_assert{X}: forall (p: ictreeW Ctx X) c v m φ,
       φ v ->
       <( p, {Obs (Log (add c v m)) tt} |= visW {assert c φ} )>.
   Proof.

@@ -11,7 +11,7 @@ From Coq Require Import
 From Coinduction Require Import
   coinduction lattice tactics.
 
-From CTree Require Import
+From ICTL Require Import
   Utils.Utils
   Events.Core
   Logic.Kripke

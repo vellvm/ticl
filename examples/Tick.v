@@ -1,25 +1,25 @@
-From CTree Require Import
-  CTree.Core
+From ICTL Require Import
+  ICTree.Core
   Logic.Ctl
-  CTree.Equ
-  CTree.SBisim
-  CTree.Logic.EX
-  CTree.Logic.EF
-  CTree.Logic.EG
-  CTree.Logic.AX
-  CTree.Logic.AF
-  CTree.Logic.AG
-  CTree.Logic.Trans
-  CTree.Logic.Bind
-  CTree.Logic.Iter
-  CTree.Logic.CanStep.
+  ICTree.Equ
+  ICTree.SBisim
+  ICTree.Logic.EX
+  ICTree.Logic.EF
+  ICTree.Logic.EG
+  ICTree.Logic.AX
+  ICTree.Logic.AF
+  ICTree.Logic.AG
+  ICTree.Logic.Trans
+  ICTree.Logic.Bind
+  ICTree.Logic.Iter
+  ICTree.Logic.CanStep.
 
 From Coinduction Require Import coinduction tactics.
 
 Generalizable All Variables.
 
-Import Ctree CTreeNotations CtlNotations.
-Local Open Scope ctree_scope.
+Import ICtree ICTreeNotations CtlNotations.
+Local Open Scope ictree_scope.
 Local Open Scope ctl_scope.
 
 Variant tickE: Type :=
@@ -31,25 +31,25 @@ Global Instance encode_tickE: Encode tickE :=
         | Tick | Tock => unit
         end.
 
-Definition tick: ctree tickE unit :=
-  @Ctree.trigger tickE tickE _ _ (ReSum_refl) (ReSumRet_refl) Tick.
+Definition tick: ictree tickE unit :=
+  @ICtree.trigger tickE tickE _ _ (ReSum_refl) (ReSumRet_refl) Tick.
 
-Definition tock: ctree tickE unit :=
-  @Ctree.trigger tickE tickE _ _ (ReSum_refl) (ReSumRet_refl) Tock.
+Definition tock: ictree tickE unit :=
+  @ICtree.trigger tickE tickE _ _ (ReSum_refl) (ReSumRet_refl) Tock.
 
 Section TickTock.
   (* Ex1: Non-det loop calling tick *)
-  Definition ticker: ctree tickE unit :=
+  Definition ticker: ictree tickE unit :=
     forever unit
       (fun _ =>
-         Ctree.br2
+         ICtree.br2
            (forever unit (fun _ => tick) tt)
            tick)
       tt.
 
   (* This requires the AR iter lemma, it's something like this
 
-  Lemma ag_iter_or{X I} (R: rel I (World E)) (i: I) w (k: I -> ctree E (I + X)) φ:
+  Lemma ag_iter_or{X I} (R: rel I (World E)) (i: I) w (k: I -> ictree E (I + X)) φ:
     R i w ->
     (forall (i: I) w,
         R i w ->
@@ -64,11 +64,11 @@ Section TickTock.
    *)
     
   (* Ex2: Non-det loop calling tick *)
-  Definition tocker: ctree tickE unit :=
+  Definition tocker: ictree tickE unit :=
     forever unit
       (fun _ =>
-         Ctree.br2
-           (Ctree.br2 tick tock)
+         ICtree.br2
+           (ICtree.br2 tick tock)
            tick)
       tt.
 

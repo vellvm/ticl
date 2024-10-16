@@ -1,18 +1,18 @@
-From CTree Require Import
-  CTree.Core
+From ICTL Require Import
+  ICTree.Core
   Events.Writer
   Logic.Ctl
-  CTree.Equ
-  CTree.SBisim
-  CTree.Logic.Trans
-  CTree.Logic.AX
-  CTree.Logic.AF
-  CTree.Logic.Bind
-  CTree.Logic.State
-  CTree.Logic.CanStep
-  CTree.Interp.State
-  CTree.Events.State
-  CTree.Events.Writer.
+  ICTree.Equ
+  ICTree.SBisim
+  ICTree.Logic.Trans
+  ICTree.Logic.AX
+  ICTree.Logic.AF
+  ICTree.Logic.Bind
+  ICTree.Logic.State
+  ICTree.Logic.CanStep
+  ICTree.Interp.State
+  ICTree.Events.State
+  ICTree.Events.Writer.
 
 From ExtLib Require Export
   Structures.MonadState
@@ -26,8 +26,8 @@ From ExtLib Require Import RelDec.
 
 Generalizable All Variables.
 
-Import Ctree CTreeNotations CtlNotations ListNotations.
-Local Open Scope ctree_scope.
+Import ICtree ICTreeNotations CtlNotations ListNotations.
+Local Open Scope ictree_scope.
 Local Open Scope ctl_scope.
 Local Open Scope list_scope.
 
@@ -44,11 +44,11 @@ Global Instance encode_queueE{S}: Encode (queueE S) :=
           | Pop => option S
           end.
 
-Definition push {S}: S -> ctree (queueE S) unit :=
-  fun (s: S) => @Ctree.trigger (queueE S) (queueE S) _ _ (ReSum_refl) (ReSumRet_refl) (Push s).
+Definition push {S}: S -> ictree (queueE S) unit :=
+  fun (s: S) => @ICtree.trigger (queueE S) (queueE S) _ _ (ReSum_refl) (ReSumRet_refl) (Push s).
 
-Definition pop {S}: ctree (queueE S) (option S) :=
-  Ctree.trigger Pop.
+Definition pop {S}: ictree (queueE S) (option S) :=
+  ICtree.trigger Pop.
 
 Arguments push /.
 Arguments pop /.
@@ -58,10 +58,10 @@ Section QueueEx.
   Infix "=?" := (rel_dec) (at level 75).
 
   (* Queue instrumented semantics *)
-  Definition h_queueE: queueE T ~> stateT (list T) (ctreeW T) := 
+  Definition h_queueE: queueE T ~> stateT (list T) (ictreeW T) := 
     fun e =>
       mkStateT (fun q =>
-                 match e return ctreeW T (encode e * list T) with
+                 match e return ictreeW T (encode e * list T) with
                  | Push v => Ret (tt, q ++ [v])
                  | Pop => match q with
                          | nil => Ret (None, nil)
@@ -71,9 +71,9 @@ Section QueueEx.
                          end
                  end).
 
-  Local Open Scope ctree_scope.
+  Local Open Scope ictree_scope.
   (* Ex1: Drain a queue until there is nothing left *)
-  Definition drain: ctree (queueE T) unit :=
+  Definition drain: ictree (queueE T) unit :=
     loop
       (x <- pop ;;
        continue).
@@ -152,7 +152,7 @@ Section QueueEx.
   Print Assumptions drain_af_pop.
   
   (* Ex2: Rotate a queue (pop an element from head, add it to tail) *)
-  Definition rotate: ctree (queueE T) unit :=
+  Definition rotate: ictree (queueE T) unit :=
     loop 
       (x <- pop ;;
        match x with
@@ -223,7 +223,7 @@ Section QueueEx.
                        AG AF visW {fun h => h = nl} )>.
   Proof with eauto with ctl.
     intros.
-    unfold rotate, forever, Classes.iter, MonadIter_ctree.
+    unfold rotate, forever, Classes.iter, MonadIter_ictree.
     apply ag_state_iter with
       (R:= fun 'tt q w => exists h ts, q = h :: ts /\ (h = nl \/ (h <> nl /\ exists i, find nl ts = Some i)))...
     - destruct q; try solve [ inv H ].
@@ -236,7 +236,7 @@ Section QueueEx.
         destruct (find nl q) eqn:Hq, i; inv H1.
         apply neg_rel_dec_correct in Hnl; split...
     - clear H q.
-      unfold Classes.iter, MonadIter_ctree.
+      unfold Classes.iter, MonadIter_ictree.
       intros [] q w Hd (h & ts & -> & [-> | (Hnl & Hi)]).
       + (* t = nl *)
         split.

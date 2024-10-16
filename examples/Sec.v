@@ -1,21 +1,21 @@
 From Coq Require Import Arith.PeanoNat.
 
-From CTree Require Import
-  CTree.Equ
-  CTree.Core
-  CTree.Events.Writer
+From ICTL Require Import
+  ICTree.Equ
+  ICTree.Core
+  ICTree.Events.Writer
   Logic.Ctl
-  CTree.SBisim
-  CTree.Logic.Trans
-  CTree.Logic.AF
-  CTree.Logic.AX
-  CTree.Logic.AG
-  CTree.Logic.State
-  CTree.Logic.Bind
-  CTree.Logic.CanStep
-  CTree.Interp.Core
-  CTree.Interp.State
-  CTree.Events.State.
+  ICTree.SBisim
+  ICTree.Logic.Trans
+  ICTree.Logic.AF
+  ICTree.Logic.AX
+  ICTree.Logic.AG
+  ICTree.Logic.State
+  ICTree.Logic.Bind
+  ICTree.Logic.CanStep
+  ICTree.Interp.Core
+  ICTree.Interp.State
+  ICTree.Events.State.
 
 From ExtLib Require Import
   Structures.MonadState
@@ -24,8 +24,8 @@ From ExtLib Require Import
 
 Generalizable All Variables.
 
-Import Ctree CTreeNotations CtlNotations.
-Local Open Scope ctree_scope.
+Import ICtree ICTreeNotations CtlNotations.
+Local Open Scope ictree_scope.
 Local Open Scope ctl_scope.
 
 (*| Security labels |*)
@@ -94,10 +94,10 @@ Section SecurityEx.
   Record SecObs := { ml: Sec; al: Sec }.
   
   (* Insecure interpreter, does not check labels *)
-  Definition h_secE: secE ~> stateT St (ctreeW SecObs) :=
+  Definition h_secE: secE ~> stateT St (ictreeW SecObs) :=
     fun e => mkStateT
             (fun (st: St) =>                                     
-               match e return ctreeW SecObs (encode e * St) with
+               match e return ictreeW SecObs (encode e * St) with
                | Read l addr =>
                    match lookup addr st with
                    (* [addr] exists and set to [(v, l_a)] *)
@@ -114,14 +114,14 @@ Section SecurityEx.
                end).
 
   (* Trigger instructions *)
-  Definition read: Sec -> Addr -> ctree secE (option nat) :=
-    fun (l: Sec) (addr: Addr) => Ctree.trigger (Read l addr). 
+  Definition read: Sec -> Addr -> ictree secE (option nat) :=
+    fun (l: Sec) (addr: Addr) => ICtree.trigger (Read l addr). 
   
-  Definition write: Sec -> Addr -> nat -> ctree secE unit :=
-    fun (l: Sec) (addr: Addr) (s: nat) => Ctree.trigger (Write l addr s).
+  Definition write: Sec -> Addr -> nat -> ictree secE unit :=
+    fun (l: Sec) (addr: Addr) (s: nat) => ICtree.trigger (Write l addr s).
 
   (* Alice (H) writes [secret] to odd addresses *)
-  Definition sec_alice1(secret: nat)(i: Addr): ctree secE unit :=
+  Definition sec_alice1(secret: nat)(i: Addr): ictree secE unit :=
     if Nat.Even_Odd_dec i then
       (* [i] even, write to [i+1] *)
       write H (S i) secret
@@ -130,7 +130,7 @@ Section SecurityEx.
       write H i secret.
  
   (* Bob (L) reads from even addresses *)
-  Definition sec_bob1(i: Addr): ctree secE unit :=
+  Definition sec_bob1(i: Addr): ictree secE unit :=
     if Nat.Even_Odd_dec i then
       (* [i] even, read [i] *)
       read L i;; Ret tt
@@ -139,7 +139,7 @@ Section SecurityEx.
       read L (S i) ;; Ret tt.
 
   (* The (unfair) infinite interleaving of Alice/Bob *)
-  Definition sec_system(secret: nat): ctree secE void :=
+  Definition sec_system(secret: nat): ictree secE void :=
     for 0 to ∞
       (fun i =>
          (br2

@@ -12,6 +12,7 @@ Local Open Scope monad_scope.
 Generalizable All Variables.
 
 Open Scope type_scope.
+
 (*| Reified effects that have an encoding into the Coq type system |*)
 Universe eff.
 
@@ -73,11 +74,4 @@ Definition h_sum{A B} `{Monad M} `{Encode A} `{Encode B}
                   | inr e => hb e
                   end.
 
-(*| Dependent observations require dependent equality |*)
-Definition eq_dep_obs`{Encode E} {e e':E}(v: encode e)(v': encode e'): Prop :=
-  eq_dep E encode e v e' v'.
 
-Class Productive(E: Type) `{Encode E} :=  
-  prod_wit(e: E) : encode e.
-Arguments Productive E {H}.
-Arguments prod_wit {E} {H} {_} e /.

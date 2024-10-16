@@ -3,10 +3,10 @@ From Coq Require Import
   Program.Basics
   Classes.Morphisms.
 
-From CTree Require Export
+From ICTL Require Export
   Logic.World.
 
-From CTree Require Import
+From ICTL Require Import
   Utils.Utils
   Events.Core.
 

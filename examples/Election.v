@@ -1,17 +1,17 @@
-From CTree Require Import
-  CTree.Core
+From ICTL Require Import
+  ICTree.Core
   Logic.Ctl
   Utils.Vectors
-  CTree.Equ
-  CTree.SBisim
-  CTree.Logic.AG
-  CTree.Logic.AF
-  CTree.Logic.AX
-  CTree.Logic.State
-  CTree.Logic.Iter
-  CTree.Logic.Bind
-  CTree.Interp.State
-  CTree.Events.Writer.
+  ICTree.Equ
+  ICTree.SBisim
+  ICTree.Logic.AG
+  ICTree.Logic.AF
+  ICTree.Logic.AX
+  ICTree.Logic.State
+  ICTree.Logic.Iter
+  ICTree.Logic.Bind
+  ICTree.Interp.State
+  ICTree.Events.Writer.
 
 From Coq Require Import
   Fin
@@ -24,8 +24,8 @@ From ExtLib Require Import
 
 Set Implicit Arguments.
 
-Import CtlNotations CTreeNotations.
-Local Open Scope ctree_scope.
+Import CtlNotations ICTreeNotations.
+Local Open Scope ictree_scope.
 Local Open Scope fin_vector_scope.
 Local Open Scope ctl_scope.
 
@@ -58,30 +58,30 @@ Section Election.
           | Get => Id
           end.
 
-  Definition send: msg -> ctree netE unit :=
-    fun p => Ctree.trigger (Send p).
+  Definition send: msg -> ictree netE unit :=
+    fun p => ICtree.trigger (Send p).
   
-  Definition recv: ctree netE msg :=
-    Ctree.trigger Recv.
+  Definition recv: ictree netE msg :=
+    ICtree.trigger Recv.
 
   Notation sysE := (netE + memE).
 
-  Definition put: Id -> ctree sysE unit :=
-    fun id => Ctree.trigger (Put id).
+  Definition put: Id -> ictree sysE unit :=
+    fun id => ICtree.trigger (Put id).
 
-  Definition get: ctree sysE Id :=
-    Ctree.trigger Get.
+  Definition get: ictree sysE Id :=
+    ICtree.trigger Get.
 
   Notation Mails := (vec' n msg).
   Notation NetObs := (Id * msg).
   
   (* Local network instrumented semantics, write to [Mails] *)
   Definition h_sysE'(cycle: fin' n -> fin' n)
-    : sysE ~> stateT (Id * Mails) (ctreeW (Id * msg)) := 
+    : sysE ~> stateT (Id * Mails) (ictreeW (Id * msg)) := 
     fun e =>
       mkStateT
         (fun '(id, mail) =>
-           match e return ctreeW (Id * msg) (encode e * (fin' n * vec' n msg)) with
+           match e return ictreeW (Id * msg) (encode e * (fin' n * vec' n msg)) with
            | inl (Send msg) =>
                log (id, msg) ;;
                Ret (tt, (id, mail @ cycle id := msg))
@@ -98,7 +98,7 @@ Section Election.
      1. (Candidate candidate), where candidate = id -- I received my own [id] back 
      2. (Elected leader) -- Someone else was elected [leader]
    *)
-  Definition elect(id: fin' n): ctree netE unit :=
+  Definition elect(id: fin' n): ictree netE unit :=
     m <- recv ;;
     match m with
     | Candidate candidate =>
@@ -116,12 +116,12 @@ Section Election.
     end.
 
   (* Uniring scheduler, picks initial [i] nondeterministically, then runs forever *)
-  Definition elect_sched'(cycle: fin' n -> fin' n): ctree sysE _ :=
-    i <- Ctree.branch n ;;
+  Definition elect_sched'(cycle: fin' n -> fin' n): ictree sysE _ :=
+    i <- ICtree.branch n ;;
     put i ;;
     loop (
         i <- get ;;
-        resumCtree (elect i) ;;
+        resumICtree (elect i) ;;
         put (cycle i);;
         continue
       ).
@@ -151,12 +151,12 @@ Local Typeclasses Transparent equ.
 Local Typeclasses Transparent sbisim.
 
 Ltac run_head :=
-  unfold iter, MonadIter_ctree;
+  unfold iter, MonadIter_ictree;
   rewrite interp_state_unfold_iter, interp_state_bind, bind_bind,
     interp_state_vis, bind_bind;
   cbn;
   rewrite bind_ret_l, sb_guard, interp_state_ret, bind_ret_l, interp_state_bind, bind_bind,
-    interp_state_resumCtree, bind_vis, interp_state_vis, bind_bind;
+    interp_state_resumICtree, bind_vis, interp_state_vis, bind_bind;
   cbn;
   repeat setoid_rewrite bind_bind;
   apply afl_log; eauto with ctl;
@@ -190,15 +190,15 @@ Lemma election3_liveness:
           AF visW {fun '(id, msg) => exists e, msg = Elected e /\ id = e /\ e = FS (FS F1)} )>.
 Proof with auto with ctl.
   intros.
-  unfold elect_sched, elect_sched', Ctree.forever.  
+  unfold elect_sched, elect_sched', ICtree.forever.  
   cbn.
   rewrite interp_state_bind.
-  unfold Ctree.branch.
+  unfold ICtree.branch.
   rewrite interp_state_br, bind_br.
   apply aul_br; right; split.
   - csplit...
   - intros i.
-    unfold send, recv, put, get, Ctree.trigger.
+    unfold send, recv, put, get, ICtree.trigger.
     rewrite sb_guard, interp_state_ret, bind_ret_l, interp_state_bind,
       interp_state_vis, bind_bind.
     cbn.
@@ -207,10 +207,10 @@ Proof with auto with ctl.
       interp_state_vis, bind_bind.
     cbn.
     rewrite bind_ret_l, bind_guard, sb_guard, interp_state_ret, bind_ret_l,
-      interp_state_bind, bind_bind, interp_state_resumCtree.    
+      interp_state_bind, bind_bind, interp_state_resumICtree.    
     (* Get into [elect] *)
     unfold elect.
-    unfold send, recv, put, get, Ctree.trigger.
+    unfold send, recv, put, get, ICtree.trigger.
     rewrite interp_state_bind, bind_bind, interp_state_vis, bind_bind.
     cbn.
     repeat setoid_rewrite bind_bind.

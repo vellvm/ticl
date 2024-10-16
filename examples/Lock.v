@@ -1,19 +1,19 @@
-From CTree Require Import
-  CTree.Core
+From ICTL Require Import
+  ICTree.Core
   Logic.Ctl
   Utils.Vectors
-  CTree.Equ
+  ICTree.Equ
   Events.Core
-  CTree.SBisim
-  CTree.Logic.AG
-  CTree.Logic.AF
-  CTree.Logic.AX
-  CTree.Logic.State
-  CTree.Logic.Iter
-  CTree.Logic.Bind
-  CTree.Events.Writer
-  CTree.Events.State
-  CTree.Interp.State.
+  ICTree.SBisim
+  ICTree.Logic.AG
+  ICTree.Logic.AF
+  ICTree.Logic.AX
+  ICTree.Logic.State
+  ICTree.Logic.Iter
+  ICTree.Logic.Bind
+  ICTree.Events.Writer
+  ICTree.Events.State
+  ICTree.Interp.State.
 
 From Coq Require Import
   Classes.SetoidClass.
@@ -22,15 +22,15 @@ From ExtLib Require Import
   Structures.MonadState
   Data.Monads.StateMonad.
 
-Import CTreeNotations CtlNotations.
+Import ICTreeNotations CtlNotations.
 Local Open Scope fin_vector_scope.
-Local Open Scope ctree_scope.
+Local Open Scope ictree_scope.
 Local Open Scope ctl_scope.
 
 Section Lock.
 
   (* Assume a finite critical section *)
-  Context {T: Type} {critical: ctree (stateE T) unit} {R: unit -> World (stateE T) -> Prop}
+  Context {T: Type} {critical: ictree (stateE T) unit} {R: unit -> World (stateE T) -> Prop}
     {Hfin: <[ critical, Pure |= AF done R ]>} (init: T).   
 
   Notation "=?" := Fin.eq_dec.
@@ -49,32 +49,32 @@ Section Lock.
   
   Notation lockE := (yieldE + stateE St).
 
-  Definition get: ctree lockE St :=
-    @Ctree.trigger (stateE St) (lockE) _ _ (ReSum_inr) (ReSumRet_inr) Get.
+  Definition get: ictree lockE St :=
+    @ICtree.trigger (stateE St) (lockE) _ _ (ReSum_inr) (ReSumRet_inr) Get.
 
-  Definition put: St -> ctree lockE unit :=
-    fun x => @Ctree.trigger (stateE St) (lockE) _ _ (ReSum_inr) (ReSumRet_inr) (Put x).
+  Definition put: St -> ictree lockE unit :=
+    fun x => @ICtree.trigger (stateE St) (lockE) _ _ (ReSum_inr) (ReSumRet_inr) (Put x).
 
   
-  Definition set_flag(st: St)(i: fin' 1)(b: bool) : ctree lockE unit :=
+  Definition set_flag(st: St)(i: fin' 1)(b: bool) : ictree lockE unit :=
     put {|
         state := st.(state);
         flags := (Vector.replace st.(flags) i b);
         turn := st.(turn);
       |}.
 
-  Definition set_turn(st: St)(i: fin' 1)(b: bool) : ctree lockE unit :=
+  Definition set_turn(st: St)(i: fin' 1)(b: bool) : ictree lockE unit :=
     put {|
         state := st.(state);
         flags := (Vector.replace st.(flags) i b);
         turn := st.(turn);
       |}.
   
-  Definition yield: ctree lockE unit :=
-    @Ctree.trigger yieldE (lockE) _ _ (ReSum_inl) (ReSumRet_inl) Yield.
+  Definition yield: ictree lockE unit :=
+    @ICtree.trigger yieldE (lockE) _ _ (ReSum_inl) (ReSumRet_inl) Yield.
 
-  Definition while{E} `{Encode E}(c: ctree E bool) (body: ctree E unit): ctree E unit :=
-    Ctree.iter
+  Definition while{E} `{Encode E}(c: ictree E bool) (body: ictree E unit): ictree E unit :=
+    ICtree.iter
       (fun _ =>
          cond <- c;;
          if cond then
@@ -84,17 +84,17 @@ Section Lock.
            Ret (inr tt)
       ) tt.
 
-  Definition check(b: St -> bool): ctree lockE bool :=
+  Definition check(b: St -> bool): ictree lockE bool :=
     st <- get ;; Ret (b st).
 
-  Check @resumCtree.
-  Definition crit: ctree lockE unit :=
+  Check @resumICtree.
+  Definition crit: ictree lockE unit :=
     
-    @resumCtree (stateE St) lockE _ _ ReSum_inr ReSumRet_inr critical.
+    @resumICtree (stateE St) lockE _ _ ReSum_inr ReSumRet_inr critical.
   Notation continue := (Ret (inl tt)).
   Notation stop := (Ret (inr tt)).
   
-  Definition lock (id: fin' 1): ctree lockE unit :=
+  Definition lock (id: fin' 1): ictree lockE unit :=
     st <- get ;;
     put (set_flag st id true) ;;
     put (set_turn st id) ;;
@@ -103,7 +103,7 @@ Section Lock.
       (yield) ;;
     
     (* Spin loop *)
-    Ctree.iter
+    ICtree.iter
       (fun _ =>
          m <- acq ;;
          if PeanoNat.Nat.eq_dec m id then
@@ -121,11 +121,11 @@ Section Lock.
     leave.
 
   (* Spinlock instrumented semantics: (counter, lock state, shared state) *)
-  Program Definition h_lockE: spinE ~> stateT (nat * bool * T) (ctreeW lockE) := 
+  Program Definition h_lockE: spinE ~> stateT (nat * bool * T) (ictreeW lockE) := 
     fun e =>
       mkStateT (fun (p: nat * bool * T) =>
                   let '(cnt, lk, st) := p in
-                  match e return ctreeW lockE (encode e * (nat * bool * T)) with
+                  match e return ictreeW lockE (encode e * (nat * bool * T)) with
                   | inl Acq =>
                       log Acq;;
                       Ret (cnt, (S cnt, lk, st))
@@ -144,8 +144,8 @@ Section Lock.
                       Ret (st, (cnt, lk, st))                          
                   end).
 
-  Definition spinlock2: ctree spinE unit :=
-    Ctree.br2
+  Definition spinlock2: ictree spinE unit :=
+    ICtree.br2
       (spinlock 0 ;; spinlock 1)
       (spinlock 1 ;; spinlock 0).
        
@@ -156,13 +156,13 @@ Section Lock.
   Proof with eauto with ctl.
     intros.
     unfold election_proto, uring_sched. 
-    unfold Ctree.branch.
+    unfold ICtree.branch.
     rewrite bind_br.
     cright.
     apply axl_br; split; [csplit; split; auto with ctl|].
     intro c. (* Nondeterministic pick *)
     rewrite bind_ret_l.
-    unfold Ctree.forever.    
+    unfold ICtree.forever.    
     eapply aul_iter_nat with (Ri:= fun _ _ => True)...
     clear c.
     intros (j, sys) w Hd [].
@@ -174,7 +174,7 @@ Section Lock.
       + (* Ret *)
         left.
         destruct x.
-        unfold Ctree.map; rewrite bind_vis;
+        unfold ICtree.map; rewrite bind_vis;
           setoid_rewrite bind_ret_l.
         apply aul_vis...
         right; split.
@@ -184,7 +184,7 @@ Section Lock.
           csplit.
           reflexivity.
       + (* Br *)
-        unfold Ctree.map; rewrite bind_br;
+        unfold ICtree.map; rewrite bind_br;
           setoid_rewrite bind_ret_l.
         right.
         apply aur_br; right.

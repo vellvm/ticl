@@ -1,23 +1,23 @@
 
-From CTree Require Import
-  CTree.Core
+From ICTL Require Import
+  ICTree.Core
   Events.State
   Events.Writer
   Logic.Ctl
-  CTree.Equ
-  CTree.SBisim
-  CTree.Logic.Trans
+  ICTree.Equ
+  ICTree.SBisim
+  ICTree.Logic.Trans
   Logic.Kripke
-  CTree.Interp.Core
-  CTree.Logic.AF
-  CTree.Logic.AX
-  CTree.Logic.Bind
-  CTree.Logic.Iter
-  CTree.Logic.State
-  CTree.Logic.CanStep
-  CTree.Interp.State
-  CTree.Events.State
-  CTree.Events.Writer
+  ICTree.Interp.Core
+  ICTree.Logic.AF
+  ICTree.Logic.AX
+  ICTree.Logic.Bind
+  ICTree.Logic.Iter
+  ICTree.Logic.State
+  ICTree.Logic.CanStep
+  ICTree.Interp.State
+  ICTree.Events.State
+  ICTree.Events.Writer
   Lang.Clang.
 
 From ExtLib Require Import
@@ -32,9 +32,9 @@ From Coq Require Import
 
 Generalizable All Variables.
 
-Import Ctree CTreeNotations CtlNotations.
+Import ICtree ICTreeNotations CtlNotations.
 Local Open Scope ctl_scope.
-Local Open Scope ctree_scope.
+Local Open Scope ictree_scope.
 Local Open Scope Z_scope.
 
 (*

@@ -1,6 +1,6 @@
 From ExtLib Require Import
   Structures.Functor.
-From CTree Require Import Utils.
+From ICTL Require Import Utils.
 
 (*| [iter]: A primitive for general recursion.
     Iterate a function updating an accumulator [I], until it produces

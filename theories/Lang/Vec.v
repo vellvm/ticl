@@ -11,16 +11,16 @@ From Coq Require Import
 
 From Equations Require Import Equations.
 
-From CTree Require Import
-  CTree.Core
+From ICTL Require Import
+  ICTree.Core
   Equ
   SBisim
-  CTree.Interp.State.
+  ICTree.Interp.State.
 
 Import ListNotations.
-Import CTreeNotations.
+Import ICTreeNotations.
 
-Local Open Scope ctree_scope.
+Local Open Scope ictree_scope.
 
 Generalizable All Variables.
 
@@ -898,7 +898,7 @@ Section Ordering.
     }
   Qed.
 
-  Lemma remove_at_permutation_vectors {n X} `{Encode E} (v1 v2 : vec' (S n) (ctree E X)) i p q Hp Hq p' q'
+  Lemma remove_at_permutation_vectors {n X} `{Encode E} (v1 v2 : vec' (S n) (ictree E X)) i p q Hp Hq p' q'
         (Hp' : p' = projT1 (remove_at_permutation p i Hp))
         (Hq' : q' = projT1 (remove_at_permutation q (p i) Hq))
         (Hpq : forall i, p (q i) = i)

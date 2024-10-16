@@ -1,10 +1,10 @@
 (*|
 =========================================
-Modal logics over ctrees
+Modal logics over ictrees
 =========================================
 |*)
 From Coinduction Require Export coinduction tactics.
-From CTree Require Export           
+From ICTL Require Export           
   Utils.Utils
   Logic.Kripke
   Logic.Syntax

@@ -1,7 +1,7 @@
 From Coinduction Require Import
   coinduction tactics.
 
-From CTree Require Import
+From ICTL Require Import
   Utils.Utils
   Events.Core
   Logic.Syntax

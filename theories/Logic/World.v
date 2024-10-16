@@ -3,7 +3,7 @@ From Coq Require Import
   Program.Equality
   Classes.Morphisms.
 
-From CTree Require Import
+From ICTL Require Import
   Events.Core.
 
 Generalizable All Variables.

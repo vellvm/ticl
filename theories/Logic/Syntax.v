@@ -1,9 +1,9 @@
-From CTree Require Import
+From ICTL Require Import
   Events.Core
   Logic.Kripke
   Utils.Utils.
 
-From CTree Require Import
+From ICTL Require Import
   Events.WriterE.
 
 From Equations Require Import Equations.

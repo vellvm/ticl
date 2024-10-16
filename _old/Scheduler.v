@@ -3,12 +3,12 @@ From Coq Require Import
   Classes.RelationPairs
   Classes.RelationClasses.
 
-From CTree Require Import
-  CTree
+From ICTL Require Import
+  ICTree
   KTree
   Events.Core
   Events.Net
-  CTree.Events.State
+  ICTree.Events.State
   Utils.Utils
   Utils.Vectors.
 
@@ -24,9 +24,9 @@ Section Scheduler.
   Notation Qs := (list T * list (uid * T))%type (only parsing).
   Notation ktree X := (ktree netE X).
   Notation scheduleE X := (stateE (vec n (ktree X * Qs)))%type (only parsing).
-  Import CTreeNotations.
+  Import ICTreeNotations.
 
-  Local Open Scope ctree_scope.
+  Local Open Scope ictree_scope.
   (*|
     Interference is how a local action affects the global state.
     It is the sharing is shared state concurrency. This will be specific to
@@ -48,15 +48,15 @@ Section Scheduler.
   Variable (interference: vec n Qs -> Qs -> Qs).
 
 
-  Definition fair_copies{X} (t: ktree X): ctree (scheduleE X) void :=
+  Definition fair_copies{X} (t: ktree X): ictree (scheduleE X) void :=
     put (Vector.const (t, ([], [])) n) ;;
-    Ctree.iter
+    ICtree.iter
       (fun _: unit =>
          ps <- get ;;
          let ps' := Vector.map (fun '(t, σ) => transF t σ) ps in
          let σs' := Vector.map snd ps' in
          put (Vector.map (fun '(t, σ) => (t, interference σs' σ)) ps') ;;
-         CTree.Core.Ret (inl tt)
+         ICTree.Core.Ret (inl tt)
       ) tt.
 
 End Scheduler.

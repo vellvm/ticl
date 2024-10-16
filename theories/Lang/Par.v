@@ -14,20 +14,20 @@ From Coinduction Require Import
 
 From Equations Require Import Equations.
 
-From CTree Require Import
-  CTree.Core
-  CTree.Events.Writer
+From ICTL Require Import
+  ICTree.Core
+  ICTree.Events.Writer
   Logic.Kripke
   Equ
   Logic.Trans
   Lang.Vec
-  CTree.Interp.State.
+  ICTree.Interp.State.
 
 Import ListNotations.
-Import CTreeNotations.
+Import ICTreeNotations.
 
 Local Open Scope ctl_scope.
-Local Open Scope ctree_scope.
+Local Open Scope ictree_scope.
 
 Generalizable All Variables.
 
@@ -48,7 +48,7 @@ Global Instance encode_forkE: Encode forkE :=
 Section parallel.
   Context `{HE: Encode E}.
 
-  Definition thread := ctree (yieldE + forkE + E) unit.
+  Definition thread := ictree (yieldE + forkE + E) unit.
   Definition vec n := fin n -> thread.
 
   (** World notation for Thread and Scheduler *)
@@ -64,10 +64,10 @@ Section parallel.
   
   (** Scheduling a thread pool *)
   Equations schedule_match
-             (schedule : forall (n : nat), vec n -> option (fin n) -> ctree E unit)
+             (schedule : forall (n : nat), vec n -> option (fin n) -> ictree E unit)
              (n : nat)
              (v: vec n)
-    : option (fin n) -> ctree E unit :=
+    : option (fin n) -> ictree E unit :=
     (* If no thread is focused, and there are none left in the pool, we are done *)
     schedule_match schedule 0 v None :=
       Ret tt;
@@ -176,7 +176,7 @@ Section parallel.
     rewrite unfold_schedule in Hequ.
     destruct n as [| n]. 
     - inv i.
-    - rewrite ctree_eta in Hequ.
+    - rewrite ictree_eta in Hequ.
       simp schedule_match in Hequ.
       destruct (observe (Guard t)) eqn:Heqt;
         desobs (v i); cbn in Hequ;
@@ -184,19 +184,19 @@ Section parallel.
       + destruct x.
         left.        
         exists n, eq_refl; intuition.
-        rewrite (ctree_eta (v i)), Heqt0; reflexivity.
+        rewrite (ictree_eta (v i)), Heqt0; reflexivity.
       + right. left.
         exists t1; intuition.
-        rewrite (ctree_eta (v i)), Heqt0; reflexivity.
+        rewrite (ictree_eta (v i)), Heqt0; reflexivity.
       + destruct e eqn:He; try destruct s; try destruct y; try destruct f;
           cbn in x; inv x.                                                               
         right. right. 
         exists k; intuition.
-        rewrite (ctree_eta (v i)), Heqt0; reflexivity.
+        rewrite (ictree_eta (v i)), Heqt0; reflexivity.
   Qed.
 
   (** Helper lemmas for when [schedule] transitions to [done] *)
-  Lemma ktrans_schedule_done_1 w w' n v i (t: ctree E unit) R:
+  Lemma ktrans_schedule_done_1 w w' n v i (t: ictree E unit) R:
     [schedule n v (Some i), w] ↦ [t, w'] ->
     done_with (X:=unit) R w' ->    
     n = 1%nat.
@@ -204,12 +204,12 @@ Section parallel.
     intros.
     cbn in H.
     remember (observe (schedule n v (Some i))).
-    pose proof (ctree_eta (go (observe (schedule n v (Some i))))) as Eqt.
-    rewrite <- Heqc in Eqt at 1. cbn in Eqt. clear Heqc.    
+    pose proof (ictree_eta (go (observe (schedule n v (Some i))))) as Eqt.
+    rewrite <- Heqi0 in Eqt at 1. cbn in Eqt. clear Heqi0.    
     remember (observe t).
-    revert n t v i R Eqt Heqc0 H0.
-    induction H; intros; try inv Heqc; subst.
-    - rewrite <- ctree_eta in Eqt.
+    revert n t v i R Eqt Heqi1 H0.
+    induction H; intros; try inv Heqi1; subst.
+    - rewrite <- ictree_eta in Eqt.
       apply guard_schedule_inv in Eqt.
       destruct Eqt as [? | [? | ?]].
       + (* Ret *)
@@ -226,7 +226,7 @@ Section parallel.
         destruct (observe (v i)) eqn:Hv; cbn in H;
           step in Ht_; cbn in Ht_; rewrite Hv in Ht_; inv Ht_.
         eapply IHktrans_ with (v:=replace_vec v i t_) (i:=i); eauto.
-        now rewrite <- ?ctree_eta.
+        now rewrite <- ?ictree_eta.
       + (* Vis (Yield) *)
         destruct H1 as (k_ & Hv & Ht).
         destruct n; try solve [inv i].
@@ -242,33 +242,33 @@ Section parallel.
       simp schedule_match in Eqt.      
       destruct (observe (v i)) eqn:Hv; cbn in Eqt;
         step in Eqt; cbn in Eqt; inv Eqt.
-      destruct e; destruct y; [destruct s; [destruct y| destruct f] |]; inv H2.
+      destruct e; destruct y; [destruct s; [destruct y| destruct f] |]; inv H3.
     - destruct n; try solve [inv i].
       rewrite unfold_schedule in Eqt.
       simp schedule_match in Eqt.      
       destruct (observe (v0 i)) eqn:Hv; cbn in Eqt;
         step in Eqt; cbn in Eqt; inv Eqt.
-      destruct e0; [destruct s; [destruct y0| destruct f]|]; inv H2.
+      destruct e0; [destruct s; [destruct y0| destruct f]|]; inv H3.
   Qed.
 
-  Opaque Ctree.stuck.
-  Lemma ktrans_schedule_thread_done (ws ws': WS) (wt wt': WT) v i (t: ctree E unit):
+  Opaque ICtree.stuck.
+  Lemma ktrans_schedule_thread_done (ws ws': WS) (wt wt': WT) v i (t: ictree E unit):
     [schedule 1%nat v (Some i), ws] ↦ [t, ws'] ->    
     world_sched_equiv ws wt ->
     done_of tt ws ws' ->
     done_of tt wt wt' ->
-    [v i, wt] ↦ [Ctree.stuck, wt'].
+    [v i, wt] ↦ [ICtree.stuck, wt'].
   Proof.
     intros.
     unfold ktrans in *.
     cbn in *. 
     remember (observe (schedule 1 v (Some i))).
-    pose proof (ctree_eta (go (observe (schedule 1 v (Some i))))).
-    rewrite <- Heqc in H3 at 1. cbn in H3. clear Heqc.
+    pose proof (ictree_eta (go (observe (schedule 1 v (Some i))))).
+    rewrite <- Heqi0 in H3 at 1. cbn in H3. clear Heqi0.
     remember (observe t).
-    revert t v i  Heqc0 H0 H1 H2 H3.
+    revert t v i  Heqi1 H0 H1 H2 H3.
     induction H; intros t_ v' i' x' Heqw Hws Hwt Hequ. 
-    - rewrite <- ctree_eta in Hequ. 
+    - rewrite <- ictree_eta in Hequ. 
       apply guard_schedule_inv in Hequ.
       destruct Hequ as [? | [? | ?]].
       + (* Ret *)
@@ -284,7 +284,7 @@ Section parallel.
           inv Heqw; ddestruction Hws; ddestruction Hwt; now constructor.
         * step in Hvic; cbn in Hvic; rewrite Hv' in Hvic; inv Hvic.
         * step in Hvic; cbn in Hvic; rewrite Hv' in Hvic; inv Hvic.
-          rewrite (ctree_eta t), (ctree_eta (schedule 1 (replace_vec v' i' t'') (Some i'))) in Hk.
+          rewrite (ictree_eta t), (ictree_eta (schedule 1 (replace_vec v' i' t'') (Some i'))) in Hk.
           inv Heqw; ddestruction Hws; ddestruction Hwt; econstructor. 
           -- specialize (IHktrans_  t_ (replace_vec v' i' t'') i' x' (WorldSchedE _ _) (ObsWithFinish _ _ _) (ObsWithFinish _ _ _) Hk).
              rewrite replace_vec_eq in IHktrans_.

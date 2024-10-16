@@ -16,13 +16,13 @@ From ExtLib Require Import
   Structures.Monad
   Data.Monads.StateMonad.
 
-From CTree Require Import
+From ICTL Require Import
   Events.Core
   Events.WriterE
   Utils.Utils
   Logic.Kripke.
 
-From CTree Require Export
+From ICTL Require Export
   Logic.Syntax.
 
 Generalizable All Variables.
