@@ -7,7 +7,7 @@ From Coq Require Import
 From Coinduction Require Import
      coinduction rel tactics.
 
-From ICTL Require Import
+From TICL Require Import
   ICTree.Core.
 
 Generalizable All Variables.

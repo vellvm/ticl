@@ -12,7 +12,7 @@ From Coq Require Import
   Classes.SetoidClass
   Classes.RelationPairs.
 
-From ICTL Require Import
+From TICL Require Import
   ICTree.Core
   ICTree.Equ
   ICTree.Trans
@@ -50,7 +50,7 @@ Section ICTreeTrans.
   | KtransFinish (e: E) (v: encode e) (x: X) t:
     t ≅ ICtree.stuck ->
     ktrans_ (RetF x) (Obs e v) (observe t) (Finish e v x).
-  Hint Constructors ktrans_: ctl.
+  Hint Constructors ktrans_: ticl.
 
   Local Instance ktrans_equ_aux1 {X}(t: ictree' E X) (w: World E):
     Proper (going (equ eq) ==> eq ==> flip impl) (ktrans_ t w).
@@ -109,9 +109,9 @@ Section ICTreeTrans.
         ktrans_ (X:=X) (observe t) w (observe t') w'
     }.
   Next Obligation.
-    dependent induction H; cbn; eauto with ctl.
+    dependent induction H; cbn; eauto with ticl.
   Defined.
-  Hint Unfold ktrans: ctl.
+  Hint Unfold ktrans: ticl.
   Arguments ktrans /.
 
   Global Instance ktrans_equ_proper{X}:
@@ -202,7 +202,7 @@ Section ICTreeTrans.
     exists s'; intuition.
   Qed.
 
-  Local Open Scope ctl_scope.
+  Local Open Scope ticl_scope.
   Lemma ktrans_guard{X}: forall (t t': ictree E X) w w',
       [Guard t, w] ↦ [t', w'] <-> [t, w] ↦ [t', w'].
   Proof.
@@ -212,7 +212,7 @@ Section ICTreeTrans.
     - cbn in *.
       now econstructor.
   Qed.
-  Hint Resolve ktrans_guard: ctl.
+  Hint Resolve ktrans_guard: ticl.
 
   Lemma ktrans_br {X}: forall n (t: ictree E X) (k: fin' n -> ictree E X) w w',
       [Br n k, w] ↦ [t, w'] <->
@@ -226,7 +226,7 @@ Section ICTreeTrans.
     - destruct H as (i & Heq & -> & Hd).
       econstructor; eauto.
   Qed.
-  Hint Resolve ktrans_br: ctl.
+  Hint Resolve ktrans_br: ticl.
 
   Lemma ktrans_done {X}: forall (t: ictree E X) (w': World E) x,
       [Ret x, Pure] ↦ [t, w'] <-> (w' = Done x /\ t ≅ stuck).
@@ -237,7 +237,7 @@ Section ICTreeTrans.
     - destruct H as (-> & ->); constructor.
       reflexivity.
   Qed.
-  Hint Resolve ktrans_done: ctl.
+  Hint Resolve ktrans_done: ticl.
 
   Lemma ktrans_finish {X}: forall (t: ictree E X) (w': World E) (e: E) (v: encode e) x,
       [Ret x, Obs e v] ↦ [t, w'] <->
@@ -249,7 +249,7 @@ Section ICTreeTrans.
     - destruct H as (-> & ->); constructor.
       reflexivity.
   Qed.
-  Hint Resolve ktrans_finish: ctl.
+  Hint Resolve ktrans_finish: ticl.
 
   Lemma ktrans_vis{X}: forall (t: ictree E X) (s s': World E) (e: E) (k: encode e -> ictree E X),
       [Vis e k, s] ↦ [t, s'] <->
@@ -264,14 +264,14 @@ Section ICTreeTrans.
     - destruct TR as (? & -> & <- & ?).
       econstructor; auto.
   Qed.
-  Hint Resolve ktrans_vis: ctl.
+  Hint Resolve ktrans_vis: ticl.
 
   Lemma ktrans_pure_pred{X}: forall (t t': ictree E X) w,
       [t, w] ↦ [t', Pure] -> w = Pure.
   Proof.
     intros * H; cbn in H; dependent induction H; eauto.
   Qed.
-  Hint Resolve ktrans_pure_pred: ctl.
+  Hint Resolve ktrans_pure_pred: ticl.
 
   Lemma ktrans_stuck{X}: forall (t: ictree E X) w w',
       ~ [stuck, w] ↦ [t, w'].
@@ -279,7 +279,7 @@ Section ICTreeTrans.
     intros * Hcontra.
     cbn in Hcontra; dependent induction Hcontra; eauto.
   Qed.
-  Hint Resolve ktrans_stuck: ctl.
+  Hint Resolve ktrans_stuck: ticl.
 
   Lemma done_not_ktrans{X}: forall (t: ictree E X) w,
       is_done X w ->
@@ -290,21 +290,21 @@ Section ICTreeTrans.
     inv Hret;
       apply ktrans_not_done in H; inv H.
   Qed.
-  Hint Resolve done_not_ktrans: ctl.
+  Hint Resolve done_not_ktrans: ticl.
 
   Lemma ktrans_done_inv{X}: forall (t t': ictree E X) (x: X) w,
       ~ [t, Done x] ↦ [t', w].
   Proof.
     intros * Hcontra; cbn in Hcontra; dependent induction Hcontra; eauto; inv H.
   Qed.
-  Hint Resolve ktrans_done_inv: ctl.
+  Hint Resolve ktrans_done_inv: ticl.
 
   Lemma ktrans_finish_inv{X}: forall (t t': ictree E X) (e: E) (v: encode e) (x: X) w,
       ~ [t, Finish e v x] ↦ [t', w].
   Proof.
     intros * Hcontra; cbn in Hcontra; dependent induction Hcontra; eauto; inv H.
   Qed.
-  Hint Resolve ktrans_finish_inv: ctl.
+  Hint Resolve ktrans_finish_inv: ticl.
 
   Lemma ktrans_to_done_inv{X}: forall (t t': ictree E X) w (x: X),
       [t, w] ↦ [t', Done x] ->
@@ -318,7 +318,7 @@ Section ICTreeTrans.
       rewrite Eqt in H.
       intuition.
   Qed.
-  Hint Resolve ktrans_to_done_inv: ctl.
+  Hint Resolve ktrans_to_done_inv: ticl.
 
   Lemma ktrans_to_finish_inv{X}: forall (t t': ictree E X) w (e: E) (v: encode e) (x: X),
       [t, w] ↦ [t', Finish e v x] ->
@@ -332,7 +332,7 @@ Section ICTreeTrans.
       rewrite Eqt in H.
       intuition.
   Qed.
-  Hint Resolve ktrans_to_finish_inv: ctl.
+  Hint Resolve ktrans_to_finish_inv: ticl.
 
   Lemma ktrans_bind_l{X Y}: forall (t t': ictree E Y) (k: Y -> ictree E X) w w',
       [t, w] ↦ [t', w'] ->
@@ -401,7 +401,7 @@ Section ICTreeTrans.
         (exists y w_, [t, w] ↦ [stuck, w_]
                  /\ done_eq y w_
                  /\ [k y, w] ↦ [u, w']).
-  Proof with (auto with ctl).
+  Proof with (auto with ticl).
     intros TR.
     dependent induction TR; intros.
     - rewrite unfold_bind in H; unfold ktrans; cbn;
@@ -466,7 +466,7 @@ Section ICTreeTrans.
       + left.
         pose proof (equ_vis_invT H1) as (_ & <-).
         eapply equ_vis_invE with v in H1.
-        exists (k1 v); split; [|split]; auto with ctl.
+        exists (k1 v); split; [|split]; auto with ticl.
         rewrite <- H1, <- H2.
         now rewrite <- ictree_eta.
     - rewrite unfold_bind in H0; unfold ktrans; cbn;
@@ -508,12 +508,12 @@ Section ICTreeTrans.
     rewrite <- ictree_eta; reflexivity.
     rewrite <- ictree_eta; reflexivity.
   Qed.
-  Hint Resolve ktrans_bind_inv: ctl.
+  Hint Resolve ktrans_bind_inv: ticl.
 
 End ICTreeTrans.
 
 Local Typeclasses Transparent equ.
-Local Open Scope ctl_scope.
+Local Open Scope ticl_scope.
 Lemma ktrans_trigger_inv `{ReSumRet E1 E2}{X}:forall (e: E2) w w' (k: encode (resum e) -> ictree E2 X) (u': ictree E2 X),
       [z <- trigger e ;; k z, w] ↦ [u', w'] ->
       (not_done w /\ exists z, w' = Obs e z /\ u' ≅ k z).
@@ -532,16 +532,16 @@ Proof.
 Qed.
 
 Global Hint Constructors
-  ktrans_ not_done done_with vis_with: ctl.
+  ktrans_ not_done done_with vis_with: ticl.
 
 Global Hint Resolve
   ktrans_stuck ktrans_br ktrans_vis ktrans_done
   ktrans_done_inv ktrans_finish can_step_not_done
   ktrans_not_done ktrans_finish_inv ktrans_bind_inv
   ktrans_to_done_inv ktrans_to_finish_inv
-  ktrans_guard ktrans_pure_pred: ctl.
+  ktrans_guard ktrans_pure_pred: ticl.
 
-From ICTL Require Import ICTree.SBisim.
+From TICL Require Import ICTree.SBisim.
 Local Typeclasses Opaque sbisim.
 Local Typeclasses Opaque equ.
 Lemma ktrans_sbisim_ret `{Encode E} {X Y}:

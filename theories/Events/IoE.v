@@ -1,9 +1,9 @@
 (*| Useful instructions: IO (files) |*)
-From ICTL Require Import
+From TICL Require Import
   Classes
   ICTree.Core.
 
-From ICTL Require Import
+From TICL Require Import
   Events.Core.
 
 From ExtLib Require Import

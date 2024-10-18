@@ -3,7 +3,7 @@ From ExtLib Require Export
   Data.Monads.StateMonad
   Structures.Monad.
 
-From ICTL Require Import
+From TICL Require Import
   Classes
   ICTree.Core
   ICTree.Interp.Core

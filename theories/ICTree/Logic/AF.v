@@ -3,7 +3,7 @@ From Coq Require Import
   Arith.Wf_nat
   Classes.Morphisms.
 
-From ICTL Require Import
+From TICL Require Import
   Events.Core
   Events.WriterE
   ICTree.Core
@@ -13,7 +13,7 @@ From ICTL Require Import
   ICTree.Interp.State
   ICTree.Logic.Trans
   ICTree.Logic.CanStep
-  Logic.Ctl
+  Logic.Core
   Logic.AX
   Logic.Kripke
   Logic.Setoid.
@@ -21,11 +21,11 @@ From ICTL Require Import
 Set Implicit Arguments.
 Generalizable All Variables.
 
-Import ICTreeNotations CtlNotations.
-Local Open Scope ctl_scope.
+Import ICTreeNotations TiclNotations.
+Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 
-(*| CTL logic lemmas on c/itrees |*)
+(*| TICL logic lemmas on c/itrees |*)
 Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
@@ -56,12 +56,12 @@ Section BasicLemmas.
   Lemma aul_ret: forall (r: X) w φ ψ,
       <( {Ret r}, w |= ψ \/ φ AN ψ )> <->
       <( {Ret r}, w |= φ AU ψ )>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     split; intros H; cdestruct H.
     - now cleft.
     - cright; csplit; cdestruct H...
       intros t' w' TR.
-      apply ctll_not_done in Hp.
+      apply ticll_not_done in Hp.
       specialize (H _ _ TR).
       inv Hp.
       + apply ktrans_done in TR as (-> & ?).
@@ -74,7 +74,7 @@ Section BasicLemmas.
     - cdestruct H.
       cright; csplit...
       intros t' w' TR.
-      apply ctll_not_done in Hp.
+      apply ticll_not_done in Hp.
       specialize (H _ _ TR).
       inv Hp.
       + apply ktrans_done in TR as (-> & ?).
@@ -88,12 +88,12 @@ Section BasicLemmas.
   Lemma aur_ret: forall (r: X) w φ ψ,
       <[ {Ret r}, w |= ψ \/ φ AN ψ ]> <->
       <[ {Ret r}, w |= φ AU ψ ]>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     split; intros H; cdestruct H.
     - now cleft.
     - cright; csplit; cdestruct H...
       intros t' w' TR.
-      apply ctll_not_done in Hp.
+      apply ticll_not_done in Hp.
       specialize (H _ _ TR).
       inv Hp.
       + apply ktrans_done in TR as (-> & ?).
@@ -106,7 +106,7 @@ Section BasicLemmas.
     - cdestruct H.
       cright; csplit...
       intros t' w' TR.
-      apply ctll_not_done in Hp.
+      apply ticll_not_done in Hp.
       specialize (H _ _ TR).
       inv Hp.
       + apply ktrans_done in TR as (-> & ?).
@@ -122,12 +122,12 @@ Section BasicLemmas.
          <( {Br n k}, w |= ψ )> /\
            forall (i: fin' n), <( {k i}, w |= ψ AU φ )>) <->
       <( {Br n k}, w |= ψ AU φ )>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     split; intros.
     - destruct H as [Hφ | (Hψ & H)].
       + now cleft.
       + cright; csplit...
-        * apply ctll_not_done in Hψ.
+        * apply ticll_not_done in Hψ.
           now apply can_step_br.
         * intros t' w' TR'.
           apply ktrans_br in TR' as (? & -> & -> & ?).
@@ -141,7 +141,7 @@ Section BasicLemmas.
           apply H.
           apply ktrans_br.
           exists i; split2...
-          now apply ctll_not_done in Hp.
+          now apply ticll_not_done in Hp.
   Qed.
 
 
@@ -150,12 +150,12 @@ Section BasicLemmas.
          <( {Vis e k}, w |= ψ )> /\
            forall (v: encode e), <( {k v}, {Obs e v} |= ψ AU φ )>) <->
       <( {Vis e k}, w |= ψ AU φ )>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     split; intros.
     - destruct H as [Hφ | (Hψ & H)].
       + now cleft.
       + cright; csplit...
-        * apply ctll_not_done in Hψ.
+        * apply ticll_not_done in Hψ.
           now apply can_step_vis.
         * intros t' w' TR'.
           apply ktrans_vis in TR' as (? & -> & <- & ?).
@@ -169,14 +169,14 @@ Section BasicLemmas.
           apply H.
           apply ktrans_vis.
           exists i; split2...
-          now apply ctll_not_done in Hp.
+          now apply ticll_not_done in Hp.
   Qed.
 
   Lemma afl_vis: forall (e: E) (k: encode e -> ictree E X) (_: encode e) w φ,
       <( {Vis e k}, w |= φ )> \/
          (not_done w /\ forall (v: encode e), <( {k v}, {Obs e v} |= AF φ )>) <->
       <( {Vis e k}, w |= AF φ )>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     split; intros.
     - destruct H.
       + apply aul_vis...
@@ -197,12 +197,12 @@ Section BasicLemmas.
          <( {Br n k}, w |= ψ )> /\
            forall (i: fin' n), <[ {k i}, w |= ψ AU φ ]>) <->
       <[ {Br n k}, w |= ψ AU φ ]>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     split; intros.
     - destruct H as [Hφ | (Hψ & H)].
       + now cleft.
       + cright; csplit...
-        * apply ctll_not_done in Hψ.
+        * apply ticll_not_done in Hψ.
           now apply can_step_br.
         * intros t' w' TR'.
           apply ktrans_br in TR' as (? & -> & -> & ?).
@@ -216,7 +216,7 @@ Section BasicLemmas.
           apply H.
           apply ktrans_br.
           exists i; split2...
-          now apply ctll_not_done in Hp.
+          now apply ticll_not_done in Hp.
   Qed.
 
   Lemma aur_vis: forall (e: E) (k: encode e -> ictree E X) (_: encode e) w ψ φ,
@@ -224,12 +224,12 @@ Section BasicLemmas.
          <( {Vis e k}, w |= ψ )> /\
            forall (v: encode e), <[ {k v}, {Obs e v} |= ψ AU φ ]>) <->
       <[ {Vis e k}, w |= ψ AU φ ]>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     split; intros.
     - destruct H as [Hφ | (Hψ & H)].
       + now cleft.
       + cright; csplit...
-        * apply ctll_not_done in Hψ.
+        * apply ticll_not_done in Hψ.
           now apply can_step_vis.
         * intros t' w' TR'.
           apply ktrans_vis in TR' as (? & -> & <- & ?).
@@ -243,14 +243,14 @@ Section BasicLemmas.
           apply H.
           apply ktrans_vis.
           exists i; split2...
-          now apply ctll_not_done in Hp.
+          now apply ticll_not_done in Hp.
   Qed.
 
   Lemma afr_vis: forall (e: E) (k: encode e -> ictree E X) (_: encode e) w φ,
       <[ {Vis e k}, w |= φ ]> \/
          (not_done w /\ forall (v: encode e), <[ {k v}, {Obs e v} |= AF φ ]>) <->
       <[ {Vis e k}, w |= AF φ ]>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     split; intros.
     - destruct H.
       + apply aur_vis...

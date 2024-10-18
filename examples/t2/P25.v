@@ -1,9 +1,9 @@
 
-From ICTL Require Import
+From TICL Require Import
   ICTree.Core
   Events.State
   Events.Writer
-  Logic.Ctl
+  Logic.Core
   ICTree.Equ
   ICTree.SBisim
   ICTree.Logic.Trans
@@ -30,8 +30,8 @@ From Coq Require Import
 
 Generalizable All Variables.
 
-Import ICtree ICTreeNotations CtlNotations.
-Local Open Scope ctl_scope.
+Import ICtree ICTreeNotations TiclNotations.
+Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 Local Open Scope Z_scope.
 
@@ -80,7 +80,7 @@ Module P25.
       let init := add c cval empty in
       <( {instr_cprog p25 init}, {Obs (Log init) tt} |=
            (visW {assert c (fun cv => cv <= 5)} \/ AF visW {assert r (fun rv => rv > 5)}) )>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     intros.
     unfold p25, init.
     destruct (Z.le_gt_cases cval 5).
@@ -94,9 +94,9 @@ Module P25.
         * eapply aur_cprog_assgn...
           csplit...
         * do 6 (
-              eapply afl_cprog_while_unfold; auto with ctl;
-              [eapply aur_cprog_seq; eapply aur_cprog_assgn; auto with ctl;
-               csplit; auto with ctl|]; cbn
+              eapply afl_cprog_while_unfold; auto with ticl;
+              [eapply aur_cprog_seq; eapply aur_cprog_assgn; auto with ticl;
+               csplit; auto with ticl|]; cbn
             ).
           cleft.
           apply vis_c_assert...

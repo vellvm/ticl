@@ -1,7 +1,7 @@
 From Coinduction Require Import
   coinduction lattice tactics.
 
-From ICTL Require Import
+From TICL Require Import
   Events.Core
   ICTree.Core
   ICTree.Equ
@@ -16,21 +16,21 @@ From ICTL Require Import
   ICTree.Logic.EF
   ICTree.Logic.Bind
   ICTree.Logic.Ret
-  Logic.Ctl.
+  Logic.Core.
 
 From Coq Require Import Arith.Wf_nat.
 
 Generalizable All Variables.
 
-Import ICTreeNotations CtlNotations.
-Local Open Scope ctl_scope.
+Import ICTreeNotations TiclNotations.
+Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 
 Section IterLemmas.
   Context {E: Type} {HE: Encode E}.
 
   (* AN *)
-  Lemma anl_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ictree E (I + X)) (φ ψ: ctll E):
+  Lemma anl_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ictree E (I + X)) (φ ψ: ticll E):
     well_founded Rv ->
     Ri i w ->    
     (forall (i: I) w,
@@ -40,7 +40,7 @@ Section IterLemmas.
                       {fun (lr: I + X) (w': World E) => 
                          exists i', lr = inl i' /\ Ri i' w' /\ Rv i' i}]>) ->
     <( {iter k i}, w |= φ AN ψ )>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     intros WfR Hi H.
     generalize dependent k.
     generalize dependent w.
@@ -50,7 +50,7 @@ Section IterLemmas.
     unfold iter, MonadIter_ictree.
     rewrite unfold_iter.
     destruct (H _ _ Hi).
-    - now eapply ctll_bind_l.
+    - now eapply ticll_bind_l.
     - eapply anl_bind_r with
         (R:=fun (lr: I + X) (w': World E) =>
               exists i' : I, lr = inl i' /\ Ri i' w' /\ Rv i' i)... 
@@ -61,7 +61,7 @@ Section IterLemmas.
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
 
-  Lemma anr_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ictree E (I + X)) (φ: ctll E) (ψ: ctlr E X):
+  Lemma anr_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ictree E (I + X)) (φ: ticll E) (ψ: ticlr E X):
     well_founded Rv ->
     Ri i w ->    
     (forall (i: I) w,
@@ -73,7 +73,7 @@ Section IterLemmas.
                        | inr r => <[ {Ret r}, w' |= φ AN ψ ]>
                        end} ]>) ->
     <[ {iter k i}, w |= φ AN ψ ]>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     intros WfR Hi H.
     generalize dependent k.
     generalize dependent w.
@@ -97,7 +97,7 @@ Section IterLemmas.
 
   (* EN *)
   Typeclasses Transparent sbisim.
-  Lemma enl_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ictree E (I + X)) (φ ψ: ctll E):
+  Lemma enl_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ictree E (I + X)) (φ ψ: ticll E):
     well_founded Rv ->
     Ri i w ->    
     (forall (i: I) w,
@@ -106,7 +106,7 @@ Section IterLemmas.
           <[ {k i}, w |= φ EN done {fun (lr: I + X) w' =>
             exists i', lr = inl i' /\ Ri i' w' /\ Rv i' i} ]>) ->
     <( {iter k i}, w |= φ EN ψ )>.
-  Proof with auto with ctl.    
+  Proof with auto with ticl.    
     intros WfR Hi H.
     generalize dependent k.
     generalize dependent w.
@@ -117,14 +117,14 @@ Section IterLemmas.
     unfold iter, MonadIter_ictree.
     rewrite unfold_iter.
     destruct (H _ _ Hi).
-    - now eapply ctll_bind_l.
+    - now eapply ticll_bind_l.
     - apply enr_done in H0 as (Hφ & [l | r] & Heqt & i' & Hinv & HRi & HRv); inv Hinv.
       rewrite Heqt, bind_ret_l, sb_guard.
       apply HindWf...
   Qed.
 
   Lemma enr_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ictree E (I + X))
-    (φ: ctll E) (ψ: ctlr E X):
+    (φ: ticll E) (ψ: ticlr E X):
     well_founded Rv ->
     Ri i w ->    
     (forall (i: I) w,
@@ -135,7 +135,7 @@ Section IterLemmas.
                                     | inr r => <[ {Ret r}, w' |= φ EN ψ ]>
                                     end}]>) ->
     <[ {iter k i}, w |= φ EN ψ ]>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     intros WfR Hi H.
     generalize dependent k.
     generalize dependent w.
@@ -158,7 +158,7 @@ Section IterLemmas.
   Qed.  
 
   (* AU *)
-  Lemma aul_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ictree E (I + X)) (φ ψ: ctll E):
+  Lemma aul_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ictree E (I + X)) (φ ψ: ticll E):
     well_founded Rv ->
     not_done w ->
     Ri i w ->    
@@ -173,7 +173,7 @@ Section IterLemmas.
                                /\ Ri i' w'
                                /\ Rv (i', w') (i, w)}]>) ->
     <( {iter k i}, w |= φ AU ψ )>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     remember (i, w) as P.
     replace i with (fst P) by now subst.
     replace w with (snd P) by now subst.
@@ -187,7 +187,7 @@ Section IterLemmas.
     unfold iter, MonadIter_ictree.
     destruct (H _ _ Hd Hi).
     - rewrite unfold_iter.
-      apply ctll_bind_l... 
+      apply ticll_bind_l... 
     - rewrite unfold_iter.
       eapply aul_bind_r with
         (R:=fun (lr: I + X) (w': World E) =>
@@ -203,7 +203,7 @@ Section IterLemmas.
   Qed.
 
   Lemma aul_iter_nat{X I} Ri (f: I -> World E -> nat) (i: I) w (k: I -> ictree E (I + X))
-    (φ ψ: ctll E):
+    (φ ψ: ticll E):
     not_done w ->
     Ri i w ->    
     (forall (i: I) w,
@@ -224,7 +224,7 @@ Section IterLemmas.
     apply well_founded_ltof.
   Qed.
   
-  Lemma aur_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ictree E (I + X)) (φ: ctll E) (ψ: ctlr E X):
+  Lemma aur_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ictree E (I + X)) (φ: ticll E) (ψ: ticlr E X):
     well_founded Rv ->    
     Ri i w ->    
     (forall (i: I) w,
@@ -236,7 +236,7 @@ Section IterLemmas.
                        | inr r => <[ {Ret r}, w' |= φ AN ψ ]>
                        end} ]>) ->
     <[ {iter k i}, w |= φ AU ψ ]>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     remember (i, w) as P.
     replace i with (fst P) by now subst.
     replace w with (snd P) by now subst.
@@ -262,10 +262,10 @@ Section IterLemmas.
       replace i' with (fst y) in Hi' |- * by now subst.
       replace w' with (snd y) in Hi' |- * by now subst.
       apply HindWf...
-    - apply ctlr_an_au. 
+    - apply ticlr_an_au. 
   Qed.
 
-  Lemma aur_iter_nat{X I} Ri (f: I -> World E -> nat) (i: I) w (k: I -> ictree E (I + X)) (φ: ctll E) (ψ: ctlr E X):
+  Lemma aur_iter_nat{X I} Ri (f: I -> World E -> nat) (i: I) w (k: I -> ictree E (I + X)) (φ: ticll E) (ψ: ticlr E X):
     Ri i w ->    
     (forall (i: I) w,
         Ri i w ->
@@ -283,7 +283,7 @@ Section IterLemmas.
   Qed.
   
   (* EU *)
-  Lemma eul_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ictree E (I + X)) (φ ψ: ctll E):
+  Lemma eul_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ictree E (I + X)) (φ ψ: ticll E):
     well_founded Rv ->
     Ri i w ->
     not_done w ->
@@ -295,7 +295,7 @@ Section IterLemmas.
                       {fun (lr: I + X) (w': World E) =>
                          exists i', lr = inl i' /\ not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)}]>) ->
     <( {iter k i}, w |= φ EU ψ )>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     remember (i, w) as P.
     replace i with (fst P) by now subst.
     replace w with (snd P) by now subst.
@@ -309,7 +309,7 @@ Section IterLemmas.
     unfold iter, MonadIter_ictree.
     rewrite unfold_iter.
     destruct (H _ _ Hi)...
-    - now eapply ctll_bind_l.
+    - now eapply ticll_bind_l.
     - eapply eul_bind_r with
         (R:=fun (lr: I + X) (w': World E) =>
               exists i' : I, lr = inl i' /\ not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w))... 
@@ -323,7 +323,7 @@ Section IterLemmas.
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
 
-  Lemma eur_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ictree E (I + X)) (φ: ctll E) (ψ: ctlr E X):
+  Lemma eur_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ictree E (I + X)) (φ: ticll E) (ψ: ticlr E X):
     well_founded Rv ->
     Ri i w ->
     not_done w ->
@@ -337,7 +337,7 @@ Section IterLemmas.
                        | inr r => <[ {Ret r}, w' |= φ EN ψ ]>
                        end} ]>) ->
     <[ {iter k i}, w |= φ EU ψ ]>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     remember (i, w) as P.
     replace i with (fst P) by now subst.
     replace w with (snd P) by now subst.
@@ -363,7 +363,7 @@ Section IterLemmas.
     replace i' with (fst y) in Hi' |- * by now subst.
     replace w' with (snd y) in Hi',Hd' |- * by now subst.
     apply HindWf...
-    apply ctlr_en_eu.
+    apply ticlr_en_eu.
   Qed.
   
   (* AG *)
@@ -377,7 +377,7 @@ Section IterLemmas.
                       {fun (lr: I + X) (w': World E) =>
                          exists (i': I), lr = inl i' /\ R i' w'}) ]>) ->
     <( {iter k i}, w |= AG φ )>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     intros HR H.
     (* coinductive case *)
     generalize dependent i.
@@ -412,7 +412,7 @@ Section IterLemmas.
   Qed.        
 
   (* EG *)
-  Lemma eg_iter{X I} R (i: I) w (k: I -> ictree E (I + X)) (φ: ctll E):
+  Lemma eg_iter{X I} R (i: I) w (k: I -> ictree E (I + X)) (φ: ticll E):
     R i w ->    
     (forall (i: I) w,
         R i w ->
@@ -421,7 +421,7 @@ Section IterLemmas.
                     {fun (lr: I + X) (w': World E) =>
                        exists (i': I), lr = inl i' /\ R i' w'}) ]>) ->
     <( {iter k i}, w |= EG φ )>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     intros.
     (* coinductive case *)
     generalize dependent i.

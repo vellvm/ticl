@@ -1,9 +1,9 @@
-From ICTL Require Import
+From TICL Require Import
   ICTree.Core
   ICTree.Trans
   ICTree.Equ.
 
-From ICTL Require Export
+From TICL Require Export
   ICTree.SBisim.Core
   ICTree.SBisim.SSim.
 

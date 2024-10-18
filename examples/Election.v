@@ -1,6 +1,6 @@
-From ICTL Require Import
+From TICL Require Import
   ICTree.Core
-  Logic.Ctl
+  Logic.Core
   Utils.Vectors
   ICTree.Equ
   ICTree.SBisim
@@ -24,15 +24,15 @@ From ExtLib Require Import
 
 Set Implicit Arguments.
 
-Import CtlNotations ICTreeNotations.
+Import TiclNotations ICTreeNotations.
 Local Open Scope ictree_scope.
 Local Open Scope fin_vector_scope.
-Local Open Scope ctl_scope.
+Local Open Scope ticl_scope.
 
 Section Election.
   Context {n: nat}.
   Notation Id := (fin' n).
-  
+
   (*| Message passing in unidirectional ring |*)
   Variant msg :=
     | Candidate (u: Id)
@@ -41,11 +41,11 @@ Section Election.
   Variant netE: Type :=
     | Recv
     | Send (m: msg).
-  
+
   Variant memE: Type :=
     | Put (id: Id)
     | Get.
-  
+
   Global Instance encode_netE: Encode netE :=
     fun e => match e with
           | Recv => msg
@@ -60,7 +60,7 @@ Section Election.
 
   Definition send: msg -> ictree netE unit :=
     fun p => ICtree.trigger (Send p).
-  
+
   Definition recv: ictree netE msg :=
     ICtree.trigger Recv.
 
@@ -74,10 +74,10 @@ Section Election.
 
   Notation Mails := (vec' n msg).
   Notation NetObs := (Id * msg).
-  
+
   (* Local network instrumented semantics, write to [Mails] *)
   Definition h_sysE'(cycle: fin' n -> fin' n)
-    : sysE ~> stateT (Id * Mails) (ictreeW (Id * msg)) := 
+    : sysE ~> stateT (Id * Mails) (ictreeW (Id * msg)) :=
     fun e =>
       mkStateT
         (fun '(id, mail) =>
@@ -93,9 +93,9 @@ Section Election.
            | inr (Put id) =>
                Ret (tt, (id, mail))
            end).
-    
+
   (* Always terminates, conditional on receiving either:
-     1. (Candidate candidate), where candidate = id -- I received my own [id] back 
+     1. (Candidate candidate), where candidate = id -- I received my own [id] back
      2. (Elected leader) -- Someone else was elected [leader]
    *)
   Definition elect(id: fin' n): ictree netE unit :=
@@ -143,7 +143,7 @@ Definition elect_sched := elect_sched' cycle.
 Definition h_sysE := h_sysE' cycle.
 
 (* Initial mailboxes are [F3, F1, F2] *)
-Definition mailboxes: vec' 2 (fin' 2) := 
+Definition mailboxes: vec' 2 (fin' 2) :=
   Vector.cons _ (FS (FS F1)) _ (Vector.cons _ F1 _ (Vector.cons _ (FS F1) _ (Vector.nil _))).
 
 Import Vectors.
@@ -159,7 +159,7 @@ Ltac run_head :=
     interp_state_resumICtree, bind_vis, interp_state_vis, bind_bind;
   cbn;
   repeat setoid_rewrite bind_bind;
-  apply afl_log; eauto with ctl;
+  apply afl_log; eauto with ticl;
   rewrite ?bind_ret_l, sb_guard, interp_state_bind, bind_bind,
     interp_state_ret, bind_ret_l;
   unfold resum_ret, ReSumRet_refl, ReSumRet_inr;
@@ -168,7 +168,7 @@ Ltac run_head :=
 Ltac run_body :=
   rewrite interp_state_vis; cbn;
   repeat setoid_rewrite bind_bind;
-  eapply afl_log; eauto with ctl;
+  eapply afl_log; eauto with ticl;
   rewrite ?bind_ret_l, sb_guard,
         interp_state_ret, bind_ret_l, interp_state_bind, bind_bind,
         interp_state_vis, bind_bind;
@@ -188,9 +188,9 @@ Ltac run_sched :=
 Lemma election3_liveness:
   <( {interp_state h_sysE elect_sched (F1, Vector.map Candidate mailboxes)}, Pure |=
           AF visW {fun '(id, msg) => exists e, msg = Elected e /\ id = e /\ e = FS (FS F1)} )>.
-Proof with auto with ctl.
+Proof with auto with ticl.
   intros.
-  unfold elect_sched, elect_sched', ICtree.forever.  
+  unfold elect_sched, elect_sched', ICtree.forever.
   cbn.
   rewrite interp_state_bind.
   unfold ICtree.branch.
@@ -207,7 +207,7 @@ Proof with auto with ctl.
       interp_state_vis, bind_bind.
     cbn.
     rewrite bind_ret_l, bind_guard, sb_guard, interp_state_ret, bind_ret_l,
-      interp_state_bind, bind_bind, interp_state_resumICtree.    
+      interp_state_bind, bind_bind, interp_state_resumICtree.
     (* Get into [elect] *)
     unfold elect.
     unfold send, recv, put, get, ICtree.trigger.
@@ -215,7 +215,7 @@ Proof with auto with ctl.
     cbn.
     repeat setoid_rewrite bind_bind.
     eapply afl_log...
-    rewrite ?bind_ret_l, sb_guard, interp_state_ret, bind_ret_l. 
+    rewrite ?bind_ret_l, sb_guard, interp_state_ret, bind_ret_l.
     unfold resum_ret, ReSumRet_refl, ReSumRet_inl.
     ddestruction i; [|ddestruction i; [|ddestruction i]]; simpl; simp cycle.
     + (* Start with F1 *)

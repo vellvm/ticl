@@ -1,6 +1,6 @@
-From ICTL Require Import
+From TICL Require Import
   ICTree.Core
-  Logic.Ctl
+  Logic.Core
   ICTree.Equ
   ICTree.SBisim
   ICTree.Logic.EX
@@ -18,9 +18,9 @@ From Coinduction Require Import coinduction tactics.
 
 Generalizable All Variables.
 
-Import ICtree ICTreeNotations CtlNotations.
+Import ICtree ICTreeNotations TiclNotations.
 Local Open Scope ictree_scope.
-Local Open Scope ctl_scope.
+Local Open Scope ticl_scope.
 
 Variant tickE: Type :=
   | Tick
@@ -74,7 +74,7 @@ Section TickTock.
 
   Example eg_tock:
     <( tocker, {Obs Tock tt} |= EG vis {fun e _ => e = Tock} )>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     unfold tocker, forever.
     apply eg_iter with (R:=fun 'tt w => w = Obs Tock tt)...
     intros [] w ->.
@@ -82,7 +82,7 @@ Section TickTock.
     - csplit...
     - unfold map, br2.
       rewrite bind_br.
-      apply exr_br; split; [csplit; eauto with ctl|].
+      apply exr_br; split; [csplit; eauto with ticl|].
       exists Fin.F1.
       rewrite bind_br.
       apply eur_br.

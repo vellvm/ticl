@@ -1,17 +1,17 @@
 (lang dune 3.15)
 (using coq 0.6)
-(name coq-ictl)
+(name coq-ticl)
 
 (license "MIT")
 (authors "Eleftherios Ioannidis" "Yannick Zakowski" "Paul He")
 (maintainers "Eleftherios Ioannidis")
-(source (github vellvm/ictl))
-(bug_reports "https://github.com/vellvm/ictl/issues")
+(source (github vellvm/ticl))
+(bug_reports "https://github.com/vellvm/ticl/issues")
 
 (generate_opam_files true)
 
 (package
- (name coq-ictl)
+ (name coq-ticl)
  (synopsis "Library for structural temporal logic proofs over coinductive, free monads with effects and choice.")
  (version 0.1)
  (depends

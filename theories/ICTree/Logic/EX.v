@@ -5,7 +5,7 @@ From Coq Require Import
 From Coinduction Require Import
   coinduction lattice.
 
-From ICTL Require Import
+From TICL Require Import
   Events.Core
   ICTree.Core
   ICTree.Equ
@@ -13,18 +13,18 @@ From ICTL Require Import
   ICTree.Logic.Trans
   ICTree.Logic.CanStep
   ICTree.Events.Writer
-  Logic.Ctl
+  Logic.Core
   Logic.Kripke
   Logic.Setoid.
 
 Set Implicit Arguments.
 Generalizable All Variables.
 
-Import ICTreeNotations CtlNotations.
-Local Open Scope ctl_scope.
+Import ICTreeNotations TiclNotations.
+Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
   
-(*| CTL EN lemmas on ictrees |*)
+(*| TICL EN lemmas on ictrees |*)
 Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
@@ -40,14 +40,14 @@ Section BasicLemmas.
   Lemma enl_br: forall n (k: fin' n -> ictree E X) w φ ψ,
       (<( {Br n k}, w |= φ )> /\ (exists (i: fin' n), <( {k i}, w |= ψ )>)) <->
     <( {Br n k}, w |= φ EN ψ )>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     split; intros.
     - destruct H as (Hφ & i & H).
       csplit...
       exists (k i), w; split...
       apply ktrans_br; exists i. 
       split2...
-      now apply ctll_not_done in Hφ.
+      now apply ticll_not_done in Hφ.
     - cdestruct H.
       apply ktrans_br in TR as (i & Heq & -> & Hd).
       rewrite Heq in H.
@@ -58,7 +58,7 @@ Section BasicLemmas.
   Lemma enl_vis: forall (e: E) (k: encode e -> ictree E X) (_: encode e) w φ ψ,
       <( {Vis e k}, w |= φ EN ψ )> <->        
         <( {Vis e k}, w |= φ )> /\ (exists (v: encode e), <( {k v}, {Obs e v} |= ψ )>).
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     split; intros.
     - cdestruct H. 
       apply ktrans_vis in TR as (v & -> & ? & ?).
@@ -69,7 +69,7 @@ Section BasicLemmas.
       exists (k v), (Obs e v); split...
       apply ktrans_vis.
       exists v; split2...
-      now apply ctll_not_done in Hd.
+      now apply ticll_not_done in Hd.
   Qed.
 
   Lemma enr_stuck: forall w φ ψ,
@@ -84,14 +84,14 @@ Section BasicLemmas.
   Lemma enr_br: forall n (k: fin' n -> ictree E X) w φ ψ,
       (<( {Br n k}, w |= φ )> /\ (exists (i: fin' n), <[ {k i}, w |= ψ ]>)) <->
         <[ {Br n k}, w |= φ EN ψ ]>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     split; intros.
     - destruct H as (Hφ & i & H).
       csplit...
       exists (k i), w; split...
       apply ktrans_br; exists i. 
       split2...
-      now apply ctll_not_done in Hφ.
+      now apply ticll_not_done in Hφ.
     - cdestruct H.
       apply ktrans_br in TR as (i & Heq & -> & Hd).
       rewrite Heq in H.
@@ -102,7 +102,7 @@ Section BasicLemmas.
   Lemma enr_vis: forall (e: E) (k: encode e -> ictree E X) (_: encode e) w φ ψ,
       <[ {Vis e k}, w |= φ EN ψ ]> <->        
         <( {Vis e k}, w |= φ )> /\ (exists (v: encode e), <[ {k v}, {Obs e v} |= ψ ]>).
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     split; intros.
     - cdestruct H. 
       apply ktrans_vis in TR as (v & -> & ? & ?).
@@ -113,12 +113,12 @@ Section BasicLemmas.
       exists (k v), (Obs e v); split...
       apply ktrans_vis.
       exists v; split2...
-      now apply ctll_not_done in Hd.
+      now apply ticll_not_done in Hd.
   Qed.
 
   Lemma enr_done: forall (t: ictree E X) φ ψ w,
       <[ t, w |= φ EN done ψ ]> <-> <( t, w |= φ )> /\ (exists (x: X), t ~ Ret x /\ ψ x w).
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     split; intros.
     - cdestruct H.
       split...
@@ -144,7 +144,7 @@ Section BasicLemmas.
     - destruct H as (Hφ & x & Heq & H).
       rewrite Heq in Hφ |- *.
       csplit...
-      pose proof (ctll_not_done _ _ _ _ Hφ) as Hd.
+      pose proof (ticll_not_done _ _ _ _ Hφ) as Hd.
       inv Hd.
       + exists (ICtree.stuck), (Done x); split.
         * now apply ktrans_done.
@@ -162,16 +162,16 @@ Section BasicLemmas.
     assert (Hd: not_done w) by now apply ktrans_not_done in TR.
     inv Hd.
     - apply ktrans_done in TR as (-> & Heqt); rewrite Heqt in H.
-      apply ctll_not_done in H; inv H.
+      apply ticll_not_done in H; inv H.
     - apply ktrans_finish in TR as (-> & Heqt); rewrite Heqt in H.
-      apply ctll_not_done in H; inv H.
+      apply ticll_not_done in H; inv H.
   Qed.
 
   Lemma enr_ret: forall (r: X) (R: rel X (World E)) φ w,
       <( {Ret r}, w |= φ )> ->
       R r w ->
       <[ {Ret r}, w |= φ EN done R ]>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     intros.
     apply enr_done; split...
     exists r...
@@ -181,7 +181,7 @@ Section BasicLemmas.
       not_done w ->
       R r w ->
       <[ {Ret r}, w |= EX done R ]>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     intros.
     apply enr_ret...
     csplit...
@@ -192,7 +192,7 @@ Section BasicLemmas.
         <( {Ret r}, w |= φ )>
         /\ exists (w': World E), done_with (fun x w' => x = r /\ w = w') w'
         /\ <[ ICtree.stuck, w' |= ψ ]>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     intros.
     cdestruct H.
     assert (Hd: not_done w) by now apply ktrans_not_done in TR. 
@@ -213,7 +213,7 @@ Section WriterLemmas.
   Lemma exr_log{S}: forall (x: S) w,
       not_done w ->
       <[ {log x}, w |= EX EX done=tt {Obs (Log x) tt} ]>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     intros.
     unfold log, ICtree.trigger.
     apply enr_vis...

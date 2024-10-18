@@ -1,4 +1,4 @@
-From ICTL Require Import
+From TICL Require Import
   Events.Core
   ICTree.Core
   ICTree.Equ
@@ -11,22 +11,22 @@ From ICTL Require Import
   ICTree.Logic.EX
   ICTree.Logic.EF
   ICTree.Logic.EG
-  Logic.Ctl.
+  Logic.Core.
 
 Generalizable All Variables.
 
-Import ICTreeNotations CtlNotations.
-Local Open Scope ctl_scope.
+Import ICTreeNotations TiclNotations.
+Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 
 Section RetLemmas.
   Context {E: Type} {HE: Encode E}.
 
-  Theorem ctll_ret_equiv{X Y}: forall (x: X) (y: Y) (φ: ctll E) w,
+  Theorem ticll_ret_equiv{X Y}: forall (x: X) (y: Y) (φ: ticll E) w,
       <( {Ret x}, w |= φ )> <-> <( {Ret y}, w |= φ )>.
-  Proof with auto with ctl.    
+  Proof with auto with ticl.    
     split; intros * H.
-    - assert (Hd: not_done w) by now apply ctll_not_done in H.
+    - assert (Hd: not_done w) by now apply ticll_not_done in H.
       assert (Hs: can_step (Ret y) w) by now apply can_step_ret; auto.      
       generalize dependent w; revert x y.
       induction φ; intros.
@@ -56,7 +56,7 @@ Section RetLemmas.
           apply IHφ1 with x...
         * cright.
           apply IHφ2 with x...
-    - assert (Hd: not_done w) by now apply ctll_not_done in H.
+    - assert (Hd: not_done w) by now apply ticll_not_done in H.
       assert (Hs: can_step (Ret x) w) by now apply can_step_ret; auto.      
       generalize dependent w; revert x y.
       induction φ; intros.

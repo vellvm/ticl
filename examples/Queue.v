@@ -1,7 +1,7 @@
-From ICTL Require Import
+From TICL Require Import
   ICTree.Core
   Events.Writer
-  Logic.Ctl
+  Logic.Core
   ICTree.Equ
   ICTree.SBisim
   ICTree.Logic.Trans
@@ -26,9 +26,9 @@ From ExtLib Require Import RelDec.
 
 Generalizable All Variables.
 
-Import ICtree ICTreeNotations CtlNotations ListNotations.
+Import ICtree ICTreeNotations TiclNotations ListNotations.
 Local Open Scope ictree_scope.
-Local Open Scope ctl_scope.
+Local Open Scope ticl_scope.
 Local Open Scope list_scope.
 
 Variant queueE (S: Type): Type :=
@@ -58,7 +58,7 @@ Section QueueEx.
   Infix "=?" := (rel_dec) (at level 75).
 
   (* Queue instrumented semantics *)
-  Definition h_queueE: queueE T ~> stateT (list T) (ictreeW T) := 
+  Definition h_queueE: queueE T ~> stateT (list T) (ictreeW T) :=
     fun e =>
       mkStateT (fun q =>
                  match e return ictreeW T (encode e * list T) with
@@ -79,7 +79,7 @@ Section QueueEx.
        continue).
 
   Lemma list_app_nil: forall (s: T) hs,
-      ~ [] = hs ++ [s].  
+      ~ [] = hs ++ [s].
   Proof. destruct hs; intros * H; inv H; auto. Qed.
 
   Lemma list_app_cons: forall (h s: T) ts hs,
@@ -87,19 +87,19 @@ Section QueueEx.
       match hs with
       | nil => h = s /\ ts = nil
       | h' :: ts' => h = h' /\ ts = ts' ++ [s]
-      end.  
+      end.
   Proof. destruct hs; intros; cbn in *; inv H; auto. Qed.
-    
+
   (*| Eventually we get [nl] (needle) to show up
     in the instrumentation. |*)
   Example drain_af_pop: forall (nl: T) (q: list T),
       <( {interp_state h_queueE drain (q ++ [nl])}, Pure |=
          AF visW {fun w => w = nl })>.
-  Proof with eauto with ctl.    
+  Proof with eauto with ticl.
     intros.
     apply aul_state_iter_nat
       with (f:=fun 'tt l _ => List.length l)
-           (Ri:=fun 'tt l w => 
+           (Ri:=fun 'tt l w =>
                   match w with
                   | Obs (Log s') tt =>
                       match l with
@@ -107,7 +107,7 @@ Section QueueEx.
                       | h :: ts => exists hs, h :: ts = hs ++ [nl]
                       end
                   | _ => exists hs, l = hs ++ [nl]
-                  end)... 
+                  end)...
     intros [] l w Hd Hw.
     destruct l as [|h ts] eqn:Hl; subst.
     - (* l = [] *)
@@ -119,7 +119,7 @@ Section QueueEx.
         destruct e, v. subst.
         left.
         cleft.
-        now csplit.         
+        now csplit.
     - (* l = h :: ts *)
       right.
       eapply aur_state_bind_r_eq.
@@ -131,7 +131,7 @@ Section QueueEx.
         apply axr_ret...
       + cbn.
         rewrite interp_state_ret.
-        cleft.        
+        cleft.
         apply axr_ret...
         exists tt; intuition.
         cbn.
@@ -150,10 +150,10 @@ Section QueueEx.
              ++ now (exists (t1 ::x)).
   Qed.
   Print Assumptions drain_af_pop.
-  
+
   (* Ex2: Rotate a queue (pop an element from head, add it to tail) *)
   Definition rotate: ictree (queueE T) unit :=
-    loop 
+    loop
       (x <- pop ;;
        match x with
        | Some v =>
@@ -182,7 +182,7 @@ Section QueueEx.
 
   Lemma find_last_ex: forall nl ts,
     exists i0 : nat, find nl (ts ++ [nl]) = Some i0.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     induction ts.
     - exists 0; cbn.
       rewrite rel_dec_eq_true...
@@ -208,7 +208,7 @@ Section QueueEx.
       destruct (find nl ts); inv H.
       rewrite IHts with (n:=n0)...
   Qed.
-  
+
   Lemma nat_eqb_S: forall n,
       Nat.eqb n (S n) = false.
   Proof. induction n; auto. Qed.
@@ -216,12 +216,12 @@ Section QueueEx.
   Variable (nl: T).
   Typeclasses Transparent equ.
   Typeclasses Transparent sbisim.
-  
+
   Theorem rotate_agaf_pop: forall q i,
       find nl q = Some i ->
       <( {interp_state h_queueE rotate q}, Pure |=
                        AG AF visW {fun h => h = nl} )>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     intros.
     unfold rotate, forever, Classes.iter, MonadIter_ictree.
     apply ag_state_iter with
@@ -242,7 +242,7 @@ Section QueueEx.
         split.
         * (* iter |= AF *)
           rewrite interp_state_unfold_iter.
-          apply ctll_bind_l.
+          apply ticll_bind_l.
           rewrite interp_state_bind.
           setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
           rewrite ?bind_bind.
@@ -254,7 +254,7 @@ Section QueueEx.
           setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
           rewrite ?bind_bind.
           apply axr_log...
-          rewrite bind_ret_l, sb_guard, bind_ret_l, interp_state_bind.          
+          rewrite bind_ret_l, sb_guard, bind_ret_l, interp_state_bind.
           setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Push nl) _); cbn.
           rewrite ?bind_bind.
           rewrite bind_ret_l, sb_guard, bind_ret_l.
@@ -309,7 +309,7 @@ Section QueueEx.
                 exists tt; intuition.
                 ** destruct ts'; cbn.
                    --- exists h', []...
-                   --- exists t, (ts' ++ [h']); split... 
+                   --- exists t, (ts' ++ [h']); split...
                        destruct H as (j & H1).
                        rewrite unfold_find_hd in H1.
                        destruct (t =? nl) eqn:Hnl''; inv H1.
@@ -343,7 +343,7 @@ Section QueueEx.
           destruct (t =? nl) eqn:Hnl'; inv H.
           -- apply rel_dec_correct in Hnl'.
              now left.
-          -- right.                
+          -- right.
              rewrite Hnl' in H1.
              destruct (find nl ts) eqn:Hts; inv H1.
              split.
@@ -352,4 +352,4 @@ Section QueueEx.
                 now apply find_app_l.
   Qed.
 End QueueEx.
-  
+

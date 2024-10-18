@@ -2,7 +2,7 @@ From Coq Require Import
   Vector
   List.
 
-From ICTL Require Import
+From TICL Require Import
   ICTree.Core
   ICTree.Equ
   Events.Core
@@ -66,7 +66,7 @@ Definition fchoice {n}: ictree (fairE n) (fin' n) :=
   ICtree.trigger (@FChoice n).
 
 (*
-(*| Need CTL here to prove fairness |*)
+(*| Need TICL here to prove fairness |*)
 Definition fairness: forall {X} (t: ictree uniformE X) vs (x: X),
     Leaf (interp handler_uniformE t) (vs, x) -> Forall (fun n => n <= m) vs.
  *)

@@ -4,7 +4,7 @@ Modal logics over ictrees
 =========================================
 |*)
 From Coinduction Require Export coinduction tactics.
-From ICTL Require Export           
+From TICL Require Export           
   Utils.Utils
   Logic.Kripke
   Logic.Syntax

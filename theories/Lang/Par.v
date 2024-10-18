@@ -14,7 +14,7 @@ From Coinduction Require Import
 
 From Equations Require Import Equations.
 
-From ICTL Require Import
+From TICL Require Import
   ICTree.Core
   ICTree.Events.Writer
   Logic.Kripke
@@ -26,7 +26,7 @@ From ICTL Require Import
 Import ListNotations.
 Import ICTreeNotations.
 
-Local Open Scope ctl_scope.
+Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 
 Generalizable All Variables.

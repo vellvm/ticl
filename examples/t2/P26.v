@@ -1,9 +1,9 @@
 
-From ICTL Require Import
+From TICL Require Import
   ICTree.Core
   Events.State
   Events.Writer
-  Logic.Ctl
+  Logic.Core
   ICTree.Equ
   ICTree.SBisim
   ICTree.Logic.Trans
@@ -32,8 +32,8 @@ From Coq Require Import
 
 Generalizable All Variables.
 
-Import ICtree ICTreeNotations CtlNotations.
-Local Open Scope ctl_scope.
+Import ICtree ICTreeNotations TiclNotations.
+Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 Local Open Scope Z_scope.
 
@@ -88,7 +88,7 @@ Module P26.
       let init := add r 0 (add c cval empty) in
       <( {instr_cprog p26 init}, {Obs (Log init) tt} |=
            (visW {assert c (fun cv => cv > 5)} \/ EG visW {assert r (fun rv => rv <= 5)}) )>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     intros.
     unfold p26, init.
     destruct (Z.le_gt_cases cval 5).
@@ -112,16 +112,16 @@ Module P26.
              ++ split; cbn; try lia.
                 admit. 
           -- intros ctx' (Hr & Hc & HR); split. 
-             ++ apply ctll_vis; constructor...
+             ++ apply ticll_vis; constructor...
                 unfold assert in *.
                 destruct (lookup r ctx'); lia.
              ++ apply eur_cprog_ite_gte.
                 pose proof (Zge_cases (cdenote_exp c ctx') (cdenote_exp cs ctx')).
                 destruct (cdenote_exp c ctx' >=? cdenote_exp cs ctx') eqn:Hab.
-                assert (impl_ctll (unit*Ctx) <( visW {assert r (fun rv : Z => rv <= 5)} )> <( ⊤ )>).
-                { unfold impl_ctll; intros; csplit; intuition. }
-                ** eapply (impl_ctlr_next Q_E _ _ _ _ H1); [reflexivity|]; clear H1.
-                   apply ctlr_euex_exeu.
+                assert (impl_ticll (unit*Ctx) <( visW {assert r (fun rv : Z => rv <= 5)} )> <( ⊤ )>).
+                { unfold impl_ticll; intros; csplit; intuition. }
+                ** eapply (impl_ticlr_next Q_E _ _ _ _ H1); [reflexivity|]; clear H1.
+                   apply ticlr_euex_exeu.
                    eapply eur_cprog_seq.
                    --- eapply eur_cprog_assgn_eq...
                        constructor.

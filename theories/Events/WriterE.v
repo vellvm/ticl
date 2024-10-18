@@ -1,4 +1,4 @@
-From ICTL Require Import
+From TICL Require Import
   Events.Core.
 
 Set Implicit Arguments.

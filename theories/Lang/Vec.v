@@ -11,7 +11,7 @@ From Coq Require Import
 
 From Equations Require Import Equations.
 
-From ICTL Require Import
+From TICL Require Import
   ICTree.Core
   Equ
   SBisim

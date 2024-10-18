@@ -6,7 +6,7 @@ From Coq Require Import
 From Coinduction Require Import
   coinduction lattice.
 
-From ICTL Require Import
+From TICL Require Import
   Events.Core
   Events.WriterE
   ICTree.Core
@@ -15,17 +15,17 @@ From ICTL Require Import
   ICTree.Interp.Core
   ICTree.Logic.Trans
   ICTree.Logic.CanStep
-  Logic.Ctl
+  Logic.Core
   Logic.EX.
 
 Set Implicit Arguments.
 Generalizable All Variables.
 
-Import ICTreeNotations CtlNotations.
-Local Open Scope ctl_scope.
+Import ICTreeNotations TiclNotations.
+Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
   
-(*| CTL logic lemmas on c/itrees |*)
+(*| TICL logic lemmas on c/itrees |*)
 Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
@@ -33,7 +33,7 @@ Section BasicLemmas.
   Lemma eul_stuck: forall w φ ψ,
       <( {ICtree.stuck: ictree E X}, w |= φ EU ψ )> <->
       <( {ICtree.stuck: ictree E X}, w |= ψ )>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     split; intros.
     - cdestruct H...
       cdestruct H.
@@ -44,7 +44,7 @@ Section BasicLemmas.
   Lemma eur_stuck: forall w φ ψ,
       <[ {ICtree.stuck: ictree E X}, w |= φ EU ψ ]> <->
       <[ {ICtree.stuck: ictree E X}, w |= ψ ]>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     split; intros.
     - cdestruct H...
       cdestruct H.
@@ -55,7 +55,7 @@ Section BasicLemmas.
   Lemma eul_ret: forall (r: X) w φ ψ,
       <( {Ret r}, w |= ψ \/ φ EN ψ )> <->
       <( {Ret r}, w |= φ EU ψ )>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     split; intros H; cdestruct H.
     - now cleft.
     - cright; csplit; cdestruct H...
@@ -79,17 +79,17 @@ Section BasicLemmas.
       + apply ktrans_done in TR as (-> & ?).
         rewrite H0 in H.
         apply eul_stuck in H.
-        apply ctll_not_done in H; inv H.
+        apply ticll_not_done in H; inv H.
       + apply ktrans_finish in TR as (-> & ?).
         rewrite H0 in H.
         apply eul_stuck in H.
-        apply ctll_not_done in H; inv H.
+        apply ticll_not_done in H; inv H.
   Qed.
 
   Lemma eur_ret: forall (r: X) w φ ψ,
       <[ {Ret r}, w |= ψ \/ φ EN ψ ]> <->
       <[ {Ret r}, w |= φ EU ψ ]>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     split; intros H; cdestruct H.
     - now cleft.
     - cright; csplit; cdestruct H...
@@ -128,12 +128,12 @@ Section BasicLemmas.
          <( {Br n k}, w |= ψ )> /\
            exists (i: fin' n), <( {k i}, w |= ψ EU φ )>) <->
         <( {Br n k}, w |= ψ EU φ )>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     split; intros.
     - destruct H as [Hφ | (Hψ & i & H)].
       + now cleft. 
       + cright; csplit...
-        apply ctll_not_done in Hψ.
+        apply ticll_not_done in Hψ.
         exists (k i), w; split...
         apply ktrans_br.
         exists i...
@@ -153,12 +153,12 @@ Section BasicLemmas.
          <( {Br n k}, w |= ψ )> /\
            exists (i: fin' n), <[ {k i}, w |= ψ EU φ ]>) <->
         <[ {Br n k}, w |= ψ EU φ ]>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     split; intros.
     - destruct H as [Hφ | (Hψ & i & H)].
       + now cleft. 
       + cright; csplit...
-        apply ctll_not_done in Hψ.
+        apply ticll_not_done in Hψ.
         exists (k i), w; split...
         apply ktrans_br.
         exists i...
@@ -178,12 +178,12 @@ Section BasicLemmas.
          <( {Vis e k}, w |= ψ )> /\
            exists (v: encode e), <( {k v}, {Obs e v} |= ψ EU φ )>) <->
         <( {Vis e k}, w |= ψ EU φ )>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     split; intros.
     - destruct H as [Hφ | (Hψ & i & H)].
       + now cleft. 
       + cright; csplit...
-        apply ctll_not_done in Hψ.
+        apply ticll_not_done in Hψ.
         exists (k i), (Obs e i); split...
         apply ktrans_vis.
         exists i...
@@ -203,12 +203,12 @@ Section BasicLemmas.
          <( {Vis e k}, w |= ψ )> /\
            exists (v: encode e), <[ {k v}, {Obs e v} |= ψ EU φ ]>) <->
         <[ {Vis e k}, w |= ψ EU φ ]>.
-  Proof with auto with ctl.
+  Proof with auto with ticl.
     split; intros.
     - destruct H as [Hφ | (Hψ & i & H)].
       + now cleft. 
       + cright; csplit...
-        apply ctll_not_done in Hψ.
+        apply ticll_not_done in Hψ.
         exists (k i), (Obs e i); split...
         apply ktrans_vis.
         exists i...

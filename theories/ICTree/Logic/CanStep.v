@@ -2,7 +2,7 @@ From Coq Require Import
   Basics
   Init.Wf.
 
-From ICTL Require Import
+From TICL Require Import
   Events.Core
   ICTree.Core
   Events.Core
@@ -10,16 +10,16 @@ From ICTL Require Import
   ICTree.Interp.State
   ICTree.Events.Writer
   ICTree.Equ
-  Logic.Ctl
+  Logic.Core
   Logic.Kripke.
 
 Generalizable All Variables.
 
-Import ICTreeNotations CtlNotations.
-Local Open Scope ctl_scope.
+Import ICTreeNotations TiclNotations.
+Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 
-(*| CTL logic lemmas on c/itrees |*)
+(*| TICL logic lemmas on c/itrees |*)
 Section CanStepICtrees.
   Context {E: Type} {HE: Encode E}.
   Notation encode := (@encode E HE).
@@ -44,7 +44,7 @@ Section CanStepICtrees.
     - exists (k Fin.F1), w.
       apply ktrans_br; exists Fin.F1; auto.
   Qed.
-  Hint Resolve can_step_br: ctl.
+  Hint Resolve can_step_br: ticl.
   
   (*| Guard |*)  
   Lemma can_step_guard{X}: forall (t: ictree E X) w,
@@ -58,7 +58,7 @@ Section CanStepICtrees.
       apply ktrans_guard in TR.
       now (exists t', w').
   Qed.
-  Hint Resolve can_step_guard: ctl.
+  Hint Resolve can_step_guard: ticl.
   
   Lemma can_step_vis{X}: forall (e:E) (k: encode e -> ictree E X) (_: encode e) w,
       can_step (Vis e k) w <-> not_done w.
@@ -69,7 +69,7 @@ Section CanStepICtrees.
     - exists (k X0), (Obs e X0).
       apply ktrans_vis; exists X0; auto.
   Qed.
-  Hint Resolve can_step_vis: ctl.
+  Hint Resolve can_step_vis: ticl.
 
   Lemma can_step_ret{X}: forall w (x: X),
     not_done w ->
@@ -80,7 +80,7 @@ Section CanStepICtrees.
     - exists ICtree.stuck, (Done x); now constructor. 
     - exists ICtree.stuck, (Finish e v x); now constructor.
   Qed.
-  Hint Resolve can_step_ret: ctl.
+  Hint Resolve can_step_ret: ticl.
 
   Lemma can_step_stuck{X}: forall w,
       ~ (can_step (ICtree.stuck: ictree E X) w).
@@ -88,7 +88,7 @@ Section CanStepICtrees.
     intros * (t' & w' & TRcontra).
     now apply ktrans_stuck in TRcontra.
   Qed.
-  Hint Resolve can_step_stuck: ctl.
+  Hint Resolve can_step_stuck: ticl.
 
   Typeclasses Transparent equ.
   Lemma can_step_bind{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w,
@@ -97,7 +97,7 @@ Section CanStepICtrees.
         \/ (exists y w', [t, w] ↦ [ICtree.stuck, w']
                    /\ done_eq y w'
                    /\ can_step (k y) w).
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     unfold can_step; split.
     - intros (k' & w' & TR).
       apply ktrans_bind_inv in TR
@@ -139,7 +139,7 @@ Section CanStepICtrees.
           -- observe_equ x2.
              now rewrite Eqt, bind_ret_l.
   Qed.
-  Hint Resolve can_step_bind: ctl.
+  Hint Resolve can_step_bind: ticl.
 
   Lemma can_step_bind_l{X Y}: forall (t t': ictree E Y) (k: Y -> ictree E X) w w',
       [t, w] ↦ [t', w'] ->
@@ -151,14 +151,14 @@ Section CanStepICtrees.
     left.
     exists t', w'; auto.
   Qed.
-  Hint Resolve can_step_bind_l: ctl.
+  Hint Resolve can_step_bind_l: ticl.
 
   Typeclasses Opaque equ.
   Lemma can_step_bind_r{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w R,      
       <[ t, w |= AF AX done R ]> ->
       (forall y w, R y w -> can_step (k y) w) ->
       can_step (x <- t ;; k x) w.
-  Proof with eauto with ctl. 
+  Proof with eauto with ticl. 
     intros.
     apply can_step_bind.
     induction H.
@@ -220,7 +220,7 @@ Section CanStepICtrees.
           destruct H5 as (Hp & Hs & H5);
            cdestruct Hp; inv H7.
   Qed.
-  Hint Resolve can_step_bind_r: ctl.
+  Hint Resolve can_step_bind_r: ticl.
 
   Lemma can_step_iter{I X}: forall (k: I -> ictree E (I+X))
                               (i: I) t' w w',
@@ -235,7 +235,7 @@ Section CanStepICtrees.
   
 End CanStepICtrees.
 
-(*| CTL logic lemmas on interpretations of c/itrees |*)
+(*| TICL logic lemmas on interpretations of c/itrees |*)
 Section CanStepInterp.
   Context {E F S: Type} {HE: Encode E} {HF: Encode F} (h: E ~> stateT S (ictree F)) (s: S).
 

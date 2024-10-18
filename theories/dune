@@ -1,5 +1,5 @@
 (include_subdirs qualified)
 
 (coq.theory
- (name ICTL)
- (package coq-ictl))
+ (name TICL)
+ (package coq-ticl))

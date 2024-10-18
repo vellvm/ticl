@@ -1,9 +1,9 @@
 
-From ICTL Require Import
+From TICL Require Import
   ICTree.Core
   Events.State
   Events.Writer
-  Logic.Ctl
+  Logic.Core
   ICTree.Equ
   ICTree.SBisim
   ICTree.Logic.Trans
@@ -32,13 +32,13 @@ From Coq Require Import
 
 Generalizable All Variables.
 
-Import ICtree ICTreeNotations CtlNotations.
-Local Open Scope ctl_scope.
+Import ICtree ICTreeNotations TiclNotations.
+Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 Local Open Scope Z_scope.
 
 (*
-// -ctl "AND{AG{AF{n==1}}}{AF{n==0}}"
+// -ticl "AND{AG{AF{n==1}}}{AF{n==0}}"
 // -precondition n > 0
 
 void main() {
@@ -82,7 +82,7 @@ Module And_test.
       <( {instr_cprog and_test init}, {Obs (Log init) tt} |=
                     (AG AF (visW {assert n (fun n_ => n_ = 1)} ))
                      /\ AF visW {assert n (fun n_ => n_ = 0)} )>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     intros.    
     csplit.
     - unfold and_test.

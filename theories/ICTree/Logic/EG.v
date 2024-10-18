@@ -5,7 +5,7 @@ From Coq Require Import
 From Coinduction Require Import
   coinduction lattice tactics.
 
-From ICTL Require Import
+From TICL Require Import
   Events.Core
   ICTree.Core
   ICTree.Equ
@@ -15,12 +15,12 @@ From ICTL Require Import
   Logic.Setoid
   ICTree.Logic.EX
   ICTree.Logic.EF
-  Logic.Ctl.
+  Logic.Core.
 
 Generalizable All Variables.
 
-Import ICtree ICTreeNotations CtlNotations.
-Local Open Scope ctl_scope.
+Import ICtree ICTreeNotations TiclNotations.
+Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 
 (* Lemmas on the structure of ictree [t] and AG proofs *)
@@ -30,12 +30,12 @@ Section BasicLemmas.
   Lemma eg_vis: forall e (k: encode e -> ictree E X) w φ,
       (<( {Vis e k}, w |= φ )> /\ exists v, <( {k v}, {Obs e v} |= EG φ )>) <->
          <( {Vis e k}, w |= EG φ )>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     split; intros.
     - destruct H as (Hφ & v & H).
       csplit...
       exists (k v), (Obs e v); split...
-      apply ctll_not_done in Hφ.
+      apply ticll_not_done in Hφ.
       apply ktrans_vis.      
       exists v; split2...
     - cdestruct H.
@@ -49,12 +49,12 @@ Section BasicLemmas.
   Lemma eg_br: forall n (k: fin' n -> ictree E X) w φ,
       (<( {Br n k}, w |= φ )> /\ exists (i: fin' n), <( {k i}, w |= EG φ )>) <->
         <( {Br n k}, w |= EG φ )>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     split; intros.
     - destruct H as (Hφ & i & H).
       csplit...
       + exists (k i), w; split...
-        apply ctll_not_done in Hφ.
+        apply ticll_not_done in Hφ.
         apply ktrans_br.
         exists i... 
     - cdestruct H.
@@ -78,7 +78,7 @@ Section BasicLemmas.
   Proof.
     intros * H. 
     cdestruct H.
-    assert(Hd: not_done w) by now apply ctll_not_done in Hp.
+    assert(Hd: not_done w) by now apply ticll_not_done in Hp.
     inv Hd.
     - apply ktrans_done in TR as (-> & Heqt).
       rewrite Heqt in H.

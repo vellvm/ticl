@@ -11,7 +11,7 @@ From Coq Require Import
 From Coinduction Require Import
   coinduction lattice tactics.
 
-From ICTL Require Import
+From TICL Require Import
   Utils.Utils
   Events.Core
   Logic.Kripke
@@ -19,8 +19,8 @@ From ICTL Require Import
 
 From Equations Require Import Equations.
 
-Import CtlNotations.
-Local Open Scope ctl_scope.
+Import TiclNotations.
+Local Open Scope ticl_scope.
 Local Open Scope type_scope.
 
 Generalizable All Variables.
@@ -63,7 +63,7 @@ Ltac ktrans_equ TR :=
           end
     end.
 
-(*| Models are setoids over CTL |*)
+(*| Models are setoids over TICL |*)
 Section EquivSetoid.
   Context `{K: Kripke M E} {X} {meq: relation (M E HE X)} {Eqm: Equivalence meq}
     {KS: KripkeSetoid M E X meq}.
@@ -286,12 +286,12 @@ Section EquivSetoid.
 
 End EquivSetoid.
 
-Global Add Parametric Morphism `{KS: KripkeSetoid M E X meq} (φ: ctll E) :
+Global Add Parametric Morphism `{KS: KripkeSetoid M E X meq} (φ: ticll E) :
   (entailsL X φ)
        with signature (meq ==> eq  ==> iff) as proper_entailsL_meq.
 Proof.
   induction φ; intros * Heq w.
-  - (* Now *) rewrite ?ctll_now; reflexivity. 
+  - (* Now *) rewrite ?ticll_now; reflexivity. 
   - (* CuL *) destruct q; rewrite unfold_entailsL.
     + (* au *)
       refine (@proper_au_equ M E HE K X meq Eqm KS (entailsL X φ1) _ (entailsL X φ2) _ _ _ Heq _ _ eq_refl);
@@ -325,12 +325,12 @@ Proof.
     + right; now rewrite (IHφ2 _ _ Heq).
 Qed.
 
-Global Add Parametric Morphism `{KS: KripkeSetoid M E X meq} (φ: ctlr E X) :
+Global Add Parametric Morphism `{KS: KripkeSetoid M E X meq} (φ: ticlr E X) :
   (entailsR φ)
        with signature (meq ==> eq  ==> iff) as proper_entailsR_meq.
 Proof.
   induction φ; intros * Heq w.
-  - (* Done *) rewrite ?ctll_done; reflexivity. 
+  - (* Done *) rewrite ?ticll_done; reflexivity. 
   - (* CuR *) destruct q; rewrite unfold_entailsR.
     + (* au *)
       refine (@proper_au_equ M E HE K X meq Eqm KS (entailsL X φ) _ (entailsR φ0) _ _ _ Heq _ _ eq_refl);
@@ -350,7 +350,7 @@ Proof.
     + now rewrite <- (IHφ2 _ _ Heq).
     + now rewrite (IHφ1 _ _ Heq).
     + now rewrite (IHφ2 _ _ Heq).
-  - (* /\ *) split; intros; rewrite ctlr_or in H |- *; destruct H.
+  - (* /\ *) split; intros; rewrite ticlr_or in H |- *; destruct H.
     + left; now rewrite <- (IHφ1 _ _ Heq).
     + right; now rewrite <- (IHφ2 _ _ Heq).
     + left; now rewrite (IHφ1 _ _ Heq).

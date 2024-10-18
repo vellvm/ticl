@@ -10,7 +10,7 @@ From ExtLib Require Import
 From Coinduction Require Import
      coinduction.
 
-From ICTL Require Export
+From TICL Require Export
   Classes
   Events.Core.
 
@@ -230,4 +230,4 @@ End ICTreeNotations.
   fun n => ICtree.branch n.
 
 (*| Export various useful Utils |*)
-From ICTL Require Export Utils.Utils.
+From TICL Require Export Utils.Utils.

@@ -3,14 +3,14 @@
 From Coq Require Import
   Relations.
 
-From ICTL Require Import
+From TICL Require Import
   Classes
   Logic.World
   Events.Core
   ICTree.Events.State
   ICTree.Core.
 
-From ICTL Require Export
+From TICL Require Export
   Events.WriterE.
 
 From ExtLib Require Export

@@ -2,7 +2,7 @@ From Coq Require Import
   Basics
   Classes.Morphisms.
 
-From ICTL Require Import
+From TICL Require Import
   Events.Core
   Events.WriterE
   ICTree.Core
@@ -14,7 +14,7 @@ From ICTL Require Import
   ICTree.Logic.Bind
   ICTree.Logic.Iter
   ICTree.Logic.CanStep
-  Logic.Ctl
+  Logic.Core
   Logic.AX
   Logic.AF
   Logic.EX
@@ -27,14 +27,14 @@ From ICTL Require Import
 Set Implicit Arguments.
 Generalizable All Variables.
 
-Import ICTreeNotations CtlNotations.
-Local Open Scope ctl_scope.
+Import ICTreeNotations TiclNotations.
+Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 
 Section SyntacticEntailment.
   Context {E: Type} {HE: Encode E}.
 
-  Inductive syntailsL{X}: ictree E X -> World E -> ctll E -> Prop :=
+  Inductive syntailsL{X}: ictree E X -> World E -> ticll E -> Prop :=
   (* All formulas are invariant to [Guard] *)
   | SynGuard: forall w φ t,
       syntailsL t w φ ->
@@ -276,9 +276,9 @@ Section SyntacticEntailment.
                                     exists (i': I), lr = inl i' /\ R i' w'}) ]>) ->
       syntailsL (iter k i) w <( EG φ )>.
 
-  Lemma soundnessL{X}: forall (t: ictree E X) (w: World E) (φ: ctll E),
+  Lemma soundnessL{X}: forall (t: ictree E X) (w: World E) (φ: ticll E),
       syntailsL t w φ -> <( t, w |= φ )>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     intros.
     induction H.
     - rewrite sb_guard...
@@ -286,7 +286,7 @@ Section SyntacticEntailment.
     - csplit...
     - cleft...
     - cright...
-    - apply ctll_bind_l...
+    - apply ticll_bind_l...
     - apply aul_stuck...
     - apply aul_ret; cleft...
     - apply aul_ret; cright...

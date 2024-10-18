@@ -1,8 +1,8 @@
-From ICTL Require Export
+From TICL Require Export
   ICTree.Eq.Core
   ICTree.Eq.Bind.
 
-From ICTL Require Import
+From TICL Require Import
   ICTree.Core.
 
 From Coq Require Import

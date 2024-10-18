@@ -1,6 +1,6 @@
-From ICTL Require Import
+From TICL Require Import
   ICTree.Core
-  Logic.Ctl
+  Logic.Core
   Utils.Vectors
   ICTree.Equ
   Events.Core
@@ -22,19 +22,19 @@ From ExtLib Require Import
   Structures.MonadState
   Data.Monads.StateMonad.
 
-Import ICTreeNotations CtlNotations.
+Import ICTreeNotations TiclNotations.
 Local Open Scope fin_vector_scope.
 Local Open Scope ictree_scope.
-Local Open Scope ctl_scope.
+Local Open Scope ticl_scope.
 
 Section Lock.
 
   (* Assume a finite critical section *)
   Context {T: Type} {critical: ictree (stateE T) unit} {R: unit -> World (stateE T) -> Prop}
-    {Hfin: <[ critical, Pure |= AF done R ]>} (init: T).   
+    {Hfin: <[ critical, Pure |= AF done R ]>} (init: T).
 
   Notation "=?" := Fin.eq_dec.
-  
+
   Record St := {
       state: T;
       flags: vec' 1 bool;
@@ -43,10 +43,10 @@ Section Lock.
 
   (* Preemption *)
   Variant yieldE := Yield.
-  
+
   Global Instance encode_yieldE : Encode yieldE :=
     fun 'Yield => unit.
-  
+
   Notation lockE := (yieldE + stateE St).
 
   Definition get: ictree lockE St :=
@@ -55,7 +55,7 @@ Section Lock.
   Definition put: St -> ictree lockE unit :=
     fun x => @ICtree.trigger (stateE St) (lockE) _ _ (ReSum_inr) (ReSumRet_inr) (Put x).
 
-  
+
   Definition set_flag(st: St)(i: fin' 1)(b: bool) : ictree lockE unit :=
     put {|
         state := st.(state);
@@ -69,7 +69,7 @@ Section Lock.
         flags := (Vector.replace st.(flags) i b);
         turn := st.(turn);
       |}.
-  
+
   Definition yield: ictree lockE unit :=
     @ICtree.trigger yieldE (lockE) _ _ (ReSum_inl) (ReSumRet_inl) Yield.
 
@@ -89,11 +89,11 @@ Section Lock.
 
   Check @resumICtree.
   Definition crit: ictree lockE unit :=
-    
+
     @resumICtree (stateE St) lockE _ _ ReSum_inr ReSumRet_inr critical.
   Notation continue := (Ret (inl tt)).
   Notation stop := (Ret (inr tt)).
-  
+
   Definition lock (id: fin' 1): ictree lockE unit :=
     st <- get ;;
     put (set_flag st id true) ;;
@@ -101,13 +101,13 @@ Section Lock.
     yield ;;
     while (check (fun st => st.(turn) =? id && st.(flag) $ id))
       (yield) ;;
-    
+
     (* Spin loop *)
     ICtree.iter
       (fun _ =>
          m <- acq ;;
          if PeanoNat.Nat.eq_dec m id then
-           b <- enter ;;           
+           b <- enter ;;
            if b then
              (* success *)
              stop
@@ -121,7 +121,7 @@ Section Lock.
     leave.
 
   (* Spinlock instrumented semantics: (counter, lock state, shared state) *)
-  Program Definition h_lockE: spinE ~> stateT (nat * bool * T) (ictreeW lockE) := 
+  Program Definition h_lockE: spinE ~> stateT (nat * bool * T) (ictreeW lockE) :=
     fun e =>
       mkStateT (fun (p: nat * bool * T) =>
                   let '(cnt, lk, st) := p in
@@ -141,28 +141,28 @@ Section Lock.
                   | inr (Put s) =>
                       Ret (tt, (cnt, lk, s))
                   | inr Get =>
-                      Ret (st, (cnt, lk, st))                          
+                      Ret (st, (cnt, lk, st))
                   end).
 
   Definition spinlock2: ictree spinE unit :=
     ICtree.br2
       (spinlock 0 ;; spinlock 1)
       (spinlock 1 ;; spinlock 0).
-       
+
   Lemma spinlock_live: forall (id: nat),
-      id = 0 \/ id = 1 
+      id = 0 \/ id = 1
       <( {interp_state h_lockE spinlock2 (0, false, init)} |=
            AF visW {fun obs => obs.(id) = i} )>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     intros.
-    unfold election_proto, uring_sched. 
+    unfold election_proto, uring_sched.
     unfold ICtree.branch.
     rewrite bind_br.
     cright.
-    apply axl_br; split; [csplit; split; auto with ctl|].
+    apply axl_br; split; [csplit; split; auto with ticl|].
     intro c. (* Nondeterministic pick *)
     rewrite bind_ret_l.
-    unfold ICtree.forever.    
+    unfold ICtree.forever.
     eapply aul_iter_nat with (Ri:= fun _ _ => True)...
     clear c.
     intros (j, sys) w Hd [].
@@ -194,7 +194,7 @@ Section Lock.
           cleft.
           apply anr_ret...
           eexists; intuition.
-          
+
           exists (j, ). eexists.
         cbn.
         rewrite Heqt.
@@ -207,7 +207,7 @@ Section Lock.
                       | h :: ts => exists hs, h :: ts = hs ++ [nl]
                       end
                   | _ => exists hs, l = hs ++ [nl]
-                  end)... 
+                  end)...
     intros [] l w (Hd & Hw).
-  Admitted.    
+  Admitted.
 End Election.

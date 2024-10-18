@@ -3,10 +3,10 @@ From Coq Require Import
   Program.Basics
   Classes.Morphisms.
 
-From ICTL Require Export
+From TICL Require Export
   Logic.World.
 
-From ICTL Require Import
+From TICL Require Import
   Utils.Utils
   Events.Core.
 
@@ -24,15 +24,15 @@ Class Kripke (M: forall E, Encode E -> Type -> Type) (E: Type) `{HE: Encode E} :
       not_done w;
   }.
 
-Declare Scope ctl_scope.
-Local Open Scope ctl_scope.
-Delimit Scope ctl_scope with ctl.
+Declare Scope ticl_scope.
+Local Open Scope ticl_scope.
+Delimit Scope ticl_scope with ticl.
 
 (* Transition relation *)
 Notation "[ t , w ]  ↦ [ t' , w' ]" :=
   (ktrans t w t' w')
     (at level 78,
-      right associativity): ctl_scope.
+      right associativity): ticl_scope.
 
 Definition can_step `{Kripke M W} {X} (m: M W _ X) (w: World W): Prop :=
   exists m' w', [m,w] ↦ [m',w'].
@@ -45,7 +45,7 @@ Proof.
   destruct H0 as (t' & w' & TR).
   now apply ktrans_not_done in TR.
 Qed.
-Global Hint Resolve can_step_not_done: ctl.
+Global Hint Resolve can_step_not_done: ticl.
 
 Ltac world_inv :=
   match goal with
@@ -66,7 +66,7 @@ Ltac world_inv :=
   | [H: ?w = @Finish ?E ?HE ?X ?e ?v ?x |- _] =>
       dependent destruction H
   end.
-Global Hint Extern 2 => world_inv: ctl.
+Global Hint Extern 2 => world_inv: ticl.
 
 Ltac ktrans_inv :=
   match goal with
@@ -75,4 +75,4 @@ Ltac ktrans_inv :=
   | [H: [?t, ?w] ↦ [?t', ?w'] |- not_done ?w] =>
       apply ktrans_not_done with t t' w'; apply H
   end.
-Global Hint Extern 2 => ktrans_inv: ctl.
+Global Hint Extern 2 => ktrans_inv: ticl.

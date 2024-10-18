@@ -3,17 +3,17 @@ Temporal Interaction and Choice Logic (TICL)
 
 # About
 
-Mechanized verification of liveness properties for programs with effects, nondeterminism, 
-and nontermination is difficult. Existing temporal reasoning frameworks operate on the 
-level of models (traces, automata) not executable code, creating a verification gap and losing 
-the benefits of modularity and composition enjoyed by structural program logics. Reasoning about 
-infinite traces and automata requires complex (co-)inductive proof techniques and familiarity 
-with proof assistant mechanics (e.g., guardedness checker). We propose a structural approach to 
-the verification of temporal properties with a new temporal logic that we call ticl. Using ticl, 
-we internalize complex (co-)inductive proof techniques to structural lemmas and reasoning about 
-variants and invariants. We show that it is possible to perform mechanized proofs of general 
+Mechanized verification of liveness properties for programs with effects, nondeterminism,
+and nontermination is difficult. Existing temporal reasoning frameworks operate on the
+level of models (traces, automata) not executable code, creating a verification gap and losing
+the benefits of modularity and composition enjoyed by structural program logics. Reasoning about
+infinite traces and automata requires complex (co-)inductive proof techniques and familiarity
+with proof assistant mechanics (e.g., guardedness checker). We propose a structural approach to
+the verification of temporal properties with a new temporal logic that we call ticl. Using ticl,
+we internalize complex (co-)inductive proof techniques to structural lemmas and reasoning about
+variants and invariants. We show that it is possible to perform mechanized proofs of general
 temporal properties, while working in a high-level of abstraction. We demonstrate the benefits of
-ticl by giving mechanized proofs of safety and liveness properties for programs with queues, 
+ticl by giving mechanized proofs of safety and liveness properties for programs with queues,
 secure memory, and distributed consensus.
 
 # Building
@@ -90,7 +90,7 @@ Then use `dune build` in the root directory to build `TICL` and `dune install` t
     │   └── Yield.v
     ├── Logic
     │   ├── Congruence.v
-    │   ├── Ctl.v
+    │   ├── Core.v
     │   ├── Semantics.v
 ```
 

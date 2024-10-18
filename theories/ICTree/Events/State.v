@@ -1,8 +1,8 @@
 (*| Useful instructions: State |*)
-From ICTL Require Import
+From TICL Require Import
   ICTree.Core.
 
-From ICTL Require Export
+From TICL Require Export
   Events.Core
   Events.StateE.
 

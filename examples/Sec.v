@@ -1,10 +1,10 @@
 From Coq Require Import Arith.PeanoNat.
 
-From ICTL Require Import
+From TICL Require Import
   ICTree.Equ
   ICTree.Core
   ICTree.Events.Writer
-  Logic.Ctl
+  Logic.Core
   ICTree.SBisim
   ICTree.Logic.Trans
   ICTree.Logic.AF
@@ -24,9 +24,9 @@ From ExtLib Require Import
 
 Generalizable All Variables.
 
-Import ICtree ICTreeNotations CtlNotations.
+Import ICtree ICTreeNotations TiclNotations.
 Local Open Scope ictree_scope.
-Local Open Scope ctl_scope.
+Local Open Scope ticl_scope.
 
 (*| Security labels |*)
 Variant Sec: Set := H | L.
@@ -160,7 +160,7 @@ Section SecurityEx.
       (forall i, no_leak i σ) ->
       <( {interp_state h_secE (sec_system secret) σ},
          {Obs (Log {| ml := L; al := L |}) tt} |= AG visW {fun obs => obs.(al) ⪯ obs.(ml)} )>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     intros.    
     unfold sec_system, forever.
     apply ag_state_iter with
@@ -225,7 +225,7 @@ Section SecurityEx.
       eapply aur_bind_r_eq; [eapply aur_bind_r_eq|].
       + apply aur_vis...
         right; split.
-        * apply ctll_vis...
+        * apply ticll_vis...
         * intros [].
           cleft; apply anr_ret...
       + cleft; apply anr_ret... 
@@ -243,7 +243,7 @@ Section SecurityEx.
         eapply aur_bind_r_eq; [eapply aur_bind_r_eq|].
         * apply aur_vis...
           right; split.
-          -- apply ctll_vis...
+          -- apply ticll_vis...
           -- intros [].
              cleft; apply anr_ret... 
         * cleft; apply anr_ret... 

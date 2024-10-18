@@ -7,7 +7,7 @@ From ExtLib Require Import
   Data.Map.FMapAList
   Data.String.
 
-From ICTL Require Import
+From TICL Require Import
   ICTree.Core
   ICTree.SBisim
   ICTree.Equ
@@ -15,8 +15,8 @@ From ICTL Require Import
   ICTree.Events.State
   ICTree.Events.Writer.
 
-From ICTL Require Import
-  Logic.Ctl
+From TICL Require Import
+  Logic.Core
   Logic.Trans
   ICTree.Logic.AX
   ICTree.Logic.AF
@@ -28,8 +28,8 @@ From ICTL Require Import
 
 Generalizable All Variables.
 
-Import ICtree ICTreeNotations CtlNotations.
-Local Open Scope ctl_scope.
+Import ICtree ICTreeNotations TiclNotations.
+Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 Local Open Scope nat_scope.
 
@@ -174,7 +174,7 @@ Module Clang.
       <( p, {Obs (Log (add c v m)) tt} |= visW {assert c φ} )>.
   Proof.
     intros.
-    apply ctll_vis; constructor.
+    apply ticll_vis; constructor.
     unfold assert.
     pose proof (mapsto_lookup c v (add c v m)).
     pose proof (mapsto_add_eq m c v).
@@ -189,18 +189,18 @@ Module Clang.
       let ctx' := add x (cdenote_exp a ctx) ctx in
       R (tt, ctx') (Obs (Log ctx') tt) ->
       <[ {instr_cprog [[ x := a]] ctx}, w |= <( now φ )> EN EX done R ]>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     cbn; intros; subst.
     unfold instr_cprog, instr_stateE; cbn.
     eapply enr_state_bind_r_eq.
     - rewrite interp_state_get.
       apply enr_ret.
-      + rewrite ctll_now; intuition.
+      + rewrite ticll_now; intuition.
       + intuition.
     - rewrite interp_state_put.
       apply enr_log.
       + apply exr_ret...
-      + apply ctll_now; intuition.
+      + apply ticll_now; intuition.
   Qed.
 
   Lemma aur_cprog_assgn: forall x a ctx ctx' w φ ψ,
@@ -208,7 +208,7 @@ Module Clang.
       <( {instr_cprog [[ x := a ]] ctx}, w |= ψ )> ->
       <[ {Ret (tt, ctx')}, {Obs (Log ctx') tt} |= φ ]> ->
       <[ {instr_cprog [[ x := a ]] ctx}, w |= ψ AU φ ]>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     unfold instr_cprog, instr_stateE.
     cbn; intros; subst. 
     unfold get, put, trigger in *.
@@ -233,7 +233,7 @@ Module Clang.
       <( {instr_cprog [[ x := a ]] ctx}, w |= ψ )> ->
       <( {Ret (tt, ctx')}, {Obs (Log ctx') tt} |= φ )> ->
       <( {instr_cprog [[ x := a ]] ctx}, w |= ψ AU φ )>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     unfold instr_cprog, instr_stateE.
     cbn; intros; subst. 
     unfold get, put, trigger in *.
@@ -331,7 +331,7 @@ Module Clang.
        else
          <( {instr_cprog f ctx}, w |= φ AU ψ )>) ->         
       <( {instr_cprog [[ if c then t else f ]] ctx}, w |= φ AU ψ )>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     unfold instr_cprog, instr_stateE.
     intros; cbn.
     eapply aul_state_bind_r_eq.
@@ -342,8 +342,8 @@ Module Clang.
       cleft.
       eapply axr_ret.
       destruct (cdenote_comp c ctx) eqn:Hc. 
-      + now apply ctll_not_done in H.
-      + now apply ctll_not_done in H.
+      + now apply ticll_not_done in H.
+      + now apply ticll_not_done in H.
       + unfold resum_ret, ReSumRet_refl.
         intuition.
     - destruct (cdenote_comp c ctx) eqn:Hc... 
@@ -355,7 +355,7 @@ Module Clang.
        else
          <[ {instr_cprog f ctx}, w |= φ AU AX ψ ]>) ->   
       <[ {instr_cprog [[ if c then t else f ]] ctx}, w |= φ AU AX ψ ]>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     unfold instr_cprog, instr_stateE.
     intros; cbn.
     eapply aur_state_bind_r_eq.
@@ -378,7 +378,7 @@ Module Clang.
        else
          <( {instr_cprog f ctx}, w |= φ EU ψ )>) ->   
       <( {instr_cprog [[ if c then t else f ]] ctx}, w |= φ EU ψ )>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     unfold instr_cprog, instr_stateE.
     intros; cbn.
     eapply eul_state_bind_r_eq.
@@ -389,7 +389,7 @@ Module Clang.
       cleft.
       eapply exr_ret.
       + destruct (cdenote_comp c ctx) eqn:Hc;
-          now eapply ctll_not_done in H.
+          now eapply ticll_not_done in H.
       + intuition.
     - unfold resum_ret, ReSumRet_refl.
       destruct (cdenote_comp c ctx)... 
@@ -401,7 +401,7 @@ Module Clang.
        else
          <[ {instr_cprog f ctx}, w |= φ EU EX ψ ]>) ->   
       <[ {instr_cprog [[ if c then t else f ]] ctx}, w |= φ EU EX ψ ]>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     unfold instr_cprog, instr_stateE.
     intros; cbn.
     eapply eur_state_bind_r_eq.
@@ -424,7 +424,7 @@ Module Clang.
       cdenote_comp c ctx' = true ->
       <( {instr_cprog [[ do t while c done ]] ctx'}, w' |= φ AU ψ )> ->   
       <( {instr_cprog [[ do t while c done ]] ctx}, w |= φ AU ψ )>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     unfold instr_cprog, instr_stateE; cbn; intros.
     rewrite unfold_iter.
     eapply aul_state_bind_r_eq.
@@ -435,12 +435,12 @@ Module Clang.
       + rewrite interp_state_get.
         cleft...
         apply axr_ret...
-        now apply ctll_not_done in H1.
+        now apply ticll_not_done in H1.
       + destruct (cdenote_comp c ctx'); inv H0.
         rewrite interp_state_ret.
         cleft...
         apply axr_ret...
-        now apply ctll_not_done in H1.
+        now apply ticll_not_done in H1.
     - cbn.
       rewrite unfold_interp_state; cbn.
       rewrite sb_guard...
@@ -451,7 +451,7 @@ Module Clang.
       cdenote_comp c ctx' = false ->
       <( {Ret (tt, ctx')}, w' |= ψ )> ->   
       <( {instr_cprog [[ do t while c done ]] ctx}, w |= φ AU ψ )>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     unfold instr_cprog, instr_stateE; cbn; intros.
     rewrite unfold_iter.
     eapply aul_state_bind_r_eq.
@@ -462,12 +462,12 @@ Module Clang.
       + rewrite interp_state_get.
         cleft...
         apply axr_ret...
-        now apply ctll_not_done in H1.
+        now apply ticll_not_done in H1.
       + destruct (cdenote_comp c ctx'); inv H0.
         rewrite interp_state_ret.
         cleft...
         apply axr_ret...
-        now apply ctll_not_done in H1.
+        now apply ticll_not_done in H1.
     - cbn.
       rewrite interp_state_ret.
       now cleft.      
@@ -478,7 +478,7 @@ Module Clang.
       cdenote_comp c ctx' = true ->
       <[ {instr_cprog [[ do t while c done ]] ctx'}, w' |= φ AU AX ψ ]> ->   
       <[ {instr_cprog [[ do t while c done ]] ctx}, w |= φ AU AX ψ ]>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     unfold instr_cprog, instr_stateE; cbn; intros.
     rewrite unfold_iter.
     eapply aur_state_bind_r_eq.
@@ -505,7 +505,7 @@ Module Clang.
       cdenote_comp c ctx' = false ->
       <[ {Ret (tt, ctx')}, w' |= AX ψ ]> ->   
       <[ {instr_cprog [[ do t while c done ]] ctx}, w |= φ AU AX ψ ]>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     unfold instr_cprog, instr_stateE; cbn; intros.
     rewrite unfold_iter.
     eapply aur_state_bind_r_eq.
@@ -543,7 +543,7 @@ Module Clang.
                                                        else
                                                          <[ {Ret (tt, ctx')}, w' |= φ AN ψ ]>} ]>) -> 
       <[ {instr_cprog [[ do t while c done ]] ctx}, w |= φ AU ψ ]>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     unfold instr_cprog, instr_stateE; cbn; intros.
     eapply aur_state_iter_nat with
       (Ri:= fun 'tt ctx' w' => Ri ctx')
@@ -585,7 +585,7 @@ Module Clang.
                                                   /\ not_done w'
                                                   /\ R ctx' }) ]>) ->
     <( {instr_cprog [[ do t while c done ]] ctx}, w |= AG φ )>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     unfold instr_cprog, instr_stateE.
     intros; subst.
     cbn.
@@ -632,7 +632,7 @@ Module Clang.
                                                   /\ not_done w'
                                                   /\ R ctx' }) ]>) ->
     <( {instr_cprog [[ do t while c done ]] ctx}, w |= EG φ )>.
-  Proof with eauto with ctl.
+  Proof with eauto with ticl.
     unfold instr_cprog, instr_stateE.
     intros; subst.
     cbn.
