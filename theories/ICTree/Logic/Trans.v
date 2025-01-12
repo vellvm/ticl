@@ -104,7 +104,7 @@ Section ICTreeTrans.
       apply KtransFinish; auto.
   Qed.
 
-  Global Program Instance ictree_kripke: Kripke ictree E := {
+  Global Program Instance ictree_kripke: Kripke ictree E | 1 := {
       ktrans X t w t' w' :=
         ktrans_ (X:=X) (observe t) w (observe t') w'
     }.
@@ -114,6 +114,14 @@ Section ICTreeTrans.
   Hint Unfold ktrans: ticl.
   Arguments ktrans /.
 
+  (** This hint tells Coq that when trying to resolve an instance of
+  Kripke ?A ?B, it should first try to unify the first parameter with
+  ictree. The priority 0 ensures this hint is tried before other
+  resolution strategies. *)
+  Hint Extern 0 (Kripke ?A ?B) => 
+         first [ is_evar A; exact ictree
+               | fail ] : typeclass_instances.
+  
   Global Instance ktrans_equ_proper{X}:
     Proper (equ eq ==> eq ==> equ eq ==> eq ==> iff) (ktrans (X:=X)).
   Proof.
@@ -202,6 +210,15 @@ Section ICTreeTrans.
     exists s'; intuition.
   Qed.
 
+  (** This hint tells Coq that when trying to resolve an instance of
+  KripkeSetoid ?A ?B, it should first try to unify the first parameter with
+  ictree. The priority 0 ensures this hint is tried before other
+  resolution strategies. *)
+  Hint Extern 0 (KripkeSetoid ?A ?B) => 
+         first [ is_evar A; exact ictree
+               | fail ] : typeclass_instances.
+  
+  
   Local Open Scope ticl_scope.
   Lemma ktrans_guard{X}: forall (t t': ictree E X) w w',
       [Guard t, w] ↦ [t', w'] <-> [t, w] ↦ [t', w'].

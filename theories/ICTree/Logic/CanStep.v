@@ -272,3 +272,24 @@ Section CanStepInterp.
     apply can_step_bind_l with t' w'; auto.   
   Qed.
 End CanStepInterp.
+
+Section CanStepLog.
+  Context {S X: Type}.
+   Lemma can_step_log: forall (s: S) w (t: ictreeW S X),
+      not_done w ->
+      can_step (log s) w.
+  Proof.
+    intros.
+    apply can_step_vis; auto.
+  Qed.
+  Lemma can_step_log_bind: forall (s: S) w (t: ictreeW S X),
+      not_done w ->
+      can_step (log s ;; t) w.
+  Proof.
+    intros.
+    eapply can_step_bind_l.
+    apply ktrans_vis.
+    exists tt; intuition.
+    constructor.
+  Qed.
+End CanStepLog.

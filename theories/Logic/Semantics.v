@@ -129,8 +129,8 @@ Section Shallow.
 End Shallow.
 
 (* Companion notations *)
-Notation agc p := (gfp (agcF p)).
-Notation egc p := (gfp (egcF p)).
+Notation agc p   := (gfp (agcF p)).
+Notation egc p   := (gfp (egcF p)).
 Notation agct p  := (t (agcF p)).
 Notation egct p  := (t (egcF p)).
 Notation agcbt p := (bt (agcF p)).

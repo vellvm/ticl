@@ -18,22 +18,20 @@ From TICL Require Import
   ICTree.Interp.State
   ICTree.Events.State
   ICTree.Events.Writer
-  Lang.Clang.
+  Lang.StImp.
 
 From ExtLib Require Import
   Structures.Maps
   Data.Map.FMapAList.
 
 From Coq Require Import
-  Strings.String
-  ZArith.
+  Strings.String.
 
 Generalizable All Variables.
 
 Import ICtree ICTreeNotations TiclNotations.
 Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
-Local Open Scope Z_scope.
 
 (*
 void main() {
@@ -58,18 +56,18 @@ void main() {
  *)
 
 Module P25.
-  Import Clang.Clang.
-  Local Open Scope clang_scope.
+  Import StImp.StImp. 
+  Local Open Scope stimp_scope.
 
   Definition c: string := "c".
   Definition r: string := "r".
   Definition cs: string := "cs".
-  
+
   Definition p25: CProg :=
     [[
         r := 0 ;;;
         cs := 8 ;;;
-        while cs > 0 do
+        while 0 <? cs do
           c := c - 1 ;;;
           r := r + 1
         done
@@ -78,17 +76,17 @@ Module P25.
   (* // (varC <= 5) || ([AF](varR > 5)) *)
   Lemma p25_spec: forall cval,
       let init := add c cval empty in
-      <( {instr_cprog p25 init}, {Obs (Log init) tt} |=
-           (visW {assert c (fun cv => cv <= 5)} \/ AF visW {assert r (fun rv => rv > 5)}) )>.
+      <( {instr_prog p25 init}, {Obs (Log init) tt} |= var c <= 5 \/ AF (var r > 5) )>.
   Proof with eauto with ticl.
     intros.
     unfold p25, init.
-    destruct (Z.le_gt_cases cval 5).
+    destruct (Compare_dec.le_gt_dec cval 5).
     - cleft. (* cv <= 5 *)
-      now eapply vis_c_assert.
+      now eapply var_le. 
     - cright. (* cv > 5 *)
       eapply aul_cprog_seq.
       + eapply aur_cprog_assgn...
+        * 
         csplit...
       + eapply aul_cprog_seq.
         * eapply aur_cprog_assgn...

@@ -158,6 +158,19 @@ Section IterLemmas.
   Qed.  
 
   (* AU *)
+  Lemma aul_iter_next{X I} R (i: I) w (k: I -> ictree E (I + X)) (φ ψ: ticll E):
+    <[ {k i}, w |= φ AU AX done {fun lr w => exists i', lr = inl i' /\ R i' w} ]> ->
+    (forall i w, R i w -> <( {iter k i}, w |= φ AU ψ )>) ->
+    <( {iter k i}, w |= φ AU ψ )>.
+  Proof with auto with ticl.
+    unfold iter, MonadIter_ictree.
+    intros.
+    rewrite unfold_iter.
+    apply aul_bind_r with (R:=(fun lr w => exists i', lr = inl i' /\ R i' w))...
+    intros ? ? (i' & -> & HR).
+    rewrite sb_guard...
+  Qed.
+  
   Lemma aul_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ictree E (I + X)) (φ ψ: ticll E):
     well_founded Rv ->
     not_done w ->
@@ -222,6 +235,19 @@ Section IterLemmas.
     eapply aul_iter with Ri
                          (ltof _ (fun '(i, w) => f i w)); auto.
     apply well_founded_ltof.
+  Qed.
+
+  Lemma aur_iter_next{X I} R (i: I) w (k: I -> ictree E (I + X)) (φ: ticll E) ψ:
+    <[ {k i}, w |= φ AU AX done {fun lr w => exists i', lr = inl i' /\ R i' w} ]> ->
+    (forall i w, R i w -> <[ {iter k i}, w |= φ AU ψ ]>) ->
+    <[ {iter k i}, w |= φ AU ψ ]>.
+  Proof with auto with ticl.
+    unfold iter, MonadIter_ictree.
+    intros.
+    rewrite unfold_iter.
+    apply aur_bind_r with (R:=(fun lr w => exists i', lr = inl i' /\ R i' w))...
+    intros ? ? (i' & -> & HR).
+    rewrite sb_guard...
   Qed.
   
   Lemma aur_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ictree E (I + X)) (φ: ticll E) (ψ: ticlr E X):

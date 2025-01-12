@@ -3,7 +3,6 @@ From TICL Require Import
   ICTree.Core
   ICTree.Equ
   ICTree.SBisim
-  ICTree.Interp.State
   ICTree.Events.Writer
   ICTree.Logic.Trans
   ICTree.Logic.Bind
@@ -14,7 +13,10 @@ From TICL Require Import
   ICTree.Logic.EF
   ICTree.Logic.AG
   ICTree.Logic.EX
-  Logic.Core.
+  Logic.Core  
+  ICTree.Interp.State
+  ICTree.Events.State.
+
 
 From Coq Require Import Arith.Wf_nat.
 From Coq Require Import Program.Tactics.
@@ -52,6 +54,27 @@ Section StateLemmas.
     now apply ticll_bind_l.
   Qed.
 
+  (*| Ret lemmas |*)
+  Theorem axr_state_ret{X}: forall R (x: X) w,
+      R (x, σ) w ->
+      not_done w ->
+      <[ {interp_state h (Ret x) σ}, w |= AX done R ]>.  
+  Proof with eauto with ticl.
+    intros.
+    rewrite interp_state_ret.
+    apply axr_ret...
+  Qed.
+  
+  Theorem aur_state_ret{X}: forall R (x: X) φ w,
+      R (x, σ) w ->
+      not_done w ->
+      <[ {interp_state h (Ret x) σ}, w |= φ AU AX done R ]>.  
+  Proof with eauto with ticl.
+    intros.
+    cleft.
+    apply axr_state_ret...
+  Qed.
+  
   (*| Bind lemmas for [AN] |*)
   Theorem anl_state_bind_r{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ R,
       <[ {interp_state h t σ}, w |= φ AN done {fun '(x, σ) => R x σ} ]> ->
@@ -442,6 +465,34 @@ Section StateLemmas.
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
 
+  Theorem aul_state_iter_next{X I} R (i: I) w (k: I -> ictree E (I + X)) φ ψ:
+    <[ {interp_state h (k i) σ}, w |= φ AU AX done {fun '(lr, σ) w => exists i, lr = inl i /\ not_done w /\ R i σ w} ]> ->
+    (forall (i: I) σ w, R i σ w -> not_done w -> <( {interp_state h (iter k i) σ}, w |= φ AU ψ )>) ->
+    <( {interp_state h (iter k i) σ}, w |= φ AU ψ )>.
+  Proof with auto with ticl.
+    unfold iter, MonadIter_ictree.
+    intros.
+    rewrite unfold_iter.
+    apply aul_state_bind_r with (R:=(fun lr σ w => exists i, lr = inl i /\ not_done w /\ R i σ w))...
+    intros ? ? ? (i' & -> & Hd & HR).
+    rewrite interp_state_tau, sb_guard...
+  Qed.
+
+  Theorem aul_state_iter_next_eq{X I} (i i': I) w w' σ' (k: I -> ictree E (I + X)) φ ψ:
+    <[ {interp_state h (k i) σ}, w |= φ AU AX done= {(inl i', σ')} w' ]> ->
+    not_done w' ->
+    <( {interp_state h (iter k i') σ'}, w' |= φ AU ψ )> ->
+    <( {interp_state h (iter k i) σ}, w |= φ AU ψ )>.
+  Proof with auto with ticl.
+    unfold iter, MonadIter_ictree.
+    intros.
+    rewrite unfold_iter.
+    eapply aul_state_bind_r_eq.
+    - apply H.
+    - cbn.
+      rewrite interp_state_tau, sb_guard...
+  Qed.
+  
   Theorem aur_state_iter{X I} Ri (Rv: relation (I * Σ * WorldW W)) (i: I) w
     (k: I -> ictree E (I + X)) (φ: ticllW W) (ψ: ticlrW W (X * Σ)):
     well_founded Rv ->
@@ -487,7 +538,35 @@ Section StateLemmas.
       apply HindWf...
     - apply ticlr_an_au. 
   Qed.
-  
+
+  Theorem aur_state_iter_next{X I} R (i: I) w (k: I -> ictree E (I + X)) φ ψ:
+    <[ {interp_state h (k i) σ}, w |= φ AU AX done {fun '(lr, σ) w => exists i, lr = inl i /\ not_done w /\ R i σ w} ]> ->
+    (forall (i: I) σ w, R i σ w -> not_done w -> <[ {interp_state h (iter k i) σ}, w |= φ AU ψ ]>) ->
+    <[ {interp_state h (iter k i) σ}, w |= φ AU ψ ]>.
+  Proof with auto with ticl.
+    unfold iter, MonadIter_ictree.
+    intros.
+    rewrite unfold_iter.
+    apply aur_state_bind_r with (R:=(fun lr σ w => exists i, lr = inl i /\ not_done w /\ R i σ w))...
+    intros ? ? ? (i' & -> & Hd & HR).
+    rewrite interp_state_tau, sb_guard...
+  Qed.
+
+  Theorem aur_state_iter_next_eq{X I} (i i': I) w w' σ' (k: I -> ictree E (I + X)) φ ψ:
+    <[ {interp_state h (k i) σ}, w |= φ AU AX done= {(inl i', σ')} w' ]> ->
+    not_done w' ->
+    <[ {interp_state h (iter k i') σ'}, w' |= φ AU ψ ]> ->
+    <[ {interp_state h (iter k i) σ}, w |= φ AU ψ ]>.
+  Proof with auto with ticl.
+    unfold iter, MonadIter_ictree.
+    intros.
+    rewrite unfold_iter.
+    eapply aur_state_bind_r_eq.
+    - apply H.
+    - cbn.
+      rewrite interp_state_tau, sb_guard...
+  Qed.
+
   (*| Iter lemmas for [EU] |*)
   Lemma eul_state_iter{X I} Ri (Rv: relation (I * Σ * WorldW W)) (i: I) w
     (k: I -> ictree E (I + X)) (φ ψ: ticllW W):
@@ -757,3 +836,89 @@ Section StateLemmas.
     apply well_founded_ltof.
   Qed.  
 End StateLemmas.
+
+(* Lemmas for [stateE] handler [h_stateW] *)
+Section StateELemmas.
+  (* S: State, s: initial state *)
+  Context {S: Type} (s: S).
+
+  Lemma anr_get: forall (w: WorldW S) ψ R,
+      R (s,s) w ->
+      <( {Ret (s, s)}, {w} |= ψ )> ->
+      <[ {instr_stateE get s}, w |= ψ AN done R ]>.
+  Proof with eauto with ticl.
+    intros.
+    unfold instr_stateE.
+    rewrite interp_state_get.
+    apply anr_done...
+  Qed.
+
+  Lemma axr_get: forall (w: WorldW S) R,
+      not_done w ->
+      R (s,s) w ->
+      <[ {instr_stateE get s}, w |= AX done R ]>.
+  Proof with eauto with ticl.
+    intros.
+    unfold instr_stateE.
+    rewrite interp_state_get.
+    apply axr_ret... 
+  Qed.
+
+  Lemma aur_get: forall (w: WorldW S) ψ R,
+      not_done w ->
+      R (s,s) w ->
+      <[ {instr_stateE get s}, w |= ψ AU AX done R ]>.
+  Proof with eauto with ticl.
+    intros.
+    cleft.
+    apply axr_get...
+  Qed.
+  
+  Lemma aur_put: forall (s': S) (w: WorldW S) ψ R,
+      <( {log s'}, {w} |= ψ )> ->
+      R (tt, s') (Obs (Log s') tt) ->
+      <[ {instr_stateE (put s') s}, w |= ψ AU AX done R ]>.
+  Proof with eauto with ticl.
+    intros.
+    unfold instr_stateE.
+    rewrite interp_state_put.
+    eapply aur_log...
+    - cleft; apply axr_ret...
+    - now apply ticll_bind_l.
+  Qed.
+
+  Lemma enr_get: forall (w: WorldW S) ψ R,
+      R (s,s) w ->
+      <( {Ret (s, s)}, {w} |= ψ )> ->
+      <[ {instr_stateE get s}, w |= ψ EN done R ]>.
+  Proof with eauto with ticl.
+    intros.
+    unfold instr_stateE.
+    rewrite interp_state_get.
+    apply enr_done...
+  Qed.
+
+  Lemma exr_get: forall (w: WorldW S) R,
+      not_done w ->
+      R (s,s) w ->
+      <[ {instr_stateE get s}, w |= EX done R ]>.
+  Proof with eauto with ticl.
+    intros.
+    unfold instr_stateE.
+    rewrite interp_state_get.
+    apply exr_ret... 
+  Qed.
+  
+  Lemma eur_put: forall (s': S) (w: WorldW S) ψ R,
+      <( {log s'}, {w} |= ψ )> ->
+      R (tt, s') (Obs (Log s') tt) ->
+      <[ {instr_stateE (put s') s}, w |= ψ EU EX done R ]>.
+  Proof with eauto with ticl.
+    intros.
+    unfold instr_stateE.
+    rewrite interp_state_put.
+    eapply eur_log...
+    - cleft; apply exr_ret...
+    - now apply ticll_bind_l.
+  Qed.
+End StateELemmas.

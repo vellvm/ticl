@@ -264,3 +264,43 @@ Proof with eauto.
   rewrite sb_guard, interp_state_ret.
   reflexivity.
 Qed.
+
+Lemma instr_state_bind {S A B} (t : ictree (stateE S) A) (k : A -> ictree (stateE S) B) (s : S) :
+  instr_stateE (t >>= k) s ≅ instr_stateE t s >>= fun '(x, s) => instr_stateE (k x) s.
+Proof.
+  unfold instr_stateE.
+  apply interp_state_bind.
+Qed.
+
+Lemma instr_state_map {S A B} (t : ictree (stateE S) A) (f : A -> B) (s : S) :
+  instr_stateE (ICtree.map f t) s ≅ ICtree.map (fun '(x, s) => (f x, s)) (instr_stateE t s).
+Proof.
+  unfold instr_stateE.
+  apply interp_state_map.
+Qed.
+
+Lemma instr_state_unfold_iter{S I R}
+  (k : I -> ictree (stateE S) (I + R)) (i: I) (s: S) :
+  instr_stateE (ICtree.iter k i) s ≅ instr_stateE (k i) s >>= fun '(x, s) =>
+      match x with
+      | inl l => Guard (instr_stateE (iter k l) s)
+      | inr r => Ret (r, s)
+      end.
+Proof.
+  unfold instr_stateE.
+  apply interp_state_unfold_iter.
+Qed.
+
+Lemma instr_state_get {S}: forall (s: S),
+  instr_stateE get s ~ Ret (s, s).
+Proof.
+  unfold instr_stateE.
+  apply interp_state_get.
+Qed.
+
+Lemma instr_state_put {S}: forall (s s': S),
+  instr_stateE (put s') s ~ log s' ;; Ret (tt, s').
+Proof with eauto.
+  unfold instr_stateE.
+  apply interp_state_put.
+Qed.

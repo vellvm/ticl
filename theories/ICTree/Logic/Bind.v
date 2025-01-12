@@ -647,7 +647,6 @@ Section BindLemmas.
   Qed.
 
   Lemma aur_log{X S}: forall (s: S) (k: ictree (writerE S) X) w ψ φ,
-      not_done w ->
       <[ k, {Obs (Log s) tt} |= ψ AU φ ]> ->
       <( {log s;; k }, w |= ψ )> ->
       <[ {log s;; k }, w |= ψ AU φ ]>.  
@@ -656,7 +655,8 @@ Section BindLemmas.
     cright.
     csplit...
     - eapply can_step_bind_l.
-      + apply ktrans_vis...
+      + eapply ticll_not_done in H0.
+        apply ktrans_vis...
       + constructor.
     - intros * TR.
       apply ktrans_bind_inv in TR as
@@ -664,9 +664,9 @@ Section BindLemmas.
                 (x & ? & TR' & Hr & TRk)].
       + apply ktrans_vis in TR' as (-> & -> & ? & ?).
         unfold resum_ret, ReSumRet_refl in H1.
-        rewrite <- H2, bind_ret_l.
+        rewrite <- H1, bind_ret_l.
         unfold resum, ReSum_refl.
-        apply H0.
+        apply H.
       + apply ktrans_vis in TR' as (-> & -> & ? & ?).
         inv Hr.
         Unshelve.
@@ -700,30 +700,32 @@ Section BindLemmas.
   Qed.
   
   Lemma eur_log{X S}: forall (s: S) (k: ictree (writerE S) X) w ψ φ,
-      ψ w ->
-      not_done w ->
-      <[ k, {Obs (Log s) tt} |= <( now ψ )> EU φ ]> ->
-      <[ {log s;; k }, w |= <( now ψ )> EU φ ]>.
+      <[ k, {Obs (Log s) tt} |= ψ EU φ ]> ->
+      <( {log s;; k }, w |= ψ )> ->
+      <[ {log s;; k }, w |= ψ EU φ ]>. 
   Proof with eauto with ticl.
     intros.
     cright.
-    csplit...
-    - now apply ticll_now.
-    - eexists; exists (Obs (Log s) tt); split.
-      apply ktrans_bind_r...
-      unfold log, ICtree.trigger, resum, ReSum_refl.
-      apply ktrans_vis.
-      exists tt; intuition.
-    + now rewrite bind_ret_l.
+    csplit...    
+    exists k, (Obs (Log s) tt); split...
+    unfold log, ICtree.trigger.
+    rewrite bind_vis.
+    apply ktrans_vis.
+    exists tt; intuition.
+    - unfold resum_ret, ReSumRet_refl.
+      now rewrite bind_ret_l.
+    - now apply ticll_not_done in H0.
   Qed.
 
   Lemma efr_log{X S}: forall (s: S) (k: ictree (writerE S) X) w φ,
       not_done w ->
       <[ k, {Obs (Log s) tt} |= EF φ ]> ->
       <[ {log s;; k }, w |= EF φ ]>.
-  Proof with eauto.
+  Proof with eauto with ticl.
     intros.
     eapply eur_log...
+    csplit; intuition.
   Qed.
-  
+
+
 End BindLemmas.

@@ -18,7 +18,7 @@ From TICL Require Import
   ICTree.Interp.State
   ICTree.Events.State
   ICTree.Events.Writer
-  Lang.Clang.
+  Lang.StImp.
 
 From ExtLib Require Import
   String
@@ -27,15 +27,13 @@ From ExtLib Require Import
 
 From Coq Require Import
   Strings.String
-  Lia
-  ZArith.
+  Lia.
 
 Generalizable All Variables.
 
 Import ICtree ICTreeNotations TiclNotations.
 Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
-Local Open Scope Z_scope.
 
 (*
 void main() {
@@ -60,19 +58,19 @@ void main() {
  *)
 
 Module P26.
-  Include Clang.Clang.
-  Local Open Scope clang_scope.
+  Include StImp.StImp. 
+  Local Open Scope stimp_scope.
 
   Definition c: string := "c".
   Definition r: string := "r".
   Definition cs: string := "cs".
-  
+
   Definition p26: CProg :=
     [[
         r := 0 ;;;
         cs := 4 ;;;
-        while cs > 0 do
-          if c >= cs then
+        while cs >? 0 do
+          if c >=? cs then
             c := c - 1 ;;;
             r := r + 1 ;;;
             cs := cs - 1
@@ -86,8 +84,8 @@ Module P26.
   (* // (varC > 5) || [EG](varR <= 5) *)
   Lemma p26_spec: forall cval,
       let init := add r 0 (add c cval empty) in
-      <( {instr_cprog p26 init}, {Obs (Log init) tt} |=
-           (visW {assert c (fun cv => cv > 5)} \/ EG visW {assert r (fun rv => rv <= 5)}) )>.
+      <( {instr_prog p26 init}, {Obs (Log init) tt} |=
+           (var c > 5 \/ {assert c (fun cv => cv > 5)} \/ EG visW {assert r (fun rv => rv <= 5)}) )>.
   Proof with eauto with ticl.
     intros.
     unfold p26, init.
