@@ -74,6 +74,17 @@ Section StateLemmas.
     cleft.
     apply axr_state_ret...
   Qed.
+
+    
+  Theorem aul_state_ret{X}: forall (x: X) φ ψ w,
+      not_done w ->
+      <( {Ret (x, σ)}, w |= ψ )> ->
+      <( {interp_state h (Ret x) σ}, w |= φ AU ψ )>.
+  Proof with eauto with ticl.
+    intros.
+    cleft.
+    now rewrite interp_state_ret.
+  Qed.
   
   (*| Bind lemmas for [AN] |*)
   Theorem anl_state_bind_r{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ R,
@@ -414,7 +425,6 @@ Section StateLemmas.
       apply HindWf...
     - rewrite Heqt, bind_ret_l...
   Qed.
-
 
   (*| Iter lemmas for [AU] |*)
   Theorem aul_state_iter{X I} Ri (Rv: relation (I * Σ * WorldW W)) (i: I) w

@@ -241,129 +241,6 @@ Module StImp.
     Unshelve.
     typeclasses eauto.
   Qed.
-
-  (*| Less-than-equal in context |*)
-  Lemma var_le{X}: forall (p: ictreeW Ctx X) c v x m,
-      v <= x ->
-      <( p, {Obs (Log (add c v m)) tt} |= var c <= x )>.
-  Proof with auto.
-    intros.
-    apply ticll_vis; constructor.
-    pose proof (mapsto_lookup c v (add c v m)).
-    pose proof (mapsto_add_eq m c v).
-    exists v; split...
-  Qed.
-
-  Lemma var_nle{X}: forall (p: ictreeW Ctx X) c c' v x m,
-      <( p, {Obs (Log m) tt} |= var c <= x )> ->
-      c <> c' ->
-      <( p, {Obs (Log (add c' v m)) tt} |= var c <= x )>.
-  Proof with eauto.
-    intros.
-    apply ticll_vis in H.
-    dependent destruction H.
-    destruct H as (v' & Heq & ?).
-    apply ticll_vis; econstructor.
-    exists v'; split...
-    rewrite mapsto_lookup.
-    apply mapsto_add_neq with (R:=eq); eauto. 
-    apply mapsto_lookup; auto.
-    Unshelve.
-    typeclasses eauto.
-  Qed.
-
-  (*| Less-than in context |*)
-  Lemma var_lt{X}: forall (p: ictreeW Ctx X) c v x m,
-      v < x ->
-      <( p, {Obs (Log (add c v m)) tt} |= var c < x )>.
-  Proof with auto.
-    intros.
-    apply ticll_vis; constructor.
-    pose proof (mapsto_lookup c v (add c v m)).
-    pose proof (mapsto_add_eq m c v).
-    exists v; split...
-  Qed.
-
-  Lemma var_nlt{X}: forall (p: ictreeW Ctx X) c c' v x m,
-      <( p, {Obs (Log m) tt} |= var c < x )> ->
-      c <> c' ->
-      <( p, {Obs (Log (add c' v m)) tt} |= var c < x )>.
-  Proof with eauto.
-    intros.
-    apply ticll_vis in H.
-    dependent destruction H.
-    destruct H as (v' & Heq & ?).
-    apply ticll_vis; econstructor.
-    exists v'; split...
-    rewrite mapsto_lookup.
-    apply mapsto_add_neq with (R:=eq); eauto. 
-    apply mapsto_lookup; auto.
-    Unshelve.
-    typeclasses eauto.
-  Qed.
-
-  (*| Greater-than in context |*)
-  Lemma var_gt{X}: forall (p: ictreeW Ctx X) c v x m,
-      v > x ->
-      <( p, {Obs (Log (add c v m)) tt} |= var c > x )>.
-  Proof with auto.
-    intros.
-    apply ticll_vis; constructor.
-    pose proof (mapsto_lookup c v (add c v m)).
-    pose proof (mapsto_add_eq m c v).
-    exists v; split...
-  Qed.
-
-  Lemma var_ngt{X}: forall (p: ictreeW Ctx X) c c' v x m,
-      <( p, {Obs (Log m) tt} |= var c > x )> ->
-      c <> c' ->
-      <( p, {Obs (Log (add c' v m)) tt} |= var c > x )>.
-  Proof with eauto.
-    intros.
-    apply ticll_vis in H.
-    dependent destruction H.
-    destruct H as (v' & Heq & ?).
-    apply ticll_vis; econstructor.
-    exists v'; split...
-    rewrite mapsto_lookup.
-    apply mapsto_add_neq with (R:=eq); eauto. 
-    apply mapsto_lookup; auto.
-    Unshelve.
-    typeclasses eauto.
-  Qed.
-
-  (*| Comparissons |*)
-  Lemma axr_ccomp_lt: forall x (c: string) b ctx w,
-      b = Nat.ltb x (load c ctx) ->
-      not_done w ->
-      <[ {instr_comp [[x <? c]] ctx}, {w} |= AX (done= {(b, ctx)} {w}) ]>.
-  Proof with eauto with ticl.
-    intros.
-    Opaque Nat.ltb.
-    unfold instr_comp, instr_stateE; cbn.    
-    eapply anr_state_bind_r_eq...
-    - apply axr_state_ret...
-    - eapply anr_state_bind_r_eq...
-      + eapply anr_state_bind_r_eq...
-        * rewrite interp_state_get.
-          apply axr_ret...
-        * apply axr_state_ret...
-      + rewrite <- H.
-        apply axr_state_ret...
-  Qed.
-    
-  Lemma axr_cexp_const: forall v v' ctx ctx' w w',
-      v = v' ->
-      ctx = ctx' ->
-      w = w' ->
-      not_done w ->
-      <[ {instr_exp (CConst v) ctx}, w |= AX done= {(v', ctx')} w' ]>.
-  Proof.
-    intros; subst.
-    unfold instr_exp, instr_stateE; cbn.
-    rewrite interp_state_ret.
-    now apply axr_ret.
-  Qed.
   
   (*| Assignment: structural temporal lemmas |*)
   Lemma aur_cprog_assgn: forall x a ctx r w R ψ,
@@ -517,66 +394,8 @@ Module StImp.
         cdestruct H.
         apply can_step_not_done in Hs...
     - cleft...
-  Qed.
+  Qed.  
   
-  (* Eventually *)
-  Theorem aul_cprog_while ctx (t: CProg) Ri f w c φ ψ:
-    not_done w ->
-    Ri ctx ->
-    (forall ctx w (b: bool),
-        not_done w ->
-        Ri ctx ->        
-        <[ {instr_comp c ctx}, w |= AX done={(b, ctx)} w ]> ->
-          if b then
-            <( {instr_prog t ctx}, w |= φ AU ψ )> \/ 
-            <[ {instr_prog t ctx}, w |= φ AU AX done {fun '(_, ctx') w' => not_done w' /\ Ri ctx' /\ f ctx' < f ctx} ]>
-          else
-            <( {Ret (inr unit tt, ctx)}, w |= ψ )>) ->
-      <( {instr_prog [[ while c do t done ]] ctx}, w |= φ AU ψ )>.
-  Proof with eauto with ticl.
-    unfold instr_prog, instr_comp; intros.
-    eapply aul_state_iter_nat with
-      (Ri:=fun 'tt ctx w => forall (b: bool),
-             <[ {instr_stateE (cdenote_comp c) ctx}, w |= AX (done= {(b, ctx)} w) ]> ->
-             if b
-             then
-               <( {instr_prog t ctx}, w |= φ AU ψ )> \/ 
-               <[
-                 {instr_stateE (cdenote_prog t) ctx}, {w}
-                   |= {φ} AU AX (done {fun '(_, ctx') (w' : WorldW Ctx) => not_done w' /\ Ri ctx' /\ f ctx' < f ctx}) ]>
-             else <( {Ret (inr unit tt, ctx)}, w |= ψ )>)
-      (f:= fun _ ctx _ => f ctx)...
-    - intros [] Hb; specialize (H1 _ _ _ H H0 Hb)...
-    - intros [] * Hd HR.
-
-      
-    - (* true *)
-      destruct Ht.
-      + (* match *)
-        left.
-        eapply aul_state_bind_r_eq...
-        * cleft...
-        * eapply ticll_state_bind_l...
-      + (* non-match *)
-        right.
-        eapply aur_state_bind_r_eq.
-        * cleft...
-        * eapply aur_state_bind_r.
-          -- apply H2.
-          -- intros [] ctx_ w_ (Hd' & HR & Hv).
-             apply aur_state_ret...
-             exists tt; intuition...
-    - (* false *)
-      left.
-      eapply aul_state_bind_r_eq...
-      + cleft...
-      + cbn.
-        apply aul_state_ret...
-        Unshelve.
-        exact true.
-        exact true.
-  Qed.
-
   (* Termination *)
   Theorem aur_cprog_while_termination ctx (t: CProg) Ri f w c φ ψ:    
       not_done w ->
@@ -584,7 +403,7 @@ Module StImp.
       (forall ctx w (b: bool),
           not_done w ->
           Ri ctx ->
-          <[ {instr_comp c ctx}, w |= AX done={(b, ctx)} w ]> ->
+          <[ {instr_comp c ctx}, w |= AX done={(b, ctx)} w ]> /\
           if b then
             <[ {instr_prog t ctx}, w |= φ AU AX done {fun '(_, ctx') w' => not_done w' /\ Ri ctx' /\ f ctx' < f ctx} ]>
           else
@@ -593,8 +412,8 @@ Module StImp.
   Proof with eauto with ticl.
     unfold instr_prog, instr_comp; intros.
     eapply aur_state_iter_nat with
-      (Ri:=fun 'tt ctx w => forall (b: bool),
-             <[ {instr_stateE (cdenote_comp c) ctx}, w |= AX (done= {(b, ctx)} w) ]> ->
+      (Ri:=fun 'tt ctx w => exists (b: bool),
+             <[ {instr_stateE (cdenote_comp c) ctx}, w |= AX (done= {(b, ctx)} w) ]> /\
              if b
              then
                <[
@@ -602,11 +421,9 @@ Module StImp.
                    |= {φ} AU AX (done {fun '(_, ctx') (w' : WorldW Ctx) => not_done w' /\ Ri ctx' /\ f ctx' < f ctx}) ]>
              else <[ {Ret (tt, ctx)}, {w} |= {φ} AN {ψ} ]>)
       (f:= fun _ ctx _ => f ctx)...
-    - intros [] Hb; specialize (H1 _ _ _ H H0 Hb); cbn in H1...
-    - intros [] ctx' w' Hd HR. 
-      eapply aur_state_bind_r_eq...
+    - intros [] ctx' w' Hd ([] & Hb & HR);
+        eapply aur_state_bind_r_eq...
       + cleft...
-        admit.
       + eapply aur_state_bind_r.
         * apply HR.
         * intros; destruct x.

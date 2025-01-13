@@ -25,6 +25,7 @@ From ExtLib Require Import
   Data.Map.FMapAList.
 
 From Coq Require Import
+  Lia
   Strings.String.
 
 Generalizable All Variables.
@@ -86,7 +87,38 @@ Module P25.
     - cright. (* cv > 5 *)
       eapply aul_cprog_seq.
       + eapply aur_cprog_assgn...
-        * 
+        * apply axr_cexp_const...
+        * csplit...
+      + eapply aul_cprog_seq.
+        * eapply aur_cprog_assgn...
+          -- apply axr_cexp_const...
+          -- csplit...
+        * eapply aul_cprog_while with (Ri:= (fun ctx => load cs ctx = 8))...
+          intros.
+          split.
+          -- apply axr_ccomp_lt.
+             rewrite H0.
+             cbn.
+             (* HERE *)
+             
+          unfold instr_comp, instr_stateE; cbn.
+             rewrite bind_ret_l, bind_bind.
+             rewrite interp_state_bind.
+             eapply anr_bind_r_eq.
+             ++ rewrite interp_state_get.
+                apply axr_ret...
+             ++ cbn.
+                rewrite interp_state_bind.
+                eapply anr_bind_r_eq...
+                ** rewrite interp_state_ret.
+                   apply axr_ret...
+                ** cbn.
+                   rewrite interp_state_ret; cbn.
+                   destruct (load cs ctx) eqn:Hcs; cbn in *.
+                   --- lia.
+                   --- apply axr_ret...
+          rewrite 
+          apply axr_ret.
         csplit...
       + eapply aul_cprog_seq.
         * eapply aur_cprog_assgn...
