@@ -18,6 +18,7 @@ From TICL Require Import
   ICTree.Interp.State
   ICTree.Events.State
   ICTree.Events.Writer
+  Lang.Maps
   Lang.StImp.
 
 From ExtLib Require Import
@@ -33,7 +34,7 @@ Generalizable All Variables.
 Import ICtree ICTreeNotations TiclNotations.
 Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
-
+Local Open Scope nat_scope.
 (*
 void main() {
 
@@ -57,7 +58,7 @@ void main() {
  *)
 
 Module P25.
-  Import StImp.StImp. 
+  Import StImp.StImp Ctx.
   Local Open Scope stimp_scope.
 
   Definition c: string := "c".
@@ -74,58 +75,80 @@ Module P25.
 
   Lemma toy_spec: forall cval,
       let init := add c cval empty in
-      <( {instr_prog toy init}, {Obs (Log init) tt} |= var c <= 5 \/ AF (var r > 5) )>.
+      <( {instr_prog toy init}, {Obs (Log init) tt} |= var c <= 5 \/ AF (var r >= 5) )>.
   Proof with eauto with ticl.
     intros.
+    assert (Hcr: c<>r) by (intro Hcontra; inv Hcontra).
     unfold toy, init.
     destruct (Compare_dec.le_gt_dec cval 5).
-    - cleft. (* cv <= 5 *)
-      now eapply var_le. 
-    - cright. (* cv > 5 *)
+    - cleft. (* cval <= 5 *)
+      eapply var_le with cval...
+    - cright. (* cval > 5 *)
       eapply aul_cprog_seq.
       + eapply aur_cprog_assgn...
         * apply axr_cexp_const...
         * csplit...
-      + eapply aul_cprog_while with (Ri:= (fun ctx => load cs ctx = 8))...          
-          -- apply axr_ccomp_lt...
-          -- intros.
-             exists true; split.
-             ++ apply axr_ccomp_lt; [|auto].
-                now rewrite H0.
-             ++ 
-                intuition.
-             cbn.
-             (* HERE *)
-             
-          unfold instr_comp, instr_stateE; cbn.
-             rewrite bind_ret_l, bind_bind.
-             rewrite interp_state_bind.
-             eapply anr_bind_r_eq.
-             ++ rewrite interp_state_get.
-                apply axr_ret...
-             ++ cbn.
-                rewrite interp_state_bind.
-                eapply anr_bind_r_eq...
-                ** rewrite interp_state_ret.
-                   apply axr_ret...
-                ** cbn.
-                   rewrite interp_state_ret; cbn.
-                   destruct (load cs ctx) eqn:Hcs; cbn in *.
-                   --- lia.
-                   --- apply axr_ret...
-          rewrite 
-          apply axr_ret.
-        csplit...
-      + eapply aul_cprog_seq.
-        * eapply aur_cprog_assgn...
-          csplit...
-        * do 6 (
-              eapply afl_cprog_while_unfold; auto with ticl;
-              [eapply aur_cprog_seq; eapply aur_cprog_assgn; auto with ticl;
-               csplit; auto with ticl|]; cbn
-            ).
-          cleft.
-          apply vis_c_assert...
+      + eapply aul_cprog_while with (Ri:=fun ctx => assert1 r ctx (fun x => x >= 0)
+                                                 /\ assert1 c ctx (fun x => x <= cval)
+                                                 /\ assert2 r c ctx (fun a b => a + b = cval))
+                                    (f:=fun ctx => match lookup r ctx with
+                                                | Some rv => cval - rv
+                                                | _ => 0
+                                                end)...
+        * intuition.
+          -- apply assert1_add_eq...
+          -- apply assert1_add_neq...
+             apply assert1_add_eq...
+          -- apply assert2_add_l...
+        * eapply axr_ccomp_lt...
+          cbn; destruct cval; lia.
+        * intros ctx ((vr & Hr & Hvr) & (vc & Hc & Hvc) & (vr' & vc' & Hr' & Hc' & Hsum)).
+          rewrite Hc' in Hc; inv Hc.
+          rewrite Hr' in Hr; inv Hr.
+          destruct vc eqn:Hceq.
+          -- (* c = 0 *)
+            exists false; split.
+            ++ eapply axr_ccomp_lt...
+            ++ eapply var_ge with vr... 
+               lia.
+          -- (* c = S n *)
+            exists true; split.
+            ++ eapply axr_ccomp_lt...
+            ++ destruct n eqn:Hn.
+               ** (* n = 0, c = 1 *)
+                 left.
+                 eapply aul_cprog_seq.
+                 --- eapply aur_cprog_assgn...
+                     +++ eapply axr_cexp_sub...
+                     +++ csplit...
+                 --- eapply aul_cprog_assgn.
+                     +++ eapply axr_cexp_add...
+                         rewrite lookup_add_neq...
+                     +++ csplit...
+                     +++ eapply var_ge with (vr+1)...
+                         lia.
+               ** (* n = S n0, c > 1 *)
+                 right.
+                 eapply aur_cprog_seq.
+                 --- eapply aur_cprog_assgn...
+                     +++ eapply axr_cexp_sub...
+                     +++ csplit...
+                 --- eapply aur_cprog_assgn...
+                     +++ eapply axr_cexp_add...
+                         rewrite lookup_add_neq...
+                     +++ csplit...
+                     +++ intuition.
+                         *** apply assert1_add_eq...
+                             lia.
+                         *** apply assert1_add_neq...
+                             apply assert1_add_eq...
+                             lia.
+                         *** apply assert2_add_l...
+                             lia.
+                         *** rewrite lookup_add_eq...
+                             rewrite Hr'.
+                             lia.
   Qed.
+ 
 
 End P25.        
