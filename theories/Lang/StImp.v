@@ -523,10 +523,11 @@ Module StImp.
   Theorem aul_cprog_while ctx (t: CProg) Ri f w c φ ψ:
     not_done w ->
     Ri ctx ->
-    (forall ctx w (b: bool),
+    <[ {instr_comp c ctx}, w |= AX done={(true, ctx)} w ]> ->
+    (forall ctx w, 
         not_done w ->
         Ri ctx ->        
-        <[ {instr_comp c ctx}, w |= AX done={(b, ctx)} w ]> ->
+        exists (b: bool), <[ {instr_comp c ctx}, w |= AX done={(b, ctx)} w ]> /\
           if b then
             <( {instr_prog t ctx}, w |= φ AU ψ )> \/ 
             <[ {instr_prog t ctx}, w |= φ AU AX done {fun '(_, ctx') w' => not_done w' /\ Ri ctx' /\ f ctx' < f ctx} ]>
@@ -534,57 +535,49 @@ Module StImp.
             <( {Ret (inr unit tt, ctx)}, w |= ψ )>) ->
       <( {instr_prog [[ while c do t done ]] ctx}, w |= φ AU ψ )>.
   Proof with eauto with ticl.
-    unfold instr_prog, instr_comp; intros.
+    unfold instr_prog, instr_comp.
+    intros Hd HR Hb H.
     eapply aul_state_iter_nat with
-      (Ri:=fun 'tt ctx w => forall (b: bool),
-             <[ {instr_stateE (cdenote_comp c) ctx}, w |= AX (done= {(b, ctx)} w) ]> ->
-             if b
-             then
-               <( {instr_prog t ctx}, w |= φ AU ψ )> \/ 
-               <[
-                 {instr_stateE (cdenote_prog t) ctx}, {w}
-                   |= {φ} AU AX (done {fun '(_, ctx') (w' : WorldW Ctx) => not_done w' /\ Ri ctx' /\ f ctx' < f ctx}) ]>
-             else <( {Ret (inr unit tt, ctx)}, w |= ψ )>)
+      (Ri:=fun 'tt ctx w => exists (b: bool),
+               <[ {instr_stateE (cdenote_comp c) ctx}, w |= AX done={(b, ctx)} w ]> /\
+                 if b then
+                   <( {instr_stateE (cdenote_prog t) ctx}, w |= φ AU ψ )> \/ 
+                     <[ {instr_stateE (cdenote_prog t) ctx}, w |= φ AU AX done {fun '(_, ctx') w' => not_done w' /\ Ri ctx' /\ f ctx' < f ctx} ]>
+                 else
+                   <( {Ret (inr unit tt, ctx)}, w |= ψ )>)
       (f:= fun _ ctx _ => f ctx)...
-    - intros [] Hb; specialize (H1 _ _ _ H H0 Hb)...
-    - intros [] * Hd HR.
-
-      
-    - (* true *)
-      destruct Ht.
-      + (* match *)
+    - intros [] ctx' w' Hd' (b' & Hb' & HR').
+      destruct b'.
+      + (* true *)
+        destruct HR'.
+        * left.
+          eapply aul_state_bind_r_eq...
+          -- cleft...
+          -- eapply ticll_state_bind_l...
+        * right.
+          eapply aur_state_bind_r_eq...
+          -- cleft...
+          -- eapply aur_state_bind_r with (R:=fun _ ctx'0 w' => not_done w' /\ Ri ctx'0 /\ f ctx'0 < f ctx')...
+             intros [] ctx_ w_ (Hd_ & HR_ & Hf).
+             apply aur_state_ret...
+             exists tt; intuition.
+      + (* false *)
         left.
         eapply aul_state_bind_r_eq...
         * cleft...
-        * eapply ticll_state_bind_l...
-      + (* non-match *)
-        right.
-        eapply aur_state_bind_r_eq.
-        * cleft...
-        * eapply aur_state_bind_r.
-          -- apply H2.
-          -- intros [] ctx_ w_ (Hd' & HR & Hv).
-             apply aur_state_ret...
-             exists tt; intuition...
-    - (* false *)
-      left.
-      eapply aul_state_bind_r_eq...
-      + cleft...
-      + cbn.
-        apply aul_state_ret...
-        Unshelve.
-        exact true.
-        exact true.
+        * cbn.
+          apply aul_state_ret...
   Qed.
 
   (* Termination *)
-  Theorem aur_cprog_while_termination ctx (t: CProg) Ri f w c φ ψ:    
+  Theorem aur_cprog_while_termination ctx (t: CProg) Ri f w c φ ψ b:    
       not_done w ->
       Ri ctx ->
-      (forall ctx w (b: bool),
+      <[ {instr_comp c ctx}, w |= AX done={(b, ctx)} w ]> ->
+      (forall ctx w,
           not_done w ->
           Ri ctx ->
-          <[ {instr_comp c ctx}, w |= AX done={(b, ctx)} w ]> ->
+          exists (b: bool), <[ {instr_comp c ctx}, w |= AX done={(b, ctx)} w ]> /\
           if b then
             <[ {instr_prog t ctx}, w |= φ AU AX done {fun '(_, ctx') w' => not_done w' /\ Ri ctx' /\ f ctx' < f ctx} ]>
           else
@@ -593,29 +586,24 @@ Module StImp.
   Proof with eauto with ticl.
     unfold instr_prog, instr_comp; intros.
     eapply aur_state_iter_nat with
-      (Ri:=fun 'tt ctx w => forall (b: bool),
-             <[ {instr_stateE (cdenote_comp c) ctx}, w |= AX (done= {(b, ctx)} w) ]> ->
-             if b
-             then
-               <[
-                 {instr_stateE (cdenote_prog t) ctx}, {w}
-                   |= {φ} AU AX (done {fun '(_, ctx') (w' : WorldW Ctx) => not_done w' /\ Ri ctx' /\ f ctx' < f ctx}) ]>
-             else <[ {Ret (tt, ctx)}, {w} |= {φ} AN {ψ} ]>)
+      (Ri:=fun 'tt ctx w => exists b : bool,
+               <[ {instr_stateE (cdenote_comp c) ctx}, w |= AX (done= {(b, ctx)} w) ]> /\
+                 (if b
+                  then
+                    <[ {instr_stateE (cdenote_prog t) ctx}, w |= {φ} AU AX (done {fun '(_, ctx') (w' : WorldW Ctx) =>
+                                                                                    not_done w' /\ Ri ctx' /\ f ctx' < f ctx}) ]>
+                  else <[ {Ret (tt, ctx)}, w |= {φ} AN {ψ} ]>))
       (f:= fun _ ctx _ => f ctx)...
-    - intros [] Hb; specialize (H1 _ _ _ H H0 Hb); cbn in H1...
-    - intros [] ctx' w' Hd HR. 
+    - intros [] ctx' w' Hd (b' & Hb' & HR).
       eapply aur_state_bind_r_eq...
       + cleft...
-        admit.
-      + eapply aur_state_bind_r.
-        * apply HR.
-        * intros; destruct x.
+      + destruct b'.
+        * (* true *)
+          eapply aur_state_bind_r with (R:=fun _ ctx'0 w' => not_done w' /\ Ri ctx'0 /\ f ctx'0 < f ctx')...
+          intros [] ctx_ w_ (Hd_ & HR_ & Hf).
           apply aur_state_ret; intuition.
-          exists true...
-      + cleft...
-      + eapply aur_state_ret...
-        Unshelve.
-        exact true.
+        * (* false *)
+          apply aur_state_ret; intuition.
   Qed.
 
   (* Invariance *)

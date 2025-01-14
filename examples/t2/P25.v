@@ -62,25 +62,22 @@ Module P25.
 
   Definition c: string := "c".
   Definition r: string := "r".
-  Definition cs: string := "cs".
 
-  Definition p25: CProg :=
+  Definition toy: CProg :=
     [[
         r := 0 ;;;
-        cs := 8 ;;;
-        while 0 <? cs do
+        while 0 <? c do
           c := c - 1 ;;;
           r := r + 1
         done
     ]].
 
-  (* // (varC <= 5) || ([AF](varR > 5)) *)
-  Lemma p25_spec: forall cval,
+  Lemma toy_spec: forall cval,
       let init := add c cval empty in
-      <( {instr_prog p25 init}, {Obs (Log init) tt} |= var c <= 5 \/ AF (var r > 5) )>.
+      <( {instr_prog toy init}, {Obs (Log init) tt} |= var c <= 5 \/ AF (var r > 5) )>.
   Proof with eauto with ticl.
     intros.
-    unfold p25, init.
+    unfold toy, init.
     destruct (Compare_dec.le_gt_dec cval 5).
     - cleft. (* cv <= 5 *)
       now eapply var_le. 
@@ -89,15 +86,14 @@ Module P25.
       + eapply aur_cprog_assgn...
         * apply axr_cexp_const...
         * csplit...
-      + eapply aul_cprog_seq.
-        * eapply aur_cprog_assgn...
-          -- apply axr_cexp_const...
-          -- csplit...
-        * eapply aul_cprog_while with (Ri:= (fun ctx => load cs ctx = 8))...
-          intros.
-          split.
-          -- apply axr_ccomp_lt.
-             rewrite H0.
+      + eapply aul_cprog_while with (Ri:= (fun ctx => load cs ctx = 8))...          
+          -- apply axr_ccomp_lt...
+          -- intros.
+             exists true; split.
+             ++ apply axr_ccomp_lt; [|auto].
+                now rewrite H0.
+             ++ 
+                intuition.
              cbn.
              (* HERE *)
              
