@@ -120,6 +120,12 @@ Module TiclNotations.
                            fun 'tt => R x s w)))
       (in custom ticlr at level 75): ticl_scope.
 
+  Notation "'finishW=' x s w" :=
+    (CDone (finish_with (fun '(x', s') (pat : writerE _) =>
+                           let 'Log w' as u := pat return (encode u -> Prop) in
+                           fun 'tt => x = x' /\ s = s' /\ w = w')))
+      (in custom ticlr at level 75): ticl_scope.
+  
   Notation "⊤" := (CNow (fun _ => True))
                     (in custom ticll at level 76): ticl_scope.
   

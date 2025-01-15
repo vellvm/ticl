@@ -35,27 +35,6 @@ Import ICtree ICTreeNotations TiclNotations.
 Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 Local Open Scope nat_scope.
-(*
-void main() {
-
-    int varC; // assume varC >= 1 (LEF: looks like this isn't needed?)
-    int varR = 0;
-    int varCS = 8;
-
-    while (varCS > 0) {
-        if (varC >= varCS) {
-            varC = varC - 1;
-            varR = varR + 1;
-            varCS = varCS - 1;
-        } else {
-            varC = varC - 1; 
-            varR = varR + 1; 
-            varCS = varCS - 1;
-        }
-    }
-
-}
- *)
 
 Module P25.
   Import StImp.StImp Ctx.
@@ -76,7 +55,7 @@ Module P25.
   Lemma toy_spec: forall cval,
       let init := add c cval empty in
       <( {instr_prog toy init}, {Obs (Log init) tt} |= var c <= 5 \/ AF (var r >= 5) )>.
-  Proof with eauto with ticl.
+  Proof with (eauto with ticl; try lia).
     intros.
     assert (Hcr: c<>r) by (intro Hcontra; inv Hcontra).
     unfold toy, init.
@@ -101,7 +80,7 @@ Module P25.
              apply assert1_add_eq...
           -- apply assert2_add_l...
         * eapply axr_ccomp_lt...
-          cbn; destruct cval; lia.
+          cbn; destruct cval... 
         * intros ctx ((vr & Hr & Hvr) & (vc & Hc & Hvc) & (vr' & vc' & Hr' & Hc' & Hsum)).
           rewrite Hc' in Hc; inv Hc.
           rewrite Hr' in Hr; inv Hr.
@@ -110,7 +89,6 @@ Module P25.
             exists false; split.
             ++ eapply axr_ccomp_lt...
             ++ eapply var_ge with vr... 
-               lia.
           -- (* c = S n *)
             exists true; split.
             ++ eapply axr_ccomp_lt...
@@ -126,7 +104,6 @@ Module P25.
                          rewrite lookup_add_neq...
                      +++ csplit...
                      +++ eapply var_ge with (vr+1)...
-                         lia.
                ** (* n = S n0, c > 1 *)
                  right.
                  eapply aur_cprog_seq.
@@ -139,15 +116,11 @@ Module P25.
                      +++ csplit...
                      +++ intuition.
                          *** apply assert1_add_eq...
-                             lia.
                          *** apply assert1_add_neq...
                              apply assert1_add_eq...
-                             lia.
                          *** apply assert2_add_l...
-                             lia.
                          *** rewrite lookup_add_eq...
-                             rewrite Hr'.
-                             lia.
+                             rewrite Hr'...
   Qed.
  
 
