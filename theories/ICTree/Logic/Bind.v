@@ -149,7 +149,49 @@ Section BindLemmas.
           specialize (H0 _ _ H) as Hax.
           cdestruct Hax...
   Qed.
-
+  
+  Theorem anr_bind_l{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ R,
+      <[ t, w |= φ AN AX done R ]> ->
+      (forall x w, R x w -> <[ {k x}, w |= ψ ]>) ->
+      <[ {x <- t ;; k x}, w |= φ AN ψ ]>.  
+  Proof with eauto with ticl.
+    intros.
+    cdestruct H; csplit...
+    - now apply ticll_bind_l.
+    - (* can_step *)
+      destruct Hs as (t_ & w_ & TR_).
+      eapply can_step_bind_l...
+      specialize (H _ _ TR_).
+      cdestruct H; eapply can_step_not_done...
+    - intros y wr TR.
+      apply ktrans_bind_inv in TR as
+          [(t_ & TR_ & Hd & ->) |
+            (x & w_ & TR_ & Hr & TRk)].
+      + specialize (H _ _ TR_).
+        apply anr_done in H as (? & ? & Heqt & ?).
+        clear H.
+        rewrite proper_entailsR_meq with (meq:=sbisim eq)
+                                         (x:=x0 <- t_;; k x0)
+                                         (y:=x0 <- Ret x;; k x0);
+          [|exact KripkeSetoidSBisim| |].
+        * rewrite bind_ret_l...
+        * __upto_bind_sbisim...
+        * reflexivity.
+      + inv Hr; destruct Hs as (t' & w' & TR').
+        * eapply ktrans_to_done in TR_ as (? & ->).
+          specialize (H _ _ TR') as Hax.
+          destruct (ktrans_semiproper (Ret x0) t t' _ _ H1 TR') as (t'' & TR'' & Heqt').
+          rewrite Heqt' in Hax.
+          cbn in TR''; dependent destruction TR''.
+          cdestruct Hax; apply can_step_not_done in Hs; inv Hs.
+        * eapply ktrans_to_finish in TR_ as (? & ->).
+          specialize (H _ _ TR') as Hax.
+          destruct (ktrans_semiproper (Ret x0) t t' _ _ H1 TR') as (t'' & TR'' & Heqt').
+          rewrite Heqt' in Hax.
+          cbn in TR''; dependent destruction TR''.
+          cdestruct Hax; apply can_step_not_done in Hs; inv Hs.
+  Qed.
+  
   Theorem anr_bind_r{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ R,
       <[ t, w |= φ AN done R ]> ->
       (forall x w, R x w -> <[ {k x}, w |= φ AN ψ ]>) ->
@@ -272,7 +314,7 @@ Section BindLemmas.
     apply aul_bind_r with (R:=fun x w => r = x /\ w' = w)...
     intros ? ? [<- <-]...
   Qed.
-  
+
   Theorem aur_bind_r{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ R,
       <[ t, w |= φ AU AX done R ]> ->
       (forall x w, R x w -> <[ {k x}, w |= φ AU ψ ]>) ->

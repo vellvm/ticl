@@ -67,7 +67,7 @@ Module StImpQ.
                   | Pop => match q with
                           | nil => Ret (None, nil)
                           | h :: ts =>
-                             log h ;; (* Instrument the head of the queue [h] *)
+                             log h ;; (* Instrument the head of the queue [h] at pop *)
                              Ret (Some h, ts)
                           end
                   end).
@@ -75,7 +75,7 @@ Module StImpQ.
   Inductive CProg : Type -> Type :=
   | CPop : CProg (option T)
   | CPush (x: T): CProg unit
-  | CIfSome (c: option T) (t: T -> CProg unit): CProg unit
+  | CIfSome{X} (c: option X) (t: X -> CProg unit): CProg unit
   | CUntilNone {A} (b: CProg (option A)) : CProg unit
   | CRet {A}(a: A): CProg A
   | CBind {A B}(l: CProg A) (k: A -> CProg B): CProg B.
@@ -119,39 +119,91 @@ Module StImpQ.
     apply axr_ret...
   Qed.
   
+  Lemma anr_pop_cons: forall w h ts φ,
+      not_done w ->
+      <( {log h}, w |= φ )> ->
+      <[ {instr_prog CPop (h::ts)}, w |= φ AN AX (done= {(Some h, ts)} {Obs (Log h) tt}) ]>.
+  Proof with auto with ticl.
+    intros; unfold instr_prog; cbn.
+    unfold trigger.
+    rewrite interp_state_vis; cbn.
+    rewrite bind_bind.
+    apply anr_log.
+    - rewrite bind_ret_l, sb_guard, interp_state_ret.
+      unfold resum_ret, ReSumRet_refl.
+      apply axr_ret...
+    - now apply ticll_bind_l.
+  Qed.
+
   Lemma aur_pop_cons: forall w h ts φ,
       not_done w ->
       <( {log h}, w |= φ )> ->
       <[ {instr_prog CPop (h::ts)}, w |= φ AU AX (done= {(Some h, ts)} {Obs (Log h) tt}) ]>.
   Proof with auto with ticl.
     intros; unfold instr_prog; cbn.
+    cright.
+    apply ticlr_auan_anau.
+    cleft.
+    apply anr_pop_cons...
+  Qed.
+
+  Lemma axr_push: forall w x q,
+      not_done w ->
+      <[ {instr_prog (CPush x) q}, w |= AX (done= {(tt, q ++ [x])} w) ]>.
+  Proof with auto with ticl.
+    intros; unfold instr_prog; cbn.
     unfold trigger.
     rewrite interp_state_vis; cbn.
-    rewrite bind_bind.
-    apply aur_log.
-    - rewrite bind_ret_l, sb_guard, interp_state_ret.
-      unfold resum_ret, ReSumRet_refl.
-      cleft.
-      apply axr_ret...
-    - now apply ticll_bind_l.
+    rewrite bind_ret_l, sb_guard, interp_state_ret.
+    unfold resum_ret, ReSumRet_refl.
+    apply axr_ret...
+  Qed.
+
+  (*| Ret lemma |*)
+  Lemma axr_qprog_ret{X}: forall (x: X) w q R,
+      R (x, q) w ->
+      not_done w ->
+      <[ {instr_prog (CRet x) q}, w |= AX done R ]>.
+  Proof with eauto with ticl.
+    unfold instr_prog; cbn; intros.
+    rewrite interp_state_ret; subst.
+    apply axr_ret...
   Qed.
   
+  (*| Sequence lemmas |*)
   Lemma aul_qprog_bind{X Y}: forall (h: CProg X) (k: X -> CProg Y) q q' (r: X) w w' φ ψ,
       <[ {instr_prog h q}, w |= φ AU AX done={(r,q')} w' ]> ->
       <( {instr_prog (k r) q'}, w' |= φ AU ψ )> ->
       <( {instr_prog (CBind h k) q}, w |= φ AU ψ )>.
-  Proof.
+  Proof with eauto with ticl.
     unfold instr_prog; cbn; intros.
-    eapply aul_state_bind_r_eq; eauto.
+    eapply aul_state_bind_r_eq...
   Qed.
-  
+
   Lemma aur_qprog_bind{X Y}: forall (h: CProg X) (k: X -> CProg Y) q q' (r: X) w w' φ ψ,
       <[ {instr_prog h q}, w |= φ AU AX done={(r,q')} w' ]> ->
       <[ {instr_prog (k r) q'}, w' |= φ AU ψ ]> ->
       <[ {instr_prog (CBind h k) q}, w |= φ AU ψ ]>.
-  Proof.
+  Proof with eauto with ticl.
     unfold instr_prog; cbn; intros.
-    eapply aur_state_bind_r_eq; eauto.
+    eapply aur_state_bind_r_eq...
+  Qed.
+  
+  Lemma anr_qprog_bind_l{X Y}: forall (h: CProg X) (k: X -> CProg Y) q q' (r: X) w w' φ ψ,
+      <[ {instr_prog h q}, w |= φ AN AX done={(r,q')} w' ]> ->
+      <[ {instr_prog (k r) q'}, w' |= ψ ]> ->
+      <[ {instr_prog (CBind h k) q}, w |= φ AN ψ ]>.
+  Proof with eauto with ticl.
+    unfold instr_prog; cbn; intros.
+    eapply anr_state_bind_l_eq...
+  Qed.
+
+  (*| Conditionals |*)
+  Lemma ticlr_ifsome_some{X}: forall (k: X -> CProg unit) q ψ x w,
+    <[ {instr_prog (k x) q}, w |= ψ ]> ->
+    <[ {instr_prog (CIfSome (Some x) k) q}, w |= ψ ]>.
+  Proof with eauto.
+    unfold instr_prog; cbn; intros...
   Qed.
   
   (*| While loops |*)
@@ -198,6 +250,37 @@ Module StImpQ.
         apply aur_state_ret; intuition.
       + (* None *)
         apply aur_state_ret; intuition.
+  Qed.
+
+  (* Eventually *)
+  Theorem aul_qprog_eventually {X} (b: CProg (option X)) q (Ri: rel Q (WorldW T)) w (f: Q -> nat) φ ψ:    
+    Ri q w ->
+    not_done w ->
+    (forall q w,
+        Ri q w ->
+        not_done w ->
+        <[ {instr_prog b q}, w |= φ AU AX done {fun '(opt, q') w' => exists x, opt = Some x /\ not_done w' /\ Ri q' w' /\ f q' < f q} ]> \/
+        <( {instr_prog b q}, w |= φ AU ψ )>) ->
+    <( {instr_prog (CUntilNone b) q}, w |= φ AU ψ )>.
+  Proof with eauto with ticl.
+    unfold instr_prog; intros; cbn.
+    eapply aul_state_iter_nat with
+      (Ri:=fun 'tt q w =>
+             <[ {interp_state h_queueE (cdenote_prog b) q}, w
+                          |= φ AU AX done {fun '(opt, q') w' => exists x, opt = Some x /\ not_done w' /\ Ri q' w' /\ f q' < f q} ]> \/
+               <( {interp_state h_queueE (cdenote_prog b) q}, w |= φ AU ψ )>)
+      (f:= fun _ q _ => f q)...
+    - intros [] q' w' Hd [HR | HR].
+      + (* Steps *)
+        right.
+        eapply aur_state_bind_r.
+        * apply HR.
+        * cbn; intros opt q_ w_ (x_ & Heqx_ & Hd_ & HR_ & Hf_); subst.
+          apply aur_state_ret...
+          exists tt; intuition...
+      + (* Matches *)
+        left.
+        apply ticll_state_bind_l...
   Qed.
 
   (* Invariance *)

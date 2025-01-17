@@ -198,81 +198,95 @@ Module Drain.
           -- cleft.
              apply ticll_vis...
         * (* body variant/invariant *)
-          eapply aur_qprog_bind.
-          rewrite interp_state_bind.
-          setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
-          rewrite ?bind_bind.
-          apply axr_log...
-          rewrite bind_ret_l, sb_guard, bind_ret_l, interp_state_bind.
-          setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Push nl) _); cbn.
-          rewrite ?bind_bind.
-          rewrite bind_ret_l, sb_guard, bind_ret_l.
-          cleft.
-          rewrite interp_state_ret.
-          apply axr_ret...
-          exists tt; split2...
-          destruct ts.
-          -- exists nl, []...
-          -- exists t, (ts ++ [nl]); split...
-             destruct (t =? nl) eqn:Hnl.
-             ++ left.
-                now apply rel_dec_correct.
-             ++ right.
-                apply neg_rel_dec_correct in Hnl; split...
-                apply find_last_ex.
+          eapply anr_qprog_bind_l.
+          -- apply anr_pop_cons...
+             csplit...
+          -- eapply aur_qprog_bind.
+             ++ apply ticlr_ifsome_some.
+                cleft.
+                apply axr_push...
+             ++ cbn; cleft.
+                apply axr_qprog_ret...
+                intuition.
+                (* Low-level list proof starts here *)
+                destruct ts.
+                ** exists nl, []...
+                ** exists t, (ts ++ [nl]); split...
+                   destruct (t =? nl) eqn:Hnl.
+                   --- left.
+                       now apply rel_dec_correct.
+                   --- right.
+                       apply neg_rel_dec_correct in Hnl; split...
+                       apply find_last_ex.
       + (* t <> nl *)
         split.
         * clear i.
           destruct Hi as (i & Hi).
-          eapply aul_state_iter_nat with
-            (Ri:=fun 'tt q _ =>
+          eapply aul_qprog_eventually with
+            (Ri:=fun q _ =>
                    exists h ts, q = h :: ts /\ (h = nl \/ (h <> nl /\ exists i, find nl ts = Some i)))
-            (f:=fun 'tt q _ =>
+            (f:=fun q =>
                   match find nl q with
                   | None => length q
                   | Some v => v
                   end)...
           -- exists h, ts; split...
-          -- intros [] q w' Hw' (h' & ts' & -> & [-> | (Hnl' & ?)]).
+          -- clear h Hnl.
+             intros q w' (h & ts' & -> & [-> | (Hnl' & ?)]) Hd'.
              ++ left.
-                rewrite interp_state_bind.
-                setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
-                rewrite ?bind_bind.
-                apply afl_log...
-                rewrite bind_ret_l, sb_guard, bind_ret_l, interp_state_bind.
-                setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Push nl) _); cbn.
-                rewrite ?bind_bind, bind_ret_l, sb_guard, bind_ret_l, interp_state_ret.
-                cleft.
-                csplit...
-             ++ right.
-                rewrite interp_state_bind.
-                setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ Pop _); cbn.
-                rewrite ?bind_bind.
-                apply afr_log...
-                rewrite bind_ret_l, sb_guard, bind_ret_l, interp_state_bind.
-                setoid_rewrite (@interp_state_trigger _ _ _ _ _ _ (Push h') _); cbn.
-                rewrite ?bind_bind, bind_ret_l, sb_guard, bind_ret_l, interp_state_ret.
-                apply aur_ret.
-                cleft.
-                apply axr_ret...
-                exists tt; intuition.
-                ** destruct ts'; cbn.
-                   --- exists h', []...
-                   --- exists t, (ts' ++ [h']); split...
-                       destruct H as (j & H1).
-                       rewrite unfold_find_hd in H1.
-                       destruct (t =? nl) eqn:Hnl''; inv H1.
-                       +++ apply rel_dec_correct in Hnl''.
-                           now left.
-                       +++ right; split.
-                           now apply neg_rel_dec_correct in Hnl''.
-                           destruct (find nl ts') eqn:Hts'; inv H0.
-                           exists n.
-                           now apply find_app_l.
-                ** (* variant *)
-                  cbn.
-                  eapply rel_dec_neq_false in Hnl'...
-                  destruct H.
+                eapply aur_qprog_bind.
+                ** apply aur_pop_cons...
+                   csplit...
+                ** eapply aur_qprog_bind.
+                   --- apply ticlr_ifsome_some.
+                       cleft.
+                       apply axr_push...
+                   --- cbn; cleft.
+                       apply axr_qprog_ret...
+                       exists tt; split2...
+                       split.
+                       +++ destruct ts; cbn; try solve [inv Hi].
+                           destruct ts' eqn:Hts'; cbn; subst.
+                           *** exists nl, []...
+                           *** rewrite unfold_find_hd in Hi.
+                               destruct (t =? nl) eqn:Hnl''.
+                               ---- (* t = nl *)
+                                 rewrite rel_dec_correct in Hnl''; subst; inv Hi.
+                                 exists t0, (l ++ [nl]); split...                                 
+                                 destruct (t0 =? nl) eqn:Hnl0. 
+                                 ++++ rewrite rel_dec_correct in Hnl0; subst.
+                                      now left.
+                                 ++++ right; split.
+                                      **** now apply neg_rel_dec_correct in Hnl0.
+                                      **** apply find_last_ex.
+                               ---- (* t <> nl *)
+                                 exists t0, (l++[nl]); split...
+                                 apply neg_rel_dec_correct in Hnl''.
+                                 destruct (find nl ts) eqn:Hts'; inv Hi.
+                                 destruct (t0 =? nl) eqn:Hnl0.
+                                 ++++ rewrite rel_dec_correct in Hnl0; subst.
+                                      now left.
+                                 ++++ right; split.
+                                      **** now apply neg_rel_dec_correct in Hnl0.
+                                      **** apply find_last_ex.
+                       +++ (* variant *)
+                         replace (nl =? nl) with true.
+                         *** destruct ts eqn:Hts; subst; cbn; try solve [inv Hi].
+                         destruct (find_last_ex nl ts').
+                         rewrite H.
+                         destruct (nl =? nl) eqn:Heq.
+                         **** 
+                         **** apply neg_rel_dec_correct in Heq.
+                              contradiction.
+                              
+                         Search rel_dec.
+                          (rel_dec_correct nl nl).
+                         rewrite H
+                         destruct ts' eqn:Hts'; cbn; subst.
+                         Print HCor.
+                         eapply rel_dec_neq_false with (r:=HDec) in Hnl; [|typeclasses eauto].
+                         Search rel_dec.
+                         destruct H.
                   rewrite Hnl', H.
                   cbn.
                   erewrite find_app_l...

@@ -109,6 +109,17 @@ Section StateLemmas.
     intros [y σ'] w' HR...
   Qed.
 
+  Theorem anr_state_bind_l{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ R,
+      <[ {interp_state h t σ}, w |= φ AN AX done {fun '(x, σ) => R x σ} ]> ->
+      (forall x σ w, R x σ w -> <[ {interp_state h (k x) σ}, w |= ψ ]>) ->
+      <[ {interp_state h (x <- t ;; k x) σ}, w |= φ AN ψ ]>.  
+  Proof with eauto with ticl.
+    intros.
+    rewrite interp_state_bind.
+    apply anr_bind_l with (R:=fun '(x, σ) => R x σ)...
+    intros [y σ'] w' HR...
+  Qed.
+  
   Theorem anr_state_bind_r_eq{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w w' φ ψ r σ',
       <[ {interp_state h t σ}, w |= φ AN done= {(r, σ')} w' ]> ->
       <[ {interp_state h (k r) σ'}, w' |= φ AN ψ ]> ->
@@ -120,6 +131,17 @@ Section StateLemmas.
     intros [y σ_] w_ (Hinv & HR); inv Hinv; subst...
   Qed.
 
+  Theorem anr_state_bind_l_eq{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w w' φ ψ r σ',
+      <[ {interp_state h t σ}, w |= φ AN AX done= {(r, σ')} w' ]> ->
+      <[ {interp_state h (k r) σ'}, w' |= ψ ]> ->
+      <[ {interp_state h (x <- t ;; k x) σ}, w |= φ AN ψ ]>.  
+  Proof with eauto with ticl.
+    intros.
+    rewrite interp_state_bind.
+    eapply anr_bind_l...
+    intros [y σ_] w_ (Hinv & HR); inv Hinv; subst...
+  Qed.
+  
   (*| Bind lemmas for [EN] |*)
   Typeclasses Transparent sbisim.
   Theorem enl_state_bind_r{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ R,
