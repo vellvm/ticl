@@ -2,11 +2,7 @@ From Coq Require Import
   List
   Lia.
 
-From ExtLib Require Import
-  Structures.Maps
-  RelDec
-  Data.Map.FMapAList
-  Data.String.
+From ExtLib Require Import RelDec.
 
 From TICL Require Import
   ICTree.Core
@@ -23,8 +19,7 @@ From TICL Require Import
   ICTree.Logic.EF
   ICTree.Logic.Bind
   ICTree.Logic.CanStep
-  ICTree.Logic.State
-  Lang.Maps.
+  ICTree.Logic.State.
 
 Generalizable All Variables.
 
@@ -35,7 +30,7 @@ Local Open Scope list_scope.
 
 Generalizable All Variables.
 
-Module StImpQ.
+Module ME.
   Context {T: Type} {HDec: RelDec (@eq T)} {HCor: RelDec_Correct HDec}.
   Variant queueE : Type :=
   | Push (s: T)
@@ -321,4 +316,4 @@ Module StImpQ.
           now apply aur_stuck, anr_stuck in HR.
   Qed.
 
-End StImpQ.
+End ME.

@@ -1,4 +1,5 @@
-From Coq Require Import Arith.PeanoNat.
+From Coq Require Import
+  Arith.PeanoNat.
 
 From TICL Require Import
   ICTree.Equ
@@ -15,7 +16,8 @@ From TICL Require Import
   ICTree.Logic.CanStep
   ICTree.Interp.Core
   ICTree.Interp.State
-  ICTree.Events.State.
+  ICTree.Events.State
+  Lang.StImpS.
 
 From ExtLib Require Import
   Structures.MonadState
@@ -27,127 +29,33 @@ Generalizable All Variables.
 Import ICtree ICTreeNotations TiclNotations.
 Local Open Scope ictree_scope.
 Local Open Scope ticl_scope.
+Local Open Scope nat_scope.
 
-(*| Security labels |*)
-Variant Sec: Set := H | L.
-
-(*| Preorder of [sec] labels |*)
-Reserved Notation "a ≺ b" (at level 52, left associativity).
-Variant sec_lt: relation Sec :=
-  | SecLt: L ≺ H
-where "a ≺ b" := (sec_lt a b).
-Local Hint Constructors sec_lt: core.
-
-Reserved Notation "a ⪯ b" (at level 52, left associativity).
-Variant sec_lte: relation Sec :=
-| SecRefl: forall a, a ⪯ a
-| SecHL: L ≺ H -> L ⪯ H
-where "a ⪯ b" := (sec_lte a b).
-Local Hint Constructors sec_lte: core.
-
-Local Instance sec_lte_refl: Reflexive sec_lte := SecRefl.
-Local Instance sec_lt_trans: Transitive sec_lt.
-Proof.
-  red; intros [] [] [] *; auto; intros.
-  inv H0. inv H1.
-Qed.
-
-Local Instance sec_lte_trans: Transitive sec_lte.
-Proof. red; intros [] [] [] *; auto. Qed.
-
-Lemma sec_lte_dec(l r: Sec): { l ⪯ r } + { r ≺ l }.
-Proof.
-  revert r; induction l; destruct r.
-  - left; reflexivity. 
-  - right; auto. 
-  - left; auto.
-  - left; reflexivity.
-Qed.
-
-Lemma sec_lte_H(l: Sec): l ⪯ H.
-Proof. destruct l; repeat econstructor. Qed.
-
-Lemma sec_lte_L(l: Sec): L ⪯ l.
-Proof. destruct l; repeat econstructor. Qed.
-
-(*| Both values and addresses are nat |*)
-Notation Addr := nat.
-
-Variant secE: Type :=
-  | Read (l: Sec) (addr: Addr)
-  | Write (l: Sec) (addr: Addr) (val: nat).
-
-Section SecurityEx.
-  Context `{MF: Map Addr (Sec * nat) St} `{OF: MapOk Addr (Sec * nat) St eq}.
-
-  Global Instance encode_secE: Encode secE :=
-    fun e => match e with
-          | Read l addr => option nat
-          | Write l addr v => unit
-          end.
-  
-  (* Ghost state, instrument every read with
-     [m: memory address it targets]
-     [ml: Security-level of the instruction]
-     [al: Security-level of the address cell previously written]
-   *)               
-  Record SecObs := { ml: Sec; al: Sec }.
-  
-  (* Insecure interpreter, does not check labels *)
-  Definition h_secE: secE ~> stateT St (ictreeW SecObs) :=
-    fun e => mkStateT
-            (fun (st: St) =>                                     
-               match e return ictreeW SecObs (encode e * St) with
-               | Read l addr =>
-                   match lookup addr st with
-                   (* [addr] exists and set to [(v, l_a)] *)
-                   | Some (l_a, v) =>
-                       (* Instrumentation *)
-                       log {| ml:=l_a; al := l |} ;;
-                       Ret (Some v, st)
-                   (* [addr] does not exist, return [None] *)
-                   | None => Ret (None, st)
-                   end
-               | Write l addr v =>
-                   (* Set [addr] to [(l, v)] *)
-                   Ret (tt, add addr (l, v) st)
-               end).
-
-  (* Trigger instructions *)
-  Definition read: Sec -> Addr -> ictree secE (option nat) :=
-    fun (l: Sec) (addr: Addr) => ICtree.trigger (Read l addr). 
-  
-  Definition write: Sec -> Addr -> nat -> ictree secE unit :=
-    fun (l: Sec) (addr: Addr) (s: nat) => ICtree.trigger (Write l addr s).
+Module Sec.
+  Include ME.
 
   (* Alice (H) writes [secret] to odd addresses *)
-  Definition sec_alice1(secret: nat)(i: Addr): ictree secE unit :=
-    if Nat.Even_Odd_dec i then
-      (* [i] even, write to [i+1] *)
-      write H (S i) secret
-    else
-      (* [i] odd, write to [i] *)
-      write H i secret.
- 
-  (* Bob (L) reads from even addresses *)
-  Definition sec_bob1(i: Addr): ictree secE unit :=
-    if Nat.Even_Odd_dec i then
-      (* [i] even, read [i] *)
-      read L i;; Ret tt
-    else
-      (* [i] odd, read [i+1] *)
-      read L (S i) ;; Ret tt.
+  Definition alice (secret: nat)(i: Addr): CProg unit :=
+    CIf (Nat.Even_Odd_dec i)
+      (CWrite H (S i) secret)
+      (CWrite H i secret).
 
-  (* The (unfair) infinite interleaving of Alice/Bob *)
-  Definition sec_system(secret: nat): ictree secE void :=
-    for 0 to ∞
+  Definition bob (i: Addr): CProg unit :=
+    CBind
+      (CIf (Nat.Even_Odd_dec i)
+         (CRead H i)
+         (CRead H (S i)))
+      (fun _=> CRet tt).
+
+  Definition sched (secret: nat): SProg unit :=
+    SLoop 0
       (fun i =>
-         (br2
-            (sec_alice1 secret i)
-            (sec_bob1 i));;
-         (* Increase counter by 1 *)
-         Ret (S i)).
-
+         SBind
+           (SBr
+              (SCall (alice secret i))
+              (SCall (bob i)))
+           (fun _ => SRet (1 + i))).
+  
   Definition no_leak(i: Addr) (σ: St): Prop :=
     Nat.Even i -> exists v, lookup i σ = Some (L, v).
 

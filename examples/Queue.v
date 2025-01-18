@@ -13,7 +13,7 @@ From TICL Require Import
   ICTree.Interp.State
   ICTree.Events.State
   ICTree.Events.Writer
-  Lang.StImpQ.
+  Lang.MeQ.
 
 From ExtLib Require Export
   Structures.MonadState
@@ -32,8 +32,8 @@ Local Open Scope ictree_scope.
 Local Open Scope ticl_scope.
 Local Open Scope list_scope.
 
-Module Drain.
-  Include StImpQ.
+Module Queue.
+  Include ME.
   Infix "=?" := (rel_dec) (at level 75).
 
   (* Ex1: Drain a queue until there is nothing left *)
@@ -294,5 +294,5 @@ Module Drain.
                    --- exists n.
                        now apply find_app_l.
   Qed.
-End QueueEx.
+End Queue.
 
