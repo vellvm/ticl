@@ -17,7 +17,7 @@ From TICL Require Import
   ICTree.Interp.Core
   ICTree.Interp.State
   ICTree.Events.State
-  Lang.StImpS.
+  Lang.MeS.
 
 From ExtLib Require Import
   Structures.MonadState
@@ -33,6 +33,9 @@ Local Open Scope nat_scope.
 
 Module Sec.
   Include ME.
+
+  Existing Instance sec_lte_refl. 
+  Existing Instance sec_lt_trans. 
 
   (* Alice (H) writes [secret] to odd addresses *)
   Definition alice (secret: nat)(i: Addr): CProg unit :=
@@ -59,25 +62,23 @@ Module Sec.
   Definition no_leak(i: Addr) (σ: St): Prop :=
     Nat.Even i -> exists v, lookup i σ = Some (L, v).
 
-  (* Safety property: All memory labels [ml] accessed by
-     label [al ≺ ml], or there does not exist a low intruction that reads from
-     high-security memory *)
-  Typeclasses Transparent equ.
-  Typeclasses Transparent sbisim.
-  Theorem ag_safety_sec: forall (secret: nat) (σ: St),
-      (forall i, no_leak i σ) ->
-      <( {interp_state h_secE (sec_system secret) σ},
-         {Obs (Log {| ml := L; al := L |}) tt} |= AG visW {fun obs => obs.(al) ⪯ obs.(ml)} )>.
+  (* Safety property: All memory labels [ml] accessed by label [al] satisfy [al ≺ ml] *)
+  Local Typeclasses Transparent equ.
+  Local Typeclasses Transparent sbisim.
+  Theorem ag_safety_sec: forall (secret: nat) (m: St),
+      (forall i, no_leak i m) ->
+      <( {instr_sprog (sched secret) m}, {Obs (Log {| ml := L; al := L |}) tt}
+           |= AG visW {fun obs => obs.(al) ⪯ obs.(ml)} )>.
   Proof with eauto with ticl.
     intros.    
-    unfold sec_system, forever.
-    apply ag_state_iter with
-      (R:=fun _ σ w =>
-            exists (obs: SecObs), w = Obs (Log obs) tt
-                             /\ obs.(al) ⪯ obs.(ml)
-                             /\ forall i, no_leak i σ)...
+    unfold sched. 
+    apply ag_sprog_invariance with
+      (R:=fun _ m obs => obs.(al) ⪯ obs.(ml) /\ forall i, no_leak i m)...
     unfold no_leak in *.
-    intros i σ' w Hd (obs & -> & Hobs & Hσ0).    
+    intros i m' s' (Hobs & Hm0).
+    (* LEF: HERE *)
+    fail.
+    
     rewrite interp_state_map; unfold map.
     split; [csplit; auto|].
     unfold br2; cbn...

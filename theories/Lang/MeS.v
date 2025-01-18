@@ -35,7 +35,7 @@ Local Open Scope nat_scope.
 
 Generalizable All Variables.
 
-Module StImpS.
+Module ME.
   (*| Security labels |*)
   Variant Sec: Set := H | L.
   
@@ -177,6 +177,43 @@ Module StImpS.
   Definition instr_sprog {X}(p: SProg X): St -> ictreeW SecObs (X * St) :=
     interp_state h_secE (denote_sprog p).
   
- 
+  (* Invariance *)
+  Lemma ag_sprog_invariance{X}: forall (b: X -> SProg X) R m s (i:X) φ,
+      R i m s ->
+      (forall i m s,
+          R i m s ->
+          <( {instr_sprog (SLoop i b) m}, {Obs (Log s) tt} |= φ )> /\
+            <[ {instr_sprog (b i) m}, {Obs (Log s) tt} |= AX (φ AU AX done {fun '(i', m') w' =>
+                                                                              exists s', w' = Obs (Log s') tt /\ R i' m' s' }) ]>) ->
+      <( {instr_sprog (SLoop i b) m}, {Obs (Log s) tt} |= AG φ )>.
+  Proof with eauto with ticl.
+    unfold instr_sprog; cbn.
+    intros.
+    eapply ag_state_iter with
+      (R:=fun i m w =>
+            exists s, w = Obs (Log s) tt /\
+              <( {interp_state h_secE (denote_sprog (SLoop i b)) m}, {Obs (Log s) tt} |= φ )> /\
+              <[ {interp_state h_secE (denote_sprog (b i)) m}, {Obs (Log s) tt}
+                             |= AX (φ AU AX done {fun '(i', m') w' => exists s', w' = Obs (Log s') tt /\ R i' m' s'}) ]>)...
+    - intros i' m' w' _ (s' & -> & Hb & HR); split... 
+      rewrite interp_state_bind.
+      cdestruct HR.
+      csplit...      
+      + destruct Hs as (t_ & w_ & TR).
+        eapply can_step_bind_l...
+        specialize (HR _ _ TR).
+        now apply aur_not_done in HR.
+      + intros t_ w_ TR...
+        apply ktrans_bind_inv in TR as [(? & TR & Hd_ & ->) | ((? & ctx_) & ? & ? & ? & TR)].
+        * specialize (HR _ _ TR).
+          apply aur_bind_r with (R:=fun '(i', m') w' => exists s', w' = Obs (Log s') tt /\ R i' m' s')... 
+          intros [r_ m_] w'' (? & -> & HR').
+          apply aur_state_ret...
+          exists r_; intuition.
+          exists x0; split...
+        * specialize (HR _ _ H2).
+          now apply aur_stuck, anr_stuck in HR.
+  Qed.
 
-End StImpS.
+
+End ME.
