@@ -137,7 +137,7 @@ Module ME.
   Proof with auto with ticl.
     intros; unfold instr_prog; cbn.
     cright.
-    apply ticlr_auan_anau.
+    apply implr_auan_anau.
     cleft.
     apply anr_pop_cons...
   Qed.
@@ -175,7 +175,7 @@ Module ME.
     eapply aul_state_bind_r_eq...
   Qed.
 
-  Lemma aur_qprog_bind{X Y}: forall (h: CProg X) (k: X -> CProg Y) q q' (r: X) w w' φ ψ,
+  Lemma aur_qprog_bind_r{X Y}: forall (h: CProg X) (k: X -> CProg Y) q q' (r: X) w w' φ ψ,
       <[ {instr_prog h q}, w |= φ AU AX done={(r,q')} w' ]> ->
       <[ {instr_prog (k r) q'}, w' |= φ AU ψ ]> ->
       <[ {instr_prog (CBind h k) q}, w |= φ AU ψ ]>.
@@ -194,8 +194,8 @@ Module ME.
   Qed.
 
   (*| Conditionals |*)
-  Lemma ticlr_ifsome_some{X}: forall (k: X -> CProg unit) q ψ x w,
-    <[ {instr_prog (k x) q}, w |= ψ ]> ->
+  Lemma equivr_ifsome_some{X}: forall (k: X -> CProg unit) q ψ x w,
+    <[ {instr_prog (k x) q}, w |= ψ ]> <->
     <[ {instr_prog (CIfSome (Some x) k) q}, w |= ψ ]>.
   Proof with eauto.
     unfold instr_prog; cbn; intros...

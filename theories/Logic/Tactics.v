@@ -35,9 +35,9 @@ Generalizable All Variables.
       is_var c; destruct c; csplit
                               
   | |- @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_A ?p) ?t ?w =>
-      rewrite ticll_ag_an, ticll_an; split2
+      rewrite equivl_ag_an, ticll_an; split2
   | |- @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_E ?p) ?t ?w =>
-      rewrite ticll_eg_en, ticll_en; split
+      rewrite equivl_eg_en, ticll_en; split
   (* Quantifier is a variable, destruct it *)
   | |- @entailsL ?M ?W ?HE ?KMS ?X (Cg ?c ?p ?q) ?t ?w =>
       is_var c; destruct c; csplit
@@ -61,13 +61,13 @@ Generalizable All Variables.
   | |- @entailsR ?M ?W ?HE ?KMS ?X (COrR ?p ?q) ?t ?w =>
       rewrite ticlr_or; left                          
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_A ?p ?q) ?t ?w =>
-      rewrite ticll_au_an, ticll_or; left
+      rewrite equivl_au_an, ticll_or; left
   | |- @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_A ?p ?q) ?t ?w =>
-      rewrite ticlr_au_an, ticlr_or; left
+      rewrite equivr_au_an, ticlr_or; left
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_E ?p ?q) ?t ?w =>
-      rewrite ticll_eu_en, ticll_or; left
+      rewrite equivl_eu_en, ticll_or; left
   | |- @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_E ?p ?q) ?t ?w =>
-      rewrite ticlr_eu_en, ticlr_or; left
+      rewrite equivr_eu_en, ticlr_or; left
   (* Quantifier is a variable, destruct it *)
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL ?c ?p ?q) ?t ?w =>
       is_var c; destruct c; cleft
@@ -82,13 +82,13 @@ end.
   | |- @entailsR ?M ?W ?HE ?KMS ?X (COrR ?p ?q) ?t ?w =>
       rewrite ticlr_or; right
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_A ?p ?q) ?t ?w =>
-      rewrite ticll_au_an, ticll_or; right
+      rewrite equivl_au_an, ticll_or; right
   | |- @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_A ?p ?q) ?t ?w =>
-      rewrite ticlr_au_an, ticlr_or; right
+      rewrite equivr_au_an, ticlr_or; right
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_E ?p ?q) ?t ?w =>
-      rewrite ticll_eu_en, ticll_or; right
+      rewrite equivl_eu_en, ticll_or; right
   | |- @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_E ?p ?q) ?t ?w =>
-      rewrite ticlr_eu_en, ticlr_or; right
+      rewrite equivr_eu_en, ticlr_or; right
   (* Quantifier is a variable, destruct it *)
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL ?c ?p ?q) ?t ?w =>
       is_var c; destruct c; cright
@@ -150,13 +150,13 @@ end.
       is_var c; destruct c; cdestruct H
   (* U *)
   | @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_A ?p ?q) ?t ?w =>
-      rewrite ticll_au_an, ticll_or in H; destruct H
+      rewrite equivl_au_an, ticll_or in H; destruct H
   | @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_A ?p ?q) ?t ?w =>
-      rewrite ticlr_au_an, ticlr_or in H; destruct H
+      rewrite equivr_au_an, ticlr_or in H; destruct H
   | @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_E ?p ?q) ?t ?w =>
-      rewrite ticll_eu_en, ticll_or in H; destruct H
+      rewrite equivl_eu_en, ticll_or in H; destruct H
   | @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_E ?p ?q) ?t ?w =>
-      rewrite ticlr_eu_en, ticlr_or in H; destruct H
+      rewrite equivr_eu_en, ticlr_or in H; destruct H
   (* Quantifier is a variable, destruct it *)
   | @entailsL ?M ?W ?HE ?KMS ?X (CuL ?c ?p ?q) ?t ?w =>
       is_var c; destruct c; cdestruct H
@@ -167,14 +167,14 @@ end.
   | @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_A ?φ) ?t ?w =>
       let Hp := fresh "Hp" in
       let Hs := fresh "Hs" in
-      rewrite ticll_ag_an, unfold_entailsL in H; destruct H as (Hp & Hs & H)
+      rewrite equivl_ag_an, unfold_entailsL in H; destruct H as (Hp & Hs & H)
   | @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_E ?φ) ?t ?w =>
       let Hp := fresh "Hp" in
       let Hs := fresh "Hs" in
       let t' := fresh "t" in
       let w' := fresh "w" in
       let TR' := fresh "TR" in
-      rewrite ticll_eg_en, unfold_entailsL in H; destruct H as (Hp & t' & w' & TR' & H)
+      rewrite equivl_eg_en, unfold_entailsL in H; destruct H as (Hp & t' & w' & TR' & H)
   | @entailsL ?M ?W ?HE ?KMS ?X (Cg ?c ?p) ?t ?w =>
       is_var c; destruct c; cdestruct H
   end.

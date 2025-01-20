@@ -185,6 +185,21 @@ Section StateLemmas.
     rewrite interp_state_bind.
     eapply enr_bind_r_eq...
   Qed.
+
+  Lemma anr_state_br{X}: forall n σ (k: fin' n -> ictree E X) w φ ψ,
+      <[ {interp_state h (Br n k) σ}, w |= φ AN ψ ]> <->
+        <( {interp_state h (Br n k) σ}, w |= φ)>
+        /\ (forall (i: fin' n), <[ {interp_state h (k i) σ}, w |= ψ ]>).
+  Proof with auto with ticl.
+    intros.
+    rewrite interp_state_br.
+    split; intros...
+    - apply anr_br in H as (H1 & H2).
+      setoid_rewrite sb_guard in H2...
+    - destruct H.
+      apply anr_br; split...
+      setoid_rewrite sb_guard...
+  Qed.
   
   (*| Bind lemmas for [AU] |*)
   Theorem aul_state_bind_r{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ R,

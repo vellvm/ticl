@@ -166,8 +166,8 @@ Module Queue.
   Proof. induction n; auto. Qed.
 
   Variable (nl: T).
-  Typeclasses Transparent equ.
-  Typeclasses Transparent sbisim.
+  Local Typeclasses Transparent equ.
+  Local Typeclasses Transparent sbisim.
 
   Theorem rotate_agaf_pop: forall q i,
       find nl q = Some i ->
@@ -201,7 +201,7 @@ Module Queue.
           eapply anr_qprog_bind_l.
           -- apply anr_pop_cons...
              csplit...
-          -- eapply aur_qprog_bind.
+          -- eapply aur_qprog_bind_r.
              ++ apply ticlr_ifsome_some.
                 cleft.
                 apply axr_push...
@@ -244,10 +244,10 @@ Module Queue.
                        csplit...
              ++ left.
                 destruct H as (i' & Hi').
-                eapply aur_qprog_bind.
+                eapply aur_qprog_bind_r.
                 ** apply aur_pop_cons...
                    csplit...
-                ** eapply aur_qprog_bind.
+                ** eapply aur_qprog_bind_r.
                    --- apply ticlr_ifsome_some.
                        cleft.
                        apply axr_push...
@@ -274,7 +274,7 @@ Module Queue.
         * eapply anr_qprog_bind_l.
           -- apply anr_pop_cons...
              csplit...
-          -- eapply aur_qprog_bind.
+          -- eapply aur_qprog_bind_r.
              ++ eapply ticlr_ifsome_some.
                 cleft.
                 eapply axr_push...

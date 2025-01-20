@@ -176,6 +176,79 @@ Module ME.
   (* Instrumentation of scheduler programs *)
   Definition instr_sprog {X}(p: SProg X): St -> ictreeW SecObs (X * St) :=
     interp_state h_secE (denote_sprog p).
+
+  Lemma aur_cprog_bind_r{X Y}: forall (h: CProg X) (k: X -> CProg Y) m w φ ψ R,
+      (forall r m w, R r m w -> <[ {instr_cprog (k r) m}, w |= φ AU ψ ]>) ->
+      <[ {instr_cprog h m}, w |= φ AU AX done {fun '(r, m) w => R r m w} ]> ->
+      <[ {instr_cprog (CBind h k) m}, w |= φ AU ψ ]>.
+  Proof with eauto with ticl.
+    unfold instr_cprog; cbn; intros.
+    eapply aur_state_bind_r...
+  Qed.
+  
+  Lemma aur_cprog_bind_r_eq{X Y}: forall (h: CProg X) (k: X -> CProg Y) m w r w' m' φ ψ,
+      <[ {instr_cprog h m}, w |= φ AU AX done={(r, m')} w' ]> ->
+      <[ {instr_cprog (k r) m'}, w' |= φ AU ψ ]> ->
+      <[ {instr_cprog (CBind h k) m}, w |= φ AU ψ ]>.
+  Proof with eauto with ticl.
+    unfold instr_cprog; cbn; intros.
+    eapply aur_state_bind_r_eq...
+  Qed.
+  
+  Lemma aur_sprog_bind_r{X Y}: forall (h: SProg X) (k: X -> SProg Y) m w φ ψ R,
+      (forall r m w, R r m w -> <[ {instr_sprog (k r) m}, w |= φ AU ψ ]>) ->
+      <[ {instr_sprog h m}, w |= φ AU AX done {fun '(r, m) w => R r m w} ]> ->
+      <[ {instr_sprog (SBind h k) m}, w |= φ AU ψ ]>.
+  Proof with eauto with ticl.
+    unfold instr_sprog; cbn; intros.
+    eapply aur_state_bind_r...
+  Qed.
+  
+  Lemma aur_sprog_bind_r_eq{X Y}: forall (h: SProg X) (k: X -> SProg Y) m m' (r: X) w w' φ ψ,
+      <[ {instr_sprog h m}, w |= φ AU AX done={(r,m')} w' ]> ->
+      <[ {instr_sprog (k r) m'}, w' |= φ AU ψ ]> ->
+      <[ {instr_sprog (SBind h k) m}, w |= φ AU ψ ]>.
+  Proof with eauto with ticl.
+    unfold instr_sprog; cbn; intros.
+    eapply aur_state_bind_r_eq...
+  Qed.  
+  
+  Lemma anr_sprog_bind_l{X Y}: forall (h: SProg X) (k: X -> SProg Y) m m' (r: X) w w' φ ψ,
+      <[ {instr_sprog h m}, w |= φ AN AX done={(r,m')} w' ]> ->
+      <[ {instr_sprog (k r) m'}, w' |= ψ ]> ->
+      <[ {instr_sprog (SBind h k) m}, w |= φ AN ψ ]>.
+  Proof with eauto with ticl.
+    unfold instr_sprog; cbn; intros.
+    eapply anr_state_bind_l_eq...
+  Qed.
+
+  Lemma anr_sprog_br{X}: forall (a b: SProg X) m w φ ψ,
+      <( {instr_sprog (SBr a b) m}, w |= φ )> ->
+      <[ {instr_sprog a m}, w |= ψ ]> ->
+      <[ {instr_sprog b m}, w |= ψ ]> ->
+      <[ {instr_sprog (SBr a b) m}, w |= φ AN ψ ]>.
+  Proof with eauto with ticl.
+    unfold instr_sprog; cbn; intros.
+    apply anr_state_br; split...
+    intros []...
+  Qed.
+
+  Lemma ticlr_sprog_call{X}: forall (p: CProg X) m w ψ,
+      <[ {instr_cprog p m}, w |= ψ ]> ->
+      <[ {instr_sprog (SCall p) m}, w |= ψ ]>.
+  Proof with eauto with ticl.
+    unfold instr_sprog, instr_cprog; cbn; intros...
+  Qed.
+
+  Lemma ticlr_cprog_if{A B X}: forall (c: {A} + {B}) (t e: CProg X) m w ψ,
+      match c with
+      | left _ => <[ {instr_cprog t m}, w |= ψ ]>
+      | right _ => <[ {instr_cprog e m}, w |= ψ ]>
+      end ->
+      <[ {instr_cprog (CIf c t e) m}, w |= ψ ]>.
+  Proof with eauto with ticl.
+    unfold instr_cprog; cbn; intros []; intros...
+  Qed.
   
   (* Invariance *)
   Lemma ag_sprog_invariance{X}: forall (b: X -> SProg X) R m s (i:X) φ,
@@ -195,25 +268,24 @@ Module ME.
               <( {interp_state h_secE (denote_sprog (SLoop i b)) m}, {Obs (Log s) tt} |= φ )> /\
               <[ {interp_state h_secE (denote_sprog (b i)) m}, {Obs (Log s) tt}
                              |= AX (φ AU AX done {fun '(i', m') w' => exists s', w' = Obs (Log s') tt /\ R i' m' s'}) ]>)...
-    - intros i' m' w' _ (s' & -> & Hb & HR); split... 
-      rewrite interp_state_bind.
-      cdestruct HR.
-      csplit...      
-      + destruct Hs as (t_ & w_ & TR).
-        eapply can_step_bind_l...
-        specialize (HR _ _ TR).
-        now apply aur_not_done in HR.
-      + intros t_ w_ TR...
-        apply ktrans_bind_inv in TR as [(? & TR & Hd_ & ->) | ((? & ctx_) & ? & ? & ? & TR)].
-        * specialize (HR _ _ TR).
-          apply aur_bind_r with (R:=fun '(i', m') w' => exists s', w' = Obs (Log s') tt /\ R i' m' s')... 
-          intros [r_ m_] w'' (? & -> & HR').
-          apply aur_state_ret...
-          exists r_; intuition.
-          exists x0; split...
-        * specialize (HR _ _ H2).
-          now apply aur_stuck, anr_stuck in HR.
+    intros i' m' w' _ (s' & -> & Hb & HR); split...
+    rewrite interp_state_bind.
+    cdestruct HR.
+    csplit...      
+    - destruct Hs as (t_ & w_ & TR).
+      eapply can_step_bind_l...
+      specialize (HR _ _ TR).
+      now apply aur_not_done in HR.
+    - intros t_ w_ TR...
+      apply ktrans_bind_inv in TR as [(? & TR & Hd_ & ->) | ((? & ctx_) & ? & ? & ? & TR)].
+      + specialize (HR _ _ TR).
+        apply aur_bind_r with (R:=fun '(i', m') w' => exists s', w' = Obs (Log s') tt /\ R i' m' s')...
+        intros [r_ m_] w'' (? & -> & HR').
+        apply aur_state_ret...
+        exists r_; intuition.
+        exists x0; split...
+      + specialize (HR _ _ H2).
+        now apply aur_stuck, anr_stuck in HR.
   Qed.
-
 
 End ME.

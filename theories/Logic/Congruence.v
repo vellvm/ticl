@@ -360,7 +360,7 @@ Section TicllEquations.
   Infix "⋖" := (impl_ticll X (K:=KMS)) (at level 58, left associativity).
   Infix "⩸" := (equiv_ticll X (K:=KMS)) (at level 58, left associativity).
 
-  Lemma ticll_vis_now: forall φ,
+  Lemma equivl_vis_now: forall φ,
       <( vis φ )> ⩸ <( now {fun w => exists (e: E) (v: encode e), w = Obs e v /\ φ e v} )>.
   Proof.
     intros; split; unfold impl_ticll; rewrite ?unfold_entailsF.
@@ -370,7 +370,7 @@ Section TicllEquations.
     - intros * [(e & v & -> & Hφ) Hd]; split; auto with ticl.
   Qed.
 
-  Lemma ticll_au_an: forall (p q: ticll E),
+  Lemma equivl_au_an: forall (p q: ticll E),
       <( p AU q )> ⩸ <( q \/ (p AN (p AU q)) )>.
   Proof.
     intros p q; split; intros t w Hind.
@@ -383,7 +383,7 @@ Section TicllEquations.
         now right.
   Qed.
 
-  Lemma ticll_eu_en: forall (p q: ticll E),
+  Lemma equivl_eu_en: forall (p q: ticll E),
       <( p EU q )> ⩸ <( q \/ (p EN (p EU q)) )>.
   Proof.
     intros p q; split; intros t w Hind.
@@ -398,7 +398,7 @@ Section TicllEquations.
         now right.
   Qed.
 
-  Lemma ticll_and_idL: forall (p: ticll E),
+  Lemma equivl_and_idL: forall (p: ticll E),
       <( ⊤ /\ p )> ⩸ <( p )>.
   Proof.
     split; intros t w Hp.
@@ -407,7 +407,7 @@ Section TicllEquations.
       now apply ticll_not_done in Hp.
   Qed.
 
-  Lemma ticll_and_idR: forall (p: ticll E),
+  Lemma equivl_and_idR: forall (p: ticll E),
       <( p /\ ⊤ )> ⩸ <( p )>.
   Proof.
     split; intros t w Hp.
@@ -416,7 +416,7 @@ Section TicllEquations.
       now apply ticll_not_done in Hp.
   Qed.
 
-  Lemma ticll_or_idL: forall (p: ticll E),
+  Lemma equivl_or_idL: forall (p: ticll E),
       <( ⊥ \/ p )> ⩸ <( p )>.
   Proof.
     split; intros t w Hp.
@@ -424,7 +424,7 @@ Section TicllEquations.
     - now right.
   Qed.
 
-  Lemma ticll_or_idR: forall (p: ticll E),
+  Lemma equivl_or_idR: forall (p: ticll E),
       <( p \/ ⊥ )> ⩸ <( p )>.
   Proof.
     split; intros t w Hp.
@@ -432,7 +432,7 @@ Section TicllEquations.
     - now left.
   Qed.
 
-  Lemma ticll_ag_an: forall (p: ticll E),
+  Lemma equivl_ag_an: forall (p: ticll E),
       <( AG p )> ⩸ <( p AN (AG p) )>.
   Proof.
     split; intros t w Hp.
@@ -441,7 +441,7 @@ Section TicllEquations.
       destruct H0; step; now constructor.
   Qed.
 
-  Lemma ticll_eg_en: forall (p: ticll E),
+  Lemma equivl_eg_en: forall (p: ticll E),
       <( EG p )> ⩸ <( p EN (EG p) )>.
   Proof.
     split; intros t w Hp.
@@ -450,7 +450,7 @@ Section TicllEquations.
       step; now constructor.
   Qed.
 
-  Lemma ticll_auan_anau: forall (p q: ticll E),
+  Lemma impll_auan_anau: forall (p q: ticll E),
       <( p AU (p AN q) )> ⋖ <( p AN (p AU q) )>.
   Proof.
     intros * t w H.
@@ -459,87 +459,87 @@ Section TicllEquations.
       rewrite unfold_entailsL.
       split2; auto.
       intros t' w' TR.
-      apply ticll_au_an.
+      apply equivl_au_an.
       rewrite ticll_or.
       left.
       now apply H1.
     + rewrite ticll_an.
       split2; auto.
       intros t' w' TR.
-      apply ticll_au_an; apply ticll_or.
+      apply equivl_au_an; apply ticll_or.
       right; auto.
   Qed.
   
-  Lemma ticll_ag_refl: forall (p: ticll E),
+  Lemma impll_ag_refl: forall (p: ticll E),
       <( AG p )> ⋖ p.
   Proof.
     unfold impl_ticll; intros.
-    rewrite ticll_ag_an, ticll_an in H.
+    rewrite equivl_ag_an, ticll_an in H.
     now destruct H.
   Qed.
 
-  Lemma ticll_eg_refl: forall (p: ticll E),
+  Lemma impll_eg_refl: forall (p: ticll E),
       <( EG p )> ⋖ p.
   Proof.
     unfold impl_ticll; intros.
-    rewrite ticll_eg_en, ticll_en in H.
+    rewrite equivl_eg_en, ticll_en in H.
     now destruct H.
   Qed.
 
-  Lemma ticll_au_idem: forall (p q: ticll E),
+  Lemma equivl_au_idem: forall (p q: ticll E),
       <( p AU q )> ⩸ <( p AU (p AU q) )>.
   Proof.
     split; unfold impl_ticll; intros; cinduction H.
-    - apply ticll_au_an, ticll_or.
+    - apply equivl_au_an, ticll_or.
       left.
-      apply ticll_au_an, ticll_or.
+      apply equivl_au_an, ticll_or.
       now left.
-    - apply ticll_au_an, ticll_or.
+    - apply equivl_au_an, ticll_or.
       right.
       apply ticll_an; split; auto.
     - apply Hp.
-    - apply ticll_au_an; right; split; auto.
+    - apply equivl_au_an; right; split; auto.
   Qed.
 
-  Lemma ticll_eu_idem: forall (p q: ticll E),
+  Lemma equivl_eu_idem: forall (p q: ticll E),
       <( p EU q )> ⩸ <( p EU (p EU q) )>.
   Proof.
     split; unfold impl_ticll; intros; cinduction H.
-    - apply ticll_eu_en, ticll_or; left.
-      apply ticll_eu_en, ticll_or.
+    - apply equivl_eu_en, ticll_or; left.
+      apply equivl_eu_en, ticll_or.
       now left.
-    - apply ticll_eu_en, ticll_or; right.
+    - apply equivl_eu_en, ticll_or; right.
       apply ticll_en; split; eauto.
     - apply Hp.
-    - apply ticll_eu_en, ticll_or; right.
+    - apply equivl_eu_en, ticll_or; right.
       apply ticll_en; split; eauto.
   Qed.
 
-  Lemma ticll_ag_idem: forall (p: ticll E),
+  Lemma equivl_ag_idem: forall (p: ticll E),
       <( AG p )> ⩸ <( AG (AG p) )>.
   Proof.
     split.
     - unfold impl_ticll; intros;
         revert H; revert t w; coinduction R CIH; intros t' w' Hag.
       constructor; auto.
-      apply ticll_ag_an in Hag; rewrite unfold_entailsL in Hag; destruct Hag, H0.
+      apply equivl_ag_an in Hag; rewrite unfold_entailsL in Hag; destruct Hag, H0.
       split; auto.
-    - apply ticll_ag_refl.
+    - apply impll_ag_refl.
   Qed.
 
-  Lemma ticll_eg_idem: forall (p: ticll E),
+  Lemma equivl_eg_idem: forall (p: ticll E),
       <( EG p )> ⩸ <( EG (EG p) )>.
   Proof.
     split.
     - unfold impl_ticll; intros;
         revert H; revert t w; coinduction R CIH; intros t' w' Heg.
       constructor; auto.
-      apply ticll_eg_en in Heg; rewrite unfold_entailsL in Heg; destruct Heg, H0 as (t_ & w_  & TR & H0).
+      apply equivl_eg_en in Heg; rewrite unfold_entailsL in Heg; destruct Heg, H0 as (t_ & w_  & TR & H0).
       exists t_, w_; intuition.
-    - apply ticll_eg_refl.
+    - apply impll_eg_refl.
   Qed.
 
-  Lemma ticll_and_ag: forall p q,
+  Lemma equivl_and_ag: forall p q,
       <( AG (p /\ q) )> ⩸ <( AG p /\ AG q )>.
   Proof with eauto.
     split.
@@ -547,75 +547,75 @@ Section TicllEquations.
       + generalize dependent t.
         generalize dependent w.
         coinduction R CIH; intros.
-        apply ticll_ag_an, ticll_an in H as (Hp & Hs & Hg).
+        apply equivl_ag_an, ticll_an in H as (Hp & Hs & Hg).
         split2...
         now apply ticll_and in Hp as (Hp & Hq).
       + generalize dependent t.
         generalize dependent w.
         coinduction R CIH; intros.
-        apply ticll_ag_an, ticll_an in H as (Hp & Hs & Hg).
+        apply equivl_ag_an, ticll_an in H as (Hp & Hs & Hg).
         split2...
         now apply ticll_and in Hp as (Hp & Hq).
     - unfold impl_ticll; intros; revert H; revert t w.
       coinduction R CIH; intros.
       destruct H as (Hp & Hq).
-      apply ticll_ag_an, ticll_an in Hp as (Hp & Hs & Hgp).
-      apply ticll_ag_an, ticll_an in Hq as (Hq & _ & Hgq).
+      apply equivl_ag_an, ticll_an in Hp as (Hp & Hs & Hgp).
+      apply equivl_ag_an, ticll_an in Hq as (Hq & _ & Hgq).
       split2...
       apply ticll_and...
   Qed.
 
   (* Other direction does not hold *)
-  Lemma ticll_and_eg: forall p q,
+  Lemma impll_and_eg: forall p q,
       <( EG (p /\ q) )> ⋖ <( EG p /\ EG q )>.
   Proof with eauto.
     unfold impl_ticll; intros; apply ticll_and; split.
     + generalize dependent t.
       generalize dependent w.
       coinduction R CIH; intros.
-      apply ticll_eg_en, ticll_en in H as (Hp & t' & w' & TR & Hg).
+      apply equivl_eg_en, ticll_en in H as (Hp & t' & w' & TR & Hg).
       split...
       now apply ticll_and in Hp as (Hp & Hq).
     + generalize dependent t.
       generalize dependent w.
       coinduction R CIH; intros.
-      apply ticll_eg_en, ticll_en in H as (Hp & t' & w' & TR & Hg).
+      apply equivl_eg_en, ticll_en in H as (Hp & t' & w' & TR & Hg).
       split...
       now apply ticll_and in Hp as (Hp & Hq).
   Qed.
 
-  Lemma ticll_or_ag: forall p q,
+  Lemma impll_or_ag: forall p q,
       <( AG p \/ AG q )> ⋖ <( AG (p \/ q) )>.
   Proof with eauto.
     unfold impl_ticll; intros; apply ticll_or in H as [H|H]. 
     + generalize dependent t.
       generalize dependent w.
       coinduction R CIH; intros.
-      apply ticll_ag_an, ticll_an in H as (Hp & Hs & Hg).
+      apply equivl_ag_an, ticll_an in H as (Hp & Hs & Hg).
       split2...
       apply ticll_or; now left. 
     + generalize dependent t.
       generalize dependent w.
       coinduction R CIH; intros.
-      apply ticll_ag_an, ticll_an in H as (Hp & Hs & Hg).
+      apply equivl_ag_an, ticll_an in H as (Hp & Hs & Hg).
       split2...
       apply ticll_or; now right.
   Qed.
 
-  Lemma ticll_or_eg: forall p q,
+  Lemma impll_or_eg: forall p q,
       <( EG p \/ EG q )> ⋖ <( EG (p \/ q) )>.
   Proof with eauto.
     unfold impl_ticll; intros; apply ticll_or in H as [H|H]. 
     + generalize dependent t.
       generalize dependent w.
       coinduction R CIH; intros.
-      apply ticll_eg_en, ticll_en in H as (Hp & t' & w' & TR & Hg).
+      apply equivl_eg_en, ticll_en in H as (Hp & t' & w' & TR & Hg).
       split...
       apply ticll_or; now left.
     + generalize dependent t.
       generalize dependent w.
       coinduction R CIH; intros.
-      apply ticll_eg_en, ticll_en in H as (Hp & t' & w' & TR & Hg).
+      apply equivl_eg_en, ticll_en in H as (Hp & t' & w' & TR & Hg).
       split...
       apply ticll_or; now right.
   Qed.
@@ -629,7 +629,7 @@ Section TiclrEquations.
   Infix "⋖" := (@impl_ticlr M E HE KMS X) (at level 58, left associativity).
   Infix "⩸" := (@equiv_ticlr M E HE KMS X) (at level 58, left associativity).
 
-  Lemma ticlr_finish_done: forall (φ: X -> forall e, encode e -> Prop),
+  Lemma equivr_finish_done: forall (φ: X -> forall e, encode e -> Prop),
       <[ finish φ ]> ⩸ <[ done {fun x w =>
                                   exists (e: E) (v: encode e), w = Obs e v /\ φ x e v} ]>.
   Proof with eauto with ticl.
@@ -642,7 +642,7 @@ Section TiclrEquations.
         destruct H as (e' & v' & Hinv & ?); ddestruction Hinv...
   Qed.
 
-  Lemma ticlr_or_injL: forall (p q: ticlr E X),
+  Lemma equivr_or_injL: forall (p q: ticlr E X),
       <[ p ]> ⋖ <[ p \/ q ]>.
   Proof.
     intros p q t w R.
@@ -650,7 +650,7 @@ Section TiclrEquations.
     now left.
   Qed.
 
-  Lemma ticlr_or_injR: forall (p q: ticlr E X),
+  Lemma equivr_or_injR: forall (p q: ticlr E X),
       <[ q ]> ⋖ <[ p \/ q ]>.
   Proof.
     intros p q t w R.
@@ -658,7 +658,7 @@ Section TiclrEquations.
     now right.
   Qed.
   
-  Lemma ticlr_or_impl_or: forall p q R,      
+  Lemma implr_or_impl_or: forall p q R,      
       <[ p \/ q ]> ⋖ R -> <[ p ]> ⋖ R \/ <[ q ]> ⋖ R.
   Proof.
     unfold impl_ticlr.
@@ -669,7 +669,7 @@ Section TiclrEquations.
     now left.
   Qed.
 
-  Lemma ticlr_or_impl_and: forall p q R,
+  Lemma implr_or_impl_and: forall p q R,
       <[ p ]> ⋖ R /\ <[ q ]> ⋖ R ->
       <[ p \/ q ]> ⋖ R.
   Proof.
@@ -681,8 +681,24 @@ Section TiclrEquations.
     - now apply H.
     - now apply H1.
   Qed.
-      
-  Lemma ticlr_au_an: forall (p: ticll E) (q: ticlr E X),
+
+  Lemma implr_an_or: forall p q r,
+      <[ p AN q \/ p AN r ]> ⋖ <[ p AN (q \/ r) ]>.
+  Proof with auto with ticl.
+    unfold impl_ticlr.
+    intros p q r t' w' Hn.
+    apply ticlr_or in Hn as [Hn | Hn].
+    - apply ticlr_an; 
+        apply ticlr_an in Hn as (Hp & Hs & H); split2...
+      intros t_ w_ TR_.
+      apply ticlr_or; left...
+    - apply ticlr_an; 
+        apply ticlr_an in Hn as (Hp & Hs & H); split2...
+      intros t_ w_ TR_.
+      apply ticlr_or; right...
+  Qed.
+  
+  Lemma equivr_au_an: forall (p: ticll E) (q: ticlr E X),
       <[ p AU q ]> ⩸ <[ q \/ (p AN (p AU q)) ]>.
   Proof with auto with ticl.
     intros p q; split; intros t w Hind.
@@ -695,7 +711,7 @@ Section TiclrEquations.
         now right.
   Qed.
 
-  Lemma ticlr_eu_en: forall (p: ticll E) (q: ticlr E X),
+  Lemma equivr_eu_en: forall (p: ticll E) (q: ticlr E X),
       <[ p EU q ]> ⩸ <[ q \/ (p EN (p EU q)) ]>.
   Proof.
     intros p q; split; intros t w Hind.
@@ -710,7 +726,7 @@ Section TiclrEquations.
         now right.
   Qed.
 
-  Lemma ticlr_auan_anau: forall (p: ticll E) (q: ticlr E X),
+  Lemma implr_auan_anau: forall (p: ticll E) (q: ticlr E X),
       <[ p AU (p AN q) ]> ⋖ <[ p AN (p AU q) ]>.
   Proof with auto with ticl.
     intros p q t w H.
@@ -719,18 +735,18 @@ Section TiclrEquations.
       rewrite unfold_entailsR.
       split2; auto.
       intros t' w' TR.
-      apply ticlr_au_an.
+      apply equivr_au_an.
       rewrite ticlr_or.
       left.
       now apply H1.
     - rewrite ticlr_an.
       split2; auto.
       intros t' w' TR.
-      apply ticlr_au_an; apply ticlr_or.
+      apply equivr_au_an; apply ticlr_or.
       right; auto.
   Qed.
 
-  Lemma ticlr_euen_eneu: forall (p: ticll E) (q: ticlr E X),
+  Lemma implr_euen_eneu: forall (p: ticll E) (q: ticlr E X),
       <[ p EU (p EN q) ]> ⋖ <[ p EN (p EU q) ]>.
   Proof with auto with ticl.
     intros p q t w H.
@@ -740,52 +756,50 @@ Section TiclrEquations.
       split...
       exists t', w'.
       split...
-      rewrite ticlr_eu_en, ticlr_or.
+      rewrite equivr_eu_en, ticlr_or.
       now left.
     - rewrite ticlr_en.
       split...
       exists t0, w0.
       split...
-      rewrite ticlr_eu_en, ticlr_or.
+      rewrite equivr_eu_en, ticlr_or.
       right...
   Qed.
 
-  Lemma ticlr_au_idem: forall (p: ticll E) (q: ticlr E X),
+  Lemma equivr_au_idem: forall (p: ticll E) (q: ticlr E X),
       <[ p AU q ]> ⩸ <[ p AU (p AU q) ]>.
   Proof.
     split; intros * t w H; cinduction H.
-    - apply ticlr_au_an, ticlr_or.
+    - apply equivr_au_an, ticlr_or.
       left.
-      apply ticlr_au_an, ticlr_or.
+      apply equivr_au_an, ticlr_or.
       now left.
-    - apply ticlr_au_an, ticlr_or.
+    - apply equivr_au_an, ticlr_or.
       right.
       apply ticlr_an; split; auto.
     - apply Hp.
-    - apply ticlr_au_an; right; split; auto.
+    - apply equivr_au_an; right; split; auto.
   Qed.
 
-  Lemma ticlr_eu_idem: forall (p: ticll E) (q: ticlr E X),
+  Lemma equivr_eu_idem: forall (p: ticll E) (q: ticlr E X),
       <[ p EU q ]> ⩸ <[ p EU (p EU q) ]>.
   Proof.
     split; unfold impl_ticlr; intros; cinduction H.
-    - apply ticlr_eu_en, ticlr_or; left.
-      apply ticlr_eu_en, ticlr_or.
+    - apply equivr_eu_en, ticlr_or; left.
+      apply equivr_eu_en, ticlr_or.
       now left.
-    - apply ticlr_eu_en, ticlr_or; right.
+    - apply equivr_eu_en, ticlr_or; right.
       apply ticlr_en; split; eauto.
     - apply Hp.
-    - apply ticlr_eu_en, ticlr_or; right.
+    - apply equivr_eu_en, ticlr_or; right.
       apply ticlr_en; split; eauto.
   Qed.
 
-  Lemma ticlr_modus: forall q q' (t: M E HE X) w,
-      <[ {t}, {w} |= q -> q' ]> ->
-      <( {t}, {w} |= q )> ->
-      <[ {t}, {w} |= q' ]>.
-  Proof.
-    eauto.
-  Qed.
+  Lemma implr_modus: forall q q' (t: M E HE X) w,
+      <[ t, w |= q -> q' ]> ->
+      <( t, w |= q )> ->
+      <[ t, w |= q' ]>.
+  Proof. eauto. Qed.
 
 End TiclrEquations.
 
