@@ -492,7 +492,8 @@ Module StImp.
         exists (b: bool), <[ {instr_comp c ctx}, {Obs (Log ctx) tt} |= AX done={(b, ctx)} {Obs (Log ctx) tt} ]> /\
           if b then
             <( {instr_prog t ctx}, {Obs (Log ctx) tt} |= φ AU ψ )> \/ 
-            <[ {instr_prog t ctx}, {Obs (Log ctx) tt} |= φ AU AX done {fun '(_, ctx') w' => w' = Obs (Log ctx') tt /\ Ri ctx' /\ f ctx' < f ctx} ]>
+              <[ {instr_prog t ctx}, {Obs (Log ctx) tt} |= φ AU AX done {fun '(_, ctx') w' =>
+                                            w' = Obs (Log ctx') tt /\ Ri ctx' /\ f ctx' < f ctx} ]>
           else
             <( {Ret (inr unit tt, ctx)}, {Obs (Log ctx) tt} |= ψ )>) ->
       <( {instr_prog [[ while c do t done ]] ctx}, {Obs (Log ctx) tt} |= φ AU ψ )>.

@@ -15,6 +15,7 @@ From TICL Require Import
 
 From Coq Require Import
   Fin
+  Lia
   Vector
   List
   Classes.SetoidClass.
@@ -30,8 +31,8 @@ Local Open Scope fin_vector_scope.
 Local Open Scope ticl_scope.
 
 Section Election.
-  Context {n: nat}.
-  Notation Id := (fin' n).
+  Context (max: nat) (Hmax: max > 0).
+  Notation Id := { x: nat | x < max }.
 
   (*| Message passing in unidirectional ring |*)
   Variant msg :=
@@ -39,70 +40,63 @@ Section Election.
     | Elected   (u: Id).
 
   Variant netE: Type :=
-    | Recv
-    | Send (m: msg).
-
-  Variant memE: Type :=
-    | Put (id: Id)
-    | Get.
+    | Recv (from: Id)
+    | Send (from: Id) (m: msg).
 
   Global Instance encode_netE: Encode netE :=
     fun e => match e with
-          | Recv => msg
-          | Send _ => unit
+          | Recv _ => msg
+          | Send _ _ => Id
           end.
 
-  Global Instance encode_idE: Encode memE :=
-    fun e => match e with
-          | Put _ => unit
-          | Get => Id
-          end.
+  Definition send: Id -> msg -> ictree netE Id :=
+    fun i p => ICtree.trigger (Send i p).
 
-  Definition send: msg -> ictree netE unit :=
-    fun p => ICtree.trigger (Send p).
+  Definition recv: Id -> ictree netE msg :=
+    fun i => ICtree.trigger (Recv i).
 
-  Definition recv: ictree netE msg :=
-    ICtree.trigger Recv.
-
-  Notation sysE := (netE + memE).
-
-  Definition put: Id -> ictree sysE unit :=
-    fun id => ICtree.trigger (Put id).
-
-  Definition get: ictree sysE Id :=
-    ICtree.trigger Get.
-
-  Notation Mails := (vec' n msg).
+  Program Definition cycle(i: Id): Id :=
+    let n := proj1_sig i in
+    if PeanoNat.Nat.eq_dec (S n) max then
+      0
+    else
+      S n.
+  Next Obligation. lia. Defined.
+    
+  Notation Mails := (vec max msg).
   Notation NetObs := (Id * msg).
 
+  Definition mget(mails: Mails)(id: Id): msg :=
+    mails $ of_nat_lt (proj2_sig id).
+
+  Definition mset(mails: Mails)(id: Id)(m: msg): Mails :=
+     mails @ (of_nat_lt (proj2_sig id)) := m.
+   
   (* Local network instrumented semantics, write to [Mails] *)
-  Definition h_sysE'(cycle: fin' n -> fin' n)
-    : sysE ~> stateT (Id * Mails) (ictreeW (Id * msg)) :=
+  Definition h_sysE'
+    : netE ~> stateT Mails (ictreeW NetObs) :=
     fun e =>
       mkStateT
-        (fun '(id, mail) =>
-           match e return ictreeW (Id * msg) (encode e * (fin' n * vec' n msg)) with
-           | inl (Send msg) =>
+        (fun mails =>
+           match e return ictreeW (Id * msg) (encode e * Mails) with
+           | Send id msg =>
+               let next := cycle id in
+               Ret (next, mset mails next msg)
+           | Recv id =>
+               let msg := mget mails id in
                log (id, msg) ;;
-               Ret (tt, (id, mail @ cycle id := msg))
-           | inl Recv =>
-               log (id, mail $ id) ;;
-               Ret (mail $ id, (id, mail))
-           | inr Get =>
-               Ret (id, (id, mail))
-           | inr (Put id) =>
-               Ret (tt, (id, mail))
+               Ret (msg, mails)
            end).
 
   (* Always terminates, conditional on receiving either:
      1. (Candidate candidate), where candidate = id -- I received my own [id] back
      2. (Elected leader) -- Someone else was elected [leader]
    *)
-  Definition elect(id: fin' n): ictree netE unit :=
-    m <- recv ;;
+  Definition elect(id: Id): ictree netE Id :=
+    m <- recv id ;;
     match m with
     | Candidate candidate =>
-        match Fin_compare candidate id with (* candidate < id *)
+        match Nat.eqb candidate id with (* candidate < id *)
         (* [left] neighbor proposed candidate, support her to [right]. *)
         | Gt => send (Candidate candidate)
         (* [left] neighbor proposed a candidate, do not support her. *)

@@ -170,20 +170,70 @@ Section IterLemmas.
     intros ? ? (i' & -> & HR).
     rewrite sb_guard...
   Qed.
-  
-  Lemma aul_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ictree E (I + X)) (φ ψ: ticll E):
+
+  Lemma aul_iter_split{X I} R Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ictree E (I + X)) (φ ψ: ticll E):
     well_founded Rv ->
     not_done w ->
-    Ri i w ->    
+    R i w ->
+    (forall i w, not_done w -> Ri i w -> <( {iter k i}, w |= φ AU ψ )>) ->    
     (forall (i: I) w,
         not_done w ->
-        Ri i w ->
+        R i w ->
+        <[ {k i}, w |= φ AU AX done
+                    {fun (lr: I + X) (w': World E) =>
+                       exists i', lr = inl i'
+                             /\ not_done w'
+                             /\ Ri i' w'} ]> \/ 
+        <[ {k i}, w |= φ AU AX done
+                    {fun (lr: I + X) (w': World E) =>
+                       exists i', lr = inl i'
+                             /\ not_done w'
+                             /\ R i' w'
+                             /\ Rv (i', w') (i, w) }]>) ->
+    <( {iter k i}, w |= φ AU ψ )>.
+  Proof with auto with ticl.
+    remember (i, w) as P.
+    replace i with (fst P) by now subst.
+    replace w with (snd P) by now subst.
+    clear HeqP i w.
+    intros WfR Hd HR Hi H.
+    generalize dependent k.
+    induction P using (well_founded_induction WfR);
+      destruct P as (i, w); cbn in *. 
+    rename H into HindWf.
+    intros.
+    unfold iter, MonadIter_ictree.
+    destruct (H _ _ Hd HR).
+    - rewrite sb_unfold_iter.
+      eapply aul_bind_r with (R:=fun (lr : I + X) (w' : World E) => exists i' : I, lr = inl i' /\ not_done w' /\ Ri i' w')...
+      intros [i' | r] w' (i_ & His & Hd' & HRi); inv His.
+      apply Hi...
+    - rewrite sb_unfold_iter.
+      eapply aul_bind_r with
+        (R:=fun (lr: I + X) (w': World E) =>
+              exists i' : I, lr = inl i' /\ not_done w'/\ R i' w' /\ Rv (i', w') (i, w))... 
+      intros [i' | r] w'.            
+      + intros (j & Hinv & Hd' & Hi' & Hv); inv Hinv.
+        remember (j, w') as y.
+        replace j with (fst y) in Hi' |- * by now subst.
+        replace w' with (snd y) in Hd', Hi' |- * by now subst.
+        apply HindWf...
+      + intros (j & Hcontra & ?); inv Hcontra.
+  Qed.
+      
+  Lemma aul_iter{X I} R (Rv: relation (I * World E)) (i: I) w (k: I -> ictree E (I + X)) (φ ψ: ticll E):
+    well_founded Rv ->
+    not_done w ->
+    R i w ->    
+    (forall (i: I) w,
+        not_done w ->
+        R i w ->
         <( {k i}, w |= φ AU ψ )> \/
           <[ {k i}, w |= φ AU AX done
                       {fun (lr: I + X) (w': World E) =>
                          exists i', lr = inl i'
                                /\ not_done w'
-                               /\ Ri i' w'
+                               /\ R i' w'
                                /\ Rv (i', w') (i, w)}]>) ->
     <( {iter k i}, w |= φ AU ψ )>.
   Proof with auto with ticl.
@@ -204,7 +254,7 @@ Section IterLemmas.
     - rewrite unfold_iter.
       eapply aul_bind_r with
         (R:=fun (lr: I + X) (w': World E) =>
-              exists i' : I, lr = inl i' /\ not_done w'/\ Ri i' w' /\ Rv (i', w') (i, w))... 
+              exists i' : I, lr = inl i' /\ not_done w'/\ R i' w' /\ Rv (i', w') (i, w))... 
       intros [i' | r] w'.            
       + intros (j & Hinv & Hd' & Hi' & Hv); inv Hinv.
         rewrite sb_guard.

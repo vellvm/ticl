@@ -539,7 +539,58 @@ Section StateLemmas.
     - cbn.
       rewrite interp_state_tau, sb_guard...
   Qed.
-  
+
+  Theorem aul_state_iter_split{X I} R Ri (Rv: relation (I * Σ * WorldW W)) (i: I) w
+    (k: I -> ictree E (I + X)) (φ ψ: ticllW W):
+    well_founded Rv ->
+    not_done w ->
+    R i σ w ->
+    (forall i w σ, not_done w -> Ri i σ w -> <( {interp_state h (iter k i) σ}, w |= φ AU ψ )>) ->    
+    (forall (i: I) σ w,
+        not_done w ->
+        R i σ w ->
+        <[ {interp_state h (k i) σ}, w |= φ AU AX done
+                    {fun '(lr, σ') (w': WorldW W) =>
+                       exists i', lr = inl i'
+                             /\ not_done w'
+                             /\ Ri i' σ' w'} ]> \/ 
+        <[ {interp_state h (k i) σ}, w |= φ AU AX done
+                    {fun '(lr, σ') (w': WorldW W) =>
+                       exists i', lr = inl i'
+                             /\ not_done w'
+                             /\ R i' σ' w'
+                             /\ Rv (i', σ', w') (i, σ, w) }]>) ->
+    <( {interp_state h (iter k i) σ}, w |= φ AU ψ )>.
+  Proof with auto with ticl.
+    unfold iter, MonadIter_ictree.
+    remember (i, σ, w) as P.
+    replace i with (fst (fst P)) by now subst.
+    replace σ with (snd (fst P)) by now subst.
+    replace w with (snd P) by now subst.
+    clear HeqP i w σ.
+    intros WfR Hd HR Hi H.
+    generalize dependent k.
+    induction P using (well_founded_induction WfR);
+      destruct P as ((i, σ), w); cbn in *. 
+    rename H into HindWf.
+    intros.
+    destruct (H _ _ _ Hd HR); rewrite interp_state_unfold_iter.
+    - apply aul_bind_r with (R:=fun '(lr,σ') w' => exists i' : I, lr = inl i' /\ not_done w' /\ Ri i' σ' w')...
+      intros ([i' | r] & σ') w' (i_ & His & Hd' & HRi); inv His.
+      rewrite sb_guard.
+      apply Hi...
+    - eapply aul_bind_r with
+        (R:=fun '(lr, σ') (w': WorldW W) =>
+              exists i' : I, lr = inl i' /\ not_done w'/\ R i' σ' w' /\ Rv (i', σ', w') (i, σ, w))... 
+      intros ([i' | r] & σ') w' (j & Hinv & Hd' & HR' & HRv'); inv Hinv.
+      rewrite sb_guard.
+      remember (j, σ', w') as y.
+      replace j with (fst (fst y)) in HR' |- * by now subst.
+      replace σ' with (snd (fst y)) in HR' |- * by now subst.
+      replace w' with (snd y) in HR', Hd' |- * by now subst.      
+      apply HindWf...
+  Qed.
+    
   Theorem aur_state_iter{X I} Ri (Rv: relation (I * Σ * WorldW W)) (i: I) w
     (k: I -> ictree E (I + X)) (φ: ticllW W) (ψ: ticlrW W (X * Σ)):
     well_founded Rv ->
@@ -819,6 +870,32 @@ Section StateLemmas.
     apply well_founded_ltof.
   Qed.
 
+  Theorem aul_state_iter_split_nat{X I} R Ri (f: I -> Σ -> WorldW W -> nat) (i: I) w
+    (k: I -> ictree E (I + X)) (φ ψ: ticllW W):
+    not_done w ->
+    R i σ w ->
+    (forall i w σ, not_done w -> Ri i σ w -> <( {interp_state h (iter k i) σ}, w |= φ AU ψ )>) ->    
+    (forall (i: I) σ w,
+        not_done w ->
+        R i σ w ->
+        <[ {interp_state h (k i) σ}, w |= φ AU AX done
+                    {fun '(lr, σ') (w': WorldW W) =>
+                       exists i', lr = inl i'
+                             /\ not_done w'
+                             /\ Ri i' σ' w'} ]> \/ 
+        <[ {interp_state h (k i) σ}, w |= φ AU AX done
+                    {fun '(lr, σ') (w': WorldW W) =>
+                       exists i', lr = inl i'
+                             /\ not_done w'
+                             /\ R i' σ' w'
+                             /\ f i' σ' w' < f i σ w }]>) ->
+    <( {interp_state h (iter k i) σ}, w |= φ AU ψ )>.
+  Proof.     
+    intros.
+    eapply aul_state_iter_split with R Ri (ltof _ (fun '(i, σ, w) => f i σ w)); auto.
+    apply well_founded_ltof.
+  Qed.
+  
   Theorem aur_state_iter_nat{X I} Ri (f: I -> Σ -> WorldW W -> nat) (i: I) w
     (k: I -> ictree E (I + X)) (φ: ticllW W) (ψ: ticlrW W (X * Σ)):
     not_done w ->
