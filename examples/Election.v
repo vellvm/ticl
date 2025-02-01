@@ -171,29 +171,6 @@ Module Election3.
        [| dependent destruction x;
           [| dependent destruction x]]].
 
-  Lemma next_neq: forall x,
-      next x <> x.
-  Proof.
-    intros.
-    ddestruction3 x; simp next; intros Hcontra; inv Hcontra.
-  Qed.
-
-  Lemma mget_mset_eq: forall (ms: Mails) (x: Id) m,
-      ((ms @ x := m) $ x) = m.
-  Proof.
-    intros.
-    repeat dependent destruction ms.
-    ddestruction3 x; simp next; cbn; reflexivity.
-  Qed.
-  
-  Lemma mget_mset_neq: forall (ms: Mails) (x: Id) m,
-      ((ms @ next x := m) $ x) = (ms $ x).
-  Proof.
-    intros.
-    repeat dependent destruction ms.
-    ddestruction3 x; simp next; cbn; reflexivity.
-  Qed.
-
   Definition ranking (id: Id) (mailboxes: Mails) :=
     match id, mailboxes with
     | id1, {{ Candidate id3, Candidate id1, Candidate id2 }} => 2
@@ -272,7 +249,7 @@ Module Election3.
                        | (id2, id3) => fun _ _ => ms = {{ Candidate id3, Candidate id3, Candidate id2 }}
                        | (id3, id1) => fun _ _ => ms = {{ Candidate id3, Candidate id1, Candidate id2 }}
                        | (id1, id2) => fun _ _ => ms = {{ Candidate id3, Candidate id1, Candidate id2 }}
-                       | _ => fun _ _ => False (* Only when w = Pure *)
+                       | _ => fun _ _ => False 
                        end eq_refl eq_refl
                  | _ => False
                  end)
