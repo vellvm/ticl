@@ -545,7 +545,6 @@ Section StateLemmas.
     well_founded Rv ->
     not_done w ->
     R i σ w ->
-    (forall i w σ, not_done w -> Ri i σ w -> <( {interp_state h (iter k i) σ}, w |= φ AU ψ )>) ->    
     (forall (i: I) σ w,
         not_done w ->
         R i σ w ->
@@ -560,6 +559,7 @@ Section StateLemmas.
                              /\ not_done w'
                              /\ R i' σ' w'
                              /\ Rv (i', σ', w') (i, σ, w) }]>) ->
+    (forall i w σ, not_done w -> Ri i σ w -> <( {interp_state h (iter k i) σ}, w |= φ AU ψ )>) -> 
     <( {interp_state h (iter k i) σ}, w |= φ AU ψ )>.
   Proof with auto with ticl.
     unfold iter, MonadIter_ictree.
@@ -568,7 +568,7 @@ Section StateLemmas.
     replace σ with (snd (fst P)) by now subst.
     replace w with (snd P) by now subst.
     clear HeqP i w σ.
-    intros WfR Hd HR Hi H.
+    intros WfR Hd HR H Hi.
     generalize dependent k.
     induction P using (well_founded_induction WfR);
       destruct P as ((i, σ), w); cbn in *. 
@@ -874,7 +874,6 @@ Section StateLemmas.
     (k: I -> ictree E (I + X)) (φ ψ: ticllW W):
     not_done w ->
     R i σ w ->
-    (forall i w σ, not_done w -> Ri i σ w -> <( {interp_state h (iter k i) σ}, w |= φ AU ψ )>) ->    
     (forall (i: I) σ w,
         not_done w ->
         R i σ w ->
@@ -889,6 +888,7 @@ Section StateLemmas.
                              /\ not_done w'
                              /\ R i' σ' w'
                              /\ f i' σ' w' < f i σ w }]>) ->
+    (forall i w σ, not_done w -> Ri i σ w -> <( {interp_state h (iter k i) σ}, w |= φ AU ψ )>) ->
     <( {interp_state h (iter k i) σ}, w |= φ AU ψ )>.
   Proof.     
     intros.
