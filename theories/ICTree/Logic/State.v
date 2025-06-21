@@ -18,8 +18,8 @@ From TICL Require Import
   ICTree.Events.State.
 
 
-From Coq Require Import Arith.Wf_nat.
-From Coq Require Import Program.Tactics.
+From Stdlib Require Import Arith.Wf_nat.
+From Stdlib Require Import Program.Tactics.
 
 Generalizable All Variables.
 

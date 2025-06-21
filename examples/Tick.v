@@ -82,7 +82,7 @@ Section TickTock.
     - csplit...
     - unfold map, br2.
       rewrite bind_br.
-      apply exr_br; split; [csplit; eauto with ticl|].
+      apply enr_br; split; [csplit; eauto with ticl|].
       exists Fin.F1.
       rewrite bind_br.
       apply eur_br.
@@ -100,7 +100,7 @@ Section TickTock.
         * exists tt.
           apply eur_ret.
           cleft.
-          apply ex_done; split.
+          apply enr_done; split.
           -- csplit...
           -- eexists; intuition.
              exists tt; intuition.

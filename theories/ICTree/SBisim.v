@@ -7,7 +7,7 @@ From TICL Require Export
   ICTree.SBisim.Core
   ICTree.SBisim.SSim.
 
-From Coq Require Import
+From Stdlib Require Import
   Classes.Morphisms
   Basics
   Program.Equality

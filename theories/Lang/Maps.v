@@ -1,5 +1,5 @@
 
-From Coq Require Import
+From Stdlib Require Import
   Nat
   Strings.String.
 

@@ -1,4 +1,4 @@
-From Coq Require Import
+From Stdlib Require Import
   PeanoNat
   Lia.
 
@@ -87,7 +87,11 @@ Module ME.
   
 
   (* Secure tagged heaps *)
-  Context `{MF: Map Addr (Sec * nat) St} `{OF: MapOk Addr (Sec * nat) St eq}.
+  #[local] Parameter (St: Type) 
+    (MF: Map Addr (Sec * nat) St) 
+    (OF: @MapOk Addr (Sec * nat) St eq MF).
+  #[global] Existing Instance MF.
+  #[global] Existing Instance OF.
   
   Global Instance encode_secE: Encode secE :=
     fun e => match e with
@@ -257,7 +261,7 @@ Module ME.
           R i m s ->
           <( {instr_sprog (SLoop i b) m}, {Obs (Log s) tt} |= φ )> /\
             <[ {instr_sprog (b i) m}, {Obs (Log s) tt} |= AX (φ AU AX done {fun '(i', m') w' =>
-                                                                              exists s', w' = Obs (Log s') tt /\ R i' m' s' }) ]>) ->
+              exists s', w' = Obs (Log s') tt /\ R i' m' s' }) ]>) ->
       <( {instr_sprog (SLoop i b) m}, {Obs (Log s) tt} |= AG φ )>.
   Proof with eauto with ticl.
     unfold instr_sprog; cbn.
@@ -287,5 +291,4 @@ Module ME.
       + specialize (HR _ _ H2).
         now apply aur_stuck, anr_stuck in HR.
   Qed.
-
 End ME.

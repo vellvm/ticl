@@ -1,4 +1,4 @@
-From Coq Require Import
+From Stdlib Require Import
   Arith.PeanoNat.
 
 From TICL Require Import

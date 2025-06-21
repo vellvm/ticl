@@ -13,7 +13,7 @@ From TICL Require Import
   ICTree.Interp.State
   ICTree.Events.Writer.
 
-From Coq Require Import
+From Stdlib Require Import
   Lia
   Fin
   Vector
@@ -173,11 +173,10 @@ Module Election3.
 
   Definition ranking (id: Id) (mailboxes: Mails) :=
     match id, mailboxes with
-    | id1, {{ Candidate id3, Candidate id1, Candidate id2 }} => 2
-    | id2, {{ Candidate id3, Candidate id3, Candidate id2 }} => 1
-    | id3, {{ Candidate id3, Candidate id3, Candidate id3 }} => 0
-    | id2, {{ Candidate id3, Candidate id1, Candidate id2 }} => 4
-    | id3, {{ Candidate id3, Candidate id1, Candidate id2 }} => 3
+    | id2, {{ Candidate id3, Candidate id3, Candidate id2 }} => 0
+    | id1, {{ Candidate id3, Candidate id1, Candidate id2 }} => 1
+    | id3, {{ Candidate id3, Candidate id1, Candidate id2 }} => 2
+    | id2, {{ Candidate id3, Candidate id1, Candidate id2 }} => 3
     | _, _ => 10
     end.
 
@@ -220,8 +219,6 @@ Module Election3.
     [apply aur_elect; eauto with ticl; try exact mailboxes 
     | cleft; apply axr_state_ret; eauto with ticl; eexists; intuition; simp next; eauto with ticl].
 
-  Local Typeclasses Transparent equ.
-  Local Typeclasses Transparent sbisim.
   Lemma election3_liveness:
     <( {interp_state h_netE elect_sched mailboxes}, Pure |= AF visW {fun msg => msg = Elected id3} )>.
   Proof with eauto with ticl.
@@ -251,8 +248,8 @@ Module Election3.
                        | (id1, id2) => fun _ _ => ms = {{ Candidate id3, Candidate id1, Candidate id2 }}
                        | _ => fun _ _ => False 
                        end eq_refl eq_refl
-                 | _ => False
-                 end)
+                   | _ => False
+                   end)
            (f:=fun id ms _ => ranking id ms)...
     + (* Prove it gets to the intermediate state *)
       intros; intuition; subst.
@@ -280,8 +277,7 @@ Module Election3.
       eapply aul_state_iter_next_eq...
       * vroom.
       * do 2 (eapply aul_state_iter_next_eq; eauto with ticl; [vroom|simp next; cbn]).
-        cleft.
-        csplit...
+        cleft. csplit...
   Qed.
   Print Assumptions election3_liveness.
 End Election3.

@@ -11,7 +11,7 @@ From TICL Require Import
   ICTree.Events.State
   ICTree.Equ.
 
-From Coq Require Import Morphisms.
+From Stdlib Require Import Morphisms.
 
 Import ICTreeNotations.
 Local Open Scope ictree_scope.

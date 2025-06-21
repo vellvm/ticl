@@ -4,7 +4,7 @@ From ExtLib Require Import
   Data.Monads.IdentityMonad
   Data.Monads.StateMonad.
 
-From Coq Require Import Eqdep.
+From Stdlib Require Import Eqdep.
 
 Import MonadNotation.
 Local Open Scope monad_scope.

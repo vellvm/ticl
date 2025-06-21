@@ -4,7 +4,7 @@ From ExtLib Require Import
   Structures.MonadState
   Data.Monads.StateMonad.
 
-From Coq Require Import
+From Stdlib Require Import
   List
   Basics
   Fin
@@ -221,7 +221,7 @@ Section ICTreeTrans.
   
   Local Open Scope ticl_scope.
   Lemma ktrans_guard{X}: forall (t t': ictree E X) w w',
-      [Guard t, w] ↦ [t', w'] <-> [t, w] ↦ [t', w'].
+      |Guard t, w| ↦ |t', w'| <-> |t, w| ↦ |t', w'|.
   Proof.
     split; intro H.
     - cbn in H; dependent induction H; cbn in *.
@@ -232,7 +232,7 @@ Section ICTreeTrans.
   Hint Resolve ktrans_guard: ticl.
 
   Lemma ktrans_br {X}: forall n (t: ictree E X) (k: fin' n -> ictree E X) w w',
-      [Br n k, w] ↦ [t, w'] <->
+      |Br n k, w| ↦ |t, w'| <->
         (exists (i: fin' n), t ≅ k i /\ w = w' /\ not_done w).
   Proof.
     split; intro H.
@@ -246,7 +246,7 @@ Section ICTreeTrans.
   Hint Resolve ktrans_br: ticl.
 
   Lemma ktrans_done {X}: forall (t: ictree E X) (w': World E) x,
-      [Ret x, Pure] ↦ [t, w'] <-> (w' = Done x /\ t ≅ stuck).
+      |Ret x, Pure| ↦ |t, w'| <-> (w' = Done x /\ t ≅ stuck).
   Proof.
     intros; split; intros.
     - cbn in H; dependent destruction H; split; auto.
@@ -257,7 +257,7 @@ Section ICTreeTrans.
   Hint Resolve ktrans_done: ticl.
 
   Lemma ktrans_finish {X}: forall (t: ictree E X) (w': World E) (e: E) (v: encode e) x,
-      [Ret x, Obs e v] ↦ [t, w'] <->
+      |Ret x, Obs e v| ↦ |t, w'| <->
         (w' = Finish e v x /\ t ≅ stuck).
   Proof.
     intros; split; intros.
@@ -269,7 +269,7 @@ Section ICTreeTrans.
   Hint Resolve ktrans_finish: ticl.
 
   Lemma ktrans_vis{X}: forall (t: ictree E X) (s s': World E) (e: E) (k: encode e -> ictree E X),
-      [Vis e k, s] ↦ [t, s'] <->
+      |Vis e k, s| ↦ |t, s'| <->
         (exists (x: encode e), s' = Obs e x /\ k x ≅ t /\ not_done s).
   Proof.
     intros; split; intro TR.
@@ -284,14 +284,14 @@ Section ICTreeTrans.
   Hint Resolve ktrans_vis: ticl.
 
   Lemma ktrans_pure_pred{X}: forall (t t': ictree E X) w,
-      [t, w] ↦ [t', Pure] -> w = Pure.
+      |t, w| ↦ |t', Pure| -> w = Pure.
   Proof.
     intros * H; cbn in H; dependent induction H; eauto.
   Qed.
   Hint Resolve ktrans_pure_pred: ticl.
 
   Lemma ktrans_stuck{X}: forall (t: ictree E X) w w',
-      ~ [stuck, w] ↦ [t, w'].
+      ~ |stuck, w| ↦ |t, w'|.
   Proof.
     intros * Hcontra.
     cbn in Hcontra; dependent induction Hcontra; eauto.
@@ -300,7 +300,7 @@ Section ICTreeTrans.
 
   Lemma done_not_ktrans{X}: forall (t: ictree E X) w,
       is_done X w ->
-      ~ (exists t' w', [t, w] ↦ [t', w']).
+      ~ (exists t' w', |t, w| ↦ |t', w'|).
   Proof.
     intros * Hret Htr.
     destruct Htr as (? & ? & ?).
@@ -310,21 +310,21 @@ Section ICTreeTrans.
   Hint Resolve done_not_ktrans: ticl.
 
   Lemma ktrans_done_inv{X}: forall (t t': ictree E X) (x: X) w,
-      ~ [t, Done x] ↦ [t', w].
+      ~ |t, Done x| ↦ |t', w|.
   Proof.
     intros * Hcontra; cbn in Hcontra; dependent induction Hcontra; eauto; inv H.
   Qed.
   Hint Resolve ktrans_done_inv: ticl.
 
   Lemma ktrans_finish_inv{X}: forall (t t': ictree E X) (e: E) (v: encode e) (x: X) w,
-      ~ [t, Finish e v x] ↦ [t', w].
+      ~ |t, Finish e v x| ↦ |t', w|.
   Proof.
     intros * Hcontra; cbn in Hcontra; dependent induction Hcontra; eauto; inv H.
   Qed.
   Hint Resolve ktrans_finish_inv: ticl.
 
   Lemma ktrans_to_done_inv{X}: forall (t t': ictree E X) w (x: X),
-      [t, w] ↦ [t', Done x] ->
+      |t, w| ↦ |t', Done x| ->
       t' ≅ ICtree.stuck /\ w = Pure.
   Proof.
     intros.
@@ -338,7 +338,7 @@ Section ICTreeTrans.
   Hint Resolve ktrans_to_done_inv: ticl.
 
   Lemma ktrans_to_finish_inv{X}: forall (t t': ictree E X) w (e: E) (v: encode e) (x: X),
-      [t, w] ↦ [t', Finish e v x] ->
+      |t, w| ↦ |t', Finish e v x| ->
       t' ≅ ICtree.stuck /\ w = Obs e v.
   Proof.
     intros.
@@ -352,9 +352,9 @@ Section ICTreeTrans.
   Hint Resolve ktrans_to_finish_inv: ticl.
 
   Lemma ktrans_bind_l{X Y}: forall (t t': ictree E Y) (k: Y -> ictree E X) w w',
-      [t, w] ↦ [t', w'] ->
+      |t, w| ↦ |t', w'| ->
       not_done w' ->
-      [x <- t ;; k x, w] ↦ [x <- t' ;; k x, w'].
+      |x <- t ;; k x, w| ↦ |x <- t' ;; k x, w'|.
   Proof.
     intros; cbn in *.
     revert k.
@@ -381,8 +381,8 @@ Section ICTreeTrans.
   Typeclasses Transparent equ.
   Lemma ktrans_bind_r{X Y}: forall (t t': ictree E Y) (k: Y -> ictree E X) w w',
       not_done w' ->
-      [t, w] ↦ [t', w'] ->
-      [x <- t ;; k x, w] ↦ [x <- t' ;; k x, w'].
+      |t, w| ↦ |t', w'| ->
+      |x <- t ;; k x, w| ↦ |x <- t' ;; k x, w'|.
   Proof.
     intros; cbn in *.
     rewrite (ictree_eta t), (ictree_eta t').
@@ -411,13 +411,13 @@ Section ICTreeTrans.
       go T ≅ t >>= k ->
       go U ≅ u ->
       (* [t] steps, [t>>=k] steps *)
-      (exists t', [t, w] ↦ [t', w']
+      (exists t', |t, w| ↦ |t', w'|
              /\ not_done w'
              /\ u ≅ x <- t' ;; k x) \/
         (* [t] returns [x], [t>>=k] steps if [k x] steps *)
-        (exists y w_, [t, w] ↦ [stuck, w_]
+        (exists y w_, |t, w| ↦ |stuck, w_|
                  /\ done_eq y w_
-                 /\ [k y, w] ↦ [u, w']).
+                 /\ |k y, w| ↦ |u, w'|).
   Proof with (auto with ticl).
     intros TR.
     dependent induction TR; intros.
@@ -510,14 +510,14 @@ Section ICTreeTrans.
 
   Lemma ktrans_bind_inv: forall {X Y} (w w': World E)
                            (t: ictree E X) (u: ictree E Y) (k: X -> ictree E Y),
-      [x <- t ;; k x, w] ↦ [u, w'] ->
-      (exists t', [t, w] ↦ [t', w']
+      |x <- t ;; k x, w| ↦ |u, w'| ->
+      (exists t', |t, w| ↦ |t', w'|
              /\ not_done w'
              /\ u ≅ x <- t' ;; k x) \/
         (* [t] returns [x], [t>>=k] steps if [k x] steps *)
-        (exists y w_, [t, w] ↦ [stuck, w_]
+        (exists y w_, |t, w| ↦ |stuck, w_|
                  /\ done_eq y w_
-                 /\ [k y, w] ↦ [u, w']).
+                 /\ |k y, w| ↦ |u, w'|).
   Proof.
     intros * TR.
     eapply ktrans_bind_inv_aux.
@@ -532,7 +532,7 @@ End ICTreeTrans.
 Local Typeclasses Transparent equ.
 Local Open Scope ticl_scope.
 Lemma ktrans_trigger_inv `{ReSumRet E1 E2}{X}:forall (e: E2) w w' (k: encode (resum e) -> ictree E2 X) (u': ictree E2 X),
-      [z <- trigger e ;; k z, w] ↦ [u', w'] ->
+      |z <- trigger e ;; k z, w| ↦ |u', w'| ->
       (not_done w /\ exists z, w' = Obs e z /\ u' ≅ k z).
 Proof.
   intros.
@@ -564,8 +564,8 @@ Local Typeclasses Opaque equ.
 Lemma ktrans_sbisim_ret `{Encode E} {X Y}:
   forall (t : ictree E X) (k: X -> ictree E Y) t' x w w',
   t ~ Ret x ->
-  [x <- t;; k x, w] ↦ [t', w'] ->
-  [k x, w] ↦ [t', w'].
+  |x <- t;; k x, w| ↦ |t', w'| ->
+  |k x, w| ↦ |t', w'|.
 Proof.
   intros.
   apply ktrans_bind_inv in H1.
@@ -587,7 +587,7 @@ Proof.
     + inv TR2; inv Hd.
   - induction TR; ddestruction HeqV.
     + apply IHTR; auto.
-      assert(TRr': [Guard t, w] ↦ [stuck, w_])
+      assert(TRr': |Guard t, w| ↦ |stuck, w_|)
         by now apply TRr. clear TRr.
       rewrite ktrans_guard in TRr'.
       apply TRr'.
@@ -597,7 +597,7 @@ Qed.
 Local Opaque ICtree.stuck.
 Lemma ktrans_to_done `{Encode E} {X}:
   forall (t: ictree E X) (x: X) w,
-    [t, w] ↦ [ICtree.stuck, Done x] ->
+    |t, w| ↦ |ICtree.stuck, Done x| ->
     (t ~ Ret x /\ w = Pure).
 Proof.
   intros.
@@ -619,7 +619,7 @@ Qed.
 
 Lemma ktrans_to_finish `{Encode E} {X}:
   forall (t: ictree E X) (e: E) (v: encode e) (x: X) w,
-    [t, w] ↦ [ICtree.stuck, Finish e v x] ->
+    |t, w| ↦ |ICtree.stuck, Finish e v x| ->
     (t ~ Ret x /\ w = Obs e v).
 Proof.
   intros.

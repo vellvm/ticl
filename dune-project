@@ -1,6 +1,7 @@
 (lang dune 3.15)
 (using coq 0.6)
 (name coq-ticl)
+(warnings (deprecated_coq_lang_lt_08 disabled))
 
 (license "MIT")
 (authors "Eleftherios Ioannidis" "Yannick Zakowski" "Paul He")

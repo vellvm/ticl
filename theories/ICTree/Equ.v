@@ -5,7 +5,7 @@ From TICL Require Export
 From TICL Require Import
   ICTree.Core.
 
-From Coq Require Import
+From Stdlib Require Import
   Classes.Morphisms. 
 
 Import ICTreeNotations.

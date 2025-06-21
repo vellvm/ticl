@@ -4,7 +4,7 @@
 Modal logics over kripke semantics
 =========================================
 |*)
-From Coq Require Import
+From Stdlib Require Import
   Basics
   FunctionalExtensionality
   Classes.RelationPairs.
@@ -39,11 +39,11 @@ Section Shallow.
   Definition anc (p q: MP) (t: MS) (w: World E): Prop :=
     p t w /\
       can_step t w /\
-      (forall t' w', [t,w] ↦ [t', w'] -> q t' w').
+      (forall t' w', |t,w| ↦ |t', w'| -> q t' w').
   
   Definition enc(p q: MP) (t: MS) (w: World E): Prop :=
     p t w /\
-      exists t' w', [t, w] ↦ [t', w'] /\ q t' w'.
+      exists t' w', |t, w| ↦ |t', w'| /\ q t' w'.
   Hint Unfold anc enc: core.
 
   Unset Elimination Schemes.
@@ -89,7 +89,7 @@ Section Shallow.
       (forall t w, q t w -> P t w) -> (* base *)
       (forall t w, (* step *)
           p t w /\
-            (exists t' w', [t, w] ↦ [t', w']
+            (exists t' w', |t, w| ↦ |t', w'|
                       /\ euc p q t' w'
                       /\ P t' w') ->
           P t w) ->
@@ -267,23 +267,23 @@ Global Hint Resolve ticlr_finish: ticlr.
 (*| AN, WX, EN unfold |*)
 Lemma ticll_an `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (p q: ticll E),
-    <( t, w |= p AN q )> <-> <( t, w |= p)> /\ can_step t w /\ forall t' w', [t, w] ↦ [t',w'] -> <( t',w' |= q )>.
+    <( t, w |= p AN q )> <-> <( t, w |= p)> /\ can_step t w /\ forall t' w', |t, w| ↦ |t',w'| -> <( t',w' |= q )>.
 Proof. intros; auto. Qed.
 
 Lemma ticll_en `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (p q: ticll E),
-    <( t,w |= p EN q )> <-> <( t, w|= p)> /\ exists t' w', [t,w] ↦ [t',w'] /\ <( t',w' |= q )>.
+    <( t,w |= p EN q )> <-> <( t, w|= p)> /\ exists t' w', |t,w| ↦ |t',w'| /\ <( t',w' |= q )>.
 Proof. intros; auto. Qed.
 Global Hint Resolve ticll_an ticll_en: ticl.
 
 Lemma ticlr_an `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (p: ticll E) (q: ticlr E X),
-    <[ t, w |= p AN q ]> <-> <( t, w |= p)> /\ can_step t w /\ forall t' w', [t, w] ↦ [t',w'] -> <[ t',w' |= q ]>.
+    <[ t, w |= p AN q ]> <-> <( t, w |= p)> /\ can_step t w /\ forall t' w', |t, w| ↦ |t',w'| -> <[ t',w' |= q ]>.
 Proof. intros; auto. Qed.
 
 Lemma ticlr_en `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (p: ticll E) (q: ticlr E X),
-    <[ t,w |= p EN q ]> <-> <( t, w |= p )> /\ exists t' w', [t,w] ↦ [t',w'] /\ <[ t',w' |= q ]>.
+    <[ t,w |= p EN q ]> <-> <( t, w |= p )> /\ exists t' w', |t,w| ↦ |t',w'| /\ <[ t',w' |= q ]>.
 Proof. intros; eauto. Qed.
 Global Hint Resolve ticlr_an ticlr_en: ticl.
 

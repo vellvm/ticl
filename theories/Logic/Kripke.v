@@ -1,4 +1,4 @@
-From Coq Require Import
+From Stdlib Require Import
   Relations
   Program.Basics
   Classes.Morphisms.
@@ -29,13 +29,13 @@ Local Open Scope ticl_scope.
 Delimit Scope ticl_scope with ticl.
 
 (* Transition relation *)
-Notation "[ t , w ]  ↦ [ t' , w' ]" :=
+Notation "| t , w | ↦ | t' , w' | " :=
   (ktrans t w t' w')
-    (at level 78,
+    (at level 48,
       right associativity): ticl_scope.
 
 Definition can_step `{Kripke M W} {X} (m: M W _ X) (w: World W): Prop :=
-  exists m' w', [m,w] ↦ [m',w'].
+  exists m' w', | m,w |  ↦ | m',w' |.
 
 Lemma can_step_not_done `{Kripke M W} {X}: forall (t: M W _ X) w,
     can_step t w ->
@@ -70,9 +70,9 @@ Global Hint Extern 2 => world_inv: ticl.
 
 Ltac ktrans_inv :=
   match goal with
-  | [H: [?t, ?w] ↦ [?t', ?w'] |- can_step ?t ?w] =>
+  | [H: | ?t, ?w | ↦ | ?t', ?w' | |- can_step ?t ?w] =>
       exists t', w'; apply H
-  | [H: [?t, ?w] ↦ [?t', ?w'] |- not_done ?w] =>
+  | [H: | ?t, ?w | ↦ | ?t', ?w' | |- not_done ?w] =>
       apply ktrans_not_done with t t' w'; apply H
   end.
 Global Hint Extern 2 => ktrans_inv: ticl.

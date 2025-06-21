@@ -1,6 +1,6 @@
 (*| Useful instructions: Instrumentation |*)
 
-From Coq Require Import
+From Stdlib Require Import
   Relations.
 
 From TICL Require Import

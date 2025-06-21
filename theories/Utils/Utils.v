@@ -1,10 +1,10 @@
 #[global] Set Warnings "-intuition-auto-with-star".
-From Coq Require Import Fin.
-From Coq Require Import
+From Stdlib Require Import Fin.
+From Stdlib Require Import
   Classes.DecidableClass
   RelationPairs.  
-From Coq Require Export Program.Equality.
-From Coq Require Import Program.Tactics.
+From Stdlib Require Export Program.Equality.
+From Stdlib Require Import Program.Tactics.
 
 From Coinduction Require Import coinduction.
 

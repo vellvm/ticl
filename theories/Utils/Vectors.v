@@ -1,12 +1,12 @@
-From Coq Require Import
+From Stdlib Require Import
   Vector
   Fin
   Classes.SetoidClass.
 
-From Coq Require Import
+From Stdlib Require Import
      Program.Equality.
 
-From Coq Require
+From Stdlib Require
      List.
 
 From Equations Require Import Equations.

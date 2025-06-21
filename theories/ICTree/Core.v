@@ -1,5 +1,5 @@
 #[global] Set Warnings "-intuition-auto-with-star".
-From Coq Require Import
+From Stdlib Require Import
      Fin.
 
 From ExtLib Require Import

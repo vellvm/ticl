@@ -16,7 +16,7 @@ From TICL Require Import
 
 From Coinduction Require Import
   coinduction.
-From Coq Require Import Morphisms.
+From Stdlib Require Import Morphisms.
 
 Import ICTreeNotations.
 Local Open Scope ictree_scope.

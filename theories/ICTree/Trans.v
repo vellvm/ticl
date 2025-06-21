@@ -32,7 +32,7 @@ closed under [equ] rather than [eq].
 .. coq:: none
 |*)
 
-From Coq Require Import
+From Stdlib Require Import
   Basics
   Datatypes
   Fin.

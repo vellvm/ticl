@@ -3,7 +3,7 @@
 Congruence with respect a KripkeSetoid structure (simulation)
 ==============================================================
 |*)
-From Coq Require Import
+From Stdlib Require Import
   Basics
   Classes.SetoidClass
   Classes.Morphisms.

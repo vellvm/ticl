@@ -1,6 +1,6 @@
 (include_subdirs qualified)
 
 (coq.theory
- (name TICL)
- (package coq-ticl)
+ (name examples)
+ (theories TICL)
  (flags :standard -w -stdlib-vector))

@@ -1,4 +1,4 @@
-From Coq Require Import
+From Stdlib Require Import
   Basics
   Arith.Wf_nat
   Classes.Morphisms.

@@ -19,7 +19,7 @@ From ExtLib Require Export
   Structures.MonadState
   Data.Monads.StateMonad.
 
-From Coq Require Import
+From Stdlib Require Import
   Lia
   List.
 
@@ -35,73 +35,6 @@ Local Open Scope list_scope.
 Module Queue.
   Include ME.
   Infix "=?" := (rel_dec) (at level 75).
-
-  (* Ex1: Drain a queue until there is nothing left *)
-  Definition drain: CProg unit :=
-    CUntilNone CPop.
-
-  Lemma list_app_nil: forall (s: T) hs,
-      ~ [] = hs ++ [s].
-  Proof. destruct hs; intros * H; inv H; auto. Qed.
-
-  Lemma list_app_cons: forall (h s: T) ts hs,
-      h :: ts = hs ++ [s] ->
-      match hs with
-      | nil => h = s /\ ts = nil
-      | h' :: ts' => h = h' /\ ts = ts' ++ [s]
-      end.
-  Proof. destruct hs; intros; cbn in *; inv H; auto. Qed.
-
-  (*| Eventually we get [nl] (needle) to show up |*)
-  Example drain_af_pop: forall (nl: T) (q: list T),
-      <[ {instr_prog drain (q ++ [nl])}, Pure |= AF finishW= tt [] nl ]>.
-  Proof with eauto with ticl.
-    intros; unfold drain.
-    eapply aur_qprog_termination
-      with (f:=fun q => List.length q)
-           (Ri:=fun l w =>
-                  match w with
-                  | Obs (Log s') tt =>
-                      match l with
-                      | nil => nl = s'
-                      | h :: ts => exists hs, h :: ts = hs ++ [nl]
-                      end
-                  | _ => exists hs, l = hs ++ [nl]
-                  end)...
-    intros l w Hw Hd.
-    destruct l as [|h ts] eqn:Hl; subst.
-    - (* l = [] *)
-      inv Hd.
-      + (* w = Pure *)
-        destruct Hw.
-        now apply list_app_nil in H.
-      + (* w = Obs e v *)
-        destruct e, v; subst.
-        exists None, [], (Obs (Log t) tt); intuition.
-        * cleft.
-          apply axr_pop_nil...
-        * apply axr_ret...
-          econstructor.
-          exists tt; intuition.
-    - (* l = h :: ts *)
-      exists (Some h), ts, (Obs (Log h) tt); intuition.
-      + apply aur_pop_cons...
-        csplit...
-      + inv Hd.
-        * destruct Hw.
-          apply list_app_cons in H.
-          destruct x; intuition; subst...
-          destruct x; intuition; cbn.
-          -- now (exists []).
-          -- now (exists (t0 ::x)).
-        * destruct e, v, Hw.
-          apply list_app_cons in H.
-          destruct x; intuition; subst...
-          destruct x; intuition; cbn.
-          -- now (exists []).
-          -- now (exists (t1 ::x)).
-  Qed.
-  Print Assumptions drain_af_pop.
 
   (* Ex2: Rotate a queue (pop an element from head, add it to tail) *)
   Definition rotate: CProg unit :=
@@ -165,11 +98,10 @@ Module Queue.
       Nat.eqb n (S n) = false.
   Proof. induction n; auto. Qed.
 
-  Variable (nl: T).
   Local Typeclasses Transparent equ.
   Local Typeclasses Transparent sbisim.
 
-  Theorem rotate_agaf_pop: forall q i,
+  Theorem rotate_agaf_pop: forall q i (nl: T),
       find nl q = Some i ->
       <( {instr_prog rotate q}, Pure |= AG AF visW {fun h => h = nl} )>.
   Proof with eauto with ticl.
@@ -202,7 +134,7 @@ Module Queue.
           -- apply anr_pop_cons...
              csplit...
           -- eapply aur_qprog_bind_r.
-             ++ apply ticlr_ifsome_some.
+             ++ apply equivr_ifsome_some.
                 cleft.
                 apply axr_push...
              ++ cbn; cleft.
@@ -237,7 +169,7 @@ Module Queue.
                 ** apply aur_pop_cons...
                    csplit...
                 ** eapply aul_qprog_bind.
-                   --- apply ticlr_ifsome_some.
+                   --- apply equivr_ifsome_some.
                        cleft.
                        apply axr_push...
                    --- cleft.
@@ -248,7 +180,7 @@ Module Queue.
                 ** apply aur_pop_cons...
                    csplit...
                 ** eapply aur_qprog_bind_r.
-                   --- apply ticlr_ifsome_some.
+                   --- apply equivr_ifsome_some.
                        cleft.
                        apply axr_push...
                    --- cbn.
@@ -275,7 +207,7 @@ Module Queue.
           -- apply anr_pop_cons...
              csplit...
           -- eapply aur_qprog_bind_r.
-             ++ eapply ticlr_ifsome_some.
+             ++ eapply equivr_ifsome_some.
                 cleft.
                 eapply axr_push...
              ++ cbn.

@@ -1,5 +1,5 @@
 (*| Congruences [equiv_ticl] of TICL logic |*)
-From Coq Require Import
+From Stdlib Require Import
   Basics
   Classes.SetoidClass
   Classes.Morphisms.

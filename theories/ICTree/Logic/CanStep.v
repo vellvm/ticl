@@ -1,4 +1,4 @@
-From Coq Require Import
+From Stdlib Require Import
   Basics
   Init.Wf.
 
@@ -93,8 +93,8 @@ Section CanStepICtrees.
   Typeclasses Transparent equ.
   Lemma can_step_bind{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w,
       can_step (x <- t ;; k x) w <->        
-        (exists t' w', [t, w] ↦ [t', w'] /\ not_done w')
-        \/ (exists y w', [t, w] ↦ [ICtree.stuck, w']
+        (exists t' w', |t, w| ↦ |t', w'| /\ not_done w')
+        \/ (exists y w', |t, w| ↦ |ICtree.stuck, w'|
                    /\ done_eq y w'
                    /\ can_step (k y) w).
   Proof with eauto with ticl.
@@ -142,7 +142,7 @@ Section CanStepICtrees.
   Hint Resolve can_step_bind: ticl.
 
   Lemma can_step_bind_l{X Y}: forall (t t': ictree E Y) (k: Y -> ictree E X) w w',
-      [t, w] ↦ [t', w'] ->
+      |t, w| ↦ |t', w'| ->
       not_done w' ->
       can_step (x <- t ;; k x) w.
   Proof.
@@ -175,7 +175,7 @@ Section CanStepICtrees.
       * left. exists (k0 i), w; split...
       * left.
         exists (k0 v), (Obs e v); split...
-      * assert (TR': [Ret x, Pure] ↦ [ICtree.stuck, Done x])
+      * assert (TR': |Ret x, Pure| ↦ |ICtree.stuck, Done x|)
             by now apply ktrans_done.
         destruct (H1 _ _ TR').
         -- apply ktrans_done in TR' as (? & _).
@@ -183,7 +183,7 @@ Section CanStepICtrees.
            right.
            exists x, (Done x); split... 
         -- cbn in TR'; inv TR'.
-      * assert (TR': [Ret x, Obs e v] ↦ [ICtree.stuck, Finish e v x])
+      * assert (TR': |Ret x, Obs e v| ↦ |ICtree.stuck, Finish e v x|)
             by now apply ktrans_finish.
         destruct (H1 _ _ TR').
         -- apply ktrans_finish in TR' as (? & _).
@@ -209,12 +209,12 @@ Section CanStepICtrees.
            exists x, x0; split... 
       * left. exists (k0 i), w...
       * left. exists (k0 v), (Obs e v)... 
-      * assert (TR': [Ret x, Pure] ↦ [ICtree.stuck, Done x])
+      * assert (TR': |Ret x, Pure| ↦ |ICtree.stuck, Done x|)
           by now apply ktrans_done.
         destruct (H _ _ TR'); apply ktrans_done in TR' as (-> & _);
           destruct H5 as (Hp & Hs & H5);
           cdestruct Hp; inv H7.
-      * assert (TR': [Ret x, Obs e v] ↦ [ICtree.stuck, Finish e v x])
+      * assert (TR': |Ret x, Obs e v| ↦ |ICtree.stuck, Finish e v x|)
           by now apply ktrans_finish.
         destruct (H _ _ TR'); apply ktrans_finish in TR' as (-> & _);
           destruct H5 as (Hp & Hs & H5);
@@ -224,7 +224,7 @@ Section CanStepICtrees.
 
   Lemma can_step_iter{I X}: forall (k: I -> ictree E (I+X))
                               (i: I) t' w w',
-      [k i, w] ↦ [t', w'] ->
+      |k i, w| ↦ |t', w'| ->
       not_done w' ->
       can_step (ICtree.iter k i) w.
   Proof.
@@ -240,7 +240,7 @@ Section CanStepInterp.
   Context {E F S: Type} {HE: Encode E} {HF: Encode F} (h: E ~> stateT S (ictree F)) (s: S).
 
   Lemma can_step_state_bind_l{X Y}: forall (k: X -> ictree E Y) (s: S) (t: ictree E X) t' w w',
-      [interp_state h t s, w] ↦ [t', w'] ->
+      |interp_state h t s, w| ↦ |t', w'| ->
       not_done w' ->
       can_step (interp_state h (x <- t ;; k x) s) w.
   Proof.
@@ -263,7 +263,7 @@ Section CanStepInterp.
   Qed.
   
   Lemma can_step_state_iter{I X}: forall (k: I -> ictree E (I+X)) (i: I) t' w w',
-      [interp_state h (k i) s, w] ↦ [t', w'] ->
+      |interp_state h (k i) s, w| ↦ |t', w'| ->
       not_done w' ->
       can_step (interp_state h (ICtree.iter k i) s) w.
   Proof.

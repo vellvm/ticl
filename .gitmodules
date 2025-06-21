@@ -1,0 +1,3 @@
+[submodule "coinduction"]
+	path = coinduction
+	url = git@github.com:elefthei/coinduction.git

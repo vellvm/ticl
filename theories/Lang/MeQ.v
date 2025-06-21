@@ -1,4 +1,4 @@
-From Coq Require Import
+From Stdlib Require Import
   List
   Lia.
 
@@ -31,7 +31,12 @@ Local Open Scope list_scope.
 Generalizable All Variables.
 
 Module ME.
-  Context {T: Type} {HDec: RelDec (@eq T)} {HCor: RelDec_Correct HDec}.
+  #[local] Parameter (T: Type) 
+    (HDec: RelDec (@eq T)) 
+    (HCor: RelDec_Correct HDec).
+  #[global] Existing Instance HDec.
+  #[global] Existing Instance HCor.
+
   Variant queueE : Type :=
   | Push (s: T)
   | Pop.
@@ -315,5 +320,4 @@ Module ME.
         * specialize (HR _ _ H2).
           now apply aur_stuck, anr_stuck in HR.
   Qed.
-
 End ME.

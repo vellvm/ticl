@@ -18,7 +18,7 @@ From TICL Require Import
   ICTree.Logic.Ret
   Logic.Core.
 
-From Coq Require Import Arith.Wf_nat.
+From Stdlib Require Import Arith.Wf_nat.
 
 Generalizable All Variables.
 

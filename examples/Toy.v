@@ -25,7 +25,7 @@ From ExtLib Require Import
   Structures.Maps
   Data.Map.FMapAList.
 
-From Coq Require Import
+From Stdlib Require Import
   Lia
   Strings.String.
 
