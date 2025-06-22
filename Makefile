@@ -8,6 +8,9 @@ clean:
 	dune clean
 	-rm -f main.html
 
+install:
+	dune install
+
 doc:
 	dune build @doc
 	cp docs/main.html _build/default/theories/TICL.html/main.html

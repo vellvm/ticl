@@ -19,79 +19,17 @@ secure memory, and distributed consensus.
 # Building
 
 Dependencies are
-- Coq 8.19.0
+- Rocq 9.0.0
 - coq-equations
 - coq-ext-lib
 - relation-algebra
 - The coinduction library (https://github.com/elefthei/coinduction)
 
-Then use `dune build` in the root directory to build `TICL` and `dune install` to install it.
+Then use `make` in the root directory to build `TICL` and `make install` to install it.
 
-# File structure
-```
-.
-├── coq-ticl.opam
-├── _CoqProject
-├── dune-project
-├── examples
-│   ├── Election.v
-│   ├── Lock.v
-│   ├── Queue.v
-│   ├── Sec.v
-│   ├── t2
-│   │   ├── P25.v
-│   │   └── P26.v
-│   └── Tick.v
-├── LICENSE
-└── theories
-    ├── Classes.v
-    ├── dune
-    ├── Events
-    │   ├── Core.v
-    │   ├── StateE.v
-    │   └── WriterE.v
-    ├── ICTree
-    │   ├── Core.v
-    │   ├── Eq
-    │   │   ├── Bind.v
-    │   │   └── Core.v
-    │   ├── Equ.v
-    │   ├── Events
-    │   │   ├── IO.v
-    │   │   ├── State.v
-    │   │   └── Writer.v
-    │   ├── Interp
-    │   │   ├── Core.v
-    │   │   └── State.v
-    │   ├── Logic
-    │   │   ├── AF.v
-    │   │   ├── AG.v
-    │   │   ├── AX.v
-    │   │   ├── Bind.v
-    │   │   ├── CanStep.v
-    │   │   ├── EF.v
-    │   │   ├── EG.v
-    │   │   ├── EX.v
-    │   │   ├── Iter.v
-    │   │   ├── Ret.v
-    │   │   ├── Soundness.v
-    │   │   ├── State.v
-    │   │   └── Trans.v
-    │   ├── SBisim
-    │   │   ├── Core.v
-    │   │   └── SSim.v
-    │   ├── SBisim.v
-    │   └── Trans.v
-    ├── ICTree.v
-    ├── Lang
-    │   ├── Clang.v
-    │   ├── Par.v
-    │   ├── Vec.v
-    │   └── Yield.v
-    ├── Logic
-    │   ├── Congruence.v
-    │   ├── Core.v
-    │   ├── Semantics.v
-```
+# Documentation
+
+Use `make doc` in the root directory to build the documentation. The documentation is accessed
+by `main.html` in the root of the repository. The documentation is generated using coqdoc.
 
 
