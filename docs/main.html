@@ -124,13 +124,13 @@
     <h2 id="basic-definitions">1. Basic Definitions</h2>
     <p>This section outlines fundamental definitions used throughout the proofs.</p>
     <ul>
-        <li><a href="TICL.ICTree.Core.html#ictreeF">ICTree</a>: The core interactive computation tree definition.</li>
-        <li><a href="TICL.ICTree.Logic.Bind.html#bind">bind</a>: Definition of bind for ICTree.</li>
-        <li><a href="TICL.ICTree.Logic.Iter.html#iter">iter</a>: Definition of iter for ICTree.</li>
-        <li><a href="TICL.ICTree.Logic.State.html#stuck">stuck</a>: Definition of stuck for ICTree.</li>
+        <li><a href="TICL.ICTree.Core.html#ictreeF">ictree</a>: The core interaction and choice tree definition.</li>
+        <li><a href="TICL.ICTree.Core.html#ICtree.bind">bind</a>: Definition of bind for ICTree.</li>
+        <li><a href="TICL.ICTree.Core.html#ICtree.iter">iter</a>: Definition of iter for ICTree.</li>
+        <li><a href="TICL.ICTree.Core.html#ICtree.stuck">stuck</a>: Definition of stuck for ICTree.</li>
         <li><a href="TICL.ICTree.Interp.Core.html#interp">interp</a>: Definition of interpretation function.</li>
         <li><a href="TICL.ICTree.Interp.State.html#interp_state">interp_state</a>: Definition of interpretation function for ICTree with state events.</li>
-        <li><a href="TICL.ICTree.Logic.Trans.html#ktrans">ktrans</a>: Definition of ktrans (Kripke transition).</li>
+        <li><a href="TICL.ICTree.Logic.Trans.html#ktrans_">ktrans</a>: Definition of ktrans (Kripke transition).</li>
         <li><a href="TICL.Logic.Semantics.html#auc">auc</a>: Inductive definition for All-Until (AU) logic.</li>
         <li><a href="TICL.Logic.Semantics.html#euc">euc</a>: Inductive definition for Exists-Until (EU) logic.</li>
         <li><a href="TICL.Logic.Semantics.html#anc">anc</a>: Definition for All-Next (AN) logic.</li>
@@ -426,30 +426,20 @@
         <tbody>
             <tr>
                 <td>Ret</td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#aul_state_ret">aul_state_ret</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#ag_state_ret">ag_state_ret</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#anl_state_ret">anl_state_ret</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#eul_state_ret">eul_state_ret</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#eg_state_ret">eg_state_ret</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#enl_state_ret">enl_state_ret</a></div></td>
-            </tr>
-            <tr>
-                <td>Vis</td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#aul_state_vis">aul_state_vis</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#ag_state_vis">ag_state_vis</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#anl_state_vis">anl_state_vis</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#eul_state_vis">eul_state_vis</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#eg_state_vis">eg_state_vis</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#enl_state_vis">enl_state_vis</a></div></td>
-            </tr>
-            <tr>
-                <td>Br</td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#aul_state_br">aul_state_br</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#ag_state_br">ag_state_br</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#anl_state_br">anl_state_br</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#eul_state_br">eul_state_br</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#eg_state_br">eg_state_br</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#enl_state_br">enl_state_br</a></div></td>
+                <td>
+                    <div class="theorem-link-group">
+                        <a href="TICL.ICTree.Logic.State.html#aul_state_ret">aul_state_ret</a>
+                        <a href="TICL.ICTree.Logic.State.html#aur_state_ret">aur_state_ret</a>
+                    </div>
+                </td>
+                <td>-</td>
+                <td>
+                    <div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#axr_state_ret">axr_state_ret</a></div>
+                </td>
+                <td>-</td>
+                <td>
+                    <div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#exr_state_ret">exr_state_ret</a></div>
+                </td>
             </tr>
             <tr>
                 <td>bind</td>
@@ -547,31 +537,32 @@
                 </td>
             </tr>
             <tr>
-                <td>stuck</td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#aul_state_stuck">aul_state_stuck</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#ag_state_stuck">ag_state_stuck</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#anl_state_stuck">anl_state_stuck</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#eul_state_stuck">eul_state_stuck</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#eg_state_stuck">eg_state_stuck</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#enl_state_stuck">enl_state_stuck</a></div></td>
-            </tr>
-            <tr>
                 <td>get</td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#aur_state_get">aur_state_get</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#ag_state_get">ag_state_get</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#anr_state_get">anr_state_get</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#eul_state_get">eul_state_get</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#eg_state_get">eg_state_get</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#enl_state_get">enl_state_get</a></div></td>
+                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#aur_get">aur_get</a></div></td>
+                <td>-</td>
+                <td>
+                    <div class="theorem-link-group">
+                        <a href="TICL.ICTree.Logic.State.html#anr_get">anr_get</a>
+                        <a href="TICL.ICTree.Logic.State.html#axr_get">axr_get</a>
+                    </div>
+                </td>
+                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#eur_get">eur_get</a></div></td>
+                <td>-</td>
+                <td>
+                    <div class="theorem-link-group">
+                        <a href="TICL.ICTree.Logic.State.html#enr_get">enr_get</a>
+                        <a href="TICL.ICTree.Logic.State.html#exr_get">exr_get</a>
+                    </div>
+                </td>
             </tr>
             <tr>
                 <td>put</td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#aur_state_put">aur_state_put</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#ag_state_put">ag_state_put</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#anr_state_put">anr_state_put</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#eul_state_put">eul_state_put</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#eg_state_put">eg_state_put</a></div></td>
-                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#enl_state_put">enl_state_put</a></div></td>
+                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#aur_put">aur_put</a></div></td>
+                <td>-</td>
+                <td>-</td>
+                <td><div class="theorem-link-group"><a href="TICL.ICTree.Logic.State.html#eur_put">eur_put</a></div></td>
+                <td>-</td>
+                <td>-</td>
             </tr>
         </tbody>
     </table>
@@ -579,8 +570,8 @@
     <h2 id="strong-bisimulation">4. Strong Bisimulation Preserves Ticl</h2>
     <p>This section lists theorems related to strong bisimulation and its preservation of Ticl properties.</p>
     <ul>
-        <li><a href="TICL.ICTree.Logic.Setoid.html#proper_entailsL_meq">proper_entailsL_meq</a>: Strong bisimulation implies left Ticl equivalence.</li>
-        <li><a href="TICL.ICTree.Logic.Setoid.html#proper_entailsR_meq">proper_entailsR_meq</a>: Strong bisimulation implies right Ticl equivalence.</li>
+        <li><a href="TICL.Logic.Setoid.html#proper_entailsL_meq">proper_entailsL_meq</a>: Strong bisimulation implies left Ticl equivalence.</li>
+        <li><a href="TICL.Logic.Setoid.html#proper_entailsR_meq">proper_entailsR_meq</a>: Strong bisimulation implies right Ticl equivalence.</li>
         <li><a href="TICL.ICTree.Logic.Trans.html#KripkeSetoidSBisim">KripkeSetoidSBisim</a>: Kripke setoid for ictrees and strong bisimulation.</li>
     </ul>
 

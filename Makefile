@@ -6,9 +6,12 @@ build:
 
 clean:
 	dune clean
+	-rm -f main.html
 
 doc:
 	dune build @doc
+	cp docs/main.html _build/default/theories/TICL.html/main.html
+	ln -sf _build/default/theories/TICL.html/main.html main.html
 
 depgraph::
 	coqdep *.v -dumpgraph depgraph.dot 1>/dev/null 2>/dev/null

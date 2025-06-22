@@ -1077,7 +1077,20 @@ Section StateELemmas.
     rewrite interp_state_get.
     apply exr_ret... 
   Qed.
-  
+ 
+  (** [get] commands terminate in one step and return the initial state. *)
+  Lemma eur_get: forall (w: WorldW S) ψ R,
+      R (s,s) w ->
+      not_done w ->
+      <[ {instr_stateE get s}, w |= ψ EU EX done R ]>.
+  Proof with eauto with ticl.
+    intros.
+    unfold instr_stateE.
+    rewrite interp_state_get.
+    cleft...
+    apply exr_ret... 
+  Qed.
+
   (** [put] commands terminate in two steps, first the [log] event is executed and then the [Ret] is executed. *)
   Lemma eur_put: forall (s': S) (w: WorldW S) ψ R,
       <( {log s'}, {w} |= ψ )> ->
