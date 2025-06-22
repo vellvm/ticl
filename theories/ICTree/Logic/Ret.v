@@ -19,9 +19,12 @@ Import ICTreeNotations TiclNotations.
 Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 
+(** * Ret lemma for prefix formulas *)
 Section RetLemmas.
   Context {E: Type} {HE: Encode E}.
 
+  (** [Ret] nodes are prefix formula equivalent, regardless of the return value.
+      Proof is by induction on the formula. *)
   Theorem ticll_ret_equiv{X Y}: forall (x: X) (y: Y) (φ: ticll E) w,
       <( {Ret x}, w |= φ )> <-> <( {Ret y}, w |= φ )>.
   Proof with auto with ticl.    

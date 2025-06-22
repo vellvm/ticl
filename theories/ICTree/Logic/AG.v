@@ -22,10 +22,12 @@ Import ICtree ICTreeNotations TiclNotations.
 Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 
-(* Lemmas on the structure of ictree [t] and AG proofs *)
+(** * Lemmas on the structure of ictrees and the always [AG] operator *)
+(** The lemmas in this section internalize coinductive proof techniques, most notably the up-to-bind-ag lemmas. *)
 Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
+  (** Vis iff lemma for always [AG] *)
   Lemma ag_vis: forall e (k: encode e -> ictree E X)
                   (v : encode e) w φ,
       (<( {Vis e k}, w |= φ )> /\ forall v, <( {k v}, {Obs e v} |= AG φ )>) <->
@@ -43,7 +45,8 @@ Section BasicLemmas.
       intro v'.
       apply H, ktrans_vis...
   Qed.
-  
+
+  (** Branch iff lemma for always [AG] *)
   Lemma ag_br: forall n (k: fin' n -> ictree E X) w φ,
       (<( {Br n k}, w |= φ )> /\ forall (i: fin' n), <( {k i}, w |= AG φ )>) <->
         <( {Br n k}, w |= AG φ )>.
@@ -62,6 +65,7 @@ Section BasicLemmas.
       apply H, ktrans_br...
   Qed.
 
+  (** Stuckness lemma for always [AG]: no AG formula for stuck as it doesn't step *)
   Lemma ag_stuck: forall w φ,
       ~ <( {stuck: ictree E X}, w |= AG φ )>.
   Proof.
@@ -70,6 +74,7 @@ Section BasicLemmas.
     now apply can_step_stuck in Hs.
   Qed.
 
+  (** Return lemma for always [AG]: no AG formula for return as it doesn't step always *)
   Lemma ag_ret: forall (x: X) w φ,      
       ~ <( {Ret x}, w |= AG φ )>.
   Proof.

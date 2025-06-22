@@ -25,7 +25,8 @@ Local Open Scope type_scope.
 
 Generalizable All Variables.
 
-(*| Relation [meq] over [M X] is a Kripke setoid if
+(** * Kripke setoids *)
+(** Relation [meq] over [M X] is a Kripke setoid if
     the following square commutes
 
    [s, w]   ↦   [s', w']
@@ -34,7 +35,12 @@ Generalizable All Variables.
      |             |
      v             v
    [t, w]   ↦   [t', w']
-|*)  
+*)  
+(** [KripkeSetoid] is a class that defines a Kripke setoid over a Kripke structure.
+Meaning a kripke structure equipped with an equivalence relation. This is important
+as we will show the equivalence relation preserves all Ticl specifications, a strong result.
+This is akin to the result that strong bisimulation preserves all CTL specifications, but stronger
+as Ticl extends CTL with post-conditions in suffix formulas. *)
 Class KripkeSetoid (M: forall E, Encode E -> Type -> Type) (E: Type) {HE: Encode E}
   {K: Kripke M E} X (meq: relation (M E HE X)) {Eqm: Equivalence meq} :=
   ktrans_semiproper : forall (t s s': M E HE X) w w',
@@ -63,7 +69,7 @@ Ltac ktrans_equ TR :=
           end
     end.
 
-(*| Models are setoids over TICL |*)
+(** * Models are setoids over TICL *)
 Section EquivSetoid.
   Context `{K: Kripke M E} {X} {meq: relation (M E HE X)} {Eqm: Equivalence meq}
     {KS: KripkeSetoid M E X meq}.
@@ -83,8 +89,7 @@ Section EquivSetoid.
       now (exists y', w_).
   Qed.
 
-  (*| Start building the proof that
-      [entailsF] is a congruence with regards to [meq] |*)
+  (** * [entailsF] is a congruence with regards to [meq] *)
   Global Add Parametric Morphism {φ: World E -> Prop}: (fun _ => φ)
       with signature meq ==> eq ==> iff as meq_proper_fun.
   Proof. intros; split; auto. Qed.
@@ -93,10 +98,10 @@ Section EquivSetoid.
         with signature meq ==> eq ==> iff as meq_proper_done.
   Proof. intros; rewrite unfold_entailsR; reflexivity. Qed.
 
-  (* Placeholder for properness, to be proved by induction *)
+  (** Placeholder for properness, to be proved by induction and plugged in later. *)
   Context {P: MP} {HP: Proper (meq ==> eq ==> iff) P}.
   
-  (*| [meq] closure enchancing function |*)
+  (** [meq] closure enchancing function. *)
   Variant mequ_clos_body(R : MP) : MP :=
     | mequ_clos_ctor : forall t0 w0 t1 w1
                          (Heqm : meq t0 t1)
@@ -110,6 +115,7 @@ Section EquivSetoid.
     {| body := mequ_clos_body |}.
   Next Obligation. repeat red; intros; destruct H0; subst; eauto. Qed.
 
+  (** [meq] is under the coinductive companion [agct] *)
   Lemma mequ_clos_agc:
     mequ_clos <= agct P.
   Proof.
@@ -125,6 +131,7 @@ Section EquivSetoid.
       eapply mequ_clos_ctor with (t1:=z); eauto. 
   Qed.
 
+  (** [meq] is under the coinductive companion [egct] *)
   Lemma mequ_clos_egc:
     mequ_clos <= egct P.
   Proof.
@@ -140,6 +147,7 @@ Section EquivSetoid.
     now symmetry.
   Qed.
 
+  (** [agct] is a congruence with regards to [meq] *)
   Global Add Parametric Morphism RR: (agct P RR) with signature
          (meq ==> eq ==> iff) as proper_agt_equ.
   Proof.
@@ -148,7 +156,8 @@ Section EquivSetoid.
       now symmetry.
     - eapply mequ_clos_ctor with (t1:=t'); eauto.
   Qed.
-  
+
+  (** [agcT] is a congruence with regards to [meq] *)
   Global Add Parametric Morphism RR f: (agcT P f RR)
          with signature (meq ==> eq ==> iff) as proper_agT_equ.
   Proof.
@@ -158,6 +167,7 @@ Section EquivSetoid.
     - eapply mequ_clos_ctor with (t1:=t'); eauto.
   Qed.
   
+  (** [agc] is a congruence with regards to [meq] *)
   Global Add Parametric Morphism: (agc P)
          with signature (meq ==> eq ==> iff) as proper_ag_equ.
   Proof.
@@ -167,6 +177,7 @@ Section EquivSetoid.
     - eapply mequ_clos_ctor with (t1:=t'); eauto.
   Qed.      
 
+  (** [egct] is a congruence with regards to [meq] *)
   Global Add Parametric Morphism RR: (egct P RR)
          with signature (meq ==> eq ==> iff) as proper_egt_equ.
   Proof.
@@ -176,6 +187,7 @@ Section EquivSetoid.
     - eapply mequ_clos_ctor with (t1:=t'); eauto.
   Qed.
 
+  (** [egcT] is a congruence with regards to [meq] *)
   Global Add Parametric Morphism RR f: (egcT P f RR)
          with signature (meq ==> eq ==> iff) as proper_egT_equ.
   Proof.
@@ -185,6 +197,7 @@ Section EquivSetoid.
     - eapply mequ_clos_ctor with (t1:=t'); eauto.
   Qed.
   
+  (** [egc] is a congruence with regards to [meq] *)
   Global Add Parametric Morphism: (egc P)
          with signature (meq ==> eq ==> iff) as proper_er_equ.
   Proof.
@@ -194,9 +207,10 @@ Section EquivSetoid.
     - eapply mequ_clos_ctor with (t1:=t'); eauto.
   Qed.
 
-  (*| Binary modalities AN, EN, AU, EU |*)
+  (** * Congruence with respect to binary modalities AN, EN, AU, EU *)
   Context {Q: MP} {HQ: Proper (meq ==> eq ==> iff) Q}.
 
+  (** [anc] is a congruence with regards to [meq] *)
   Global Add Parametric Morphism: (anc P Q)
          with signature (meq ==> eq ==> iff) as proper_ax_equ.
   Proof.
@@ -213,6 +227,7 @@ Section EquivSetoid.
       now rewrite EQ.
   Qed.      
     
+  (** [enc] is a congruence with regards to [meq] *)
   Global Add Parametric Morphism: (enc P Q)
          with signature (meq ==> eq ==> iff) as proper_ex_equ.
   Proof.
@@ -228,6 +243,7 @@ Section EquivSetoid.
         now rewrite <- EQ.
   Qed.
   
+  (** [auc] is a congruence with regards to [meq] *)
   Global Add Parametric Morphism: (auc P Q)
         with signature (meq ==> eq ==> iff) as proper_au_equ.
   Proof.
@@ -260,6 +276,7 @@ Section EquivSetoid.
           now symmetry.
   Qed.
 
+  (** [euc] is a congruence with regards to [meq] *)
   Global Add Parametric Morphism: (euc P Q)
         with signature (meq ==> eq ==> iff) as proper_eu_equ.
   Proof.
@@ -286,6 +303,8 @@ Section EquivSetoid.
 
 End EquivSetoid.
 
+(** * Congruence with respect to TICL formulas *)
+(** [entailsL] is a congruence with regards to [meq]. This is the main result of this file. *)
 Global Add Parametric Morphism `{KS: KripkeSetoid M E X meq} (φ: ticll E) :
   (entailsL X φ)
        with signature (meq ==> eq  ==> iff) as proper_entailsL_meq.
@@ -325,6 +344,7 @@ Proof.
     + right; now rewrite (IHφ2 _ _ Heq).
 Qed.
 
+(** [entailsR] is a congruence with regards to [meq]. *)
 Global Add Parametric Morphism `{KS: KripkeSetoid M E X meq} (φ: ticlr E X) :
   (entailsR φ)
        with signature (meq ==> eq  ==> iff) as proper_entailsR_meq.

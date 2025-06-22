@@ -19,7 +19,8 @@ Local Open Scope ictree_scope.
 
 Generalizable All Variables.
 
-(*| Up-to bind principle (unary) |*)
+(** * Up-to bind principle for unary relation [R] *)
+(** This lemma allows us to distribute a unary relation [R] over a bind. *)
 Section Bind_ctx1.
   Context {E:Type} `{HE: Encode E} {X Y: Type}.
 
@@ -29,6 +30,7 @@ Section Bind_ctx1.
        (fun x => sup S
                 (fun k => (fun t => t = bind x k)))).
     
+  (** [leq_bind_ctx1] specifies relations above the context *)
   Lemma leq_bind_ctx1:
     forall R S S', @bind_ctx1 R S <= S' <->
                 (forall x, R x -> forall k, S k -> S' (bind x k)).
@@ -39,6 +41,7 @@ Section Bind_ctx1.
     firstorder congruence.
   Qed.
   
+  (** [in_bind_ctx1] specifies how to populate the context *)
   Lemma in_bind_ctx1 (R : ictree E X -> Prop) (S : (X -> ictree E Y) -> Prop) x f :
     R x -> S f -> @bind_ctx1 R S (bind x f).
   Proof. intros. epose proof (proj1 (leq_bind_ctx1 R S _)). apply H1; auto. Qed.
@@ -46,10 +49,9 @@ Section Bind_ctx1.
   #[global] Opaque bind_ctx1.
 End Bind_ctx1.
 
-(*|
-Up-to bind principle (binary)
-~~~~~~~~~~~~~~~~~~~~
-Consider two computations explicitely built as sequences
+(** * Up-to bind principle (binary) *)
+
+(** Consider two computations explicitely built as sequences
 [t >>= k] and [u >>= l]. When trying to prove that they are
 bisimilar via a coinductive proof, one is faced with a goal
 of the shape:
@@ -66,29 +68,25 @@ More formally, this corresponds as always to establishing that
 the appropriate function is a valid enhancement. The function
 in question here is:
 f R = {(bind t k, bind u l) | equ SS t u /\ forall x y, SS x y -> R (k x) (l x)}
-
-|*)
+*)
 
 Section Bind_ctx2.
   Context {E F :Type} `{HE: Encode E} `{HF: Encode F} {X X' Y Y': Type}.
 
-  (*|
-Most general contextualisation function associated to bind].
-Can be read more digestly as, where R is a relation on ictrees
-(the prefixes of the binds) and S on the continuations:
-bind_ctx2 R S = {(bind t k, bind t' k') | R t t' /\ S k k'}
-
-Note that at this point, this is more general that what we are
-interested in: we will specialize [R] and [S] for our purpose,
-first here w.r.t. to [equ], later w.r.t. to other relations over
-[ictree]s.
-
-Remark: the Coinduction library provides generic binary contexts
-[binary_ctx], but whose both arguments are at the same types.
-We could provide an heterogeneous version of [binary_ctx] and have
-[bind_ctx] be an instance of it to avoid having to rethink in terms
-of [sup_all] locally.
-|*)
+  (** Most general contextualisation function associated to bind].  Can be read
+  more digestly as, where R is a relation on ictrees (the prefixes of the binds)
+  and S on the continuations: bind_ctx2 R S = {(bind t k, bind t' k') | R t t'
+  /\ S k k'}
+  
+  Note that at this point, this is more general that what we are interested in:
+  we will specialize [R] and [S] for our purpose, first here w.r.t. to [equ],
+  later w.r.t. to other relations over [ictree]s.
+  
+  Remark: the Coinduction library provides generic binary contexts [binary_ctx],
+  but whose both arguments are at the same types.  We could provide an
+  heterogeneous version of [binary_ctx] and have [bind_ctx2] be an instance of it
+  to avoid having to rethink in terms of [sup_all] locally.
+  *)
 
   Definition bind_ctx2
     (R: rel (ictree E X) (ictree F X'))
@@ -100,11 +98,9 @@ of [sup_all] locally.
                                         (fun k' =>
                                            pairH (bind x k) (bind x' k'))))).
 
-  (*|
-Two lemmas to interact with [bind_ctx] before making it opaque:
+  (** Two lemmas to interact with [bind_ctx2] before making it opaque:
 - [leq_bind_ctx] specifies relations above the context
-- [in_bind_ctx] specifies how to populate it
-|*)
+- [in_bind_ctx] specifies how to populate it *)
   Lemma leq_bind_ctx2:
     forall R S S', bind_ctx2 R S <= S' <->
                 (forall x x', R x x' -> forall k k', S k k' -> S' (bind x k) (bind x' k')).
@@ -126,28 +122,18 @@ Two lemmas to interact with [bind_ctx] before making it opaque:
 
 End Bind_ctx2.
 
-(*|
+(**
 Specialization of [bind_ctx2] to the [equ]-based closure we are
 looking for, and the proof of validity of the principle. As
 always with the companion, we prove that it is valid by proving
 that it si below the companion.
-|*)
-
-
-(*|
-Specialization of [bind_ctx2] to the [equ]-based closure we are
-looking for, and the proof of validity of the principle. As
-always with the companion, we prove that it is valid by proving
-that it si below the companion.
-|*)
+*)
 Section Equ_bind_ctx.
 
   Context `{HE: Encode E} {X1 X2 Y1 Y2: Type}.
 
-  (*|
-Specialization of [bind_ctx2] to a function acting with [equ] on the bound value,
-and with the argument (pointwise) on the continuation.
-|*)
+  (** Specialization of [bind_ctx2] to a function acting with [equ] on the bound value,
+  and with the argument (pointwise) on the continuation. *)
   Program Definition bind_ctx_equ r: mon (rel (ictree E Y1) (ictree E Y2)) :=
     {|body := fun R => @bind_ctx2 E E HE HE X1 X2 Y1 Y2 (equ r) (pointwise r R) |}.
   Next Obligation.
@@ -158,7 +144,7 @@ and with the argument (pointwise) on the continuation.
     apply H0.
   Qed.
 
-  (*| The resulting enhancing function gives a valid up-to technique |*)
+  (** The resulting enhancing function gives a valid up-to technique *)
   Lemma bind_ctx_equ_t (SS : rel X1 X2) (RR : rel Y1 Y2): bind_ctx_equ SS <= et RR.
   Proof.
     apply Coinduction. intros R. apply (leq_bind_ctx2 _).
@@ -184,17 +170,13 @@ and with the argument (pointwise) on the continuation.
 End Equ_bind_ctx.
 
 
-(*|
-Expliciting the reasoning rule provided by the up-to principle.
-|*)
-
+(** Expliciting the reasoning rule provided by the up-to principle. *)
 Lemma et_clo_bind `{HE: Encode E} (X1 X2 Y1 Y2 : Type) :
 	forall (t1 : ictree E X1) (t2 : ictree E X2) (k1 : X1 -> ictree E Y1) (k2 : X2 -> ictree E Y2)
     (S : rel X1 X2) (R : rel Y1 Y2) RR,
 		equ S t1 t2 ->
     (forall x1 x2, S x1 x2 -> et R RR (k1 x1) (k2 x2)) ->
-    et R RR (bind t1 k1) (bind t2 k2)
-.
+    et R RR (bind t1 k1) (bind t2 k2).
 Proof.
   intros.
   apply (ft_t (bind_ctx_equ_t S R)).
@@ -205,8 +187,7 @@ Lemma et_clo_bind_eq `{HE: Encode E} (X Y1 Y2 : Type) :
 	forall (t : ictree E X) (k1 : X -> ictree E Y1) (k2 : X -> ictree E Y2)
     (R : rel Y1 Y2) RR,
     (forall x, et R RR (k1 x) (k2 x)) ->
-    et R RR (bind t k1) (bind t k2)
-.
+    et R RR (bind t k1) (bind t k2).
 Proof.
   intros * EQ.
   apply (ft_t (bind_ctx_equ_t (X2 := X) eq R)).
@@ -216,10 +197,8 @@ Proof.
   apply EQ.
 Qed.
 
-(*|
-And in particular, we get the proper instance justifying rewriting [equ]
-to the left of a [bind].
-|*)
+(** And in particular, we get the proper instance justifying rewriting [equ]
+to the left of a [bind]. *)
 #[global] Instance bind_equ_cong :
  forall `{HE: Encode E} (X Y : Type) (R : rel Y Y) RR,
    Proper (equ (@eq X) ==> pointwise_relation X (et R RR) ==> et R RR) (@bind E HE X Y).
@@ -229,9 +208,7 @@ Proof.
   intros ? ? <-; auto.
 Qed.
 
-(*|
-Specializing these congruence lemmas at the [sbisim] level for equational proofs
-|*)
+(** Specializing these congruence lemmas at the [sbisim] level for equational proofs *)
 Lemma equ_clo_bind `{HE: Encode E} (X1 X2 Y1 Y2 : Type) :
 	forall (t1 : ictree E X1) (t2 : ictree E X2) (k1 : X1 -> ictree E Y1) (k2 : X2 -> ictree E Y2)
     (S : rel X1 X2) (R : rel Y1 Y2),
@@ -294,15 +271,13 @@ Ltac upto_bind_equ :=
   __upto_bind_equ eq; [reflexivity | intros ? ? <-].
 
 
-(*|
-Up-to [equ eq] bisimulations
-----------------------------
-The transitivity of the [et R] gives us "equ bisimulation up-to equ". Looking forward,
-in order to establish "up-to equ" principles for other bisimulations, we define here the
-associated enhancing function.
-|*)
+(** ** Up-to [equ eq] bisimulations *)
 
-(*| Binary enchancing function up-to-equ |*)
+(** The transitivity of the [et R] gives us "equ bisimulation up-to equ". Looking forward,
+in order to establish "up-to equ" principles for other bisimulations, we define here the
+associated enhancing function. *)
+
+(** Binary enchancing function up-to-equ *)
 Variant equ_clos_body {E F X1 X2} {HE: Encode E} {HF: Encode F}
   (R : rel (ictree E X1) (ictree F X2)) : (rel (ictree E X1) (ictree F X2)) :=
   | Equ_clos : forall t t' u' u
@@ -318,17 +293,15 @@ Next Obligation.
   inv H0; econstructor; eauto.
 Qed.
 
-(*|
-Sufficient condition to prove compatibility only over the simulation
-|*)
+(** Sufficient condition to prove compatibility only over the simulation *)
 Lemma equ_clos2_sym {E C X} : compat converse (@equ_clos E E C C X X).
 Proof.
   intros R t u EQ; inv EQ.
   apply Equ_clos with u' t'; intuition.
 Qed.
 
-(*| Even eta-laws for coinductive data-structures are not valid w.r.t. to [eq]
-  in Coq. We however do recover them w.r.t. [equ]. |*)
+(** Even eta-laws for coinductive data-structures are not valid w.r.t. to [eq]
+  in Coq. We however do recover them w.r.t. [equ]. *)
 Lemma ictree_eta {E R} {HE: Encode E} (t : ictree E R) : t ≅ go (observe t).
 Proof. step; now cbn. Qed.
 
@@ -360,14 +333,14 @@ Lemma unfold_iter {E R I} {HE: Encode E} (step : I -> ictree E (I + R)) i:
   iter step i ≅ iter_ step i.
 Proof. step; now cbn. Qed.
 
-(*| Monadic laws |*)
+(** Monadic laws for [equ] *)
 Lemma bind_ret_l {E X Y} {HE: Encode E}: forall (x : X) (k : X -> ictree E Y),
     Ret x >>= k ≅ k x.
 Proof.
   intros; now rewrite unfold_bind.
 Qed.
 
-(* Giving in to [subst'] anger and defining the monad lemmas again *)
+(** Giving in to [subst'] anger and defining the monad lemmas again *)
 Lemma subst_ret_l {E X Y} {HE: Encode E}: forall (x : X) (k : X -> ictree E Y),
     subst' k (RetF x) ≅ k x.
 Proof.
@@ -406,7 +379,7 @@ Proof.
   - constructor; intros; apply CIH.
 Qed.
 
-(*| Structural rules |*)
+(** Structural rules for [equ] *)
 Lemma bind_vis {E Y Z} (e : E) {HE: Encode E} (k : encode e -> ictree E Y) (g : Y -> ictree E Z):
   Vis e k >>= g ≅ Vis e (fun x => k x >>= g).
 Proof.
@@ -513,7 +486,7 @@ Proof.
   - rewrite bind_vis in H. step in H. inv H.
 Qed.
 
-(*| Map |*)
+(** Map *)
 Lemma map_map {E R S T} {HE: Encode E}: forall (f : R -> S) (g : S -> T) (t : ictree E R),
     map g (map f t) ≅ map (fun x => g (f x)) t.
 Proof.
@@ -539,7 +512,7 @@ Proof.
   rewrite bind_ret_l; reflexivity.
 Qed.
 
-(*| Forever |*)
+(** Forever unfolding lemma *)
 Lemma unfold_forever {E X Y} {HE: Encode E}: forall (k: X -> ictree E X)(i: X),
     forever Y k i ≅ r <- k i ;; Guard (forever Y k r).
 Proof.
@@ -566,6 +539,7 @@ Proof.
   exact (@br_equ' n E HE R k k' eq).
 Qed.
 
+(** Proper instance for [forever] *)
 #[global] Instance proper_equ_forever{E X Y} {HE: Encode E}:
   Proper (pointwise_relation X (@equ E HE X X eq) ==> eq ==> @equ E HE Y Y eq) (forever Y).
 Proof.
@@ -577,6 +551,7 @@ Proof.
   econstructor; apply CIH.
 Qed.
 
+(** Proper instance for [map] *)
 #[global] Instance proper_equ_map{E X Y} {HE: Encode E} (f: X -> Y):
   Proper (equ eq ==> equ eq) (map f).
 Proof.
@@ -585,7 +560,7 @@ Proof.
   now rewrite H.
 Qed.
 
-
+(** [resumICtree] preserves [equ] *)
 #[global] Instance proper_equ_resumICtree {X} `{Encode E1} `{Encode E2}
   `{ReSum E1 E2} `{ReSumRet E1 E2}:
   Proper (equ eq ==> equ eq) (@resumICtree E1 E2 _ _ _ _ X).
@@ -596,6 +571,7 @@ Proof with auto.
   step in H6; cbn in H6; inv H6; constructor...
 Qed.
 
+(** Resum unfolding lemma *)
 Lemma resumICtree_bind{E1 E2 : Type} `{ReSumRet E1 E2}
   {X Y}: forall (t: ictree E1 X) (k : X -> ictree E1 Y),
   resumICtree (x <- t ;; k x) ≅ x <- resumICtree t ;; resumICtree (k x).
@@ -625,7 +601,7 @@ Proof with eauto.
     apply CIH.
 Qed.  
 
-(*| Inversion of [≅] hypotheses |*)
+(** Inversion of [≅] hypotheses *)
 Ltac subst_hyp_in EQ h :=
   match type of EQ with
   | ?x = ?x => clear EQ

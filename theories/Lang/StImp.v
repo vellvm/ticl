@@ -34,12 +34,24 @@ Local Open Scope nat_scope.
 
 Generalizable All Variables.
 
+(** * StImp: A simple imperative language with string-indexed variables *)
+(** In this module we define a simple imperative language with string-indexed variables.
+    The language is denoted in terms of a set of events [stateE], which include [get] and [put] events.
+    The semantics of those events are given in terms of instrumentation handler [h_stateE], which is a state monad
+    that also keeps track of the context, which is a map from strings to natural numbers.
+
+    This is a simple deep-embedding of a simple imperative language, which allows us to prove structural versions of
+    our sequential and loop lemmas from [State.v], over standard program constructs (assignments, conditionals, sequences, etc.).
+*)
 Module StImp.
+  (** A context is a map from strings to natural numbers *)
   Definition Ctx := alist string nat.
   Definition Mem := stateE Ctx.
   Import Ctx.
   Opaque lookup.
   
+  (** * The syntax of StImp programs *)
+  (** It includes [CVar], [CConst], [CAdd], [CSub], [CEq], [CLe], [CLt], [CAssgn], [CIf], [CWhile], [CSkip], [CSeq] commands. *)
   Inductive CExp :=
   | CVar (x: string)
   | CConst (z: nat)
@@ -61,6 +73,7 @@ Module StImp.
   | CSkip
   | CSeq (l r: CProg).
 
+  (** Denotation of expressions to [ictree] *)
   Fixpoint cdenote_exp(e: CExp): ictree Mem nat :=
     match e with
     | CVar v => m <- get ;;
@@ -79,6 +92,7 @@ Module StImp.
         Ret (x - y)
     end.
 
+  (** Denotation of boolean comparison expressions to [ictree] *)
   Definition cdenote_comp(c: CComp): ictree Mem bool :=
     match c with
     | CEq a b =>
@@ -95,6 +109,7 @@ Module StImp.
         Ret (x <? y)
     end.
 
+  (** Denotation of programs to [ictree] *)
   Fixpoint cdenote_prog (s: CProg): ictree Mem unit :=
     match s with
     | CAssgn x e =>
@@ -122,7 +137,7 @@ Module StImp.
         cdenote_prog r
     end.
 
-  (* Instrumentation of expressions, comparisons and programs *)
+  (** Instrumentation of expressions, comparisons and programs *)
   Definition instr_exp(e: CExp) (ctx: Ctx) : ictreeW Ctx (nat * Ctx) :=
     instr_stateE (cdenote_exp e) ctx.
 
@@ -132,6 +147,7 @@ Module StImp.
   Definition instr_prog(p: CProg) (ctx: Ctx) : ictreeW Ctx (unit * Ctx) :=
     instr_stateE (cdenote_prog p) ctx.
   
+  (** * Notations for StImp programs *)
   Declare Scope stimp_scope.
   Local Open Scope stimp_scope.
   Local Open Scope string_scope.
@@ -207,7 +223,7 @@ Module StImp.
                        fun 'tt => assert1 x ctx (fun v => v >= c))))
       (in custom ticll at level 75): ticl_scope.
 
-  (*| Variables in context |*)
+  (** Utility lemmas *)
   Lemma var_eq{X}: forall (p: ictreeW Ctx X) c v m,
       lookup c m = Some v ->      
       <( p, {Obs (Log m) tt} |= var c = v )>.
@@ -238,7 +254,7 @@ Module StImp.
     exists v'; intuition.
   Qed.
 
-  (*| Comparissons |*)
+  (** Comparing [x] and [c] returns a boolean [b] in one step *)
   Lemma axr_ccomp_lt: forall x (c: string) b ctx w (v: nat),
       lookup c ctx = Some v ->
       b = Nat.ltb x v ->
@@ -260,6 +276,7 @@ Module StImp.
         apply axr_state_ret...
   Qed.
     
+  (** Constant expressions are evaluated to the constant in one step *)
   Lemma axr_cexp_const: forall (v v': nat) ctx ctx' w w',
       v = v' ->
       ctx = ctx' ->
@@ -273,6 +290,7 @@ Module StImp.
     now apply axr_ret.
   Qed.
 
+  (** Adding [v1] to [c] returns [v2] in one step *)
   Lemma axr_cexp_add: forall (c: string) (v0 v1 v2: nat) ctx ctx' w w',
       lookup c ctx = Some v0  ->
       v2 = v0 + v1 ->
@@ -291,6 +309,7 @@ Module StImp.
       apply axr_state_ret...
   Qed.
 
+  (** Subtracting [v1] from [c] returns [v2] in one step *)
   Lemma axr_cexp_sub: forall (c: string) (v0 v1 v2: nat) ctx ctx' w w',
       lookup c ctx = Some v0  ->
       v2 = v0 - v1 ->
@@ -309,7 +328,10 @@ Module StImp.
       apply axr_state_ret...
   Qed.
   
-  (*| Assignment: structural temporal lemmas |*)
+  (** * Assignment: structural temporal lemmas *)
+  (** An assignment [x := a] eventually (suffix) [AU] returns, where [r] is the evaluation of [a]. 
+      Assignments are instrumented with a [log] event, which records the new context.
+  *)
   Lemma aur_cprog_assgn: forall x a ctx r w R ψ,
       <[ {instr_exp a ctx}, w |= AX done= {(r, ctx)} w ]> ->
       <( {log (add x r ctx)}, w |= ψ )> ->
@@ -326,6 +348,9 @@ Module StImp.
       + eapply aur_put...
   Qed.
 
+  (** An assignment [x := a] eventually (suffix) [AU] returns, where [r] is the evaluation of [a]. 
+      Assignments are instrumented with a [log] event, which records the new context.
+  *)
   Lemma aul_cprog_assgn: forall x a ctx r w ψ φ,
       <[ {instr_exp a ctx}, w |= AX done= {(r, ctx)} w ]> ->
       <( {log (add x r ctx)}, w |= ψ )> ->
@@ -346,7 +371,8 @@ Module StImp.
         * apply ticll_bind_l...
   Qed.
   
-  (*| Sequence: structural temporal lemmas |*)
+  (** * Sequence: structural temporal lemmas *)
+  (** Sequential composition  [a ;;; b] lemmas *)
   Lemma anr_cprog_seq: forall a b ctx ctx' w w' φ ψ,
       <[ {instr_prog a ctx}, w |= ψ AN done= {(tt,ctx')} w' ]> ->
       <[ {instr_prog b ctx'}, w' |= ψ AN φ ]> ->
@@ -387,7 +413,8 @@ Module StImp.
     eapply ag_state_bind_r_eq; eauto.
   Qed.
 
-  (*| Conditional: structural temporal lemmas |*)
+  (** * Conditional: structural temporal lemmas *)
+  (** If-then-else [if c then t else f] lemmas *)
   Lemma aul_cprog_ite: forall c ctx w φ ψ (b: bool) t f,
       <[ {instr_comp c ctx}, w |= AX done= {(b, ctx)} w ]> ->
       (if b then
@@ -418,7 +445,8 @@ Module StImp.
     - destruct b...
   Qed.
 
-  (*| While loops |*)
+  (** * While loops *)
+  (** Unroll one iteration of the while loop if [c] evaluates to [true] *)
   Lemma aul_cprog_while_true: forall c t w w' φ ψ ctx ctx',
       <[ {instr_comp c ctx}, w |= AX done={(true, ctx)} w ]> ->
       <[ {instr_prog t ctx}, w |= φ AU AX done={(tt, ctx')} w' ]> ->
@@ -435,6 +463,7 @@ Module StImp.
     - apply ticll_not_done in H1...
   Qed.
 
+  (** The loop terminates if [c] evaluates to [false] *)
   Lemma aul_cprog_while_false: forall c t w φ ψ ctx,
       <[ {instr_comp c ctx}, w |= AX done={(false, ctx)} w ]> ->
       <( {Ret (tt, ctx)}, w |= ψ )> ->
@@ -450,6 +479,7 @@ Module StImp.
     - cleft...
   Qed.
 
+  (** Unroll one iteration of the while loop if [c] evaluates to [true], suffix [AU] version *)
   Lemma aur_cprog_while_true: forall c t w w' φ ψ ctx ctx',
       <[ {instr_comp c ctx}, w |= AX done={(true, ctx)} w ]> ->
       <[ {instr_prog t ctx}, w |= φ AU AX done={(tt, ctx')} w' ]> ->
@@ -467,6 +497,7 @@ Module StImp.
     - now apply aur_not_done in H1. 
   Qed.
 
+  (** The loop terminates if [c] evaluates to [false], suffix [AU] version *)
   Lemma aur_cprog_while_false: forall c t w φ ψ ctx,
       <[ {instr_comp c ctx}, w |= AX done={(false, ctx)} w ]> ->
       <[ {Ret (tt, ctx)}, w |= AX ψ ]> ->
@@ -483,7 +514,8 @@ Module StImp.
     - cleft...
   Qed.
   
-  (* Eventually *)
+  (** Termination lemma for a while loop, lifts the [aul_state_iter_nat] lemma from [State.v] 
+      to the level of StImp programs. *)
   Theorem aul_cprog_while ctx (t: CProg) Ri f c φ ψ:
     Ri ctx ->
     <[ {instr_comp c ctx}, {Obs (Log ctx) tt} |= AX done={(true, ctx)} {Obs (Log ctx) tt} ]> ->
@@ -535,7 +567,8 @@ Module StImp.
           apply aul_state_ret...
   Qed.
 
-  (* Termination *)
+  (** Termination lemma for a while loop (suffix version) lifts the [aur_state_iter_nat] lemma from [State.v] 
+      to the level of StImp programs. *)
   Theorem aur_cprog_while_termination ctx (t: CProg) Ri f c φ ψ b:    
       Ri ctx ->
       <[ {instr_comp c ctx}, {Obs (Log ctx) tt} |= AX done={(b, ctx)} {Obs (Log ctx) tt} ]> ->
@@ -572,7 +605,8 @@ Module StImp.
           apply aur_state_ret; intuition.
   Qed.
 
-  (* Invariance *)
+  (** Invariance lemma for an infinite while loop, lifts the [ag_state_iter] lemma from [State.v] 
+      to the level of StImp programs. *)
   Lemma ag_cprog_while: forall c (t: CProg) R ctx φ,
       R ctx ->      
       (forall ctx,

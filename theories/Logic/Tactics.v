@@ -13,6 +13,13 @@ Local Open Scope ticl_scope.
 
 Generalizable All Variables.
 
+(** * Ltac tactics for working with TICL formulas *)
+(** For example splitting conjunctions and disjunctions, unfolding inductive and coinductive modalities [AU, AG, EU, EG].
+    The [csplit] tactic is used to split conjunctions and disjunctions under a ticl entailment in the goal
+    the [cleft] tactic is used to take the left branch of a disjunction under a ticl entailment in the goal,
+    the [cright] tactic is used to take the right branch of a disjunction under a ticl entailment in the goal,
+    the [cdestruct] tactic is used to destruct conjunctions and disjunctions under a ticl entailment in a hypothesis.
+    *)
 #[global] Ltac csplit :=
   lazymatch goal with
   | |- @entailsL ?M ?W ?HE ?KMS ?X (CAndL ?p ?q) ?t ?w =>

@@ -11,6 +11,16 @@ Generalizable All Variables.
 
 Variant ticlq := Q_A | Q_E.
 
+(** * TICL syntax *)
+(** This section defines the syntax of TICL formulas.
+    We define two syntaxes, one for prefix formulas [ticll] and one for suffix formulas [ticlr].
+    The prefix syntax is used to define the semantics of TICL formulas that hold in [not_done] worlds.
+    The suffix syntax is used to define the semantics of TICL formulas that hold in [done] worlds,
+    meaning postconditions on the return value of the program.
+
+    The syntax is parameterized by the event type [E] and the encoding function [HE], which 
+    gives us the type of worlds [World E].
+    *)
 Section TiclSyntax.
   Context {E: Type} {HE: Encode E}.
 
@@ -35,7 +45,6 @@ Section TiclSyntax.
   | CAndR (p: ticlr) (q: ticlr): ticlr
   | COrR (p: ticlr) (q: ticlr): ticlr
   | CImplR (p: ticll) (q: ticlr): ticlr.
-
     
   Arguments ticlr: clear implicits.
 
@@ -44,6 +53,9 @@ End TiclSyntax.
 Arguments ticll E {HE}.
 Arguments ticlr E {HE} X.
 
+(** * Contramap *)
+(** This definition transforms a suffix formula [φ] over return types [X] into a suffix formula over return types [Y],
+given a function [f: Y -> X]. *)
 Section Contramap.
   Context {E: Type} {HE: Encode E} {X Y: Type}.
   Definition contramap(f: Y -> X): ticlr E X -> ticlr E Y :=
@@ -57,13 +69,10 @@ Section Contramap.
       | CImplR φ ψ => CImplR φ (F ψ)
       end.
 
-  (* TODO: Contramap laws, identity and composition *)
-  (* contramap f id = id, contramap (f . g) p = contramap g (contramap f p) *)
 End Contramap.
 
+(** * Coq notation for TICL formulas *)
 Bind Scope ticl_scope with ticll ticlr.
-
-(*| Coq notation for TICL formulas |*)
 Module TiclNotations.
   Local Open Scope ticl_scope.
 

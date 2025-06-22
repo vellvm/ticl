@@ -2,5 +2,7 @@
 
 (coq.theory
  (name TICL)
+ (theories ExtLib Stdlib Equations Coinduction)
  (package coq-ticl)
+ (coqdoc_flags :standard -utf8)
  (flags :standard -w -stdlib-vector))

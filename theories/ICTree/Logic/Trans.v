@@ -16,7 +16,6 @@ From TICL Require Import
   ICTree.Core
   ICTree.Equ
   ICTree.Trans
-  Utils.Trc
   ICTree.Events.Writer
   Events.Core
   Logic.Kripke
@@ -27,6 +26,14 @@ Generalizable All Variables.
 Import ICtree ICTreeNotations.
 Local Open Scope ictree_scope.
 
+(** * Kripke transition system *)
+(** This section defines the Kripke transition system for ictrees. 
+    We define a relation [ktrans_] that relates a pair of ictrees and worlds to a pair of ictrees and worlds.
+    We then prove that this relation is a Kripke transition system.
+
+    Intuitively, [ktrans] is the small-step semantics of ictrees, independent of the event type [E].
+    We then use [ktrans] in [Semantics.v] to define the semantic entailment relation [|=] for each Ticl formula.
+*)
 Section ICTreeTrans.
   Context {E: Type} `{HE: Encode E}.
   Notation encode := (@encode E HE).
@@ -104,6 +111,7 @@ Section ICTreeTrans.
       apply KtransFinish; auto.
   Qed.
 
+  (** [ktrans] is a Kripke transition system for ictrees. *)
   Global Program Instance ictree_kripke: Kripke ictree E | 1 := {
       ktrans X t w t' w' :=
         ktrans_ (X:=X) (observe t) w (observe t') w'
@@ -114,7 +122,7 @@ Section ICTreeTrans.
   Hint Unfold ktrans: ticl.
   Arguments ktrans /.
 
-  (** This hint tells Coq that when trying to resolve an instance of
+  (* This hint tells Coq that when trying to resolve an instance of
   Kripke ?A ?B, it should first try to unify the first parameter with
   ictree. The priority 0 ensures this hint is tried before other
   resolution strategies. *)
@@ -122,6 +130,7 @@ Section ICTreeTrans.
          first [ is_evar A; exact ictree
                | fail ] : typeclass_instances.
   
+  (** [ktrans] preserves equality [equ eq]*)
   Global Instance ktrans_equ_proper{X}:
     Proper (equ eq ==> eq ==> equ eq ==> eq ==> iff) (ktrans (X:=X)).
   Proof.
@@ -131,7 +140,8 @@ Section ICTreeTrans.
     - now rewrite H, H1.
   Qed.
 
-  (*| Prove [trans], [ktrans] are in lockstep and worlds/labels are 1-1 |*)
+  (** [ktrans] is in lockstep with [trans], the LTS transition relation used to define strong bisimulation in [SBisim.v].
+      Consequently, Kripke worlds and LTS labels are 1-1. *)
   Lemma ktrans_trans{X}: forall (t t': ictree E X) w w',
       ktrans_ (observe t) w (observe t') w' <->
         (exists l, trans_ l (observe t) (observe t') /\
@@ -219,6 +229,7 @@ Section ICTreeTrans.
                | fail ] : typeclass_instances.
   
   
+  (** [ktrans] can ignore any finite number of [guard] nodes on the left-hand side. *)
   Local Open Scope ticl_scope.
   Lemma ktrans_guard{X}: forall (t t': ictree E X) w w',
       |Guard t, w| ↦ |t', w'| <-> |t, w| ↦ |t', w'|.
@@ -231,6 +242,13 @@ Section ICTreeTrans.
   Qed.
   Hint Resolve ktrans_guard: ticl.
 
+  (** [ktrans] considers nondeterministic choices [Br n k] as a single step. 
+      This is in contrast to CTrees (Chappe et al. 2022) which define [BrD n k] as
+      a delayed-branching node, such that [ktrans] can take finitely many choices in one step.
+      We make this choice because the [bind_aul_r] and [bind_aur_r] lemmas in [Bind.v]
+      are very hard to prove with [BrD n k]. Yet, we did not disprove this fact either, 
+      so we leave this as an open question.
+  *)
   Lemma ktrans_br {X}: forall n (t: ictree E X) (k: fin' n -> ictree E X) w w',
       |Br n k, w| ↦ |t, w'| <->
         (exists (i: fin' n), t ≅ k i /\ w = w' /\ not_done w).
@@ -245,6 +263,7 @@ Section ICTreeTrans.
   Qed.
   Hint Resolve ktrans_br: ticl.
 
+  (** [ktrans] considers [Ret x] as a single step. *)
   Lemma ktrans_done {X}: forall (t: ictree E X) (w': World E) x,
       |Ret x, Pure| ↦ |t, w'| <-> (w' = Done x /\ t ≅ stuck).
   Proof.
@@ -256,6 +275,7 @@ Section ICTreeTrans.
   Qed.
   Hint Resolve ktrans_done: ticl.
 
+  (** [ktrans] considers [Ret x] as a single step. *)
   Lemma ktrans_finish {X}: forall (t: ictree E X) (w': World E) (e: E) (v: encode e) x,
       |Ret x, Obs e v| ↦ |t, w'| <->
         (w' = Finish e v x /\ t ≅ stuck).
@@ -268,6 +288,7 @@ Section ICTreeTrans.
   Qed.
   Hint Resolve ktrans_finish: ticl.
 
+  (** [ktrans] considers [Vis e k] as a single step. *)
   Lemma ktrans_vis{X}: forall (t: ictree E X) (s s': World E) (e: E) (k: encode e -> ictree E X),
       |Vis e k, s| ↦ |t, s'| <->
         (exists (x: encode e), s' = Obs e x /\ k x ≅ t /\ not_done s).
@@ -283,6 +304,7 @@ Section ICTreeTrans.
   Qed.
   Hint Resolve ktrans_vis: ticl.
 
+  (** [ktrans] cannot step from an observation to a pure state. *)
   Lemma ktrans_pure_pred{X}: forall (t t': ictree E X) w,
       |t, w| ↦ |t', Pure| -> w = Pure.
   Proof.
@@ -290,6 +312,7 @@ Section ICTreeTrans.
   Qed.
   Hint Resolve ktrans_pure_pred: ticl.
 
+  (** [ktrans] cannot step from a stuck state. *)
   Lemma ktrans_stuck{X}: forall (t: ictree E X) w w',
       ~ |stuck, w| ↦ |t, w'|.
   Proof.
@@ -298,6 +321,7 @@ Section ICTreeTrans.
   Qed.
   Hint Resolve ktrans_stuck: ticl.
 
+  (** [ktrans] cannot step from a done world [w]. *)
   Lemma done_not_ktrans{X}: forall (t: ictree E X) w,
       is_done X w ->
       ~ (exists t' w', |t, w| ↦ |t', w'|).
@@ -309,6 +333,7 @@ Section ICTreeTrans.
   Qed.
   Hint Resolve done_not_ktrans: ticl.
 
+  (** [ktrans] cannot step from a done state. *)
   Lemma ktrans_done_inv{X}: forall (t t': ictree E X) (x: X) w,
       ~ |t, Done x| ↦ |t', w|.
   Proof.
@@ -316,6 +341,7 @@ Section ICTreeTrans.
   Qed.
   Hint Resolve ktrans_done_inv: ticl.
 
+  (** [ktrans] cannot step from a finish state. *)
   Lemma ktrans_finish_inv{X}: forall (t t': ictree E X) (e: E) (v: encode e) (x: X) w,
       ~ |t, Finish e v x| ↦ |t', w|.
   Proof.
@@ -351,6 +377,7 @@ Section ICTreeTrans.
   Qed.
   Hint Resolve ktrans_to_finish_inv: ticl.
 
+  (** Left [ktrans] and [bind] lemma, if [t] steps to [t'], then [x <- t ;; k x] steps to [x <- t' ;; k x]. *)
   Lemma ktrans_bind_l{X Y}: forall (t t': ictree E Y) (k: Y -> ictree E X) w w',
       |t, w| ↦ |t', w'| ->
       not_done w' ->
@@ -378,32 +405,8 @@ Section ICTreeTrans.
     - inv H0.
   Qed.
 
-  Typeclasses Transparent equ.
-  Lemma ktrans_bind_r{X Y}: forall (t t': ictree E Y) (k: Y -> ictree E X) w w',
-      not_done w' ->
-      |t, w| ↦ |t', w'| ->
-      |x <- t ;; k x, w| ↦ |x <- t' ;; k x, w'|.
-  Proof.
-    intros; cbn in *.
-    rewrite (ictree_eta t), (ictree_eta t').
-    remember (observe t) as T.
-    remember (observe t') as T'.
-    clear HeqT t HeqT' t'.
-    revert H k.
-    induction H0; intros.
-    - rewrite bind_guard.
-      constructor.
-      now apply IHktrans_.
-    - rewrite bind_br.
-      eapply KtransBr with i; auto.
-      now rewrite H0.
-    - rewrite bind_vis.
-      eapply KtransObs; auto.
-      now rewrite H0.
-    - inv H0.
-    - inv H0.
-  Qed.
-
+  (** Auxiliary lemma for [ktrans_bind_inv], the inversion lemma for [ktrans] and [bind]. It is used to take cases
+  on the transition of [t] and [t>>=k]. *)
   Opaque ICtree.stuck.
   Lemma ktrans_bind_inv_aux {X Y} (w w': World E)(T U: ictree' E Y) :
     ktrans_ T w U w' ->
@@ -508,6 +511,11 @@ Section ICTreeTrans.
       + step in H0; inv H0.
   Qed.
 
+  (** Inversion lemma for [ktrans] and [bind]. 
+    If [x <- t ;; k x] steps to [u], then either:
+    - [t] steps to [t'], [t>>=k] steps to [x <- t' ;; k x], and [t'] is not done.
+    - [t] returns [x], [t>>=k] steps to [u] if [k x] steps.
+  *)
   Lemma ktrans_bind_inv: forall {X Y} (w w': World E)
                            (t: ictree E X) (u: ictree E Y) (k: X -> ictree E Y),
       |x <- t ;; k x, w| ↦ |u, w'| ->
@@ -529,36 +537,25 @@ Section ICTreeTrans.
 
 End ICTreeTrans.
 
-Local Typeclasses Transparent equ.
-Local Open Scope ticl_scope.
-Lemma ktrans_trigger_inv `{ReSumRet E1 E2}{X}:forall (e: E2) w w' (k: encode (resum e) -> ictree E2 X) (u': ictree E2 X),
-      |z <- trigger e ;; k z, w| ↦ |u', w'| ->
-      (not_done w /\ exists z, w' = Obs e z /\ u' ≅ k z).
-Proof.
-  intros.
-  unfold trigger in H3.
-  apply ktrans_bind_inv in H3 as
-      [(t' & TR & Hd & Hequ) |
-        (x & w_ & TRr & ? & TRk)].
-  - apply ktrans_vis in TR as (y & ? & ? & ?).
-    unfold resum, ReSum_refl, resum_ret, ReSumRet_refl in *; world_inv.
-    split; [auto | exists y]; split; [reflexivity|].
-    now rewrite <- H4, bind_ret_l in Hequ.
-  - apply ktrans_vis in TRr as (y & ? & ? & ?); subst.
-    inv H3.
-Qed.
-
-Global Hint Constructors
+#[global] Hint Constructors
   ktrans_ not_done done_with vis_with: ticl.
 
-Global Hint Resolve
+#[global] Hint Resolve
   ktrans_stuck ktrans_br ktrans_vis ktrans_done
   ktrans_done_inv ktrans_finish can_step_not_done
   ktrans_not_done ktrans_finish_inv ktrans_bind_inv
   ktrans_to_done_inv ktrans_to_finish_inv
   ktrans_guard ktrans_pure_pred: ticl.
 
+(** * Inversion lemmas for [ktrans] and [bind] *)
+(** Inversion lemma for [ktrans] and [bind] with [Ret x]. 
+    This is a bit forward looking, as it uses the notion
+    of strong bisimulation [sbisim] to prove the inversion lemma. This is because any strongly bisimilar tree
+    to [Ret x], for example [Guard ... Guard (Ret x)] 
+    behaves like a return in the context of [ktrans] and [bind].
+  *)
 From TICL Require Import ICTree.SBisim.
+Local Open Scope ticl_scope.
 Local Typeclasses Opaque sbisim.
 Local Typeclasses Opaque equ.
 Lemma ktrans_sbisim_ret `{Encode E} {X Y}:
@@ -594,6 +591,9 @@ Proof.
     + ddestruction TRr; ddestruction H1; auto.
 Qed.
 
+(** Inversion lemma for terminating [t] with [Ret x]. 
+    If it terminates with [Done x], then [t] is strongly bisimilar to [Ret x] and the world is [Pure].
+*)
 Local Opaque ICtree.stuck.
 Lemma ktrans_to_done `{Encode E} {X}:
   forall (t: ictree E X) (x: X) w,
@@ -617,6 +617,9 @@ Proof.
   - ddestruction HeqD.
 Qed.
 
+(** Inversion lemma for terminating [t] with [Ret x]. 
+    If it terminates with [Finish e v x], then [t] is strongly bisimilar to [Ret x] and the world is [Obs e v].
+*)
 Lemma ktrans_to_finish `{Encode E} {X}:
   forall (t: ictree E X) (e: E) (v: encode e) (x: X) w,
     |t, w| ↦ |ICtree.stuck, Finish e v x| ->
@@ -639,6 +642,10 @@ Proof.
   - ddestruction HeqD; auto.
 Qed.
 
+(** * Kripke setoid for ictrees and [sbisim] *)
+(** Kripke transition system for ictrees is a Kripke setoid
+with respect to strong bisimulation [sbisim]. This is a very powerful result, and sufficient to prove that Ticl formulas
+are invariant under strong bisimulation. *)
 Global Instance KripkeSetoidSBisim `{HE: Encode E} {X}:
     @KripkeSetoid ictree E HE ictree_kripke X (sbisim eq) _.
 Proof.

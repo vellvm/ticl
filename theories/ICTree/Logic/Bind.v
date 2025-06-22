@@ -21,10 +21,12 @@ Import ICTreeNotations TiclNotations.
 Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 
+(** * TICL sequential composition ([bind]) lemmas for ictrees. *)
+(** These are the most useful lemmas for modular, temporal verification. *)
 Section BindLemmas.
   Context {E: Type} {HE: Encode E}.
 
-  (*| Prove by induction on formulas [φ], very useful! |*)
+  (** Prove by induction on formulas [φ]; if [t] satisfies prefix formula [φ] then so do all its extensions ([x <- t ;; k x]) *)
   Theorem ticll_bind_l{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) φ w,
       <( t, w |= φ )> ->
       <( {x <- t ;; k x}, w |= φ )>.
@@ -117,7 +119,8 @@ Section BindLemmas.
       cdestruct H; [cleft | cright]...
   Qed.
 
-  (*| Bind lemmas for [AN] |*)
+  (** Bind lemmas for prefix [AN]; requires specifying a postcondition [R] for the return values of [t],
+  then showing the continuation [k x] will always step [φ AN ψ] with prefix formula [ψ]. *)
   Theorem anl_bind_r{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ R,
       <[ t, w |= φ AN done R ]> ->
       (forall x w, R x w -> <( {k x}, w |= φ AN ψ )>) ->
@@ -149,7 +152,9 @@ Section BindLemmas.
           specialize (H0 _ _ H) as Hax.
           cdestruct Hax...
   Qed.
-  
+ 
+  (** Bind lemmas for suffix [AN]; requires specifying a postcondition [R] for the return values of [t].
+  If [t] takes a step, then the continuation [k x] must satisfy postcondition [ψ] without the need to step *)
   Theorem anr_bind_l{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ R,
       <[ t, w |= φ AN AX done R ]> ->
       (forall x w, R x w -> <[ {k x}, w |= ψ ]>) ->
@@ -192,6 +197,8 @@ Section BindLemmas.
           cdestruct Hax; apply can_step_not_done in Hs; inv Hs.
   Qed.
   
+  (** Bind lemma for suffix [AN]; requires specifying a postcondition [R] for the return values of [t].
+  If [t] immediately terminates with post-condition [R], then the continuation [k x] must take a step to satisfy postcondition [ψ]. *)
   Theorem anr_bind_r{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ R,
       <[ t, w |= φ AN done R ]> ->
       (forall x w, R x w -> <[ {k x}, w |= φ AN ψ ]>) ->
@@ -224,6 +231,9 @@ Section BindLemmas.
           cdestruct Hax...
   Qed.
 
+  (** Helper version of [anr_bind_r] for deterministic [t], it allows us to
+  replace the return value [r] with an existential quantifier, then simply compute it. 
+  This does not require a postcondition [R]. *)
   Theorem anr_bind_r_eq{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ r w',
       <[ t, w |= φ AN done= r w' ]> ->
       <[ {k r}, w' |= φ AN ψ ]> ->
@@ -234,7 +244,8 @@ Section BindLemmas.
     now intros * [-> ->].
   Qed.
   
-  (*| Bind lemmas for [EN] |*)
+  (** Bind lemmas for prefix [EN]; requires specifying a postcondition [R] for the return values of [t],
+  then showing the continuation [k x] will always step [φ EN ψ] with prefix formula [ψ]. *)
   Typeclasses Transparent sbisim.
   Theorem enl_bind_r{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ R,
       <[ t, w |= φ EN done R ]> ->
@@ -246,6 +257,9 @@ Section BindLemmas.
     rewrite Heq, bind_ret_l...
   Qed.
 
+  (** Helper version of [enl_bind_r] for deterministic [t], it allows us to
+  replace the return value [r] with an existential quantifier, then simply compute it. 
+  This does not require a postcondition [R]. *)
   Theorem enl_bind_r_eq{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w w' φ ψ r,
       <[ t, w |= φ EN done= r w' ]> ->
       <( {k r}, w' |= φ EN ψ )> ->
@@ -256,6 +270,8 @@ Section BindLemmas.
     intros r_ w_ (-> & ->)...
   Qed.
   
+  (** Bind lemmas for suffix [EN]; requires specifying a postcondition [R] for the return values of [t],
+  then showing the continuation [k x] will always step [φ EN ψ] with post-condition [ψ]. *)
   Theorem enr_bind_r{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ R,
       <[ t, w |= φ EN done R ]> ->
       (forall r w', R r w' -> <[ {k r}, w' |= φ EN ψ ]>) ->
@@ -266,6 +282,9 @@ Section BindLemmas.
     rewrite Heq, bind_ret_l...
   Qed.
   
+  (** Helper version of [enr_bind_r] for deterministic [t], it allows us to
+  replace the return value [r] with an existential quantifier, then simply compute it. 
+  This does not require a postcondition [R]. *)
   Theorem enr_bind_r_eq{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w w' φ ψ r,
       <[ t, w |= φ EN done= r w' ]> ->
       <[ {k r}, w' |= φ EN ψ ]> ->
@@ -276,7 +295,8 @@ Section BindLemmas.
     intros r_ w_ (-> & ->)...
   Qed.
   
-  (*| Bind lemmas for [AU] |*)
+  (** Bind lemmas for prefix until [AU]; requires specifying a postcondition [R] for the return values of [t],
+  then showing the continuation [k x] will always step [φ AU ψ] with prefix formula [ψ]. *)
   Typeclasses Transparent sbisim.
   Theorem aul_bind_r{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ R,
       <[ t, w |= φ AU AX done R ]> ->
@@ -305,6 +325,9 @@ Section BindLemmas.
           now apply aur_stuck, anr_stuck in Hau.
   Qed.
   
+  (** Helper version of [aul_bind_r] for deterministic [t], it allows us to
+  replace the return value [r] with an existential quantifier, then simply compute it. 
+  This does not require a postcondition [R]. *)
   Theorem aul_bind_r_eq{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ r w',
       <[ t, w |= φ AU AX done= r w' ]> ->
       <( {k r}, w' |= φ AU ψ )> ->
@@ -315,6 +338,8 @@ Section BindLemmas.
     intros ? ? [<- <-]...
   Qed.
 
+  (** Bind lemmas for suffix until [AU]; requires specifying a postcondition [R] for the return values of [t],
+  then showing the continuation [k x] will always step [φ AU ψ] with post-condition [ψ]. *)
   Theorem aur_bind_r{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ R,
       <[ t, w |= φ AU AX done R ]> ->
       (forall x w, R x w -> <[ {k x}, w |= φ AU ψ ]>) ->
@@ -346,6 +371,9 @@ Section BindLemmas.
           now apply aur_stuck, anr_stuck in Hau.
   Qed.
 
+  (** Helper version of [aur_bind_r] for deterministic [t], it allows us to
+  replace the return value [r] with an existential quantifier, then simply compute it. 
+  This does not require a postcondition [R]. *)
   Theorem aur_bind_r_eq{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ r w',
       <[ t, w |= φ AU AX done= r w' ]> ->
       <[ {k r}, w' |= φ AU ψ ]> ->
@@ -356,7 +384,8 @@ Section BindLemmas.
     intros ? ? [<- <-]...
   Qed.
   
-  (* EU *)
+  (** Bind lemmas for prefix [EU]; requires specifying a postcondition [R] for the return values of [t],
+  then showing the continuation [k x] will always step [φ EU ψ] with prefix formula [ψ]. *)
   Theorem eul_bind_r{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ R,
       <[ t, w |= φ EU EX done R ]> ->
       (forall r w', R r w' -> <( {k r}, w' |= φ EU ψ )>) ->
@@ -372,9 +401,12 @@ Section BindLemmas.
       + now apply ticll_bind_l.
       + exists (x <- t0;; k x), w0; split...
         assert(Hd: not_done w0) by now apply ticll_not_done in HInd.
-        apply ktrans_bind_r...
+        apply ktrans_bind_l...
   Qed.
 
+  (** Helper version of [eul_bind_r] for deterministic [t], it allows us to
+  replace the return value [r] with an existential quantifier, then simply compute it. 
+  This does not require a postcondition [R]. *)
   Theorem eul_bind_r_eq{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ r w',
       <[ t, w |= φ EU EX done= r w' ]> ->
       <( {k r}, w' |= φ EU ψ )> ->
@@ -385,6 +417,8 @@ Section BindLemmas.
     intros ? ? [<- <-]...
   Qed.
   
+  (** Bind lemmas for suffix [EU]; requires specifying a postcondition [R] for the return values of [t],
+  then showing the continuation [k x] will always step [φ EU ψ] with post-condition [ψ]. *)
   Theorem eur_bind_r{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ R,
       <[ t, w |= φ EU EX done R ]> ->
       (forall r w', R r w' -> <[ {k r}, w' |= φ EU ψ ]>) ->
@@ -402,12 +436,15 @@ Section BindLemmas.
         destruct Heu.
         * cdestruct H.
           cdestruct Hp0.
-          apply ktrans_bind_r...
+          apply ktrans_bind_l...
         * destruct H.
           apply ticll_not_done in H.
-          apply ktrans_bind_r...
+          apply ktrans_bind_l...
   Qed.
 
+  (** Helper version of [eur_bind_r] for deterministic [t], it allows us to
+  replace the return value [r] with an existential quantifier, then simply compute it. 
+  This does not require a postcondition [R]. *)
   Theorem eur_bind_r_eq{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w φ ψ r w',
       <[ t, w |= φ EU EX done= r w' ]> ->
       <[ {k r}, w' |= φ EU ψ ]> ->
@@ -418,7 +455,8 @@ Section BindLemmas.
     intros ? ? [<- <-]...
   Qed.
   
-  (*| Bind lemma for [AG] |*)
+  (** ** An up-to bind principle for [AG] *)
+  (** This relation morphism, adds the distribution of [R] over the bind [x <- t ;; k x] to [R], given post-condition [Post]. *)
   Notation MP X := (rel (ictree E X) (World E)).
   Program Definition ag_bind_clos{X Y} φ Post : mon (MP Y) :=
     {| body R t w :=
@@ -434,6 +472,7 @@ Section BindLemmas.
     apply in_bind_ctx1; eauto.
   Qed.
 
+  (** It is a valid up-to bind principle for [AG]. *)
   Lemma ag_bind_ag{X Y} (φ: ticll E) (Post: rel X (World E)):
       ag_bind_clos (Y:=Y) φ Post <= agct (entailsL Y φ).
   Proof with auto with ticl.  
@@ -489,7 +528,8 @@ Section BindLemmas.
              apply ticll_not_done in Hp'; inv Hp'.
   Qed.
 
-  (* [t] satisfies [φ] until it terminates with post-condition [R],
+  (** ** Structural rule for the up-to bind principle for [AG]. *)
+  (** [t] satisfies [φ] until it terminates with post-condition [R],
      then forall x w, R x w -> k x, w satisfies [φ] forever. *)
   Lemma ag_bind_r{X Y}: forall (t: ictree E X)
                           w (k: X -> ictree E Y) φ R,
@@ -504,7 +544,8 @@ Section BindLemmas.
     apply in_bind_ctx1; auto.
   Qed.
 
-  (*| Bind lemma for [EG] |*)
+  (** ** An up-to bind principle for [EG] *)
+  (** This relation morphism adds the distribution of [R] over the bind [x <- t ;; k x] given post-condition [Post]. *)
   Program Definition eg_bind_clos{X Y} φ Post: mon (MP Y) :=
     {| body R t w :=
         bind_ctx1
@@ -518,6 +559,8 @@ Section BindLemmas.
     apply in_bind_ctx1; auto.
   Qed.
 
+  (** [t] satisfies [φ] until it terminates with post-condition [R],
+     then forall r wr, R r wr -> k r, wr satisfies [φ] forever. *)
   Lemma eg_bind_eg{X Y} (φ: ticll E) R:
       eg_bind_clos (X:=X) (Y:=Y) φ R <= egct (entailsL Y φ).
   Proof with auto with ticl.  
@@ -546,14 +589,14 @@ Section BindLemmas.
             [(t0' & TR1 & Hd_ & Heq) | (x' & w1 & TRt0 & Hd & TRk)].
         * exists (x <- t0 ;; k x), w0.
           split...
-          eapply ktrans_bind_r...
+          eapply ktrans_bind_l...
           apply (bT_T (egcF (entailsL Y φ))).
           split...
           exists t_, w_; split...
           rewrite Heq.
-          apply ktrans_bind_r...
+          apply ktrans_bind_l...
         * exists (x <- t0;; k x), w0; split.
-          -- apply ktrans_bind_r...
+          -- apply ktrans_bind_l...
           -- inv Hd.
              ++ apply ktrans_to_done in TRt0 as (Heqt & ->).
                 rewrite Heqt, bind_ret_l.
@@ -569,6 +612,9 @@ Section BindLemmas.
                 exists t_, w_; split...
   Qed.
 
+  (** ** Structural rule for the up-to bind principle for [EG]. *)
+  (** [t] satisfies [φ] until it terminates with post-condition [R],
+     then forall r wr, R r wr -> k r, wr satisfies [φ] forever. *)
   Lemma eg_bind_r{X Y}: forall (t: ictree E X) w (k: X -> ictree E Y) R φ,
       <[ t, w |= φ EU EX done R ]> ->
       (forall r w', R r w' -> <( {k r}, w' |= EG φ )>) ->
@@ -580,6 +626,9 @@ Section BindLemmas.
     apply in_bind_ctx1; eauto.
   Qed.
   
+  (** Helper version of [eg_bind_r] for deterministic [t], it allows us to
+  replace the return value [r] with an existential quantifier, then simply compute it. 
+  This does not require a postcondition [R]. *)
   Lemma eg_bind_r_eq{X Y}: forall (t: ictree E X) r
                           w wr (k: X -> ictree E Y) φ,
       <[ t, w |= φ EU EX done= r wr ]> ->
@@ -591,14 +640,7 @@ Section BindLemmas.
     now intros * (-> & ->).
   Qed.
 
-  (* These are true but will require inversion lemmas on bind formulas
-  Theorem ticlr_map{X Y}: forall (t: ictree E X) (f: X -> Y) (φ: ticlr E Y) w,
-      not_done w ->
-      <[ {ICtree.map f t}, w |= φ ]> <-> <[ t, w |= {contramap f φ} ]>.
-
-  Theorem ticll_map{X Y}: forall (t: ictree E X) (f: X -> Y) (φ: ticll E) w,
-      <( {ICtree.map f t}, w |= φ )> <-> <( t, w |= φ )>.
-   *)
+  (** ** Convenience lemmas for [bind] and instrumentation events [log s]. *)
   Typeclasses Transparent equ.
   Lemma anl_log{X S}: forall (s: S) (k: ictreeW S X) w ψ φ,
       <( k, {Obs (Log s) tt} |= ψ )> ->
@@ -768,6 +810,5 @@ Section BindLemmas.
     eapply eur_log...
     csplit; intuition.
   Qed.
-
 
 End BindLemmas.

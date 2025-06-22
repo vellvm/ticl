@@ -24,10 +24,11 @@ Import ICTreeNotations TiclNotations.
 Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
   
-(*| TICL EN lemmas on ictrees |*)
+(** * TICL logic lemmas on ictrees and the exists-next [EX] operator *)
 Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
+  (** A stuck tree satisfies prefix [φ EN ψ] if and only if it satisfies [ψ]. *)
   Lemma enl_stuck: forall w φ ψ,
       <( {ICtree.stuck: ictree E X}, w |= φ EN ψ )> ->
       <( {ICtree.stuck: ictree E X}, w |= ψ )>.
@@ -37,6 +38,7 @@ Section BasicLemmas.
     now apply ktrans_stuck in TR.
   Qed.
 
+  (** A nondeterministic choice satisfies prefix [φ EN ψ] if and only if its continuation [k i] satisfies [ψ] for some [i]. *)
   Lemma enl_br: forall n (k: fin' n -> ictree E X) w φ ψ,
       (<( {Br n k}, w |= φ )> /\ (exists (i: fin' n), <( {k i}, w |= ψ )>)) <->
     <( {Br n k}, w |= φ EN ψ )>.
@@ -55,6 +57,7 @@ Section BasicLemmas.
       exists i...
   Qed.
 
+  (** A visible event satisfies prefix [φ EN ψ] if and only if it satisfies [φ] and its continuation [k v] satisfies [ψ] for some [v]. *)
   Lemma enl_vis: forall (e: E) (k: encode e -> ictree E X) (_: encode e) w φ ψ,
       <( {Vis e k}, w |= φ EN ψ )> <->        
         <( {Vis e k}, w |= φ )> /\ (exists (v: encode e), <( {k v}, {Obs e v} |= ψ )>).
@@ -72,6 +75,7 @@ Section BasicLemmas.
       now apply ticll_not_done in Hd.
   Qed.
 
+  (** A stuck tree satisfies suffix [φ EN ψ] if and only if it satisfies [ψ]. *)
   Lemma enr_stuck: forall w φ ψ,
       <[ {ICtree.stuck: ictree E X}, w |= φ EN ψ ]> ->
       <[ {ICtree.stuck: ictree E X}, w |= ψ ]>.
@@ -81,6 +85,7 @@ Section BasicLemmas.
     now apply ktrans_stuck in TR.
   Qed.
 
+  (** A nondeterministic choice satisfies suffix [φ EN ψ] if and only if its continuation [k i] satisfies [ψ] for some [i]. *)
   Lemma enr_br: forall n (k: fin' n -> ictree E X) w φ ψ,
       (<( {Br n k}, w |= φ )> /\ (exists (i: fin' n), <[ {k i}, w |= ψ ]>)) <->
         <[ {Br n k}, w |= φ EN ψ ]>.
@@ -99,6 +104,7 @@ Section BasicLemmas.
       exists i...
   Qed.
 
+  (** A visible event satisfies suffix [φ EN ψ] if and only if it satisfies [φ] and its continuation [k v] satisfies [ψ] for some [v]. *)
   Lemma enr_vis: forall (e: E) (k: encode e -> ictree E X) (_: encode e) w φ ψ,
       <[ {Vis e k}, w |= φ EN ψ ]> <->        
         <( {Vis e k}, w |= φ )> /\ (exists (v: encode e), <[ {k v}, {Obs e v} |= ψ ]>).
@@ -116,6 +122,7 @@ Section BasicLemmas.
       now apply ticll_not_done in Hd.
   Qed.
 
+  (** A done tree satisfies suffix [φ EN ψ] if and only if it satisfies [φ] and its return value satisfies [ψ]. *)
   Lemma enr_done: forall (t: ictree E X) φ ψ w,
       <[ t, w |= φ EN done ψ ]> <-> <( t, w |= φ )> /\ (exists (x: X), t ~ Ret x /\ ψ x w).
   Proof with eauto with ticl.
@@ -154,6 +161,7 @@ Section BasicLemmas.
         * now csplit.
   Qed.
 
+  (** A return tree does not satisfy prefix [φ EN ψ]; it does not step. *)
   Lemma enl_ret: forall (r: X) w φ ψ,
       ~ <( {Ret r}, w |= φ EN ψ )>.
   Proof.
@@ -167,6 +175,7 @@ Section BasicLemmas.
       apply ticll_not_done in H; inv H.
   Qed.
 
+  (** A return tree satisfies suffix [φ EN done R] if and only if it satisfies [φ] and its return value satisfies [R]. *)
   Lemma enr_ret: forall (r: X) (R: rel X (World E)) φ w,
       <( {Ret r}, w |= φ )> ->
       R r w ->
@@ -177,6 +186,7 @@ Section BasicLemmas.
     exists r...
   Qed.
   
+  (** A return tree satisfies suffix [EX done R] if and only if it satisfies [φ] and its return value satisfies [R]. *)
   Lemma exr_ret: forall (r: X) (R: rel X (World E)) w,
       not_done w ->
       R r w ->
@@ -187,6 +197,8 @@ Section BasicLemmas.
     csplit...
   Qed.
   
+  (** Inversion lemma for the next [EN] operator and post-condition [ψ].
+  A tree [t] satisfies [φ EN ψ] if and only if it satisfies [φ] and it returns a value [x] such that [ψ x w] and [w] is done. *)
   Lemma enr_ret_inv: forall (r: X) w φ ψ,
       <[ {Ret r}, w |= φ EN ψ ]> ->
         <( {Ret r}, w |= φ )>
@@ -210,6 +222,7 @@ End BasicLemmas.
 
 Section WriterLemmas.
               
+  (** Convenience lemma for the [EX] operator and the [log] event. *)
   Lemma exr_log{S}: forall (x: S) w,
       not_done w ->
       <[ {log x}, w |= EX EX done=tt {Obs (Log x) tt} ]>.

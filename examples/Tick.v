@@ -38,32 +38,7 @@ Definition tock: ictree tickE unit :=
   @ICtree.trigger tickE tickE _ _ (ReSum_refl) (ReSumRet_refl) Tock.
 
 Section TickTock.
-  (* Ex1: Non-det loop calling tick *)
-  Definition ticker: ictree tickE unit :=
-    forever unit
-      (fun _ =>
-         ICtree.br2
-           (forever unit (fun _ => tick) tt)
-           tick)
-      tt.
-
-  (* This requires the AR iter lemma, it's something like this
-
-  Lemma ag_iter_or{X I} (R: rel I (World E)) (i: I) w (k: I -> ictree E (I + X)) φ:
-    R i w ->
-    (forall (i: I) w,
-        R i w ->
-        <( {iter k i}, w |= φ)> \/
-          <[ {k i}, w |= φ AN (φ AR AX done
-                      {fun (lr: I + X) (w': World E) =>
-                         exists (i': I), lr = inl i' /\ R i' w'}) ]>) ->
-    <( {iter k i}, w |= AG φ )>.
-  Typeclasses Transparent equ.
-  Example ag_tick:
-    <( ticker, {Obs Tick tt} |= AG vis {fun e _ => e = Tick} )>.
-   *)
-    
-  (* Ex2: Non-det loop calling tick *)
+  (** * Example 1: Non-det loop calling tick *)
   Definition tocker: ictree tickE unit :=
     forever unit
       (fun _ =>
@@ -72,6 +47,8 @@ Section TickTock.
            tick)
       tt.
 
+  (** * Specification *)
+  (** There exists an infinite path that will allways [tock]. *)
   Example eg_tock:
     <( tocker, {Obs Tock tt} |= EG vis {fun e _ => e = Tock} )>.
   Proof with auto with ticl.

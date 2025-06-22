@@ -13,12 +13,14 @@ Generalizable All Variables.
 
 Open Scope type_scope.
 
-(*| Reified effects that have an encoding into the Coq type system |*)
+(** * Reified effects that have an encoding into the Coq type system *)
 Universe eff.
 
+(** * Encoding of events into Coq types *)
 Class Encode E : Type :=
   encode: E -> Type@{eff}.
 
+(** * Encoding of sums of events *)
 Arguments encode: simpl never.
 #[global] Instance Encode_Sum (E1 E2 : Type@{eff}) `{Encode E1} `{Encode E2} : Encode (E1 + E2) :=
   fun e12 => match e12 with 
@@ -44,7 +46,7 @@ Class ReSumRet E1 E2 `{Encode E1} `{Encode E2} `{ReSum E1 E2} : Type :=
 #[global] Instance ReSumRet_refl {E} `{Encode E}:
   ReSumRet E E := fun _ e => e.
 
-(*| Empty effect |*)
+(** * Empty effect *)
 Variant void: Type :=.
 
 #[global] Instance encode_void: Encode void :=
@@ -56,16 +58,17 @@ Variant void: Type :=.
 #[global] Instance ReSumRet_void {E} `{Encode E} :
   ReSumRet void E := fun e _ => match e with end. 
 
-(*| Defines a monad homomorphism from free monad with [E]
-  to monad [M] |*)
+(** * Monad homomorphism from free monad with [E] to monad [M] *)
 Definition Handler E M `{Encode E} `{Monad M}: Type :=
   forall (e: E), M (encode e).
 
 Notation "E ~> M" := (Handler E M) (at level 68, right associativity). 
 
+(** The empty event does nothing. *)
 Definition h_void `{Monad M}: void ~> M :=
   fun (e : void) => match e with end.
 
+(** The sum of two handlers is the handler of sums *)
 Definition h_sum{A B} `{Monad M} `{Encode A} `{Encode B}
   (ha: A ~> M) (hb: B ~> M):
   A + B ~> M := fun e =>

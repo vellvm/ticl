@@ -13,6 +13,7 @@ Local Open Scope ictree_scope.
 
 Global Typeclasses Opaque equ.
 
+(** * Tactics for equ *)
 Ltac observe_equ H :=
   lazymatch type of H with
   | observe ?t = RetF ?x =>

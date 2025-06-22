@@ -25,10 +25,11 @@ Import ICTreeNotations TiclNotations.
 Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
   
-(*| TICL logic lemmas on c/itrees |*)
+(** * TICL logic lemmas on ictrees and the next [AN] operator *)
 Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
+  (** Stuckness lemma for prefix next [AN], there is no next step from stuck *)
   Lemma anl_stuck: forall w φ ψ,
       ~ <( {ICtree.stuck: ictree E X}, w |= φ AN ψ )>.
   Proof.
@@ -36,6 +37,7 @@ Section BasicLemmas.
     now apply can_step_stuck in Hs.
   Qed.
 
+  (** Stuckness lemma for suffix next [AN], there is no next step from stuck *)
   Lemma anr_stuck: forall w φ ψ,
       ~ <[ {ICtree.stuck: ictree E X}, w |= φ AN ψ ]>.
   Proof.
@@ -43,6 +45,7 @@ Section BasicLemmas.
     now apply can_step_stuck in Hs.
   Qed.
 
+  (** Branch iff lemma for prefix next [AN] *)
   Lemma anl_br: forall n (k: fin' n -> ictree E X) w φ ψ,
       <( {Br n k}, w |= φ AN ψ )> <->
         <( {Br n k}, w |= φ)>
@@ -62,6 +65,7 @@ Section BasicLemmas.
         apply H0.
   Qed.
 
+  (** Branch iff lemma for suffix next [AN] *)
   Lemma anr_br: forall n (k: fin' n -> ictree E X) w φ ψ,
       <[ {Br n k}, w |= φ AN ψ ]> <->
         <( {Br n k}, w |= φ)>
@@ -81,6 +85,7 @@ Section BasicLemmas.
         apply H0.
   Qed.
 
+  (** Vis iff lemma for prefix next [AN] *)
   Lemma anl_vis: forall (e: E) (k: encode e -> ictree E X) (_: encode e) w φ ψ,
       <( {Vis e k}, w |= φ AN ψ )> <->
         <( {Vis e k}, w |= φ )> /\ (forall (v: encode e), <( {k v}, {Obs e v} |= ψ )>).
@@ -101,6 +106,7 @@ Section BasicLemmas.
         apply H0.
   Qed.
 
+  (** Vis iff lemma for suffix next [AN] *)
   Lemma anr_vis: forall (e: E) (k: encode e -> ictree E X) (_: encode e) w φ ψ,
       <[ {Vis e k}, w |= φ AN ψ ]> <->
         <( {Vis e k}, w |= φ )> /\ (forall (v: encode e), <[ {k v}, {Obs e v} |= ψ ]>).
@@ -122,6 +128,8 @@ Section BasicLemmas.
   Qed.
 
   Typeclasses Transparent equ.
+  (** Useful lemma for the next [AN] operator and post-condition [ψ].
+  A tree [t] satisfies [φ AN done ψ] if and only if it satisfies [φ] and it returns a value [x] such that [ψ x w]. *)
   Lemma anr_done: forall (t: ictree E X) φ ψ w,
       <[ t, w |= φ AN done ψ ]> <-> <( t, w |= φ )> /\ (exists (x: X), t ~ Ret x /\ ψ x w).
   Proof with auto with ticl.
@@ -167,6 +175,7 @@ Section BasicLemmas.
            apply ticlr_done...
   Qed.
 
+  (** Return lemma for prefix next [AN], there is no prefix formula [ψ] for return *)
   Lemma anl_ret: forall (r: X) w φ ψ,
       ~ <( {Ret r}, w |= φ AN ψ )>.
   Proof.
@@ -182,6 +191,7 @@ Section BasicLemmas.
       apply ticll_not_done in H; inv H.
   Qed.
 
+  (** Return lemma for suffix next [AN] and post-condition [R]; [r] satisfies [R] next. *)
   Lemma anr_ret: forall (r: X) (R: rel X (World E)) φ w,
       <( {Ret r}, w |= φ )> ->
       R r w ->
@@ -191,7 +201,8 @@ Section BasicLemmas.
     apply anr_done; split...
     exists r...
   Qed.
-  
+ 
+  (** Helper more succinct version of the [anr_ret] lemma for [AX] = [T AN] *)
   Lemma axr_ret: forall (r: X) (R: rel X (World E)) w,
       not_done w ->
       R r w ->
@@ -202,6 +213,8 @@ Section BasicLemmas.
     csplit...
   Qed.
   
+  (** Inversion lemma for the next [AN] operator and post-condition [ψ].
+  A tree [t] satisfies [φ AN ψ] if and only if it satisfies [φ] and it returns a value [x] such that [ψ x w] and [w] is done. *)
   Lemma anr_ret_inv: forall (r: X) w φ ψ,
       <[ {Ret r}, w |= φ AN ψ ]> ->
         <( {Ret r}, w |= φ )>

@@ -26,10 +26,21 @@ Import ICTreeNotations TiclNotations.
 Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 
+(** * TICL logic iteration lemmas for ictrees and different Ticl operators.*)
+(** This section introduces the structural loop lemmas for the iteration of ictrees. 
+    Those are the main structural lemmas and the big contribution of this work.
+    Examples of the lemmas are: a termination lemma, a loop invariant lemma, a loop invariant lemma with a well-founded relation,
+    a loop invariant lemma with a well-founded relation and a post-condition etc.
+
+    The lemmas in this section internalize complex inductive and coinductive proof techniques to simple lemma application.
+*)
 Section IterLemmas.
   Context {E: Type} {HE: Encode E}.
 
-  (* AN *)
+  (** ** Iteration lemmas for the [AN] operator *)
+  (** A loop [iter k i] satisfies prefix [φ AN ψ] if [k i] steps to [φ AN ψ] or 
+      there is a finite, decreasing chain (well-founded [Rv]) such that eventually [k i]
+      will step to [φ AN ψ]. *)
   Lemma anl_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ictree E (I + X)) (φ ψ: ticll E):
     well_founded Rv ->
     Ri i w ->    
@@ -61,6 +72,9 @@ Section IterLemmas.
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
 
+  (** A loop [iter k i] satisfies suffix [φ AN ψ] if [k i] steps to [φ AN ψ] or
+  there is a finite, decreasing chain (well-founded [Rv]) such that eventually [k i]
+  will step to [φ AN ψ]. *)
   Lemma anr_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ictree E (I + X)) (φ: ticll E) (ψ: ticlr E X):
     well_founded Rv ->
     Ri i w ->    
@@ -95,7 +109,10 @@ Section IterLemmas.
       apply HindWf...
   Qed.
 
-  (* EN *)
+  (** ** Iteration lemmas for the [EN] operator *)
+  (** A loop [iter k i] satisfies prefix [φ EN ψ] if [k i] steps to [φ EN ψ] or 
+      there is a finite, decreasing chain (well-founded [Rv]) such that eventually [k i]
+      will step to [φ EN ψ]. *)
   Typeclasses Transparent sbisim.
   Lemma enl_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ictree E (I + X)) (φ ψ: ticll E):
     well_founded Rv ->
@@ -123,6 +140,9 @@ Section IterLemmas.
       apply HindWf...
   Qed.
 
+  (** A loop [iter k i] satisfies suffix [φ EN ψ] if [k i] steps to [φ EN ψ] or
+  there is a finite, decreasing chain (well-founded [Rv]) such that eventually [k i]
+  will step to [φ EN ψ]. *)
   Lemma enr_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ictree E (I + X))
     (φ: ticll E) (ψ: ticlr E X):
     well_founded Rv ->
@@ -157,7 +177,10 @@ Section IterLemmas.
       exists t, w0...
   Qed.  
 
-  (* AU *)
+  (** ** Iteration lemmas for the [AU] operator *)
+  (** A loop [iter k i] satisfies prefix [φ AU ψ] if [k i] eventually terminates with post-condition [R],
+      and in the next iteration the loop satisfies [φ AU ψ]. Intuitively, this lemma unfolds the loop body once, using
+      post-condition [R]. *)
   Lemma aul_iter_next{X I} R (i: I) w (k: I -> ictree E (I + X)) (φ ψ: ticll E):
     <[ {k i}, w |= φ AU AX done {fun lr w => exists i', lr = inl i' /\ R i' w} ]> ->
     (forall i w, R i w -> <( {iter k i}, w |= φ AU ψ )>) ->
@@ -171,6 +194,14 @@ Section IterLemmas.
     rewrite sb_guard...
   Qed.
 
+  (** ** The liveness split lemma. *)
+  (** For a loop [iter k i] to satisfy [φ AU ψ], it is sufficient to show that
+      [k i] eventually terminates with loop invariant [R], and in every next iteration the loop satisfies some intermediate
+      liveness specification [Ri]. Then starting at [Ri], we can show that the loop satisfies [φ AU ψ]. 
+
+      The key idea of this lemma is that every time we split on an intermediate liveness specification [Ri],
+      we can also provide two well-founded relations, one until [Ri] and one from [Ri] to [φ AU ψ].
+      We can continue splitting liveness proofs, giving smaller well-founded relations in this way. *)
   Lemma aul_iter_split{X I} R Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ictree E (I + X)) (φ ψ: ticll E):
     well_founded Rv ->
     not_done w ->
@@ -221,6 +252,8 @@ Section IterLemmas.
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
       
+  (** A loop [iter k i] satisfies prefix [φ AU ψ] if [k i] eventually terminates with loop invariant [R],
+      and in every next iteration the loop satisfies the invariant and a well-founded relation [Rv] becomes smaller. *)
   Lemma aul_iter{X I} R (Rv: relation (I * World E)) (i: I) w (k: I -> ictree E (I + X)) (φ ψ: ticll E):
     well_founded Rv ->
     not_done w ->
@@ -265,6 +298,7 @@ Section IterLemmas.
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
 
+  (** Working with well-founded relations can be tricky, so we provide a lemma that allows to use ranking functions instead *)
   Lemma aul_iter_nat{X I} Ri (f: I -> World E -> nat) (i: I) w (k: I -> ictree E (I + X))
     (φ ψ: ticll E):
     not_done w ->
@@ -287,6 +321,9 @@ Section IterLemmas.
     apply well_founded_ltof.
   Qed.
 
+  (** A loop [iter k i] satisfies suffix [φ AU ψ] if [k i] eventually terminates with post-condition [R],
+      and in the next iteration the loop satisfies [φ AU ψ]. Intuitively, this lemma unfolds the loop body once, using
+      post-condition [R]. *)
   Lemma aur_iter_next{X I} R (i: I) w (k: I -> ictree E (I + X)) (φ: ticll E) ψ:
     <[ {k i}, w |= φ AU AX done {fun lr w => exists i', lr = inl i' /\ R i' w} ]> ->
     (forall i w, R i w -> <[ {iter k i}, w |= φ AU ψ ]>) ->
@@ -300,6 +337,8 @@ Section IterLemmas.
     rewrite sb_guard...
   Qed.
   
+  (** A loop [iter k i] satisfies suffix [φ AU ψ] if [k i] eventually terminates with loop invariant [Ri],
+      and in every next iteration the loop satisfies the invariant and a well-founded relation [Rv] becomes smaller. *)
   Lemma aur_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ictree E (I + X)) (φ: ticll E) (ψ: ticlr E X):
     well_founded Rv ->    
     Ri i w ->    
@@ -341,6 +380,8 @@ Section IterLemmas.
     - apply ticlr_an_au. 
   Qed.
 
+  (** Working with well-founded relations can be tricky, so we provide a lemma that allows to use ranking functions
+  instead *)
   Lemma aur_iter_nat{X I} Ri (f: I -> World E -> nat) (i: I) w (k: I -> ictree E (I + X)) (φ: ticll E) (ψ: ticlr E X):
     Ri i w ->    
     (forall (i: I) w,
@@ -358,7 +399,9 @@ Section IterLemmas.
     apply well_founded_ltof.
   Qed.
   
-  (* EU *)
+  (** ** Iteration lemmas for the [EU] operator *)
+  (** A loop [iter k i] satisfies prefix [φ EU ψ] if [k i] eventually terminates with loop invariant [Ri],
+      and in every next iteration the loop satisfies the invariant and a well-founded relation [Rv] becomes smaller. *)
   Lemma eul_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ictree E (I + X)) (φ ψ: ticll E):
     well_founded Rv ->
     Ri i w ->
@@ -399,6 +442,8 @@ Section IterLemmas.
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
 
+  (** A loop [iter k i] satisfies suffix [φ EU ψ] if [k i] eventually terminates with loop invariant [Ri],
+      and in every next iteration the loop satisfies the invariant and a well-founded relation [Rv] becomes smaller. *)
   Lemma eur_iter{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ictree E (I + X)) (φ: ticll E) (ψ: ticlr E X):
     well_founded Rv ->
     Ri i w ->
@@ -442,7 +487,10 @@ Section IterLemmas.
     apply ticlr_en_eu.
   Qed.
   
-  (* AG *)
+  (** ** Iteration lemmas for the coinductive [AG] operator *)
+  (** A loop [iter k i] satisfies [AG φ] if [k i] always terminates with loop invariant [R],
+      while the return value of the iteration is always the left-injection [lr = inl i'].
+      This lemma internalizes powerful coinductive proof techniques to simple lemma application. *)
   Typeclasses Transparent sbisim.
   Lemma ag_iter{X I} (R: rel I (World E)) (i: I) w (k: I -> ictree E (I + X)) φ:
     R i w ->
@@ -487,7 +535,9 @@ Section IterLemmas.
         now apply aur_stuck, anr_stuck in HAN.
   Qed.        
 
-  (* EG *)
+  (** A loop [iter k i] satisfies [EG φ] if [k i] always terminates with loop invariant [R],
+      while the return value of the iteration is always the right-injection [lr = inr r].
+      This lemma internalizes powerful coinductive proof techniques to simple lemma application. *)
   Lemma eg_iter{X I} R (i: I) w (k: I -> ictree E (I + X)) (φ: ticll E):
     R i w ->    
     (forall (i: I) w,
@@ -513,7 +563,7 @@ Section IterLemmas.
                  | inr r => Ret r
                   end), w0; split.
       + rewrite unfold_iter.
-        apply ktrans_bind_r...
+        apply ktrans_bind_l...
         now apply eur_not_done in H0'.
       + apply (ft_t (eg_bind_eg φ
                        (fun (lr: I+X) (w0: World E) => exists i' : I, lr = inl i' /\ R i' w0))).

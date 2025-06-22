@@ -35,11 +35,21 @@ Local Open Scope nat_scope.
 
 Generalizable All Variables.
 
+(** * MeS: A secure tagged heap language with instrumentation *)
+(** In this module we define a simple imperative language with nondeterministic interleavings,
+    and shared memory, tagged with a security label [H] for high-security and [L] for low-security.
+
+    The language is defined in terms of a set of events [secE], which include [Read] and [Write] events.
+    The semantics of those events are given in terms of instrumentation handler [h_secE], which is a state monad
+    that also keeps track of the security labels of the memory cells.
+
+    This language is used in [examples/Sec.v] to prove the security of an infinite interleaving of client programs.
+*)
 Module ME.
-  (*| Security labels |*)
+  (** Security labels *)
   Variant Sec: Set := H | L.
   
-  (*| Preorder of [sec] labels |*)
+  (** Preorder of [sec] labels *)
   Reserved Notation "a ≺ b" (at level 52, left associativity).
   Variant sec_lt: relation Sec :=
     | SecLt: L ≺ H
@@ -78,7 +88,7 @@ Module ME.
   Lemma sec_lte_L(l: Sec): L ⪯ l.
   Proof. destruct l; repeat econstructor. Qed.
   
-  (*| Both values and addresses are nat |*)
+  (** Both values and addresses are natural numbers for simplicity *)
   Notation Addr := nat.
   
   Variant secE: Type :=
@@ -99,7 +109,10 @@ Module ME.
           | Write l addr v => unit
           end.
   
-  (* Ghost state, instrument every read with
+        
+  (** * Ghost state *)
+  (** The instrumentation handler [h_secE] keeps track of the security labels of the memory cells.
+    It instruments every read with
      [m: memory address it targets]
      [ml: Security-level of the instruction]
      [al: Security-level of the address cell previously written]
@@ -126,7 +139,8 @@ Module ME.
                    Ret (tt, add addr (l, v) st)
                end).
 
-  (* Client program *)
+  (** * The syntax of secure tagged heap programs *)
+  (** It includes [Read], [Write], [If], [Ret], [Bind] commands. *)
   Inductive CProg : Type -> Type :=
   | CRead (l: Sec) (addr: Addr): CProg (option nat)
   | CWrite (l: Sec) (addr: Addr) (v: nat): CProg unit
@@ -149,7 +163,13 @@ Module ME.
         denote_cprog (k x)
     end.
 
-   (* Scheduler program *)
+  (** * Scheduler programming language *)
+  (** The scheduler programming language is a language that allows for interleaving of client programs.
+    It includes [SLoop], [SBr], [SCall], [SRet], [SBind] commands.
+
+    The idea is that we write client programs in [CProg], then write the scheduler program in [SProg] to interleave them.
+    Denoting both languages to [ictree] gives us a way to reason about the interleaving of client programs.
+  *)
   Inductive SProg: Type -> Type :=
   | SLoop {X}(i: X) (b: X -> SProg X): SProg unit
   | SBr {X} (l r: SProg X): SProg X
@@ -157,6 +177,7 @@ Module ME.
   | SRet {A}(a: A): SProg A
   | SBind {A B}(l: SProg A) (k: A -> SProg B): SProg B.
 
+  (** Denotation of scheduler programs to [ictree] *)
   Fixpoint denote_sprog {A}(s: SProg A): ictree secE A :=
     match s with
     | @SLoop X i b =>
@@ -173,14 +194,16 @@ Module ME.
         denote_sprog (k x)
     end.
 
-  (* Instrumentation of client programs *)
+  (** Instrumentation of client programs *)
   Definition instr_cprog {X}(p: CProg X): St -> ictreeW SecObs (X * St) :=
     interp_state h_secE (denote_cprog p).
 
-  (* Instrumentation of scheduler programs *)
+  (** Instrumentation of scheduler programs *)
   Definition instr_sprog {X}(p: SProg X): St -> ictreeW SecObs (X * St) :=
     interp_state h_secE (denote_sprog p).
 
+  (** We lift the structural Ticl lemmas to the level of MeS programs. *)
+  (** Bind lemmas *)
   Lemma aur_cprog_bind_r{X Y}: forall (h: CProg X) (k: X -> CProg Y) m w φ ψ R,
       (forall r m w, R r m w -> <[ {instr_cprog (k r) m}, w |= φ AU ψ ]>) ->
       <[ {instr_cprog h m}, w |= φ AU AX done {fun '(r, m) w => R r m w} ]> ->
@@ -226,6 +249,7 @@ Module ME.
     eapply anr_state_bind_l_eq...
   Qed.
 
+  (** Branch lemmas *)
   Lemma anr_sprog_br{X}: forall (a b: SProg X) m w φ ψ,
       <( {instr_sprog (SBr a b) m}, w |= φ )> ->
       <[ {instr_sprog a m}, w |= ψ ]> ->
@@ -237,6 +261,7 @@ Module ME.
     intros []...
   Qed.
 
+  (** Call lemmas, call from [SProg] into the client [CProg]. *)
   Lemma ticlr_sprog_call{X}: forall (p: CProg X) m w ψ,
       <[ {instr_cprog p m}, w |= ψ ]> ->
       <[ {instr_sprog (SCall p) m}, w |= ψ ]>.
@@ -254,7 +279,7 @@ Module ME.
     unfold instr_cprog; cbn; intros []; intros...
   Qed.
   
-  (* Invariance *)
+  (** Invariance lemmas, uses [ag_state_iter] from [State.v] *)
   Lemma ag_sprog_invariance{X}: forall (b: X -> SProg X) R m s (i:X) φ,
       R i m s ->
       (forall i m s,

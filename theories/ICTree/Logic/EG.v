@@ -23,10 +23,11 @@ Import ICtree ICTreeNotations TiclNotations.
 Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 
-(* Lemmas on the structure of ictree [t] and AG proofs *)
+(** * TICL logic lemmas on ictrees and the exists-always [EG] operator *)
 Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
+  (** A visible event satisfies [EG φ] if and only if it satisfies [φ] and its continuation [k v] satisfies [EG φ] for some [v]. *)
   Lemma eg_vis: forall e (k: encode e -> ictree E X) w φ,
       (<( {Vis e k}, w |= φ )> /\ exists v, <( {k v}, {Obs e v} |= EG φ )>) <->
          <( {Vis e k}, w |= EG φ )>.
@@ -46,6 +47,7 @@ Section BasicLemmas.
       apply H. 
   Qed.
   
+  (** A nondeterministic choice satisfies [EG φ] if and only if it satisfies [φ] and its continuation [k i] satisfies [EG φ] for some [i]. *)
   Lemma eg_br: forall n (k: fin' n -> ictree E X) w φ,
       (<( {Br n k}, w |= φ )> /\ exists (i: fin' n), <( {k i}, w |= EG φ )>) <->
         <( {Br n k}, w |= EG φ )>.
@@ -65,6 +67,7 @@ Section BasicLemmas.
       apply H. 
   Qed.
 
+  (** A stuck tree does not satisfy [EG φ]; it does not step. *)
   Lemma eg_stuck: forall w φ,
       ~ <( {stuck: ictree E X}, w |= EG φ )>.
   Proof.
@@ -73,6 +76,7 @@ Section BasicLemmas.
     now apply ktrans_stuck in TR.
   Qed.
 
+  (** A return tree does not satisfy [EG φ]; it does not infinitely step. *)
   Lemma eg_ret: forall (x: X) w φ,      
       ~ <( {Ret x}, w |= EG φ )>.
   Proof.

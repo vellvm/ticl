@@ -18,6 +18,10 @@ From ExtLib Require Export
 
 Generalizable All Variables.
 
+(** * Instrumentation event *)
+(** In program instrumentation, we leave behind a [Log] event after each semantic interpretation.
+    This is useful for remembering the temporal information of the program post interpretation,
+    while also being general enough to accomodate arbitrary ghost-state [W]. *)
 Definition log {S}: S -> ictree (writerE S) unit := fun s => ICtree.trigger (Log s).
 
 Notation ictreeW Φ := (ictree (writerE Φ)).
@@ -26,6 +30,8 @@ Notation InstrM Φ Σ := (stateT Σ (ictreeW Φ)).
 Import ICTreeNotations.
 Local Open Scope ictree_scope.
 
+(** This handler makes it easier to define event instrumentation, by a semantic handler [h]
+and an observation function [obs] that returns a [W] value for each event. *)
 Definition h_instr `{Encode E} {W Σ} (h:E ~> stateT Σ (ictree void))
   (obs: forall (e: E), encode e -> Σ -> option W): E ~> InstrM W Σ :=
   fun e => mkStateT
@@ -36,7 +42,8 @@ Definition h_instr `{Encode E} {W Σ} (h:E ~> stateT Σ (ictree void))
              | None => Ret (x, σ)
              end).
 
-(*| Only log on changes |*)
+(** An instrumentation handler for [stateE S] events, leaving behind a [Log] event after each [Put] but not on [Get].
+Intuitively this means that we are only interested in the changes to the state, but not accesses to the state. *)
 Definition h_stateW{S}: stateE S ~> InstrM S S :=
   fun e => mkStateT (fun s =>
                     match e return ictreeW S (encode e * S) with

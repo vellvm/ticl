@@ -21,7 +21,7 @@ Generalizable All Variables.
 Global Typeclasses Opaque sbisim.
 Global Typeclasses Opaque ssim.
 
-(*| Re-export tactics from Equ/SBisim/SSim |*)
+(** * Re-export tactics from Equ/SBisim/SSim *)
 #[global] Tactic Notation "step" :=
   __step_equ || __step_sbisim || __step_ssim || step.
 
@@ -31,6 +31,7 @@ Global Typeclasses Opaque ssim.
 #[global] Tactic Notation "step" "in" ident(H) :=
   __step_equ_in H || __step_in_sbisim H || __step_in_ssim H || step in H.
 
+(** Lemma relating [trans] and strong bisimulation [sbisim]*)
 Lemma sbisim_trans `{HE: Encode E} {X}:
   forall (s t s': ictree E X) l (L: rel _ _),
     s (~ L) t ->
@@ -43,7 +44,7 @@ Proof.
   exists l', t'; auto.
 Qed.
 
-(*| LEF: I don't think we need an equivalence relation, maybe preorder suffices for [ictree_kripke] |*)
+(** Lemma relating [trans] and strong simulation [ssim]*)
 Lemma ssim_trans `{HE: Encode E} {X}:
   forall (s t s': ictree E X) l (L: rel _ _),
     s (≲ L) t ->

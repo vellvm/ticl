@@ -19,10 +19,9 @@ Local Open Scope ictree_scope.
 Set Implicit Arguments.
 Generalizable All Variables.
 
-(** ** Interpret *)
+(** * Event interpretation *)
 (** An event handler [E ~> M] defines a monad morphism
-    [c   tree E ~> M] for any monad [M] with a loop operator. *)
-
+    [ictree E ~> M] for any monad [M] with a loop operator. *)
 Definition interp `{Encode E} {M : Type -> Type}
   {MM : Monad M} {MI : MonadIter M} {MB: MonadBr M} (h: E ~> M) : forall X, ictree E X -> M X :=
   fun R => iter (fun t =>
@@ -35,7 +34,7 @@ Definition interp `{Encode E} {M : Type -> Type}
 
 Arguments interp {E H M MM MI MB} h [X].
 
-(*| Unfolding of [interp]. |*)
+(** Unfolding of [interp]. *)
 Notation _interp h t :=
   (match observe t with
    | RetF r => Ret r
@@ -63,6 +62,7 @@ Proof.
     reflexivity.
 Qed.
 
+(** Interpretation preserves equality [equ] *)
 #[global] Instance interp_equ `{HE: Encode E} {X} {h: E ~> ictree E} :
   Proper (equ eq ==> equ eq) (@interp E _ _ _ _ _ h X).
 Proof.

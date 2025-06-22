@@ -1,2 +1,0 @@
-alectryon == 1.4.0
-sphinx == 8.2.3

@@ -27,7 +27,15 @@ From TICL Require Export
 
 Generalizable All Variables.
 
-(*| TICL logic shallow embedding, based on kripke semantics |*)
+(** * TICL logic shallow embedding, based on kripke semantics *)
+(** We define Ticl as a shallow embedding over a Kripke model [M] parametrized by an event type [E].
+    The embedding is based on the Kripke semantics of Ticl.
+    The embedding is shallow, meaning we use the metalanguage of the Rocq proof assistant
+    to define base predicates (e.g., [MP]) and predicate transformers (e.g., [anc], [enc], [auc], [euc], [agc], [egc]),
+    that take a prediate [MP] and put it under a modality, giving a new predicate [MP].
+    
+    In this section we give the formal meaning of the Ticl formulas.
+    *)
 Section Shallow.
   Context `{KMS: Kripke M E} {X: Type}.
 
@@ -35,19 +43,34 @@ Section Shallow.
   Notation MP := (MS -> World E -> Prop).
   Local Open Scope ticl_scope.
 
-  (*| Binary shallow strong/weak forall [next] modality |*)
+  (** ** Binary shallow forall [next] modality *)
+  (** [anc] says that [p] holds now, [q] holds next, the tree [t] and world [w] must have at least one transition [can_step t w].
+      Furthermore, for all transitions [|t,w| ↦ |t', w'|], [q] must hold.
+  *)
   Definition anc (p q: MP) (t: MS) (w: World E): Prop :=
     p t w /\
       can_step t w /\
       (forall t' w', |t,w| ↦ |t', w'| -> q t' w').
   
+  (** ** Binary shallow exists [next] modality *)
+  (** [enc] says that [p] holds now, [q] holds next, the tree [t] and world [w] must have at least one transition [|t,w| ↦ |t', w'|],
+      and [q] must hold for the transition.
+  *)
   Definition enc(p q: MP) (t: MS) (w: World E): Prop :=
     p t w /\
       exists t' w', |t, w| ↦ |t', w'| /\ q t' w'.
   Hint Unfold anc enc: core.
 
   Unset Elimination Schemes.
-  (* Forall strong until *)
+
+  (** ** Forall strong until *)
+  (** [auc] is simply the least fixpoint of [anc]. 
+      In the base case, [auc p q t w] says that [q] holds now.
+      In the inductive case, [auc p q t w] says that [anc p (auc p q) t w] holds,
+      meaning [p] holds now and [auc p q] holds next.
+
+      As this is an inductive predicate, there are a finite number of constructors, so this is a well-founded definition.
+    *)
   Inductive auc (p q: MP): MP :=
   | MatchA: forall t w,       
       q t w ->    (* Matches [q] now; done *)
@@ -56,7 +79,14 @@ Section Shallow.
       anc p (auc p q) t w -> (* Matches [p] now; steps to [m'] *)
       auc p q t w.
 
-  (* Exists strong until *)
+  (** ** Exists strong until *)
+  (** [euc] is simply the least fixpoint of [enc]. 
+      In the base case, [euc p q t w] says that [q] holds now.
+      In the inductive case, [euc p q t w] says that [enc p (euc p q) t w] holds,
+      meaning [p] holds now and [euc p q] holds next.
+
+      As this is an inductive predicate, there are a finite number of constructors, so this is a well-founded definition.
+    *)
   Inductive euc(p q: MP): MP :=
   | MatchE: forall t w,
       q t w ->    (* Matches [q] now; done *)
@@ -65,7 +95,13 @@ Section Shallow.
       enc p (euc p q) t w -> (* Matches [p] now; steps to [m'] *)
       euc p q t w.
 
-  (* Custom induction schemes for [auc, euc] *)
+  (** ** Custom induction schemes for [auc, euc] *)
+  (** [auc_ind] is the custom induction scheme for [auc].
+      It is used to prove properties about [auc] by induction on the structure of the [auc] predicate.
+
+      Rocq has a hard time generating induction schemes under quantifiers (e.g., [forall t w, ...], [exists t w, ...]),
+      so we define our own induction schemes here.
+  *)
   Definition auc_ind :
     forall [p q: MP] (P : MP),
       (forall t w, q t w -> P t w) -> (* base *)
@@ -84,6 +120,9 @@ Section Shallow.
             (conj Hp (conj Hs (fun t' w' tr => F t' w' (HtrP t' w' tr))))
       end.
 
+  (** [euc_ind] is the custom induction scheme for [euc].
+      It is used to prove properties about [euc] by induction on the structure of the [euc] predicate.
+  *)
   Definition euc_ind :
     forall [p q: MP] (P : MP),
       (forall t w, q t w -> P t w) -> (* base *)
@@ -111,14 +150,19 @@ Section Shallow.
   Set Elimination Schemes.
 
   Arguments impl /.  
-  (* Always globally *)
-  (* Matches [p] now; all paths step to (t', s') *)
+
+  (** ** Forall Always modality (AG) *)
+  (** [agcF] is a monotone endomorphism used to define [agc], the greatest fixpoint of [anc].
+      Intuitively [p] must hold now and [agc p] must hold next, to infinitely many steps. *)
   Program Definition agcF p: mon MP :=
     {| body := anc p |}.
   Next Obligation.
     repeat red; intros; destruct H0; split; destruct H1; auto.
   Qed.
-  
+
+  (** ** Exists Always modality (EG) *)
+  (** [egcF] is a monotone endomorphism used to define [egc], the greatest fixpoint of [enc].
+      Intuitively [p] must hold now and [egc p] must hold next, to infinitely many steps. *)
   Program Definition egcF p: mon MP :=
     {| body := enc p |}.
   Next Obligation.
@@ -128,7 +172,7 @@ Section Shallow.
 
 End Shallow.
 
-(* Companion notations *)
+(** Greatest fixpoint and companion notations *)
 Notation agc p   := (gfp (agcF p)).
 Notation egc p   := (gfp (egcF p)).
 Notation agct p  := (t (agcF p)).
@@ -141,12 +185,17 @@ Notation agcbT p := (bT (agcF p)).
 Notation egcbT p := (bT (egcF p)).
 #[global] Hint Constructors euc auc: ticl.
 
-(*| Semantics of ticl entailment |*)
+(** * Semantics of TICL entailment *)
+(** We define the semantics of TICL entailment as a fixpoint over the structure of the TICL formulas. *)
 Section Entailment.
   Context `{KMS: Kripke M E}.
   Notation MS X := (M E HE X).
   Notation MP X := (M E HE X -> World E -> Prop).
 
+  (** ** Semantics of TICL prefix formulas *)
+  (** [entailsL] is the semantics of TICL prefix formulas, denoted to [MP X], a predicate over [M E HE X * World E]
+      in the metalanguage of the Rocq proof assistant.
+  *)
   Definition entailsL X : ticll E -> MP X := 
     fix entailsL (φ: ticll E): MP X :=
       match φ with
@@ -161,6 +210,10 @@ Section Entailment.
       | (COrL p q) => fun t w => entailsL p t w \/ entailsL q t w
       end.
 
+  (** ** Semantics of TICL suffix formulas *)
+  (** [entailsR] is the semantics of TICL suffix formulas, denoted to [MP X], a predicate over [M E HE X * World E]
+      in the metalanguage of the Rocq proof assistant.
+  *)
   Definition entailsR {X}: ticlr E X -> MP X := 
     fix entailsR (φ: ticlr E X): MP X :=
       match φ with
@@ -174,6 +227,8 @@ Section Entailment.
       | (CImplR p q) => fun t w => entailsL X p t w -> entailsR q t w
       end.
 
+  (** ** Unfolding of [entailsL]. 
+  This is defined in anger, because Rocq's evaluation [cbn] and [cbv] has a hard time figuring out when to stop. *)
   Lemma unfold_entailsL {X}: forall (t: M E HE X) (w: World E) (φ: ticll E),
       entailsL X φ t w = match φ with
                          | (CNow φ) => φ w /\ not_done w
@@ -188,6 +243,7 @@ Section Entailment.
                          end.
   Proof. intros; unfold entailsL; destruct φ; auto; destruct q; auto. Qed.
 
+  (** ** Unfolding of [entailsR]. *) 
   Lemma unfold_entailsR {X}: forall (t: M E HE X) (w: World E) (φ: ticlr E X),
       entailsR φ t w = match φ with
                        | (CDone φ) => done_with φ w
@@ -219,7 +275,7 @@ Notation " t , w  |= φ " := (entailsR φ t w)
                                   φ custom ticlr,
                                   right associativity): ticl_scope.
 
-(*| Base constructors of logical formulas |*)
+(** * Base constructors of logical formulas and some basic equivalences. *)
 Lemma ticll_now `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (φ: World E -> Prop),
     <( t, w |= now φ )> <-> φ w /\ not_done w.
@@ -313,7 +369,7 @@ Lemma ticlr_impll  `{KMS: Kripke M E} X:
     <[ t, w |= p -> q ]> <-> <( t, w |= p )> -> <[ t, w |= q ]>.
 Proof. intros t w p q; rewrite unfold_entailsR; intros [H H']; auto. Qed. 
 
-(* [AN φ] is stronger than [EN φ] *)
+(** [AN φ] is stronger than [EN φ] *)
 Lemma ticll_an_en `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (p q: ticll E),
     <( t, w |= p AN q )> -> <( t, w |= p EN q )>.
@@ -324,7 +380,7 @@ Proof.
   split; [|exists m', w']; auto.
 Qed.
 
-(* [AF φ] is stronger than [EF φ] *)
+(** [AF φ] is stronger than [EF φ] *)
 Lemma ticll_au_eu `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (p q: ticll E),
     <( t, w |= p AU q )> -> <( t, w |= p EU q )>.
@@ -350,7 +406,7 @@ Proof.
   exists m', w'; auto.
 Qed.
 
-(* [AF φ] is stronger than [EF φ] *)
+(** [AF φ] is stronger than [EF φ] *)
 Lemma ticlr_au_eu `{KMS: Kripke M E} X:
   forall (t: M E HE X) (w: World E) (p: ticll E) (q: ticlr E X),
     <[ t, w |= p AU q ]> -> <[ t, w |= p EU q ]>.
@@ -365,7 +421,7 @@ Proof.
     exists x, x0; split; auto.
 Qed.
 
-(* [AN φ] implies [AU φ] *)
+(** [AN φ] implies [AU φ] *)
 Lemma ticlr_an_au `{KMS: Kripke M E} X: forall (t: M E HE X) w φ ψ,
     <[ t, w |= φ AN ψ ]> ->
     <[ t, w |= φ AU ψ ]>.
@@ -393,12 +449,13 @@ Proof.
   exists m', w'; intuition.
 Qed.
   
-(*| Bot is false |*)
+(** * Soundness of TICL formulas *)
+(** Bot is false *)
 Lemma ticll_sound `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
     ~ <( t, w |= ⊥ )>.
 Proof. now intros * []. Qed. 
 
-(*| Ex-falso |*)
+(** Ex-falso *)
 Lemma ticlr_exfalso `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E) (p: ticlr E X),
     <[ t, w |= ⊥ -> p ]>.
 Proof.
@@ -407,7 +464,7 @@ Proof.
   now intros [].
 Qed.
 
-(*| Top is True |*)
+(** There are two top statements, one for prefix and one for suffix. *)
 Lemma ticll_top `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
     not_done w -> <( t, w |= ⊤ )>.
 Proof.
@@ -423,7 +480,9 @@ Proof.
   inv H; now constructor.
 Qed.
 
-(*| Cannot exist path such that eventually Bot |*)
+(** Cannot exist path such that eventually Bot.
+    This is a strong statement, it shows that [False] cannot eventually appear.
+    This is contrary to partial correctness logics where [False] can appear after infinite loops. *)
 Lemma ticll_sound_ef `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
     ~ <( t, w |= EF ⊥ )>.
 Proof.
@@ -434,7 +493,7 @@ Proof.
   - now destruct H as (? & ? & ? & ? & ?).
 Qed.
 
-(*| Cannot have all paths such that eventually always Bot |*)
+(** Cannot have all paths such that eventually always Bot. *)
 Lemma ticll_sound_af `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
     ~ <( t, w |= AF ⊥ )>.
 Proof.
@@ -444,7 +503,7 @@ Proof.
   contradiction.
 Qed.
 
-(*| Cannot exist path such that eventually Bot |*)
+(** Cannot exist path such that eventually Bot. *)
 Lemma ticlr_sound_ef `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
     ~ <[ t, w |= EF ⫫ ]>.
 Proof.
@@ -455,7 +514,7 @@ Proof.
   - now destruct H as (? & ? & ? & ? & ?).
 Qed.
 
-(*| Cannot have all paths such that eventually always Bot |*)
+(** Cannot have all paths such that eventually always Bot. *)
 Lemma ticlr_sound_af `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E),
     ~ <[ t, w |= AF ⫫ ]>.
 Proof.
@@ -484,7 +543,8 @@ Proof.
 Qed.
 Hint Resolve enc_not_done anc_not_done: ticl.
 
-(* Here the syntax separation becomes semantically apparent *)
+(** * Prefix formulas hold for [not_done] worlds *)
+(** Here the syntax separation becomes semantically apparent, as suffix formulas are the only ones that can hold for [done] worlds. *)
 Lemma ticll_not_done `{KMS: Kripke M E} X: forall (t: M E HE X) (w: World E) (p: ticll E),
     <( t, w |= p )> ->
     not_done w.
@@ -502,7 +562,8 @@ Proof.
     now apply ktrans_not_done with t t' w'.
 Qed.
 
-(* Basic tactics, more automated ones defined in [Tactics.v] after [Congruence.v] is done *)
+(** * Basic tactics *)
+(** More automated ones defined in [Tactics.v] after [Congruence.v] *)
 #[global] Tactic Notation "step" "in" ident(H) :=
   (lazymatch type of H with
    | @entailsL ?M ?W ?HE ?KMS ?X (Cg ?q ?φ) ?t ?w =>

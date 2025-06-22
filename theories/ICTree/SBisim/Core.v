@@ -25,12 +25,23 @@ Arguments respectful /.
 Arguments impl /.
 Arguments flip /.
 
+(** * Strong bisimulation between ictrees. *)
+(**
+      This is following the definition of strong bisimulation in CTrees from Chappe et al. 2022. We define
+      strong bisimulation as the greatest fixpoint of the symmetric closure of the simulation relation [ss].
+
+      Intuitively, two trees are strongly bisimilar if for every move the first tree can make, the second tree can make a move that is strongly bisimilar, and vice versa.
+      We prove strong bisimulation preserves the semantics of Ticl formulas and give a rich equational theory for strong bisimulation, which we use to reason under a Ticl entailment context.
+
+      Our definition of strong bisimulation is very general, as it is parametrized by relation on labels [L],
+      which means we can relate ictrees with different event types.
+*)
 Section StrongBisim.
   Context {E F: Type} {HE: Encode E} {HF: Encode F} {X Y : Type}.
   Notation S := (ictree E X).
   Notation S' := (ictree F Y).
 
-  (*| The symmetric closure of two [ss] |*)
+  (** The symmetric closure of two [ss] |*)
   Program Definition sb L : mon (S -> S' -> Prop) :=
     {| body R t u := ss L R t u /\ ss (flip L) (flip R) u t |}.
   Next Obligation.
@@ -41,6 +52,7 @@ Section StrongBisim.
       exists x0, x1; auto.      
   Qed.
 
+  (** [sb] is monotone *)
   #[global] Instance weq_sb : Proper (weq ==> weq) sb.
   Proof.
     split; intros.
@@ -58,8 +70,10 @@ Section StrongBisim.
         cbn in H2. setoid_rewrite H2. apply H0.
   Qed.
 
+  (** Strong bisimulation is the greatest fixpoint of [sb] *)
   Definition sbisim L := gfp (sb L).
 
+  (** [sbisim] is monotone *)
   #[global] Instance weq_sbisim : 
       Proper (weq ==> weq) sbisim.
   Proof.
@@ -76,8 +90,7 @@ Section StrongBisim.
 
 End StrongBisim.
 
-(* This instance allows to use the symmetric tactic from coq-coinduction
-   for homogeneous bisimulations *)
+(** This instance allows to use the symmetric tactic from coq-coinduction for homogeneous bisimulations *)
 #[global] Instance sbisim_sym `{HE: Encode E} {X} {L: rel (label E) (label E) }
   {HL: Symmetric L}:
     Sym_from converse (sb (X:=X) L) (ss L).
@@ -93,7 +106,7 @@ End StrongBisim.
 
 Local Open Scope ictree_scope.
 
-(*| sb (bisimulation) notation |*)
+(** * Notation for strong bisimulation *)
 Local Notation st L := (t (sb L)).
 Local Notation sT L := (T (sb L)).
 Local Notation sbt L := (bt (sb L)).
@@ -142,7 +155,7 @@ Ltac __step_in_sbisim H :=
 
 #[local] Tactic Notation "step" "in" ident(H) := __step_in_sbisim H || __step_in_ssim H || step in H.
 
-(*| Unary up-to-bisimulation enhancing function |*)
+(** Unary up-to-bisimulation enhancing function |*)
 Variant sbisim_clos1_body `{HE: Encode E} {X} {LE}
   (R : ictree E X -> Prop) : ictree E X -> Prop :=
     | Sbisim_clos1 : forall t t'
@@ -155,12 +168,12 @@ Program Definition sbisim_clos1 `{HE: Encode E} {X} {LE}
   {| body := @sbisim_clos1_body E HE X LE |}.
 Next Obligation. destruct H0; econstructor; eauto. Qed.
 
-(*|
-  This section should describe lemmas proved for the
-  heterogenous version of `ss`, parametric on
-  - Return types X, Y
-  - Label types E, F
-|*)
+(** * Heterogenous version of [ss] *)
+(**
+  This section describes lemmas proved for the heterogenous version of `ss`, parametric on
+  - Return types [X], [Y]
+  - Label types [E], [F]
+*)
 Section sbisim_heterogenous_theory.
   Context `{HE: Encode E} `{HF: Encode F} {X Y : Type}
           {L: rel (label E) (label F)}.
@@ -171,7 +184,7 @@ Section sbisim_heterogenous_theory.
   Local Notation sbt L := (coinduction.bt (sb L)).
   Local Notation sT  L := (coinduction.T (sb L)).
 
-  (*| Strong bisimulation up-to [equ] is valid |*)
+  (** Strong bisimulation up-to [equ] is valid *)
   Lemma equ_clos_st : @equ_clos E F X Y HE HF <= (st L).
   Proof.
     apply Coinduction; cbn.
@@ -196,10 +209,7 @@ Section sbisim_heterogenous_theory.
       eauto.
   Qed.
 
-(*|
-    Aggressively providing instances for rewriting [equ] under all [sb]-related
-    contexts.
-|*)
+  (** Providing instances for rewriting [equ] under all [sb]-related contexts. *)
   #[global] Instance equ_clos_st_goal RR :
     Proper (@equ E HE X X eq ==> @equ F HF Y Y eq ==> flip impl) (st L RR).
   Proof.
@@ -255,7 +265,7 @@ Section sbisim_heterogenous_theory.
     rewrite tt', uu'. reflexivity.
   Qed.
   
-  (*| Binary up-to-bisimulation enhancing function |*)
+  (** Binary up-to-bisimulation enhancing function *)
   Variant sbisim_clos2_body {LE LF}
           (R : rel (ictree E X) (ictree F Y)) : (rel (ictree E X) (ictree F Y)) :=
     | Sbisim_clos2 : forall t t' u' u
@@ -269,7 +279,7 @@ Section sbisim_heterogenous_theory.
   Next Obligation. destruct H0; econstructor; eauto. Qed.
 
   
-  (*| stuck ictrees can be simulated by anything. |*)
+  (** Stuck ictrees can be simulated by anything. *)
   Lemma is_stuck_sb (R : rel _ _) (t : ictree E X) (t': ictree F Y):
     is_stuck t -> is_stuck t' -> sb L R t t'.
   Proof.
@@ -335,11 +345,10 @@ Section sbisim_homogenous_theory.
   Local Notation sbt L := (coinduction.bt (sb L)).
   Local Notation sT  L := (coinduction.T (sb L)).
 
-  (*|
+  (*
     This is just a hack suggested by Damien Pous to avoid a
     universe inconsistency when using both the relational algebra
-    and coinduction libraries (we fix the type at which we'll use [eq]). |*)
-
+    and coinduction libraries (we fix the type at which we'll use [eq]). *)
   Lemma refl_st {RL: Reflexive L} : const eq <= (st L).
   Proof.
     apply leq_t.
@@ -347,10 +356,7 @@ Section sbisim_homogenous_theory.
       exists l, t'; split; eauto.
   Qed.
 
-(*|
-[converse] is compatible
-i.e. validity of up-to symmetry
-|*)
+  (** [converse] is compatible, i.e. validity of up-to symmetry *)
   Lemma converse_st `{SL: Symmetric _ L}: converse <= (st L).
   Proof.
     apply leq_t; cbn.
@@ -359,10 +365,7 @@ i.e. validity of up-to symmetry
     - destruct (H1 _ _ H) as (? & ? & ? & ? & ?); subst; symmetry in H4; eauto.
   Qed.
 
-(*|
-[square] is compatible
-i.e. validity of up-to transivitiy
-|*)
+  (** [square] is compatible, i.e. validity of up-to transivitiy *)
   Lemma square_st `{TR: Transitive _ L}: square <= (st L).
   Proof.
     apply Coinduction; cbn.
@@ -386,9 +389,7 @@ i.e. validity of up-to transivitiy
       transitivity l0; assumption.
   Qed.
 
-(*|
-Reflexivity
-|*)
+  (** Reflexivity *)
   #[global] Instance Reflexive_st R `{Reflexive _ L}: Reflexive (st L R).
   Proof. apply build_reflexive; apply ft_t; apply refl_st. Qed.
 
@@ -401,9 +402,7 @@ Reflexivity
   #[global] Instance Reflexive_sT f R `{Reflexive _ L}: Reflexive (sT L f R).
   Proof. apply build_reflexive; apply fT_T; apply refl_st. Qed.
 
-(*|
-Transitivity
-|*)
+  (** Transitivity *)
   #[global] Instance Transitive_st R `{Transitive _ L}: Transitive (st L R).
   Proof. apply build_transitive; apply ft_t; apply (square_st). Qed.
 
@@ -416,9 +415,7 @@ Transitivity
   #[global] Instance Transitive_sT f R `{Transitive _ L}: Transitive (sT L f R).
   Proof. apply build_transitive; apply fT_T; apply square_st. Qed.
 
-(*|
-Symmetry
-|*)
+  (** Symmetry *)
   #[global] Instance Symmetric_st R `{Symmetric _ L}: Symmetric (st L R).
   Proof. apply build_symmetric; apply ft_t; apply (converse_st). Qed.
 
@@ -431,9 +428,7 @@ Symmetry
   #[global] Instance Symmetric_sT f R `{Symmetric _ L}: Symmetric (sT L f R).
   Proof. apply build_symmetric; apply fT_T; apply converse_st. Qed.
 
-(*|
-Thus bisimilarity and [t R] are always equivalence relations.
-|*)
+  (** Thus bisimilarity and [t R] are always equivalence relations. *)
   #[global] Instance Equivalence_st `{Equivalence _ L} R: Equivalence (st L R).
   Proof. split; typeclasses eauto. Qed.
 
@@ -446,11 +441,7 @@ Thus bisimilarity and [t R] are always equivalence relations.
   #[global] Instance Equivalence_sT `{Equivalence _ L} f R: Equivalence ((T (sb L)) f R).
   Proof. split; typeclasses eauto. Qed.
 
-(*|
-Aggressively providing instances for rewriting hopefully faster
-[sbisim] under all [sb]-related contexts (consequence of the transitivity
-of the companion).
-|*)
+  (** Providing instances for rewriting hopefully faster [sbisim] under all [sb]-related contexts (consequence of the transitivity of the companion). *)
   #[global] Instance sbisim_sbisim_clos2_goal `{Transitive _ L} `{Symmetric _ L} :
     Proper (sbisim L ==> sbisim L ==> flip impl) (sbisim L).
   Proof.
@@ -516,13 +507,10 @@ of the companion).
 End sbisim_homogenous_theory.
 
 
-(*|
-Up-to [bind] context bisimulations
-----------------------------------
-We have proved in the module [Equ] that up-to bind context is
-a valid enhancement to prove [equ].
-We now prove the same result, but for strong and weak bisimulation.
-|*)
+(** * Up-to [bind] context bisimulations *)
+(** We have proved in the module [Equ] that up-to bind context
+    is a valid enhancement to prove [equ].
+    We now prove the same result, but for strong and weak bisimulation. *)
 
 Section bind.
   Obligation Tactic := trivial.
@@ -537,9 +525,7 @@ Section bind.
     apply in_bind_ctx2. apply H'. intros t t' HS. apply H, H'', HS.
   Qed.
 
-(*|
-The resulting enhancing function gives a valid up-to technique
-|*)
+  (** The resulting enhancing function gives a valid up-to technique *)
   Lemma bind_ctx_sbisim_t L0 :
     is_update_val_rel L R0 L0 -> bind_ctx_sbisim L0 <= st L.
   Proof.
@@ -605,10 +591,7 @@ End bind.
 Import ICtree.
 Import ICTreeNotations.
 
-(*|
-Expliciting the reasoning rule provided by the up-to principles.
-This principle is unusable for most [L], see https://github.com/vellvm/ictrees/issues/21
-|*)
+(** Expliciting the reasoning rule provided by the up-to principles. This principle is unusable for most [L] *)
 Lemma st_clo_bind_gen {E F: Type} {HE: Encode E} {HF: Encode F} {X Y X' Y': Type}
   {L : rel (label E) (label F)}
   (R0 : rel X Y) L0
@@ -724,9 +707,7 @@ Lemma sbisim_clo_bind_eq `{HE: Encode E} {X X': Type}
   t1 >>= k1 ~ t2 >>= k2.
 Proof. now apply st_clo_bind_eq. Qed.
 
-(*|
-And in particular, we get the proper instance justifying rewriting [~] to the left of a [bind].
-|*)
+(** And in particular, we get the proper instance justifying rewriting [~] to the left of a [bind]. *)
 #[global] Instance bind_sbisim_cong_gen `{HE: Encode E} {X X'} (RR: relation (ictree E X')):
   Proper (sbisim eq ==> pointwise_relation X (st eq RR) ==> st eq RR) (@bind E HE X X').
 Proof.
@@ -806,7 +787,7 @@ Section sb_vis_ctx.
       eapply H in H2; eapply H2.
     Qed.
 
-    (*| The resulting enhancing function gives a valid up-to technique |*)
+    (** The resulting enhancing function gives a valid up-to technique *)
     Lemma vis_ctx_sbisim_gen_t {L: rel (label E) (label F)} (e : E) (f: F)
       (right: encode e -> encode f) (left: encode f -> encode e) :
       (forall x, L (obs e x) (obs f (right x))) ->
@@ -844,9 +825,7 @@ Section sb_vis_ctx.
       eapply H in H0; eapply H0.
     Qed.
 
-(*|
-The resulting enhancing function gives a valid up-to technique
-|*)
+  (** The resulting enhancing function gives a valid up-to technique *)
     Lemma vis_ctx_sbisim_t (e : E) :
       vis_ctx_sbisim e <= (st eq).
     Proof.
@@ -914,19 +893,12 @@ Ltac __eplayR_sbisim :=
 #[local] Tactic Notation "eplayL" := __eplayL_sbisim.
 #[local] Tactic Notation "eplayR" := __eplayR_sbisim.
 
-(*|
-Proof rules for [~]
--------------------
-Naive bisimulations proofs naturally degenerate into exponential proofs,
-splitting into two goals at each step.
-The following proof rules avoid this issue in particular cases.
-
-Be sure to notice that contrary to equations such that [sb_guard] or
-up-to principles such that [upto_vis], (most of) these rules consume a [sb].
-
-TODO: need to think more about this --- do we want more proof rules?
-Do we actually need them on [sb (st R)], or something else?
-|*)
+(** * Proof rules for [~] *)
+(** Naive bisimulations proofs naturally degenerate into exponential proofs,
+    splitting into two goals at each step.
+    The following proof rules avoid this issue in particular cases.
+    Be sure to notice that contrary to equations such that [sb_guard] or
+    up-to principles such that [upto_vis], (most of) these rules consume a [sb]. *)
 Section Proof_Rules.
   Context {E F: Type} {HE: Encode E} {HF: Encode F} {X Y: Type} {L: rel (label E) (label F)}.
 
@@ -952,10 +924,8 @@ Section Proof_Rules.
     - typeclasses eauto.
   Qed.
 
-  (*|
-    The vis nodes are deterministic from the perspective of the labeled transition system,
-    stepping is hence symmetric and we can just recover the itree-style rule.
-  |*)
+  (** The vis nodes are deterministic from the perspective of the labeled transition system,
+      stepping is hence symmetric and we can just recover the itree-style rule. *)
   Lemma step_sb_vis_gen {X' Y'} (e: E) (f: F)
     (k: encode e -> ictree E X') (k': encode f -> ictree F Y') {R : rel _ _}:
     (Proper (equ eq ==> equ eq ==> impl) R) ->
@@ -978,7 +948,7 @@ Section Proof_Rules.
     typeclasses eauto.
   Qed.
 
-  (*| Same goes for visible tau nodes. |*)
+  (** Same goes for visible tau nodes. *)
   Lemma step_sb_step_gen (t : ictree E X) (t' : ictree F Y) (R: rel _ _) :
     (Proper (equ eq ==> equ eq ==> impl) R) ->
     L tau tau ->
@@ -1049,10 +1019,7 @@ Section Proof_Rules.
     typeclasses eauto.
   Qed.
 
-  (*|
-    For invisible nodes, the situation is different: we may kill them, but that execution
-    cannot act as going under the guard.
-  |*)
+  (** For invisible nodes, the situation is different: we may kill them, but that execution cannot act as going under the guard. *)
   Lemma step_sb_guard_gen (t : ictree E X) (t': ictree F Y) (R: rel _ _) :
     sb L R t t' ->
     sb L R (Guard t) (Guard t').
@@ -1070,10 +1037,8 @@ Section Proof_Rules.
 
 End Proof_Rules.
 
-(*|
-Proof system for homogenous [~]
---------------------
-
+(** * Proof system for homogenous [~] *)
+(**
 While the proof rules from the previous section are useful for performing full on
 coinductive proofs, lifting these at the level of [sbisim] can allow for completely
 avoiding any coinduction when combined with a pre-established equational theory.
@@ -1098,11 +1063,10 @@ Section Sb_Proof_System.
     apply H.
   Qed.
 
-  (*|
-    Visible vs. Invisible Taus
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~
-    Invisible taus can be stripped-out w.r.t. to [sbisim], but not visible ones
-  |*)
+  (** * Visible Branches vs. Invisible Guards *)
+  (**
+    Invisible guards can be stripped-out w.r.t. to [sbisim], but not visible ones
+  *)
   Lemma sb_guard: forall (t : ictree E X),
       Guard t ~ t.
   Proof.
@@ -1157,7 +1121,6 @@ Section Sb_Proof_System.
     apply @step_sb_br_id; auto.
   Qed.
 
-
   Lemma sb_unfold_iter{I}: forall (step: I -> ictree E (I + X))(i: I),
       iter step i ~
         (lr <- step i;;
@@ -1186,20 +1149,7 @@ Section Sb_Proof_System.
 
 End Sb_Proof_System.
 
-(* TODO: tactics!
-   Should it be the same to step at both levels or two different sets?
-
-Ltac bsret  := apply step_sb_ret.
-Ltac bsvis  := apply step_sb_vis.
-Ltac bstauv := apply step_sb_tauV.
-Ltac bsstep := bsret || bsvis || bstauv.
-
-Ltac sret  := apply sb_ret.
-Ltac svis  := apply sb_vis.
-Ltac stauv := apply sb_tauV.
-Ltac sstep := sret || svis || stauv.
- *)
-
+(** * Sanity checks *)
 Section SanityChecks.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
@@ -1213,7 +1163,7 @@ Section SanityChecks.
     reflexivity.
   Qed.
 
-  (*| Need to know [encode e1] is inhabited to take a step (not [void]) |*)
+  (** Need to know [encode e1] is inhabited to take a step (not [void]) *)
   Lemma sbisim_vis_invT {e1 e2: E} {k1: encode e1 -> ictree E X} {k2: encode e2 -> ictree E X} (x: encode e1):
     Vis e1 k1 ~ Vis e2 k2 ->
     encode e1 = encode e2 /\ e1 = e2.
@@ -1278,6 +1228,10 @@ Section SanityChecks.
   
 End SanityChecks.
 
+(** * Strong heterogenous simulations *)
+(**
+  This section defines the strong heterogenous simulations [ssim], which are used to define the strong bisimulation [sbisim].
+*)
 Section StrongSimulations.
 
   Context {E F: Type} {HE: Encode E} {HF: Encode F} {X Y: Type}
@@ -1305,7 +1259,7 @@ Section StrongSimulations.
         econstructor; eauto.
   Qed.
 
-  (*| Instances for rewriting [sbisim] under all [ss]-related contexts |*)
+  (** Instances for rewriting [sbisim] under all [ss]-related contexts *)
   #[global] Instance sbisim_eq_clos_ssim_goal:
     Proper (sbisim eq ==> sbisim eq ==> flip impl) (ssim L).
   Proof.

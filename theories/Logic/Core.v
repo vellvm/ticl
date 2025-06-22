@@ -1,8 +1,4 @@
-(*|
-=========================================
-Modal logics over ictrees
-=========================================
-|*)
+(** * Core logic theory *)
 From Coinduction Require Export coinduction tactics.
 From TICL Require Export           
   Utils.Utils

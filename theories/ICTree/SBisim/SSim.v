@@ -20,13 +20,19 @@ Local Open Scope ictree_scope.
 Set Implicit Arguments.
 Generalizable All Variables.
 
-(* TODO: Decide where to set this *)
 Arguments trans : simpl never.
 
+(** * Strong simulation *)
+(** Strong simulation is a relation between two ictrees.
+We define [ss] and [ssim] semantically, using the [trans] relation of labeleled transition systems (LTS)
+following the CTree definitions of Chappe et al. 2022. 
+
+Intuitively, an ictree [t] simulates an ictree [u],
+if for every transition of [t], there exists a transition of [u] that is related by [L], an equivalence relation on labels.
+*)
 Section StrongSim.
   Context {E F : Type} `{HE: Encode E} `{HF: Encode F} {X Y : Type}.
-  (*| The function defining strong simulations: [trans] plays must be answered
-    using [trans]. |*)
+  (** The function defining strong simulations: [trans] plays must be answered using [trans]. *)
   Program Definition ss (L : rel (label E) (label F)) :
     mon (ictree E X -> ictree F Y -> Prop) :=
     {| body R t u :=
@@ -66,7 +72,7 @@ Section StrongSim.
 
 End StrongSim.
 
-(*| ss (simulation) notation |*)
+(** Notation for strong simulation *)
 Notation sst L := (t (ss L)).
 Notation ssbt L := (bt (ss L)).
 Notation ssT L := (T (ss L)).
@@ -117,6 +123,9 @@ Ltac __coinduction_ssim R H :=
 
 Import ICTreeNotations.
 
+(** * Homogenous version of strong simulation *)
+(** The relation on labels [L] relates
+events of the same type. *)
 Section ssim_homogenous_theory.
   Context {E: Type} `{HE: Encode E} {X: Type}
           {L: relation (label E)}.
@@ -133,6 +142,7 @@ Section ssim_homogenous_theory.
     apply leq_t; cbn; unfold impl; red; intros; subst; eauto.
   Qed.
 
+  (** The transitivity of strong simulation. *)
   Lemma square_sst `{Transitive _ L}: square <= (sst L).
   Proof.
     apply Coinduction; cbn.
@@ -148,7 +158,7 @@ Section ssim_homogenous_theory.
     transitivity l'; auto.
   Qed.
 
-  (*| Reflexivity |*)
+  (** Reflexivity *)
   #[global] Instance Reflexive_sst R `{Reflexive _ L}: Reflexive (sst L R).
   Proof. apply build_reflexive; apply ft_t; apply (refl_sst). Qed.
 
@@ -161,7 +171,7 @@ Section ssim_homogenous_theory.
   #[global] Instance Reflexive_ssT f R `{Reflexive _ L}: Reflexive (ssT L f R).
   Proof. apply build_reflexive; apply fT_T; apply refl_sst. Qed.
 
-  (*| Transitivity |*)
+  (** Transitivity *)
   #[global] Instance Transitive_sst R `{Transitive _ L}: Transitive (sst L R).
   Proof. apply build_transitive; apply ft_t; apply (square_sst). Qed.
 
@@ -174,7 +184,7 @@ Section ssim_homogenous_theory.
   #[global] Instance Transitive_ssT f R `{Transitive _ L}: Transitive (ssT L f R).
   Proof. apply build_transitive; apply fT_T; apply square_sst. Qed.
 
-  (*| PreOrder |*)
+  (** Strong simulation is a preorder. *)
   #[global] Instance PreOrder_sst R `{PreOrder _ L}: PreOrder (sst L R).
   Proof. split; typeclasses eauto. Qed.
 
@@ -189,7 +199,7 @@ Section ssim_homogenous_theory.
 
 End ssim_homogenous_theory.
 
-(*| The LTS can not take a step [tau, vis, ret] |*)
+(** The LTS can not take a step [tau, vis, ret] *)
 Definition is_stuck `{Encode E} {X} (t: ictree E X) := ( ~ exists l u, trans l t u).
 Arguments is_stuck /.
 
@@ -203,7 +213,9 @@ Proof.
 Qed.
 Global Hint Resolve stuck_is_stuck: ictree.
 
-(*| Parametric theory of [ss] with heterogenous relation on labels [L] |*)
+(** * Parametric theory of [ss] with heterogenous relation [L]*)
+(** Here we define the heterogenous version of strong simulation, where the
+relation [L] relates labels of different types. *)
 Section ssim_heterogenous_theory.
   Context {E F: Type} `{HE: Encode E} `{HF: Encode F} {X Y: Type} {L: rel (label E) (label F)}.
 
@@ -213,7 +225,7 @@ Section ssim_heterogenous_theory.
   Notation ssbt L := (coinduction.bt (ss L)).
   Notation ssT L := (coinduction.T (ss L)).
 
-  (*| Strong simulation up-to [equ] is valid |*)
+  (** Strong simulation up-to [equ] is valid *)
   Lemma equ_clos_sst : equ_clos <= (sst L).
   Proof.
     apply Coinduction; cbn.
@@ -301,7 +313,7 @@ Section ssim_heterogenous_theory.
     do 2 eexists; eauto. rewrite <- uu'. eauto.
   Qed.
     
-  (*| stuck ictrees can be simulated by anything. |*)
+  (** Stuck ictrees can be simulated by anything. *)
   Lemma is_stuck_ss (R : rel _ _) (t : ictree E X) (t': ictree F Y):
     is_stuck t -> ss L R t t'.
   Proof.
@@ -333,14 +345,12 @@ Section ssim_heterogenous_theory.
 End ssim_heterogenous_theory.
 
 
-(*|
-Up-to [bind] context simulations
-----------------------------------
+(** * Up-to [bind] context simulations *)
+(**
 We have proved in the module [Equ] that up-to bind context is
 a valid enhancement to prove [equ].
 We now prove the same result, but for strong simulation.
-|*)
-
+*)
 Section ssim_heterogenous_bind.
   Context {E F: Type} `{HE: Encode E} `{HF: Encode F} {X X' Y Y': Type}
           (L : rel (label E) (label F)) (RR : rel X Y).
@@ -408,8 +418,8 @@ Section ssim_heterogenous_bind.
     red. reflexivity.
   Qed.
 
-  (*| Specialization of [bind_ctx] to a function acting with [ssim] on the bound value,
-    and with the argument (pointwise) on the continuation. |*)
+  (** Specialization of [bind_ctx] to a function acting with [ssim] on the bound value,
+    and with the argument (pointwise) on the continuation. *)
   Program Definition bind_ctx_ssim L0 : mon (rel (ictree E X') (ictree F Y')) :=
     {|body := fun R => @bind_ctx2 E F HE HF X Y X' Y' (ssim L0) (pointwise RR R) |}.
   Next Obligation.
@@ -419,7 +429,7 @@ Section ssim_heterogenous_bind.
     apply in_bind_ctx2. apply H'. intros t t' HS. apply H, H'', HS.
   Qed.
 
-  (*| The resulting enhancing function gives a valid up-to technique |*)
+  (** The resulting enhancing function gives a valid up-to technique *)
   Lemma bind_ctx_ssim_t L0: 
     is_update_val_rel L0 -> bind_ctx_ssim L0 <= (sst L).
   Proof.
@@ -501,7 +511,7 @@ Proof.
       constructor; auto.
 Qed.
 
-(*| Expliciting the reasoning rule provided by the up-to principles. |*)
+(** Expliciting the reasoning rule provided by the up-to principles. *)
 Lemma sst_clo_bind_gen `{HE: Encode E} `{HF: Encode F} {X Y X' Y': Type} {L : rel (label E) (label F)}
       (R0 : rel X Y) L0
       (t1 : ictree E X) (t2: ictree F Y)
@@ -586,7 +596,7 @@ Proof.
   - intros. now subst.
 Qed.
 
-(*| Specializing the congruence principle for [≲] |*)
+(** Specializing the congruence principle for [≲] *)
 Lemma ssim_clo_bind_gen `{HE: Encode E} `{HF: Encode F} {X Y X' Y': Type}
   {L : rel (label E) (label F)}
       (R0 : rel X Y) L0
@@ -694,11 +704,9 @@ Section Proof_Rules.
     intros. step. now apply step_ss_ret.
   Qed.
 
-(*|
- The vis nodes are deterministic from the perspective of the labeled
- transition system, stepping is hence symmetric and we can just recover
- the itree-style rule.
-|*)
+  (** The vis nodes are deterministic from the perspective of the labeled
+    transition system, stepping is hence symmetric and we can just recover
+    the itree-style rule. *)
   Lemma step_ss_vis_gen {Y} (e : E) (f: F)
         (k : encode e -> ictree E X) (k' : encode f -> ictree F Y) (R L: rel _ _) :
     (Proper (equ eq ==> equ eq ==> impl) R) ->
@@ -732,7 +740,6 @@ Section Proof_Rules.
     intros. step. now apply step_ss_vis.
   Qed.
 
-  (*| Same goes for visible tau nodes. |*)
   Lemma step_ss_step_gen {Y}
         (t : ictree E X) (t': ictree F Y) (R L: rel _ _):
     (Proper (equ eq ==> equ eq ==> impl) R) ->
@@ -755,12 +762,10 @@ Section Proof_Rules.
     typeclasses eauto.
   Qed.
 
-  (*|
-    When matching visible brs one against another, in general we need to explain how
+  (** When matching visible brs one against another, in general we need to explain how
     we map the branches from the left to the branches to the right.
     A useful special case is the one where the arity coincide and we simply use the identity
-    in both directions. We can in this case have [n] rather than [2n] obligations.
-    |*)
+    in both directions. We can in this case have [n] rather than [2n] obligations. *)
   Lemma step_ss_br_gen {Y n m} (k : fin' n -> ictree E X) (k' : fin' m -> ictree F Y)
     (R L: rel _ _) :
     (Proper (equ eq ==> equ eq ==> impl) R) ->
@@ -829,10 +834,8 @@ Section Proof_Rules.
     intros. apply ssim_br_id; eauto.
   Qed.
 
-  (*|
-    For invisible nodes, the situation is different: we may kill them, but that execution
-    cannot act as going under the guard.
-    |*)
+  (** For invisible nodes, the situation is different: we may kill them, but that execution
+    cannot act as going under the guard. *)
   Lemma step_ss_guard_gen {Y} (t: ictree E X) (t': ictree F Y) (R L: rel _ _):
     ss L R t t' ->
     ss L R (Guard t) (Guard t').
@@ -851,7 +854,7 @@ Section Proof_Rules.
     apply step_ss_guard_gen.
   Qed.
 
-  (*| Inversion principles |*)
+  (** Inversion principles *)
   Lemma ssim_ret_inv {Y} {L: rel (label E) (label F)} r1 r2:
     ssim L (Ret r1 : ictree E X) (Ret r2 : ictree F Y) ->
     L (val r1) (val r2).

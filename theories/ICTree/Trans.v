@@ -1,37 +1,16 @@
-(*|
-==========================================
-Transition relations over ictrees
-==========================================
+(** * Transition relations over ictrees *)
+(** ICrees represent the dynamics of non-deterministic procesess.
+In order to capture their behavioral equivalence, we follow the process-algebra
+tradition and define bisimulation atop of labelled transition systems.
 
-Trees represent the dynamics of non-deterministic procesess.
-In order to capture their behavioral equivalence, we follow the
-process-algebra tradition and define bisimulation atop of labelled
-transition systems.
+The relation [trans] is defined as the smallest relation satisfying the
+following rules: - [Ret v] steps to a silently blocked state by emitting a value
+label of [v] - [Vis e k] can step to any [k x] by emitting an event label tagged
+with both [e] and [x] - [BrS k] can step to any [k x] by emitting a tau label
 
-A node is said to be _observable_ if it is a visible event, a return
-node, or an internal br tagged as visible.
-The first transition relation we introduce is [trans]: a tree can
-finitely descend through unobservable brs until it reaches an
-observable node. At this point, it steps following the simple rules:
-- [Ret v] steps to a silently blocked state by emitting a value
-label of [v]
-- [Vis e k] can step to any [k x] by emitting an event label tagged
-with both [e] and [x]
-- [BrS k] can step to any [k x] by emitting a tau label
-
-This transition system will define a notion of strong bisimulation
-in the process algebra tradition.
-It also leads to a weak bisimulation by defining [wtrans] as a
-sequence of tau steps, and allowing a challenge to be answered by
-[wtrans . trans . wtrans].
-Once [trans] is defined over our structure, we can reuse the constructions
-used by Pous in [Coinduction All the Way Up] to build these weak relations
--- with the exception that we need to work in Kleene Algebras w.r.t. to model
-closed under [equ] rather than [eq].
-
-.. coq:: none
-|*)
-
+This transition system will define a notion of strong bisimulation in the
+process algebra tradition.
+*)
 From Stdlib Require Import
   Basics
   Datatypes
@@ -55,26 +34,20 @@ Set Primitive Projections.
 Section Trans.
   Context {E : Type} `{HE: Encode E} {X : Type}.
 
-(*|
-The domain of labels of the LTS.
-Note that it could be typed more strongly: [val] labels can only
-be of type [R]. However typing it statically makes lemmas about
-[bind] particularly awkward to state, so this seems to be the
-least annoying solution.
-|*)
+  (** * The domain of labels of the LTS. *)
   Variant label : Type :=
     | tau
     | obs (e : E) (v : encode e)
     | val {X : Type} (v : X).
 
-(*|
-The transition relation over [ictree]s.
+(**
+The transition relation over [ictree] inductively closes over [Guard] nodes.
 It can either:
-- recursively crawl through invisible [br] node;
+- recursively crawl through invisible [guard] nodes.
 - stop at a successor of a visible [br] node, labelling the transition [tau];
 - stop at a successor of a [Vis] node, labelling the transition by the event and branch taken;
-- stop at a sink (implemented as a [spin] node that has no successor.
-|*)
+- stop at a sink (implemented as a [spin] node that has no successor).
+*)
   Inductive trans_ : label -> relation (ictree' E X) :=
 
   | Stepguard l t u:
@@ -160,6 +133,7 @@ It can either:
       now econstructor.
   Qed.
 
+  (** [trans] preserves [equ] *)
   #[global] Instance trans_equ_ l :
     Proper (going (equ eq) ==> going (equ eq) ==> iff) (trans_ l).
   Proof.
@@ -184,15 +158,19 @@ Ltac ind_trans H :=
 Section Trans.
   Context {E : Type} `{HE: Encode E} {X : Type}. 
 
-  (*| Backward reasoning for [trans] |*)
+  (** * Backward reasoning for [trans] *)
+
+  (** [Ret x] steps to a silently blocked state by emitting a value label of [x] *)
   Lemma trans_ret : forall (x : X),
       trans (val x) (Ret x) stuck.
   Proof. intros; now constructor. Qed.
 
+  (** [Vis e k] can step to any [k x] by emitting an event label tagged with both [e] and [x] *)
   Lemma trans_vis : forall (e : E) (x: encode e) (k : encode e -> ictree E X),
       trans (obs e x) (Vis e k) (k x).
   Proof. intros; now constructor. Qed.
 
+  (** [Guard t] can step to [u], if [t] can step to [u] (inductively) *)
   Lemma trans_guard : forall l (t u: ictree E X),
       trans l t u ->
       trans l (Guard t) u.
@@ -202,6 +180,7 @@ Section Trans.
     apply TR.
   Qed.
 
+  (** [Br n k] can step to [k x] non-deterministically, emitting a tau label *)
   Lemma trans_br : forall n (k : _ -> ictree E X) t x,
       k x ≅ t ->
       trans tau (Br n k) t.
@@ -210,6 +189,7 @@ Section Trans.
     apply Steptau with x; apply H. 
   Qed.
 
+  (** [step t] can step to [t], emitting a tau label *)
   Lemma trans_step : forall (t: ictree E X),
       trans tau (step t) t.
   Proof.
@@ -217,6 +197,7 @@ Section Trans.
     apply Steptau; [exact Fin.F1 | reflexivity].
   Qed.
 
+  (** [br2 t u] can step to [t], emitting a tau label *)
   Lemma trans_br2_l : forall (t u: ictree E X),
       trans tau (br2 t u) t.
   Proof.
@@ -235,7 +216,9 @@ Section Trans.
     reflexivity.
   Qed.
 
-  (*| Forward reasoning for [trans] |*)
+  (** * Forward reasoning for [trans] *)
+
+  (** [Ret x] can step to [t], if [t] is stuck and the label is [val x] *)
   Lemma trans_ret_inv : forall x l (t : ictree E X),
       trans l (Ret x) t ->
        t ≅ stuck /\ l = val x.
@@ -246,6 +229,7 @@ Section Trans.
     now rewrite <- Eqt.
   Qed.
 
+  (** [Vis e k] can step to [u], if [u] is [k x] and the label is [obs e x] *)
   Lemma trans_vis_inv : forall (e : E) (k: encode e -> _) l (u : ictree E X),
       trans l (Vis e k) u ->
       exists x, u ≅ k x /\ l = obs e x.
@@ -258,6 +242,7 @@ Section Trans.
     - reflexivity.
   Qed.
 
+  (** [Guard t] can step to [u], if [t] can step to [u] (inductively) *)
   Lemma trans_guard_inv : forall l (t u : ictree E X),
       trans l (Guard t) u ->
       trans l t u.
@@ -274,6 +259,7 @@ Section Trans.
       eauto.
   Qed.
 
+  (** [Br n k] can step to [t'], if [t'] is [k x] and the label is [tau] *)
   Lemma trans_br_inv : forall n k l (t' : ictree E X),
       trans l (Br n k) t' ->
       exists x, t' ≅ k x /\ l = tau.
@@ -285,6 +271,7 @@ Section Trans.
     rewrite H, ictree_eta, (ictree_eta t), x; reflexivity.
   Qed.
 
+  (** [step t] can step to [t'], if [t'] is [t] and the label is [tau] *)
   Lemma trans_step_inv: forall l (t t': ictree E X),
       trans l (step t) t' ->
       t' ≅ t /\ l = tau.
@@ -292,6 +279,7 @@ Section Trans.
     intros * TR; apply trans_br_inv in TR as (_ & ? & ?); auto.
   Qed.
 
+  (** [br2 t u] can step to [t'], if [t'] is [t] or [u] and the label is [tau] *)
   Lemma trans_br2_inv : forall l (t t' u : ictree E X),
       trans l (br2 t u) t' ->
       (l = tau /\ (t' ≅ t \/ t' ≅ u)).
@@ -300,6 +288,7 @@ Section Trans.
     destruct x; auto.
   Qed.
 
+  (** [br3 t u v] can step to [t'], if [t'] is [t], [u] or [v] and the label is [tau] *)
   Lemma trans_br3_inv : forall l (t t' u v: ictree E X),
       trans l (br3 t u v) t' ->
       (l = tau /\ (t' ≅ t \/ t' ≅ u \/ t' ≅ v)).
@@ -311,8 +300,8 @@ Section Trans.
     - now right; left.
     - now right; right.
   Qed.
-  
-  (*| Inversion rules for [trans] based on the value of the label |*)
+ 
+  (** A tree with finite guards over [Ret x] can step to a stuck tree, emitting a [val x] label *)
   Lemma trans__val_inv {Y} : 
     forall (T U : ictree' E X) (x : Y),
       trans_ (val x) T U ->
@@ -336,6 +325,7 @@ Section Trans.
     reflexivity.
   Qed.
 
+  (** A struck tree cannot step *)
   Lemma trans_stuck: forall l (t: ictree E X),
       ~ trans l stuck t.
   Proof.
@@ -350,10 +340,13 @@ End Trans.
 
 Arguments label E {_}.
 
-(*| Forward and backward rules for [trans] w.r.t. [bind] |*)
+(** * Forward and backward rules for [trans] w.r.t. [bind] *)
+
+(** A label is a value label if it is of the form [val x] *)
 Variant is_val `{Encode E}: label E -> Prop :=
   | Is_val : forall X (x : X), is_val (val x).
 
+(** A tree with finite guards over [Ret x] can step to a stuck tree, emitting a [val x] label *)
 Lemma trans_bind_inv_aux {X Y} `{HE: Encode E} (l: label E)  T U :
   trans_ l T U ->
   forall (t : ictree E X) (k : X -> ictree E Y) (u : ictree E Y),
@@ -432,6 +425,7 @@ Proof.
     + step in H0; inversion H0.
 Qed.
 
+(** [t >>= k] can step to [u], if [u] is [t' >>= k] and the label is [l] *)
 Lemma trans_bind_inv {X Y} `{HE: Encode E} (t : ictree E X)
   (k : X -> ictree E Y) (u : ictree E Y) (l: label E) :
   trans l (t >>= k) u ->
@@ -445,6 +439,7 @@ Proof.
   rewrite <- ictree_eta; reflexivity.
 Qed.
 
+(** [t >>= k] can step to [u], if [u] is [t' >>= k] and the label is [l] *)
 Lemma trans_bind_inv_l {X Y} `{Encode E} (t : ictree E X)
   (k : X -> ictree E Y) (u : ictree E Y) l :
   trans l (t >>= k) u ->
@@ -455,7 +450,7 @@ Proof.
   destruct TR as [(? & ? & ? & ?) | (? & ? & ?)]; eauto.
 Qed.
 
-(* Why this is needed? *)
+(** [t >>= k] can step to [u >>= k], if [t] can step to [u] and the label is not [val x] *)
 Local Typeclasses Transparent equ.
 Lemma trans_bind_l {X Y} `{HE: Encode E} (t : ictree E X)
   (k : X -> ictree E Y) (u : ictree E X) (l: label E) :
@@ -484,6 +479,7 @@ Proof.
   - exfalso; eapply NOV; constructor.
 Qed.
 
+(** [t >>= k] can step to [u], if [t] returns with [val x] and [k x] can step to [u]. *)
 Lemma trans_bind_r {X Y} `{HE: Encode E} (t : ictree E X)
   (k : X -> ictree E Y) (u : ictree E Y) x l :
   trans (val x) t stuck ->
@@ -514,6 +510,7 @@ Proof.
   induction TR; intros; auto; try now inv Heqov.
 Qed.
 
+(** A trigger node emits an event label and can step to [k x] *)
 Lemma trans_trigger : forall {Y} `{HE: Encode E} (e : E) x (k: encode e -> ictree E Y),
     trans (obs e x) (trigger e >>= k) (k x).
 Proof.
@@ -524,6 +521,7 @@ Proof.
   constructor; auto.
 Qed.
 
+(** A trigger node can step to [k x], if [k x] can step to [u] and the label is [obs e x] *)
 Lemma trans_trigger_inv : forall {Y} `{HE: Encode E} (e : E)
                             (k : encode e -> ictree E Y) l u,
     trans l (trigger e >>= k) u ->
@@ -540,8 +538,8 @@ Proof.
     destruct TR as (? & ? & abs); inv abs.
 Qed.
 
-(*| [wf_val] states that a [label] is well-formed:
-  if it is a [val] it should be of the right type. |*)
+(** [wf_val] states that a [label] is well-formed:
+  if it is a [val] it should be of the right type. *)
 Definition wf_val `{Encode E} X l :=
   forall Y (v : Y), l = @val E _ Y v -> X = Y.
 

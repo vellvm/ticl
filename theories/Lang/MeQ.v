@@ -30,6 +30,22 @@ Local Open Scope list_scope.
 
 Generalizable All Variables.
 
+(** * MeQ: A queue language with instrumentation *)
+(** ICTrees are a denotaitonal model for programming languages with events, nondeterminism and infinite loops.
+    In this module, we demonstrate the common patterns for reasoning with ICTrees and Ticl, and introduce a queue language with instrumentation.
+
+    There are two events
+    [Push] pushes a value to the queue, and [Pop] pops a value from the queue.
+    The queue is represented as a list of values.
+
+    The semantics of those events are given in terms of instrumentation handler
+    [h_queueE], which is a state monad
+    that also keeps track of the successfully popped elements, while ignoring
+    pushes. Different temporal specifications might require different
+    instrumentation handlers. Ticl offers flexibility in that regard.
+
+    The language is used in [examples/Queue.v] to prove the always-eventually liveness property for a round-robin queue.
+*)
 Module ME.
   #[local] Parameter (T: Type) 
     (HDec: RelDec (@eq T)) 
@@ -37,10 +53,12 @@ Module ME.
   #[global] Existing Instance HDec.
   #[global] Existing Instance HCor.
 
+  (** Queue events *)
   Variant queueE : Type :=
   | Push (s: T)
   | Pop.
 
+  (** Encode the events as a sum type, [Pop] returns [None] if the queue is empty, and [Some x] if the head of the queue is [x] *)
   Global Instance encode_queueE: Encode queueE :=
     fun e => match e with
           | Push s => unit
@@ -58,7 +76,7 @@ Module ME.
 
   Definition Q := list T. 
   
-  (* Queue instrumented semantics *)
+  (** Queue instrumentation handler [h_queueE]. Emit [writeE] events for [Pop] events, recording the successfully popped elements. *)
   Definition h_queueE: queueE ~> stateT Q (ictreeW T) :=
     fun e =>
       mkStateT (fun q =>
@@ -72,6 +90,11 @@ Module ME.
                           end
                   end).
   
+  (** * The syntax of queue programs *) 
+  (** It includes [Pop], [Push], [IfSome], [UntilNone], [Ret], [Bind] commands.
+  We chose [IfSome] for control flow as we already have options in the language, as the result of [Pop] is an option.
+  The same is true for [UntilNone], which represents a loop that terminates when the result of the loop is [None].
+  *)
   Inductive CProg : Type -> Type :=
   | CPop : CProg (option T)
   | CPush (x: T): CProg unit
@@ -103,11 +126,12 @@ Module ME.
         cdenote_prog (k x)
     end.
 
-  (* Instrumentation of queue programs *)
+  (** Instrumentation of queue programs *)
   Definition instr_prog {X}(p: CProg X): Q -> ictreeW T (X * Q) :=
     interp_state h_queueE (cdenote_prog p).
 
-  (* Pop *)
+  (** We lift the structural Ticl lemmas to the level of MeQ programs. *)
+  (** Pop lemmas *)
   Lemma axr_pop_nil: forall w,
       not_done w ->
       <[ {instr_prog CPop nil}, w |= AX (done= {(None, nil)} w) ]>.
@@ -159,7 +183,7 @@ Module ME.
     apply axr_ret...
   Qed.
 
-  (*| Ret lemma |*)
+  (** Ret lemmas *)
   Lemma axr_qprog_ret{X}: forall (x: X) w q R,
       R (x, q) w ->
       not_done w ->
@@ -170,7 +194,7 @@ Module ME.
     apply axr_ret...
   Qed.
   
-  (*| Sequence lemmas |*)
+  (** Sequence lemmas *)
   Lemma aul_qprog_bind{X Y}: forall (h: CProg X) (k: X -> CProg Y) q q' (r: X) w w' φ ψ,
       <[ {instr_prog h q}, w |= φ AU AX done={(r,q')} w' ]> ->
       <( {instr_prog (k r) q'}, w' |= φ AU ψ )> ->
@@ -198,7 +222,7 @@ Module ME.
     eapply anr_state_bind_l_eq...
   Qed.
 
-  (*| Conditionals |*)
+  (** Conditional lemmas *)
   Lemma equivr_ifsome_some{X}: forall (k: X -> CProg unit) q ψ x w,
     <[ {instr_prog (k x) q}, w |= ψ ]> <->
     <[ {instr_prog (CIfSome (Some x) k) q}, w |= ψ ]>.
@@ -206,7 +230,7 @@ Module ME.
     unfold instr_prog; cbn; intros...
   Qed.
   
-  (*| While loops |*)
+  (** While loops use the [iter] lemmas from [Iter.v] and [State.v] *)
   Lemma aul_qprog_until_now{X}: forall w φ ψ (b: CProg (option X)) q,
       <( {instr_prog b q}, w |= φ AU ψ )> ->
       <( {instr_prog (CUntilNone b) q}, w |= φ AU ψ )>.
@@ -216,7 +240,7 @@ Module ME.
     now eapply ticll_state_bind_l. 
   Qed.
   
-  (* Termination *)
+  (** Termination lemma, uses [aur_state_iter_nat] from [State.v] *)
   Theorem aur_qprog_termination {X}(b: CProg (option X)) q (Ri: rel Q (WorldW T)) w (f: Q -> nat) φ ψ:    
     Ri q w ->
     not_done w ->
@@ -252,7 +276,7 @@ Module ME.
         apply aur_state_ret; intuition.
   Qed.
 
-  (* Eventually *)
+  (** Eventually lemma, uses [aul_state_iter_nat] from [State.v] *)
   Theorem aul_qprog_eventually {X} (b: CProg (option X)) q (Ri: rel Q (WorldW T)) w (f: Q -> nat) φ ψ:    
     Ri q w ->
     not_done w ->
@@ -283,7 +307,7 @@ Module ME.
         apply ticll_state_bind_l...
   Qed.
 
-  (* Invariance *)
+  (** Invariance lemma, uses [ag_state_iter] from [State.v] *)
   Lemma ag_qprog_invariance: forall (b: CProg (option unit)) R q w φ,
       R q w ->
       not_done w ->

@@ -25,11 +25,13 @@ Import ICTreeNotations TiclNotations.
 Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
   
-(*| TICL logic lemmas on c/itrees |*)
+(** * TICL logic lemmas on ictrees and the exists-until [EU] operator *)
 Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
   Opaque ICtree.stuck.
+
+  (** A stuck tree satisfies prefix [φ EU ψ] if and only if it satisfies [ψ]. *)
   Lemma eul_stuck: forall w φ ψ,
       <( {ICtree.stuck: ictree E X}, w |= φ EU ψ )> <->
       <( {ICtree.stuck: ictree E X}, w |= ψ )>.
@@ -41,6 +43,7 @@ Section BasicLemmas.
     - now cleft. 
   Qed.
 
+  (** A stuck tree satisfies suffix [φ EU ψ] if and only if it satisfies [ψ]. *)
   Lemma eur_stuck: forall w φ ψ,
       <[ {ICtree.stuck: ictree E X}, w |= φ EU ψ ]> <->
       <[ {ICtree.stuck: ictree E X}, w |= ψ ]>.
@@ -52,6 +55,7 @@ Section BasicLemmas.
     - now cleft. 
   Qed.
 
+  (** A return tree satisfies prefix [φ EU ψ] if and only if it satisfies [ψ] or [φ EN ψ]. *)
   Lemma eul_ret: forall (r: X) w φ ψ,
       <( {Ret r}, w |= ψ \/ φ EN ψ )> <->
       <( {Ret r}, w |= φ EU ψ )>.
@@ -86,6 +90,7 @@ Section BasicLemmas.
         apply ticll_not_done in H; inv H.
   Qed.
 
+  (** A return tree satisfies suffix [φ EU ψ] if and only if it satisfies [ψ] or [φ EN ψ]. *)
   Lemma eur_ret: forall (r: X) w φ ψ,
       <[ {Ret r}, w |= ψ \/ φ EN ψ ]> <->
       <[ {Ret r}, w |= φ EU ψ ]>.
@@ -123,6 +128,7 @@ Section BasicLemmas.
         constructor...
   Qed.
   
+  (** A nondeterministic choice satisfies prefix [φ EU ψ] if and only if it satisfies [ψ] or [φ EU ψ] for some [i]. *)
   Lemma eul_br: forall n (k: fin' n -> ictree E X) w φ ψ,
       (<( {Br n k}, w |= φ )> \/
          <( {Br n k}, w |= ψ )> /\
@@ -148,6 +154,7 @@ Section BasicLemmas.
           apply H.
   Qed.          
 
+  (** A nondeterministic choice satisfies suffix [φ EU ψ] if and only if it satisfies [ψ] or [φ EU ψ] for some [i]. *)
   Lemma eur_br: forall n (k: fin' n -> ictree E X) w φ ψ,
       (<[ {Br n k}, w |= φ ]> \/
          <( {Br n k}, w |= ψ )> /\
@@ -173,6 +180,7 @@ Section BasicLemmas.
           apply H.
   Qed.
 
+  (** A visible event satisfies prefix [φ EU ψ] if and only if it satisfies [ψ] or [φ EU ψ] for some [v]. *)
   Lemma eul_vis: forall (e: E) (k: encode e -> ictree E X) (_: encode e) w φ ψ,
       (<( {Vis e k}, w |= φ )> \/
          <( {Vis e k}, w |= ψ )> /\
@@ -198,6 +206,7 @@ Section BasicLemmas.
           apply H.
   Qed.
 
+  (** A visible event satisfies suffix [φ EU ψ] if and only if it satisfies [ψ] or [φ EU ψ] for some [v]. *)
   Lemma eur_vis: forall (e: E) (k: encode e -> ictree E X) (_: encode e) w φ ψ,
       (<[ {Vis e k}, w |= φ ]> \/
          <( {Vis e k}, w |= ψ )> /\

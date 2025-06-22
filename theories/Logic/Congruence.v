@@ -19,22 +19,27 @@ Local Open Scope ticl_scope.
 
 Generalizable All Variables.
 
-(*| Semantic implication of ticll formulas [p ⪟ q] |*)
+(** * Semantic implication of ticll formulas [p ⪟ q] *)
+(** We define a partial order of Ticl formulas (prefix and suffix). This is prefix implication. *)
 Definition impl_ticll {M} `{HE: Encode E} {K: Kripke M E} (X: Type): relation (ticll E) :=
   fun p q => forall (t: M E HE X) (w: World E), entailsL X p t w -> entailsL X q t w.
 
-(*| Semantic implication of ticlr formulas [p ⪟ q] |*)
+(** * Semantic implication of ticlr formulas [p ⪟ q] *)
+(** We define a partial order of Ticl formulas (prefix and suffix). This is suffix implication. *)
 Definition impl_ticlr {M} `{HE: Encode E} {K: Kripke M E} (X: Type): relation (ticlr E X) :=
   fun p q => forall (t: M E HE X) (w: World E), entailsR p t w -> entailsR q t w.
 
-(*| Semantic equivalence of ticll formulas [p ≃ q] |*)
+(** * Semantic equivalence of ticll formulas [p ≃ q] *)
+(** We define a partial order of Ticl formulas (prefix and suffix). This is prefix equivalence. *)
 Definition equiv_ticll {M} `{HE: Encode E} {K: Kripke M E} (X: Type): relation (ticll E) :=
   fun p q => impl_ticll X p q /\ impl_ticll X q p.
 
-(*| Semantic equivalence of ticlr formulas [p ≃ q] |*)
+(** * Semantic equivalence of ticlr formulas [p ≃ q] *)
+(** We define a partial order of Ticl formulas (prefix and suffix). This is suffix equivalence. *)
 Definition equiv_ticlr {M} `{HE: Encode E} {K: Kripke M E} (X: Type): relation (ticlr E X) :=
   fun p q => impl_ticlr X p q /\ impl_ticlr X q p.
 
+(** * Now we develop the equational theory of Ticl formulas. *)
 Section EquivTiclEquivalences.
   Context `{K: Kripke M E} {X: Type}.
   Notation impl_ticll := (@impl_ticll M E HE K X).
@@ -42,6 +47,7 @@ Section EquivTiclEquivalences.
   Notation equiv_ticll := (@equiv_ticll M E HE K X).
   Notation equiv_ticlr := (@equiv_ticlr M E HE K X).
 
+  (** Implications are a partial order. *)
   Global Instance Reflexive_impl_ticll:
     Reflexive impl_ticll.
   Proof. repeat red; auto. Qed.
@@ -58,6 +64,7 @@ Section EquivTiclEquivalences.
     Transitive impl_ticlr.
   Proof. repeat red; auto. Qed.
 
+  (** Equivalences are an equivalence relation. *)
   Global Instance Equivalence_equiv_ticll:
     Equivalence equiv_ticll.
   Proof.
@@ -78,7 +85,7 @@ Section EquivTiclEquivalences.
         transitivity y; auto.
   Qed.
 
-  (*| [impl_ticll] proper under [equiv_ticll] |*)
+  (** [impl_ticll] proper under [equiv_ticll] *)
   Global Add Parametric Morphism : impl_ticll with signature
          equiv_ticll ==> equiv_ticll ==> iff as equiv_ticll_impl.
   Proof.
@@ -90,7 +97,7 @@ Section EquivTiclEquivalences.
       transitivity q; auto.
   Qed.
 
-  (*| [impl_ticll] proper under [equiv_ticll] |*)
+  (** [impl_ticll] proper under [equiv_ticll] *)
   Global Add Parametric Morphism : equiv_ticll with signature
          equiv_ticll ==> equiv_ticll ==> iff as equiv_ticll_equiv.
   Proof.
@@ -100,7 +107,7 @@ Section EquivTiclEquivalences.
     - now rewrite pq, pq'.
   Qed.
 
-  (*| [impl_ticlr] proper under [equiv_ticlr] |*)
+  (** [impl_ticlr] proper under [equiv_ticlr] *)
   Global Add Parametric Morphism : impl_ticlr with signature
          equiv_ticlr ==> equiv_ticlr ==> iff as equiv_ticlr_impl.
   Proof.
@@ -112,7 +119,7 @@ Section EquivTiclEquivalences.
       transitivity q; auto.
   Qed.
 
-  (*| [impl_ticll] proper under [equiv_ticll] |*)
+  (** [impl_ticlr] proper under [equiv_ticlr] *)
   Global Add Parametric Morphism : equiv_ticlr with signature
          equiv_ticlr ==> equiv_ticlr ==> iff as equiv_ticlr_equiv.
   Proof.
@@ -123,7 +130,7 @@ Section EquivTiclEquivalences.
   Qed.
 End EquivTiclEquivalences.
 
-(*| Equations of TICL (left) |*)
+(** * Equations of TICL (prefix versions) *)
 Section EquivTicllFormulas.
   Context `{KMS: Kripke M E} {X: Type}.
   Notation MS := (M E HE X).
@@ -132,7 +139,7 @@ Section EquivTicllFormulas.
   Notation equiv_ticll := (@equiv_ticll M E HE KMS X).
 
   Arguments impl /.
-  (*| Rewriting [equiv_ticl] over [entailsF] |*)
+  (** Rewriting [equiv_ticl] over [entailsF] *)
   Global Add Parametric Morphism: (entailsL X)
          with signature (impl_ticll ==> eq ==> eq ==> impl)
            as impl_ticll_entailsL.
@@ -143,7 +150,7 @@ Section EquivTicllFormulas.
            as equiv_ticll_entailsL.
   Proof. intros x y [Hxy Hyx]; split; intro H; auto. Qed.
 
-  (*| Congruences over equiv_ticl |*)
+  (** Congruences over equiv_ticl *)
   Global Add Parametric Morphism: CAndL
          with signature impl_ticll ==> impl_ticll ==> impl_ticll
            as impl_ticll_equiv_and.
@@ -247,7 +254,7 @@ Section EquivTiclrFormulas.
   Notation impl_ticlr := (@impl_ticlr M E HE KMS X).
   Notation equiv_ticlr := (@equiv_ticlr M E HE KMS X).
 
-  (*| Rewriting [impl_ticl], [equiv_ticl] over [entailsR] |*)
+  (** Rewriting [impl_ticl], [equiv_ticl] over [entailsR] *)
   Arguments impl /.
   Global Add Parametric Morphism: entailsR
          with signature (impl_ticlr ==> eq ==> eq ==> impl)
@@ -259,7 +266,7 @@ Section EquivTiclrFormulas.
            as equiv_ticll_entailsR.
   Proof. intros x y [Hxy Hyx]; split; intro H; auto. Qed.
 
-  (*| Congruences over equiv_ticlr |*)
+  (** Congruences over equiv_ticlr *)
   Global Add Parametric Morphism: CAndR
          with signature impl_ticlr ==> impl_ticlr ==> impl_ticlr
            as impl_ticlr_equiv_andr.
@@ -346,13 +353,10 @@ Section EquivTiclrFormulas.
       with signature eq ==> equiv_ticll X ==> equiv_ticlr ==> equiv_ticlr as equiv_ticlr_until.
   Proof.
     intros [] p q [pq qp] p' q' [pq' qp']; split; try (rewrite pq, pq' || rewrite qp, qp'); reflexivity.
-  Qed.
-
-
-        
+  Qed.        
 End EquivTiclrFormulas.
 
-(*| Equations of TICL (left) |*)
+(** * Equations of TICL prefix formulas [ticll] *)
 Section TicllEquations.
   Context `{KMS: Kripke M E} {X: Type}.
   Notation MS := (M E HE X).
@@ -360,6 +364,7 @@ Section TicllEquations.
   Infix "⋖" := (impl_ticll X (K:=KMS)) (at level 58, left associativity).
   Infix "⩸" := (equiv_ticll X (K:=KMS)) (at level 58, left associativity).
 
+  (** Unfold a [vis] formula into a [now] formula *)
   Lemma equivl_vis_now: forall φ,
       <( vis φ )> ⩸ <( now {fun w => exists (e: E) (v: encode e), w = Obs e v /\ φ e v} )>.
   Proof.
@@ -370,6 +375,7 @@ Section TicllEquations.
     - intros * [(e & v & -> & Hφ) Hd]; split; auto with ticl.
   Qed.
 
+  (** [AU] either [q] holds or [p] holds and [p AU q] holds next *)
   Lemma equivl_au_an: forall (p q: ticll E),
       <( p AU q )> ⩸ <( q \/ (p AN (p AU q)) )>.
   Proof.
@@ -383,6 +389,7 @@ Section TicllEquations.
         now right.
   Qed.
 
+  (** [EU] either [q] holds or [p] holds and [p EU q] holds next *)
   Lemma equivl_eu_en: forall (p q: ticll E),
       <( p EU q )> ⩸ <( q \/ (p EN (p EU q)) )>.
   Proof.
@@ -398,6 +405,7 @@ Section TicllEquations.
         now right.
   Qed.
 
+  (** [⊤ /\ p] is the identity of [/\] *)
   Lemma equivl_and_idL: forall (p: ticll E),
       <( ⊤ /\ p )> ⩸ <( p )>.
   Proof.
@@ -407,6 +415,7 @@ Section TicllEquations.
       now apply ticll_not_done in Hp.
   Qed.
 
+  (** [p /\ ⊤] is the identity of [/\] *)
   Lemma equivl_and_idR: forall (p: ticll E),
       <( p /\ ⊤ )> ⩸ <( p )>.
   Proof.
@@ -416,6 +425,7 @@ Section TicllEquations.
       now apply ticll_not_done in Hp.
   Qed.
 
+  (** [⊥ \/ p] is the identity of [\/] *)
   Lemma equivl_or_idL: forall (p: ticll E),
       <( ⊥ \/ p )> ⩸ <( p )>.
   Proof.
@@ -424,6 +434,7 @@ Section TicllEquations.
     - now right.
   Qed.
 
+  (** [p \/ ⊥] is the identity of [\/] *)
   Lemma equivl_or_idR: forall (p: ticll E),
       <( p \/ ⊥ )> ⩸ <( p )>.
   Proof.
@@ -432,6 +443,7 @@ Section TicllEquations.
     - now left.
   Qed.
 
+  (** [AG p] is equivalent to [p] holds, and next [p AN (AG p)] holds. *)
   Lemma equivl_ag_an: forall (p: ticll E),
       <( AG p )> ⩸ <( p AN (AG p) )>.
   Proof.
@@ -441,6 +453,7 @@ Section TicllEquations.
       destruct H0; step; now constructor.
   Qed.
 
+  (** [EG p] is equivalent to [p] holds, and next [p EN (EG p)] holds. *)
   Lemma equivl_eg_en: forall (p: ticll E),
       <( EG p )> ⩸ <( p EN (EG p) )>.
   Proof.
@@ -450,6 +463,8 @@ Section TicllEquations.
       step; now constructor.
   Qed.
 
+  (** [p AU (p AN q)] implies [p AN (p AU q)].
+       Intuitively, we move the [AN] from the end to the beginning. *)
   Lemma impll_auan_anau: forall (p q: ticll E),
       <( p AU (p AN q) )> ⋖ <( p AN (p AU q) )>.
   Proof.
@@ -469,7 +484,8 @@ Section TicllEquations.
       apply equivl_au_an; apply ticll_or.
       right; auto.
   Qed.
-  
+
+  (** If [AG p] holds always then [p] holds now. *)
   Lemma impll_ag_refl: forall (p: ticll E),
       <( AG p )> ⋖ p.
   Proof.
@@ -478,6 +494,7 @@ Section TicllEquations.
     now destruct H.
   Qed.
 
+  (** If [EG p] holds always then [p] holds now. *)
   Lemma impll_eg_refl: forall (p: ticll E),
       <( EG p )> ⋖ p.
   Proof.
@@ -486,6 +503,7 @@ Section TicllEquations.
     now destruct H.
   Qed.
 
+  (** [p AU q] is idempotent. *)
   Lemma equivl_au_idem: forall (p q: ticll E),
       <( p AU q )> ⩸ <( p AU (p AU q) )>.
   Proof.
@@ -501,6 +519,7 @@ Section TicllEquations.
     - apply equivl_au_an; right; split; auto.
   Qed.
 
+  (** [p EU q] is idempotent. *)
   Lemma equivl_eu_idem: forall (p q: ticll E),
       <( p EU q )> ⩸ <( p EU (p EU q) )>.
   Proof.
@@ -515,6 +534,7 @@ Section TicllEquations.
       apply ticll_en; split; eauto.
   Qed.
 
+  (** [AG p] is idempotent. *)
   Lemma equivl_ag_idem: forall (p: ticll E),
       <( AG p )> ⩸ <( AG (AG p) )>.
   Proof.
@@ -527,6 +547,7 @@ Section TicllEquations.
     - apply impll_ag_refl.
   Qed.
 
+  (** [EG p] is idempotent. *)
   Lemma equivl_eg_idem: forall (p: ticll E),
       <( EG p )> ⩸ <( EG (EG p) )>.
   Proof.
@@ -539,6 +560,7 @@ Section TicllEquations.
     - apply impll_eg_refl.
   Qed.
 
+  (** [AG (p /\ q)] is equivalent to [AG p /\ AG q]. *)
   Lemma equivl_and_ag: forall p q,
       <( AG (p /\ q) )> ⩸ <( AG p /\ AG q )>.
   Proof with eauto.
@@ -565,7 +587,10 @@ Section TicllEquations.
       apply ticll_and...
   Qed.
 
-  (* Other direction does not hold *)
+  (** [EG (p /\ q)] implies [EG p /\ EG q] but is not equivalent like [AG].
+      This is because for [EG (p /\ q)] we can have a trace where both [p] and [q] hold now and next,
+      but for [EG p /\ EG q] we must chose either [p] or [q] to hold always.
+  *)
   Lemma impll_and_eg: forall p q,
       <( EG (p /\ q) )> ⋖ <( EG p /\ EG q )>.
   Proof with eauto.
@@ -584,6 +609,10 @@ Section TicllEquations.
       now apply ticll_and in Hp as (Hp & Hq).
   Qed.
 
+  (** [AG (p \/ q)] implies [AG p \/ AG q].
+      Intuitively, we can have a trace where [p] holds always or [q] holds always.
+      But if we chose [p] to hold always, we lose the information that [q] holds always.
+  *)
   Lemma impll_or_ag: forall p q,
       <( AG p \/ AG q )> ⋖ <( AG (p \/ q) )>.
   Proof with eauto.
@@ -602,6 +631,10 @@ Section TicllEquations.
       apply ticll_or; now right.
   Qed.
 
+  (** [EG (p \/ q)] implies [EG p \/ EG q].
+      Intuitively, we can have a trace where [p] holds always or [q] holds always.
+      But if we chose [p] to hold always, we lose the information that [q] holds always.
+  *)
   Lemma impll_or_eg: forall p q,
       <( EG p \/ EG q )> ⋖ <( EG (p \/ q) )>.
   Proof with eauto.
@@ -622,6 +655,7 @@ Section TicllEquations.
 
 End TicllEquations.
 
+(** * Equations of TICL suffix formulas [ticlr] *)
 Section TiclrEquations.
   Context `{KMS: Kripke M E} {X: Type}.
   Notation MS := (M E HE X).
@@ -642,6 +676,7 @@ Section TiclrEquations.
         destruct H as (e' & v' & Hinv & ?); ddestruction Hinv...
   Qed.
 
+  (** Left injection of [p] into [p \/ q] *)
   Lemma equivr_or_injL: forall (p q: ticlr E X),
       <[ p ]> ⋖ <[ p \/ q ]>.
   Proof.
@@ -650,6 +685,7 @@ Section TiclrEquations.
     now left.
   Qed.
 
+  (** Right injection of [q] into [p \/ q] *)
   Lemma equivr_or_injR: forall (p q: ticlr E X),
       <[ q ]> ⋖ <[ p \/ q ]>.
   Proof.
@@ -658,6 +694,7 @@ Section TiclrEquations.
     now right.
   Qed.
   
+  (** Or and implication *)
   Lemma implr_or_impl_or: forall p q R,      
       <[ p \/ q ]> ⋖ R -> <[ p ]> ⋖ R \/ <[ q ]> ⋖ R.
   Proof.
@@ -669,6 +706,7 @@ Section TiclrEquations.
     now left.
   Qed.
 
+  (** And and implication *)
   Lemma implr_or_impl_and: forall p q R,
       <[ p ]> ⋖ R /\ <[ q ]> ⋖ R ->
       <[ p \/ q ]> ⋖ R.
@@ -682,6 +720,10 @@ Section TiclrEquations.
     - now apply H1.
   Qed.
 
+  (** If [p] holds now and either [q] or [r] next, then this implies [p AN (q \/ r)].
+      Intuitively, we can have a trace where [p] holds now and either [q] or [r] holds next.
+      But if we chose [q] to hold next, we lose the information that [r] holds next.
+  *)
   Lemma implr_an_or: forall p q r,
       <[ p AN q \/ p AN r ]> ⋖ <[ p AN (q \/ r) ]>.
   Proof with auto with ticl.
@@ -698,6 +740,7 @@ Section TiclrEquations.
       apply ticlr_or; right...
   Qed.
   
+  (** [p AU q] is equivalent to [q] or [p] holds now and [p AU q] holds next. *)
   Lemma equivr_au_an: forall (p: ticll E) (q: ticlr E X),
       <[ p AU q ]> ⩸ <[ q \/ (p AN (p AU q)) ]>.
   Proof with auto with ticl.
@@ -711,6 +754,7 @@ Section TiclrEquations.
         now right.
   Qed.
 
+  (** [p EU q] is equivalent to [q] or [p] holds now and [p EU q] holds next. *)
   Lemma equivr_eu_en: forall (p: ticll E) (q: ticlr E X),
       <[ p EU q ]> ⩸ <[ q \/ (p EN (p EU q)) ]>.
   Proof.
@@ -726,6 +770,8 @@ Section TiclrEquations.
         now right.
   Qed.
 
+  (** [p AU (p AN q)] implies [p AN (p AU q)].
+      Intuitively, we move the [AN] from the end to the beginning. *)
   Lemma implr_auan_anau: forall (p: ticll E) (q: ticlr E X),
       <[ p AU (p AN q) ]> ⋖ <[ p AN (p AU q) ]>.
   Proof with auto with ticl.
@@ -746,6 +792,8 @@ Section TiclrEquations.
       right; auto.
   Qed.
 
+  (** [p EU (p EN q)] implies [p EN (p EU q)].
+      Intuitively, we move the [EN] from the end to the beginning. *)
   Lemma implr_euen_eneu: forall (p: ticll E) (q: ticlr E X),
       <[ p EU (p EN q) ]> ⋖ <[ p EN (p EU q) ]>.
   Proof with auto with ticl.
@@ -766,6 +814,7 @@ Section TiclrEquations.
       right...
   Qed.
 
+  (** [p AU q] is idempotent. *)
   Lemma equivr_au_idem: forall (p: ticll E) (q: ticlr E X),
       <[ p AU q ]> ⩸ <[ p AU (p AU q) ]>.
   Proof.
@@ -781,6 +830,7 @@ Section TiclrEquations.
     - apply equivr_au_an; right; split; auto.
   Qed.
 
+  (** [p EU q] is idempotent. *)
   Lemma equivr_eu_idem: forall (p: ticll E) (q: ticlr E X),
       <[ p EU q ]> ⩸ <[ p EU (p EU q) ]>.
   Proof.
@@ -795,6 +845,7 @@ Section TiclrEquations.
       apply ticlr_en; split; eauto.
   Qed.
 
+  (** Modus ponens *)
   Lemma implr_modus: forall q q' (t: M E HE X) w,
       <[ t, w |= q -> q' ]> ->
       <( t, w |= q )> ->

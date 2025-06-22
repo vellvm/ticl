@@ -1,4 +1,3 @@
-
 From TICL Require Import
   ICTree.Core
   Events.State

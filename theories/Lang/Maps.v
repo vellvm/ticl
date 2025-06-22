@@ -10,6 +10,7 @@ From ExtLib Require Import
 
 From TICL Require Import Utils.
 
+(** * Utility lemmas about maps over strings *)
 Module Ctx.
   Definition Ctx := alist string nat.
 
@@ -19,7 +20,7 @@ Module Ctx.
   Definition assert2 c1 c2 (m: Ctx) (r: nat -> nat -> Prop) :=
     exists v1 v2, lookup c1 m = Some v1 /\ lookup c2 m = Some v2 /\ r v1 v2.
 
-  (*| Map equations |*)
+  (** Map equations *)
   Lemma lookup_add_eq: forall c (v: nat) m,
     lookup c (add c v m) = Some v.
   Proof with auto.

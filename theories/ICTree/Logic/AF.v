@@ -25,10 +25,11 @@ Import ICTreeNotations TiclNotations.
 Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 
-(*| TICL logic lemmas on c/itrees |*)
+(** ** TICL structural lemmas for ICTrees and the until [AU] and eventually [AF] operators *)
 Section BasicLemmas.
   Context {E: Type} {HE: Encode E} {X: Type}.
 
+  (** Stuckness lemma for prefix eventually [AU_L] *)
   Lemma aul_stuck: forall w φ ψ,
       <( {ICtree.stuck: ictree E X}, w |= ψ )> <->
       <( {ICtree.stuck: ictree E X}, w |= φ AU ψ )>.
@@ -41,6 +42,7 @@ Section BasicLemmas.
       + now apply can_step_stuck in Hs.
   Qed.
 
+  (** Stuckness lemma for prefix eventually [AU_R] *)
   Lemma aur_stuck: forall w φ ψ,
       <[ {ICtree.stuck: ictree E X}, w |= ψ ]> <->
       <[ {ICtree.stuck: ictree E X}, w |= φ AU ψ ]>.
@@ -53,6 +55,7 @@ Section BasicLemmas.
       + now apply can_step_stuck in Hs.
   Qed.
 
+  (** Return iff lemma for prefix eventually [AU_L] *)
   Lemma aul_ret: forall (r: X) w φ ψ,
       <( {Ret r}, w |= ψ \/ φ AN ψ )> <->
       <( {Ret r}, w |= φ AU ψ )>.
@@ -85,6 +88,7 @@ Section BasicLemmas.
         now apply aul_stuck in H.
   Qed.
 
+  (** Return iff lemma for prefix eventually [AU_R] *)
   Lemma aur_ret: forall (r: X) w φ ψ,
       <[ {Ret r}, w |= ψ \/ φ AN ψ ]> <->
       <[ {Ret r}, w |= φ AU ψ ]>.
@@ -117,6 +121,7 @@ Section BasicLemmas.
         now apply aur_stuck in H.
   Qed.
 
+  (** Branch iff lemma for prefix eventually [AU_L] *)
   Lemma aul_br: forall n (k: fin' n -> ictree E X) w ψ φ,
       (<( {Br n k}, w |= φ )> \/
          <( {Br n k}, w |= ψ )> /\
@@ -144,7 +149,7 @@ Section BasicLemmas.
           now apply ticll_not_done in Hp.
   Qed.
 
-
+  (** Vis iff emma for prefix eventually [AU_L] *)
   Lemma aul_vis: forall (e: E) (k: encode e -> ictree E X) (_: encode e) w ψ φ,
       (<( {Vis e k}, w |= φ )> \/
          <( {Vis e k}, w |= ψ )> /\
@@ -172,6 +177,7 @@ Section BasicLemmas.
           now apply ticll_not_done in Hp.
   Qed.
 
+  (** Helper version of [aul_vis] for [AF] = [T AU]*)
   Lemma afl_vis: forall (e: E) (k: encode e -> ictree E X) (_: encode e) w φ,
       <( {Vis e k}, w |= φ )> \/
          (not_done w /\ forall (v: encode e), <( {k v}, {Obs e v} |= AF φ )>) <->
@@ -192,6 +198,7 @@ Section BasicLemmas.
         right...
   Qed.
 
+  (** Branch iff lemma for prefix eventually [AU_R] *)
   Lemma aur_br: forall n (k: fin' n -> ictree E X) w ψ φ,
       (<[ {Br n k}, w |= φ ]> \/
          <( {Br n k}, w |= ψ )> /\
@@ -219,6 +226,7 @@ Section BasicLemmas.
           now apply ticll_not_done in Hp.
   Qed.
 
+  (** Vis iff lemma for prefix eventually [AU_R] *)
   Lemma aur_vis: forall (e: E) (k: encode e -> ictree E X) (_: encode e) w ψ φ,
       (<[ {Vis e k}, w |= φ ]> \/
          <( {Vis e k}, w |= ψ )> /\
@@ -246,6 +254,7 @@ Section BasicLemmas.
           now apply ticll_not_done in Hp.
   Qed.
 
+  (** Helper version of [aur_vis] for [AF] = [T AU]*)
   Lemma afr_vis: forall (e: E) (k: encode e -> ictree E X) (_: encode e) w φ,
       <[ {Vis e k}, w |= φ ]> \/
          (not_done w /\ forall (v: encode e), <[ {k v}, {Obs e v} |= AF φ ]>) <->
@@ -266,6 +275,7 @@ Section BasicLemmas.
         right...
   Qed.
 
+  (** Not done lemma for prefix eventually [AU_R] *)
   Lemma aur_not_done: forall φ ψ ξ (t: ictree E X) (w: World E),
       <[ t, w |= φ AU (ψ AN ξ) ]> ->
       not_done w.

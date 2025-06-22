@@ -19,7 +19,9 @@ Import ICTreeNotations TiclNotations.
 Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 
-(*| TICL logic lemmas on c/itrees |*)
+(** * The [can_step] relation lemmas *)
+(** Relation [can_step] ensures that an always [AG, AU, AN] formula is not trivially satisfied by a stuck ictree. 
+    It ensures at least one step is possible from any state to take a universally quantified step. *)
 Section CanStepICtrees.
   Context {E: Type} {HE: Encode E}.
   Notation encode := (@encode E HE).
@@ -34,7 +36,7 @@ Section CanStepICtrees.
     reflexivity.
   Qed.
 
-  (*| Br |*)  
+  (** A nondeterministic choice can always step, if world [w] is not done. *)
   Lemma can_step_br{n X}: forall (k: fin' n -> ictree E X) w,
       can_step (Br n k) w <-> not_done w.
   Proof.
@@ -46,7 +48,7 @@ Section CanStepICtrees.
   Qed.
   Hint Resolve can_step_br: ticl.
   
-  (*| Guard |*)  
+  (** A guard can always step, if the guarded tree can step. *)
   Lemma can_step_guard{X}: forall (t: ictree E X) w,
       can_step (Guard t) w <-> can_step t w.
   Proof.
@@ -60,6 +62,7 @@ Section CanStepICtrees.
   Qed.
   Hint Resolve can_step_guard: ticl.
   
+  (** A visible event can always step, if world [w] is not done. *)
   Lemma can_step_vis{X}: forall (e:E) (k: encode e -> ictree E X) (_: encode e) w,
       can_step (Vis e k) w <-> not_done w.
   Proof.
@@ -71,6 +74,7 @@ Section CanStepICtrees.
   Qed.
   Hint Resolve can_step_vis: ticl.
 
+  (** A return can always step, if world [w] is not done. *)
   Lemma can_step_ret{X}: forall w (x: X),
     not_done w ->
     can_step (Ret x) w.
@@ -82,6 +86,7 @@ Section CanStepICtrees.
   Qed.
   Hint Resolve can_step_ret: ticl.
 
+  (** A stuck tree cannot step. *)
   Lemma can_step_stuck{X}: forall w,
       ~ (can_step (ICtree.stuck: ictree E X) w).
   Proof.
@@ -91,6 +96,7 @@ Section CanStepICtrees.
   Hint Resolve can_step_stuck: ticl.
 
   Typeclasses Transparent equ.
+  (** A bind can always step, if the left-hand side can step or the right-hand side can step. *)
   Lemma can_step_bind{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w,
       can_step (x <- t ;; k x) w <->        
         (exists t' w', |t, w| ↦ |t', w'| /\ not_done w')
@@ -141,6 +147,7 @@ Section CanStepICtrees.
   Qed.
   Hint Resolve can_step_bind: ticl.
 
+  (** A bind can always step, if the left-hand side can step. *)
   Lemma can_step_bind_l{X Y}: forall (t t': ictree E Y) (k: Y -> ictree E X) w w',
       |t, w| ↦ |t', w'| ->
       not_done w' ->
@@ -153,6 +160,7 @@ Section CanStepICtrees.
   Qed.
   Hint Resolve can_step_bind_l: ticl.
 
+  (** A bind can always step, if the right-hand side can step. *)
   Typeclasses Opaque equ.
   Lemma can_step_bind_r{X Y}: forall (t: ictree E Y) (k: Y -> ictree E X) w R,      
       <[ t, w |= AF AX done R ]> ->
@@ -222,6 +230,7 @@ Section CanStepICtrees.
   Qed.
   Hint Resolve can_step_bind_r: ticl.
 
+  (** An iteration can always step, if its continuation can step. *)
   Lemma can_step_iter{I X}: forall (k: I -> ictree E (I+X))
                               (i: I) t' w w',
       |k i, w| ↦ |t', w'| ->
@@ -235,10 +244,11 @@ Section CanStepICtrees.
   
 End CanStepICtrees.
 
-(*| TICL logic lemmas on interpretations of c/itrees |*)
+(** ** The [can_step] relation lemmas for [ictree] interpretations *)
 Section CanStepInterp.
   Context {E F S: Type} {HE: Encode E} {HF: Encode F} (h: E ~> stateT S (ictree F)) (s: S).
 
+  (** A stateful bind can always step, if the left-hand side can step. *)
   Lemma can_step_state_bind_l{X Y}: forall (k: X -> ictree E Y) (s: S) (t: ictree E X) t' w w',
       |interp_state h t s, w| ↦ |t', w'| ->
       not_done w' ->
@@ -249,6 +259,7 @@ Section CanStepInterp.
     apply can_step_bind_l with t' w'; auto.   
   Qed.
 
+  (** A stateful bind can always step, if the right-hand side can step. *)
   Lemma can_step_state_bind_r{X Y}: forall (k: X -> ictree E Y) (s s': S) (t: ictree E X) x w w',
       <[ {interp_state h t s}, w |= AF AX done= {(x,s')} w' ]> ->
       can_step (interp_state h (k x) s') w' ->
@@ -262,6 +273,7 @@ Section CanStepInterp.
     inv H1; auto.
   Qed.
   
+  (** A stateful iteration can always step, if its continuation can step. *)
   Lemma can_step_state_iter{I X}: forall (k: I -> ictree E (I+X)) (i: I) t' w w',
       |interp_state h (k i) s, w| ↦ |t', w'| ->
       not_done w' ->
@@ -273,6 +285,7 @@ Section CanStepInterp.
   Qed.
 End CanStepInterp.
 
+(** ** Instrumentation events [log s] can always step, if world [w] is not done. *)
 Section CanStepLog.
   Context {S X: Type}.
    Lemma can_step_log: forall (s: S) w (t: ictreeW S X),

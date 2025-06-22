@@ -12,11 +12,12 @@ From TICL Require Import
 
 Generalizable All Variables.
 
-(*| Syntactic quality on trees |*)
+(** * Syntactic equality on trees **)
 Section Equ.
 
   Context {E: Type} {HE: Encode E} {X1 X2 : Type} (RR : X1 -> X2 -> Prop).
 
+  (** The [equF] relation relates equal nodes of two trees. *)
   Variant equF (eq : ictree E X1 -> ictree E X2 -> Prop) :
     ictree' E X1 -> ictree' E X2 -> Prop :=
     | Eq_Ret x y:
@@ -33,6 +34,7 @@ Section Equ.
       equF eq (BrF n k1) (BrF n k2).
   Hint Constructors equF: core.
 
+  (** The [fequ] relation is a relation morphism that relates infinite trees. *)
   Program Definition fequ: mon (ictree E X1 -> ictree E X2 -> Prop) :=
     {|body eq t1 t2 :=  equF eq (observe t1) (observe t2) |}.
   Next Obligation.
@@ -42,6 +44,7 @@ Section Equ.
 
 End Equ.
 
+(** The [equ] relation is the greatest fixpoint of [fequ]. *)
 Definition equ {E} {HE:Encode E} {X1 X2} RR :=
   (gfp (@fequ E HE X1 X2 RR)).
 
@@ -91,6 +94,7 @@ Notation "t [≅ R ] u" := (et R _ t u) (at level 79): ictree_scope.
 Notation "t {≅ R } u" := (ebt R _ t u) (at level 79): ictree_scope.
 Notation "t {{≅ R }} u" := (equF R (equ R) t u) (at level 79): ictree_scope.
 
+(** * Companion-based theory for [equ] *)
 Section EquTheory.
   Context {E: Type} {HE: Encode E} {X : Type} (RR: X -> X -> Prop).
   Notation eT  := (T (fequ (E := E) (HE:=HE) (X1:=X) (X2:=X) RR)).
@@ -152,6 +156,7 @@ End EquTheory.
 Local Open Scope ictree_scope.
 #[global] Hint Constructors equF: core.
 
+(** The [equ] relation is compatible with itself *)
 #[global] Instance equ_eq_equ_impl {E R} {HE: Encode E}:
   Proper (equ eq ==> equ eq ==> flip impl) (@equ E _ R R eq).
 Proof.
@@ -259,7 +264,7 @@ Section observing_relations.
 
 End observing_relations.
 
-(** ** Unfolding lemmas for [bind] *)
+(** Unfolding lemmas for [bind] *)
 #[global] Instance observing_bind {E R S} {HE: Encode E}:
   Proper (observing eq ==> eq ==> observing eq) (@ICtree.bind E HE R S).
 Proof.
@@ -294,7 +299,7 @@ Lemma unfold_aloop_ {E X Y} {HE: Encode E} (f : X -> ictree E (X + Y)) (x : X) :
     (ICtree.bind (f x) (fun lr => on_left lr l (Guard (ICtree.iter f l)))).
 Proof. constructor; reflexivity. Qed.
 
-(** ** [going]: Lift relations through [go]. *)
+(** * [going]: Lift relations through [go]. *)
 
 (** Shallow [going] *)
 Inductive going {E R1 R2} {HE: Encode E} (r : ictree E R1 -> ictree E R2 -> Prop)
@@ -333,8 +338,7 @@ End going_relations.
 
 Local Open Scope ictree_scope.
 
-(* Resum lemmas *)
-
+(** * Resum lemmas, equating trees with subevents *)
 Lemma unfold_resumICtree {E1 E2 : Type} `{ReSumRet E1 E2} {R}(t: ictree E1 R):
   resumICtree t ≅
     match (observe t) with
@@ -382,7 +386,7 @@ Proof.
   reflexivity.
 Qed.
 
-(* Resum lemmas (void) *)
+(** Resum lemmas (void), no events *)
 Lemma resumICtree_ret' `{Encode E} {R} (r : R) :
   @resumICtree void E _ H _ _ _ (Ret r) ≅ Ret r.
 Proof. step. cbn. constructor. reflexivity. Qed.
@@ -432,7 +436,7 @@ Proof.
   reflexivity.
 Qed.
 
-(*| Dependent inversion of [equ] and [equb] equations |*)
+(** Dependent inversion of [equ] and [equb] equations [ret] *)
 Lemma equ_ret_inv {E R} {HE: Encode E} {r1 r2 : R} :
   (Ret r1) ≅ (Ret r2 : ictree E R) ->
   r1 = r2.
@@ -441,6 +445,7 @@ Proof.
   inv EQ; auto.
 Qed.
 
+(** Dependent inversion of [equ] and [equb] equations [vis] *)
 Lemma equ_vis_invT {E S} {HE: Encode E} {e1 e2: E} {k1: encode e1 -> ictree E S} {k2: encode e2 -> ictree E S}:
   Vis e1 k1 ≅ Vis e2 k2 ->
   encode e1 = encode e2 /\ e1 = e2.
@@ -459,6 +464,7 @@ Proof.
   auto.
 Qed.
 
+(** Dependent inversion of [equ] and [equb] equations [br] *)
 Lemma equ_br_invT {E S n1 n2} {HE: Encode E}
   {k1 : fin' n1 -> ictree E S} {k2: fin' n2 -> ictree E S}:
   Br n1 k1 ≅ Br n2 k2 ->
@@ -477,6 +483,7 @@ Proof.
   auto.
 Qed.
 
+(** Dependent inversion of [equ] and [equb] equations [guard] *)
 Lemma equ_guard_invE {E S} {HE: Encode E} {t1 t2: ictree E S}:
   Guard t1 ≅ Guard t2 ->
   t1 ≅ t2.
@@ -485,6 +492,7 @@ Proof.
   now dependent destruction EQ.
 Qed.
 
+(** Dependent inversion of [equ] and [equb] equations [vis] *)
 Lemma equF_vis_invT {E S} {HE: Encode E} {e1 e2: E} {R} {k1 k2: _ -> ictree E S}:
   equF R (equ R) (VisF e1 k1) (VisF e2 k2) ->
   encode e1 = encode e2 /\ e1 = e2.
@@ -502,6 +510,7 @@ Proof.
   dependent destruction H1; dependent destruction H2; eauto.
 Qed.
 
+(** Dependent inversion of [equ] and [equb] equations [br] *)
 Lemma equF_br_invT {E S n1 n2} {HE: Encode E} {R}
   (k1 : fin' n1 -> ictree E S) (k2: fin' n2 -> ictree E S) :
   equF R (equ R) (BrF n1 k1) (BrF n2 k2) ->
@@ -517,20 +526,6 @@ Proof.
   intros EQ.
   now dependent destruction EQ.
 Qed.
-
-(*|
-Proper Instances
-----------------
-TODO: step back and think a bit better about those
-
-equ eq       ==> going (equ eq)  observe
-∀(equ eq)    ==> going (equ eq)  BrF
-∀(equ eq)    ==> going (equ eq)  VisF
-observing eq --> equ eq
-going(equ)   ==> eq ==> fimpl    equb eq (t_equ eq r)
-eq ==> going(equ)   ==> fimpl    equb eq (t_equ eq r)
-equ ==> equ ==> flip impl)       bt_equ eq r
-|*)
 
 #[global] Instance equ_observe {E X} {HE: Encode E} {R: rel X X}: (* Why not X Y *)
   Proper (equ R ==> going (equ R)) observe.

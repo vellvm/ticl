@@ -1,5 +1,5 @@
 (lang dune 3.15)
-(using coq 0.6)
+(using coq 0.8)
 (name coq-ticl)
 (warnings (deprecated_coq_lang_lt_08 disabled))
 

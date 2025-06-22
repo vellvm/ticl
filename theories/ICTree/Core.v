@@ -20,8 +20,11 @@ Notation fin' n := (Fin.t (S n)).
 
 Create HintDb ictree.
 
+(** * Definition of ictree structure *)
 Section ICtree.
   Context {E: Type} `{Encode E} {X: Type}.
+
+  (** An ictree is a tree of events. Each event is either a return value, a branch, a guard, or a visible event. *)
   Variant ictreeF(ictree: Type): Type :=
     | RetF (x: X)
     | BrF {n} (k: fin' n -> ictree)
@@ -47,7 +50,7 @@ Arguments VisF {E H X} [ictree] e k.
 
 Notation ictree' E X := (ictreeF E X (ictree E X)).
 
-(*| We wrap the primitive projection [_observe] in a function [observe]. |*)
+(** We wrap the primitive projection [_observe] in a function [observe]. *)
 Definition observe `{HE: Encode E} `(t : ictree E X) : ictree' E X := @_observe E HE X t.
 
 Notation Ret x        := (go (RetF x)).
@@ -56,7 +59,7 @@ Notation Br n k     := (go (BrF n k)).
 Notation Guard t     := (go (GuardF t)).
 Notation step t     := (Br 0 (fun _ => t)).
 
-(* Use resum and resum_ret to map the events in an entree to another type *)
+(** Use resum and resum_ret to map the events in an entree to another type *)
 CoFixpoint resumICtree' {E1 E2 : Type} `{ReSumRet E1 E2}
            {A} (ot : ictree' E1 A) : ictree E2 A :=
   match ot with
@@ -82,15 +85,15 @@ Module ICtree.
       | VisF e k => Vis e (fun x => _subst (observe (k x)))
     end.
 
-  (*| Monadic composition [bind] |*)
+  (** Monadic composition [bind] *)
   Definition bind `{HE: Encode E} {X Y} (t : ictree E X) (k : X -> ictree E Y) :=
     subst' k (observe t).
 
-  (*| Monadic composition of continuations (i.e., Kleisli composition). |*)
+  (** Monadic composition of continuations (i.e., Kleisli composition). *)
   Definition cat `{HE: Encode E} `(k : X -> ictree E Y) `(h : Y -> ictree E Z) :
     X -> ictree E Z := fun t => bind (k t) h.
 
-  (*| Functorial map ([fmap] in Haskell) |*)
+  (** Functorial map ([fmap] in Haskell) *)
   Definition map `{HE: Encode E} `(f : X -> Y) (t : ictree E X) : ictree E Y :=
       bind t (fun x => Ret (f x)).
 
@@ -98,11 +101,11 @@ Module ICtree.
     (e : E1) : ictree E2 (encode e) :=
     Vis (resum e) (fun x : encode (resum e) => Ret (resum_ret e x)).
   
-  (*| Atomic ictrees with choice. |*)
+  (** Atomic ictrees with choice. *)
   Definition branch `{HE: Encode E} n: ictree E (fin' n) :=
     Br n (fun x => Ret x).
 
-  (*| Binary non-deterministic branch |*)
+  (** Binary non-deterministic branch *)
   Definition br2 `{HE: Encode E}{X} (a b: ictree E X): ictree E X :=
     Br 1 (fun x: fin' 1 =>
             match x in Fin.t n return n = 2 -> ictree E X with
@@ -110,7 +113,7 @@ Module ICtree.
             | _ => fun _: _ = 2 => b
             end eq_refl).
 
-  (*| Ternary non-deterministic branch |*)
+  (** Ternary non-deterministic branch *)
   Definition br3 `{HE: Encode E}{X} (a b c: ictree E X): ictree E X :=
     Br 2 (fun x: fin' 2 =>
             match x in Fin.t n return n = 3 -> ictree E X with
@@ -119,17 +122,17 @@ Module ICtree.
             | _ => fun _: _ = 3 => c
             end eq_refl).
 
-  (*| Ignore the result of a ictree. |*)
+  (** Ignore the result of a ictree. *)
   Definition ignore `{HE: Encode E} {R} : ictree E R -> ictree E unit :=
     map (fun _ => tt).
 
-  (*| Run forever, do nothing |*)
+  (** Run forever, do nothing *)
   CoFixpoint stuck `{HE: Encode E} {R} : ictree E R := Guard stuck.
   
-  (*| Run forever, do tau steps |*)
+  (** Run forever, do tau steps *)
   CoFixpoint spin `{HE: Encode E} {R} : ictree E R := step spin.
 
-  (*| [iter] |*)
+  (** [iter] is the primitive loop combinator. *)
   Definition iter `{HE: Encode E} {R I: Type}
     (step : I -> ictree E (I + R)) : I -> ictree E R :=
     cofix iter_ i := bind (step i)
@@ -144,7 +147,6 @@ Module ICtree.
   
 End ICtree.
 
-
 Ltac fold_bind :=
   repeat match goal with
     | h: context [ICtree.subst' ?k ?t] |- _ => fold (ICtree.bind (go t) k) in h
@@ -153,14 +155,11 @@ Ltac fold_bind :=
 
 #[global] Hint Extern 0 => fold_bind: core.
 
-(*|
-[on_left lr l t]: run a computation [t] if the first argument is an [inl l].
-[l] must be a variable (used as a pattern), free in the expression [t]:
-
-   - [on_left (inl x) l t = t{l := x}]
-   - [on_left (inr y) l t = Ret y]
-|*)
-
+(** [on_left lr l t]: run a computation [t] if the first argument is an [inl l].
+    [l] must be a variable (used as a pattern), free in the expression [t]:
+    - [on_left (inl x) l t = t{l := x}]
+    - [on_left (inr y) l t = Ret y]
+*)
 Notation on_left lr l t :=
   (match lr with
    | inl l => t
@@ -206,7 +205,8 @@ Module ICTreeNotations.
   
 End ICTreeNotations.
 
-(*| Common instances for [ictree] |*)
+(** * Common instances for [ictree] *)
+(** ICTree is a functor, applicative, and monad. *)
 #[global] Instance Functor_ictree `{Encode E} : Functor (ictree E) :=
   { fmap := @ICtree.map E _ }.
 
@@ -223,9 +223,11 @@ End ICTreeNotations.
     bind := @ICtree.bind E HE;
   }.
 
+(** ICTree is a monad with iteration. *)
 #[global] Instance MonadIter_ictree `{HE: Encode E} : MonadIter (ictree E) :=
   fun _ _ => ICtree.iter.
 
+(** ICTree is a monad with non-deterministic choice. *)
 #[global] Instance MonadBr_ictree `{HE: Encode E} : MonadBr (ictree E) :=
   fun n => ICtree.branch n.
 

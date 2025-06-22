@@ -31,6 +31,11 @@ Import ICTreeNotations TiclNotations.
 Local Open Scope ticl_scope.
 Local Open Scope ictree_scope.
 
+(** * Syntactic entailment proof *)
+(** In this section we package the prefix lemmas for all operators [AN, AU, EN, EU, AG, EG]
+    into a single inductive relation [syntailsL] that we prove sound with respect to the
+    semantic entailment relation [|=]. 
+*)
 Section SyntacticEntailment.
   Context {E: Type} {HE: Encode E}.
 
@@ -332,4 +337,3 @@ Section SyntacticEntailment.
   Qed.
 
 End SyntacticEntailment.
-

@@ -12,7 +12,13 @@ From TICL Require Import
 
 Generalizable All Variables.
 
-(*| Polymorphic Kripke model over family M |*)
+(** * Ticl Kripke model *)
+(** We define Ticl abstractly over a family of models [M] parametrized by an event type [E].
+    The models are equipped with a transition relation [ktrans], a notion of world [World E] and a notion of done [not_done]. 
+    
+    The abstract model is extensible, for example if we want to define Ticl in terms of a new coinductive tree (e.g. ITrees, CTrees, etc.)
+    we can simply give an instance of the Kripke class for the new coinductive tree and obtain a new Ticl logic.
+*)
 Class Kripke (M: forall E, Encode E -> Type -> Type) (E: Type) `{HE: Encode E} := {
 
     (* - [ktrans] the transition relation over [M X * W] *)
@@ -28,12 +34,15 @@ Declare Scope ticl_scope.
 Local Open Scope ticl_scope.
 Delimit Scope ticl_scope with ticl.
 
-(* Transition relation *)
+(** * Transition relation notation *)
 Notation "| t , w | ↦ | t' , w' | " :=
   (ktrans t w t' w')
     (at level 48,
       right associativity): ticl_scope.
 
+(** * [can_step] relation *)
+(** [can_step] is the relation that says that a model [m] can step from world [w],
+if there exists a model [m'] and a world [w'] such that [m] can step to [m'] from [w] to [w']. *)
 Definition can_step `{Kripke M W} {X} (m: M W _ X) (w: World W): Prop :=
   exists m' w', | m,w |  ↦ | m',w' |.
 
