@@ -13,13 +13,12 @@
 
 (package
  (name coq-ticl)
- (synopsis "Library for structural temporal logic proofs over coinductive, free monads with effects and choice.")
+ (synopsis "Library for structural temporal logic proofs over coinductive trees.")
  (version 0.1)
  (depends
-  (coq (>= 8.17))
-  (coq-ext-lib (>= 0.11.3))
+  (coq (>= 9.0))
+  (rocq-ext-lib (>= 0.11.3))
   (coq-coinduction (>= 1.3))
-  (coq-relation-algebra (>= 1.7))
   (coq-equations (>= 1.2))
  )
 )

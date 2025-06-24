@@ -114,9 +114,10 @@
 
     <div class="section-nav">
         <a href="#basic-definitions">Basic Definitions</a>
+        <a href="#strong-bisimulation">Up-to-tau equivalence (strong bisimulation)</a>
+        <a href="#ICTree instrumentation semantics">ICTree instrumentation semantics</a>
         <a href="#structural-lemmas">Structural Lemmas for ICTree</a>
         <a href="#structural-lemmas-state">Structural Lemmas for ICTree with State Events</a>
-        <a href="#strong-bisimulation">Strong Bisimulation Preserves Ticl</a>
         <a href="#languages">Languages</a>
         <a href="#examples">Examples</a>
     </div>
@@ -124,15 +125,39 @@
     <h2 id="basic-definitions">1. Basic Definitions</h2>
     <p>This section outlines fundamental definitions used throughout the proofs.</p>
     <ul>
-        <li><a href="TICL.ICTree.Core.html#ictreeF">ictree</a>: The core interaction and choice tree definition.</li>
-        <li><a href="TICL.ICTree.Core.html#ICtree.bind">bind</a>: Definition of bind for ICTree.</li>
-        <li><a href="TICL.ICTree.Core.html#ICtree.iter">iter</a>: Definition of iter for ICTree.</li>
-        <li><a href="TICL.ICTree.Core.html#ICtree.stuck">stuck</a>: Definition of stuck for ICTree.</li>
-        <li><a href="TICL.ICTree.Interp.Core.html#interp">interp</a>: Definition of interpretation function.</li>
-        <li><a href="TICL.ICTree.Interp.State.html#interp_state">interp_state</a>: Definition of interpretation function for ICTree with state events.</li>
+        <li><a href="TICL.ICTree.Core.html#ictreeF">ictree</a>: The core Interaction and Choice Tree (ICTree) definition (Figure 3).</li>
+        <li><a href="TICL.ICTree.Core.html#ICtree.bind">bind</a>: Definition of bind for ICTree (Figure 3).</li>
+        <li><a href="TICL.ICTree.Core.html#ICtree.iter">iter</a>: Definition of iter for ICTree (Figure 3).</li>
+        <li><a href="TICL.ICTree.Core.html#ICtree.stuck">stuck</a>: Definition of stuck for ICTree (Figure 3).</li>
+    </ul>
+    
+    <h2 id="strong-bisimulation">2. Up-to-tau equivalence (strong bisimulation)</h2>
+    <p>A core result of Ticl is that Ticl formulas are invariant under up-to-tau equivalence. The following definitions (Figure 5) are used to prove this result.</p>
+    <ul>
+        <li><a href="TICL.ICTree.SBisim.Core.html#sbisim">Up-to-tau equivalence</a>: Definition of strong bisimulation (up-to-tau equivalence in the paper) for ICTree. </li>
+        <li><a href="TICL.ICTree.SBisim.Core.html#Reflexive_sbisim">sb_refl</a>: Reflexivity of sbisim.</li>
+        <li><a href="TICL.ICTree.SBisim.Core.html#Symmetric_sbisim">sb_sym</a>: Symmetry of sbisim.</li>
+        <li><a href="TICL.ICTree.SBisim.Core.html#Transitive_sbisim">sb_trans</a>: Transitivity of sbisim.</li>
+        <li><a href="TICL.ICTree.SBisim.Core.html#sb_guard">sb_tau</a>: Up-to-tau (we use Guard instead of Tau in the Rocq development).</li>
+        <li><a href="TICL.ICTree.SBisim.Core.html#sbisim_clo_bind_eq">sb_bind</a>: Bind closure. </li>
+        <li><a href="TICL.ICTree.Eq.Bind.html#bind_ret_l">sb_bind_l</a>: 1st monad law (for coinductive equality, a subrelation of sbisim).</li>
+        <li><a href="TICL.ICTree.Eq.Bind.html#bind_ret_r">sb_bind_r</a>: 2nd monad law (for coinductive equality, a subrelation of sbisim).</li>
+        <li><a href="TICL.ICTree.Eq.Bind.html#bind_bind">sb_bind_assoc</a>: Associativity of bind (for coinductive equality, a subrelation of sbisim).</li>
+        <li><a href="TICL.ICTree.SBisim.Core.html#sb_ret">sb_ret</a>: Ret node congruence. </li>
+        <li><a href="TICL.ICTree.SBisim.Core.html#sb_vis">sb_vis</a>: Vis node congruence. </li>
+        <li><a href="TICL.ICTree.SBisim.Core.html#sb_br">sb_br</a>: Br node congruence (we prove a stronger version in the Rocq development than in the paper). </li>
+    </ul>
+        
+    <h2 id="ICTree instrumentation semantics">2. ICTree instrumentation semantics</h2>
+    <p>The meaning of programs, interpreted through an instrumentation handler and leaving behind traces of observations (Figure 6). The following definitions are motivated in Section 6.1 of the paper</p>
+    <ul>
+        <li><a href="TICL.Events.WriterE.html#writerE">Log events</a>: Deterministic events that "remember" an interpreted event (Figure 6).</li>
+        <li><a href="TICL.ICTree.Events.Writer.html#InstrM">Instrumentation monad</a>: An ICTree as a state monad, leaving behind log events is an instrumentation monad (Figure 6).</li>
+        <li><a href="TICL.ICTree.Interp.State.html#interp_state">Instrumentation function</a>: The instr function in Figure 6 corresponds to instr_state in the Rocq development, a more general version than the one in the paper.</li>
+
         <li><a href="TICL.ICTree.Logic.Trans.html#ktrans_">ktrans</a>: Definition of ktrans (Kripke transition).</li>
-        <li><a href="TICL.Logic.Semantics.html#auc">auc</a>: Inductive definition for All-Until (AU) logic.</li>
-        <li><a href="TICL.Logic.Semantics.html#euc">euc</a>: Inductive definition for Exists-Until (EU) logic.</li>
+        <li><a href="TICL.Logic.Semantics.html#auc">auc</a>: Inductive definition for All-Until (AU) logic (Figure 7).</li>
+        <li><a href="TICL.Logic.Semantics.html#euc">euc</a>: Inductive definition for Exists-Until (EU) logic (Figure 7). The definition of euc in the paper is a special case of the one in the Rocq development.</li>
         <li><a href="TICL.Logic.Semantics.html#anc">anc</a>: Definition for All-Next (AN) logic.</li>
         <li><a href="TICL.Logic.Semantics.html#enc">enc</a>: Definition for Exists-Next (EN) logic.</li>
         <li><a href="TICL.Logic.Semantics.html#agcF">agcF</a>: Definition for All-Globally (AG) logic.</li>
@@ -140,14 +165,14 @@
         <li><a href="TICL.Logic.Kripke.html#can_step">can_step</a>: Definition of can_step for Kripke structures.</li>
         <li><a href="TICL.Logic.Semantics.html#entailsL">entailsL</a>: Definition of prefix formula entailment for Ticl.</li>
         <li><a href="TICL.Logic.Semantics.html#entailsR">entailsR</a>: Definition of suffix formula entailment for Ticl.</li>
-        </ul>
+    </ul>
 
     <h2 id="structural-lemmas">2. Structural Lemmas for ICTree</h2>
     <p>This table summarizes lemmas proved for each ICTree node and combinator across various Ticl modalities.</p>
     <table>
         <thead>
             <tr>
-                <th>ICTree Node/Combinator</th>
+                <th>ICTree Operator</th>
                 <th>AU (All-Until)</th>
                 <th>AG (All-Globally)</th>
                 <th>AN (All-Next)</th>
@@ -414,7 +439,7 @@
     <table>
         <thead>
             <tr>
-                <th>ICTree Node/Combinator</th>
+                <th>ICTree Operator</th>
                 <th>AU (All-Until)</th>
                 <th>AG (All-Globally)</th>
                 <th>AN (All-Next)</th>

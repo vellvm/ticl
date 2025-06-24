@@ -1,8 +1,15 @@
 default: build
 
 build:
-	$(MAKE) -C coinduction install
+	$(MAKE) -C rocq-ext-lib theories
+	$(MAKE) -C coinduction build
 	dune build
+
+install: build
+	dune build -p coq-ticl @install
+	$(MAKE) -C rocq-ext-lib install
+	$(MAKE) -C coinduction install
+	dune install
 
 clean:
 	dune clean
