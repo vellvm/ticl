@@ -20,9 +20,8 @@ secure memory, and distributed consensus.
 
 Dependencies are
 - Rocq 9.0.0
-- coq-equations
-- coq-ext-lib
-- relation-algebra
+- coq-equations (from opam)
+- rocq-ext-lib (https://github.com/elefthei/coinduction)
 - The coinduction library (https://github.com/elefthei/coinduction)
 
 Then use `make` in the root directory to build `TICL` and `make install` to install it.

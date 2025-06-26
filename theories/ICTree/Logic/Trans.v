@@ -405,6 +405,7 @@ Section ICTreeTrans.
     - inv H0.
   Qed.
 
+
   (** Auxiliary lemma for [ktrans_bind_inv], the inversion lemma for [ktrans] and [bind]. It is used to take cases
   on the transition of [t] and [t>>=k]. *)
   Opaque ICtree.stuck.
@@ -640,6 +641,34 @@ Proof.
   - inv HeqD.
   - ddestruction HeqD.
   - ddestruction HeqD; auto.
+Qed.
+
+Lemma ktrans_bind_r_done `{Encode E} {X Y}: forall (t: ictree E X) t' (k: X -> ictree E Y) (u: ictree E Y) x w w',
+  |t, w| ↦ |ICtree.stuck, Done x| ->
+  |k x, w| ↦ |t', w'| ->
+  |x <- t ;; k x, w| ↦ |t', w'|. 
+Proof.
+  intros; cbn in *.
+  generalize dependent k.
+  dependent induction H0; intros; rewrite unfold_bind.
+    - rewrite <- x1.
+      econstructor; eauto.
+    - inv H0.
+    - now rewrite <- x2.      
+Qed.
+
+Lemma ktrans_bind_r_finish `{Encode E} {X Y}: forall (t: ictree E X) t' (k: X -> ictree E Y) (u: ictree E Y) x w w',
+  |t, w| ↦ |ICtree.stuck, Done x| ->
+  |k x, w| ↦ |t', w'| ->
+  |x <- t ;; k x, w| ↦ |t', w'|. 
+Proof.
+  intros; cbn in *.
+  generalize dependent k.
+  dependent induction H0; intros; rewrite unfold_bind.
+    - rewrite <- x1.
+      econstructor; eauto.
+    - inv H0.
+    - now rewrite <- x2.      
 Qed.
 
 (** * Kripke setoid for ictrees and [sbisim] *)

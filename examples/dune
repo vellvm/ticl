@@ -3,4 +3,6 @@
 (coq.theory
  (name examples)
  (theories TICL)
+ (package coq-ticl)
+ (coqdoc_flags :standard -utf8)
  (flags :standard -w -stdlib-vector))

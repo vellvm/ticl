@@ -1,6 +1,0 @@
-[submodule "coinduction"]
-	path = coinduction
-	url = git@github.com:elefthei/coinduction.git
-[submodule "rocq-ext-lib"]
-	path = rocq-ext-lib
-	url = git@github.com:elefthei/rocq-ext-lib.git
