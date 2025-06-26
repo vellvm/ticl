@@ -45,33 +45,49 @@ cannot guarantee future versions of Rocq will work without changes to the code.
 opam pin add rocq-prover 9.0.0
 ```
 
-## Python
+Then install the equations package for rocq:
 
-Ticl uses python-3.3 or later for some of its literate programming capabilities. If you do not
-want to generate literate Rocq proofs using Alectryon and Sphinx, feel free to skip this section.
+## Ticl dependencies
 
-You can install Python using your package manager. For example, on Ubuntu:
-
-```bash
-sudo apt install python3
-```
-
-Python 3.3 comes with virtual environments, which we recommend using to install the
-dependencies of Ticl. To create a virtual environment, run:
+Ticl depends on the `coq-equations` package for dependent type pattern matching.
+Install it via opam:
 
 ```bash
-python3 -m venv venv
+opam install coq-equations
 ```
 
-Then, activate the virtual environment:
+Then proceed to download and install the `rocq-ext-lib` package, which
+provides many useful libraries for Rocq. For artifact evaluation, we provide
+the `rocq-ext-lib` package in the root of the artifact folder. Otherwise, download
+and install it from Github.
 
 ```bash
-source venv/bin/activate
+cd rocq-ext-lib
+make install
+cd ..
 ```
 
-Finally, install the required Python packages:
+Then install the coinduction library in Rocq. For artifact evaluation, we provide
+the `coinduction` package in the root of the artifact folder. Otherwise, download
+and install it from Github.
 
 ```bash
-pip3 install -r requirements.txt
+cd coinduction
+make install
+cd ..
 ```
 
+## Building and checking Ticl proofs and documentation
+
+To typecheck all proofs in TICL, from the root of the artifact folder, run:
+
+```bash
+cd ticl
+make
+make doc
+```
+
+The last command also generates the documentation for Ticl in HTML format.
+For artifact evaluation, the list of all lemmas can be found in `_build/default/main.html`.
+Open that file in your browser to see an index of all the lemmas in the paper and how they
+correspond to the Rocq development.
