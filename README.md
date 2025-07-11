@@ -20,6 +20,7 @@ secure memory, and distributed consensus.
 
 Dependencies are
 - Rocq 9.0.0
+- odoc (from opam)
 - coq-equations (from opam)
 - rocq-ext-lib (https://github.com/elefthei/coinduction)
 - The coinduction library (https://github.com/elefthei/coinduction)
