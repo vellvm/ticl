@@ -22,7 +22,7 @@ Dependencies are
 - Rocq 9.0.0
 - dune (from opam)
 - odoc (from opam)
-- coq-equations (from opam)
+- rocq-equations (from opam)
 - rocq-ext-lib (https://github.com/elefthei/coinduction)
 - The coinduction library (https://github.com/elefthei/coinduction)
 
@@ -31,6 +31,6 @@ Then use `make` in the root directory to build `TICL` and `make install` to inst
 # Documentation
 
 Use `make doc` in the root directory to build the documentation. The documentation is accessed
-by `main.html` in the root of the repository. The documentation is generated using coqdoc.
+by `main.html` in the root of the repository. The documentation is generated using rocqdoc.
 
 

@@ -9,11 +9,11 @@ license: "MIT"
 homepage: "https://github.com/vellvm/ticl"
 bug-reports: "https://github.com/vellvm/ticl/issues"
 depends: [
-  "dune" {>= "3.15"}
-  "coq" {>= "9.0"}
+  "dune" {>= "3.21"}
+  "rocq-prover" {>= "9.0"}
   "rocq-ext-lib" {>= "0.11.3"}
-  "coq-coinduction" {>= "1.3"}
-  "coq-equations" {>= "1.2"}
+  "rocq-coinduction" {>= "1.3"}
+  "rocq-equations" {>= "1.2"}
   "odoc" {with-doc}
 ]
 build: [
@@ -31,3 +31,4 @@ build: [
   ]
 ]
 dev-repo: "git+https://github.com/vellvm/ticl.git"
+x-maintenance-intent: ["(latest)"]

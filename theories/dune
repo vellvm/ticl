@@ -1,8 +1,9 @@
 (include_subdirs qualified)
 
-(coq.theory
+(rocq.theory
  (name TICL)
  (theories ExtLib Stdlib Equations Coinduction)
- (package coq-ticl)
- (coqdoc_flags :standard -utf8)
+ (package rocq-ticl)
+ (mode vo)
+ (rocqdoc_flags :standard -utf8)
  (flags :standard -w -stdlib-vector))

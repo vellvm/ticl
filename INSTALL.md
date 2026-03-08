@@ -49,11 +49,11 @@ Then install the equations package for rocq:
 
 ## Ticl dependencies
 
-Ticl depends on the `coq-equations` package for dependent type pattern matching.
+Ticl depends on the `rocq-equations` package for dependent type pattern matching.
 Install it via opam:
 
 ```bash
-opam install coq-equations
+opam install rocq-equations
 ```
 
 Then proceed to download and install the `rocq-ext-lib` package, which

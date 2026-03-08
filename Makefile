@@ -4,7 +4,7 @@ build:
 	dune build
 
 install: build
-	dune build -p coq-ticl @install
+	dune build -p rocq-ticl @install
 	dune install
 
 clean:
