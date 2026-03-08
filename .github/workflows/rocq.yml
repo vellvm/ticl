@@ -28,6 +28,10 @@ jobs:
           opam_file: 'rocq-ticl.opam'
           coq_version: ${{ matrix.rocq_version }}
           ocaml_version: ${{ matrix.ocaml_version }}
+          before_install: |
+            startGroup "Upgrade dune"
+              opam pin add dune 3.21.1 -y
+            endGroup
           export: 'OPAMWITHTEST'
         env:
           OPAMWITHTEST: 'true'
