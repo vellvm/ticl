@@ -17,7 +17,7 @@
  (depends
   (rocq-prover (>= 9.0))
   (coq-ext-lib (>= 0.11.3))
-  (coq-coinduction (>= 1.3))
+  (rocq-coinduction (>= 1.3))
   (coq-equations (>= 1.2))
  )
 )
