@@ -32,8 +32,8 @@ jobs:
             startGroup "Upgrade dune"
               opam pin add dune 3.21.1 -y
             endGroup
-            startGroup "Add coinduction repo"
-              opam repo add coinduction https://github.com/elefthei/coinduction.git
+            startGroup "Pin coinduction"
+              opam pin add rocq-coinduction https://github.com/elefthei/coinduction.git -y
             endGroup
           export: 'OPAMWITHTEST'
         env:
