@@ -35,6 +35,9 @@ jobs:
             startGroup "Pin coinduction"
               opam pin add rocq-coinduction https://github.com/elefthei/coinduction.git -y
             endGroup
+            startGroup "Pin ext-lib"
+              opam pin add rocq-ext-lib https://github.com/elefthei/rocq-ext-lib.git -y
+            endGroup
           export: 'OPAMWITHTEST'
         env:
           OPAMWITHTEST: 'true'

@@ -11,7 +11,7 @@ bug-reports: "https://github.com/vellvm/ticl/issues"
 depends: [
   "dune" {>= "3.21"}
   "rocq-prover" {>= "9.0"}
-  "coq-ext-lib" {>= "0.11.3"}
+  "rocq-ext-lib" {>= "0.11.3"}
   "rocq-coinduction" {>= "1.3"}
   "rocq-equations" {>= "1.3"}
   "odoc" {with-doc}

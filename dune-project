@@ -16,7 +16,7 @@
  (version 0.1)
  (depends
   (rocq-prover (>= 9.0))
-  (coq-ext-lib (>= 0.11.3))
+  (rocq-ext-lib (>= 0.11.3))
   (rocq-coinduction (>= 1.3))
   (rocq-equations (>= 1.3))
  )
