@@ -5,4 +5,5 @@ From TICL Require Export
   Lang.Yield.Denote
   Lang.Yield.Scheduler
   Lang.Yield.Interp
-  Lang.Yield.Ticl.
+  Lang.Yield.Ticl
+  Lang.Yield.SBisim.
