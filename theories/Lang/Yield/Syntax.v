@@ -16,9 +16,10 @@ Module YieldSyntax.
   | YSeq (a b : YStmt)
   | YIf (i : YExp) (t e : YStmt)
   | YWhile (t : YExp) (b : YStmt)
-  (** [YFork inactive active] keeps the prior branch polarity:
-      the fork result [true] selects [inactive], and [false] selects [active]. *)
-  | YFork (inactive active : YStmt)
+  (** [YFork body] spawns [body] as the child-side statement.
+      The parent path performs no source statement at the fork node; it
+      continues through the surrounding sequence. *)
+  | YFork (body : YStmt)
   | YSkip
   | YYield.
 

@@ -64,7 +64,8 @@ Definition interp_scheduled_erased (s : YStmt) : ictree Mem unit :=
 Definition interp_scheduled : YStmt -> ictree Mem unit := interp_scheduled_erased.
 
 (** Interpret a raw thread without scheduling by resolving [Fork] to [false],
-    i.e. taking the active branch. *)
+    so a standalone thread behaves as the parent path and never starts the
+    fork body. *)
 Definition handle_thread : YEff ~> ictree (yieldE + Mem) :=
   fun event =>
     match event with
