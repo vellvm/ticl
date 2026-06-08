@@ -6,4 +6,5 @@ From TICL Require Export
   Lang.Yield.Scheduler
   Lang.Yield.Interp
   Lang.Yield.Ticl
-  Lang.Yield.SBisim.
+  Lang.Yield.SBisim
+  Lang.Yield.SchedulerFairness.
