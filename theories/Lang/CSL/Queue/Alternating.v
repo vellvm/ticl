@@ -25,7 +25,7 @@ From TICL Require Import
   Logic.Core.
 
 From TICL Require Export Lang.CSL.Heap.
-From examples Require Import CSL.HeapQ.
+From TICL Require Import Lang.CSL.Queue.Representation Lang.CSL.Queue.Operations.
 
 Import ICtree ICTreeNotations TiclNotations ListNotations.
 Local Open Scope ictree_scope.
@@ -41,58 +41,24 @@ Local Typeclasses Transparent sbisim.
     the standalone turn and the scheduler body without any
     bind-associativity reasoning. *)
 Definition turnk {X} (q hdr: nat) (kt: ictree sE X) : ictree sE X :=
-  a  <- srd (S hdr) ;;
-  v  <- srd a ;;
-  _  <- semit q v ;;
-  n  <- srd (S a) ;;
-  _  <- swr (S hdr) n ;;
-  z0 <- srd hdr ;;
-  _  <- swr (S (if Nat.eqb n 0 then hdr else z0)) a ;;
-  _  <- swr (S a) 0 ;;
-  _  <- swr hdr a ;;
-  kt.
+  queue_turn (semit q) hdr kt.
 
 Definition turn (q hdr: nat) : ictree sE unit := turnk q hdr (Ret tt).
 
 (** *** The turn correspondence.
 
-    Same three-in-one content as the frozen [QLang.rot_body_spec]: hidden
-    segment termination, operation correctness ([HeapQ.rot_heap_spec]) and the
-    observation, now queue-tagged.  The proof script is the frozen one with
-    the final [interp_state_ret] dropped, because the tail is a parameter. *)
+    Instantiate [Operations.queue_turn_spec] with tagged observations. The
+    arbitrary tail reuses the same heap operation proof as sequential rotation. *)
 Theorem turnk_spec {X}: forall q hdr a ns pv vs h c (kt: ictree sE X),
     qrep hdr (a :: ns) (pv :: vs) h ->
     interp_state sh (turnk q hdr kt) (h, c)
     ~ (log (SPop q pv c) ;;
        interp_state sh kt (rot_heap hdr a (hdf ns 0) (zof hdr ns) h, S c)).
 Proof.
-  intros q hdr a ns pv vs h c kt Hq.
-  pose proof Hq as (Hwf & Hhd & Htl & Hch & Hdom).
-  cbn in Hhd, Htl.
-  destruct Hch as (Ha & Hsa & Hch).
-  pose proof (qwf_neqs _ _ _ Hwf) as (Hha & Hsha & Hhsa & Hshsa & Hhshdr).
-  pose proof (qrep_zof_dom _ _ _ _ _ _ Hq) as Hzdom.
-  assert (Hhdrdom: h hdr <> None) by (rewrite Htl; discriminate).
-  assert (Hsadom: h (S a) <> None) by (rewrite Hsa; discriminate).
-  assert (Hshdrdom: h (S hdr) <> None) by (rewrite Hhd; discriminate).
-  assert (Hread_hdr: upd h (S hdr) (hdf ns 0) hdr = Some (last (a :: ns) 0))
-    by (rewrite upd_neq by congruence; exact Htl).
-  unfold turnk.
-  rewrite (sinterp_rd (S hdr) h c a _ Hhd).
-  rewrite (sinterp_rd a h c pv _ Ha).
-  rewrite sinterp_emit.
-  apply sbisim_clo_bind_eq; [reflexivity | intros []].
-  rewrite (sinterp_rd (S a) h (S c) (hdf ns 0) _ Hsa).
-  rewrite (sinterp_wr' (S hdr) h (S c) (hdf ns 0) _ Hshdrdom).
-  rewrite (sinterp_rd hdr (upd h (S hdr) (hdf ns 0)) (S c) (last (a :: ns) 0) _
-             Hread_hdr).
-  rewrite (zof_compute hdr a ns Hwf).
-  rewrite (sinterp_wr' (S (zof hdr ns)) _ (S c) a _ (upd_mono _ _ _ _ Hzdom)).
-  rewrite (sinterp_wr' (S a) _ (S c) 0 _
-             (upd_mono _ _ _ _ (upd_mono _ _ _ _ Hsadom))).
-  rewrite (sinterp_wr' hdr _ (S c) a _
-             (upd_mono _ _ _ _ (upd_mono _ _ _ _ (upd_mono _ _ _ _ Hhdrdom)))).
-  reflexivity.
+  intros q hdr a ns pv vs h c kt Hq; unfold turnk.
+  eapply (queue_turn_spec sh_tagged (semit q) (fun value index => SPop q value index)).
+  - intros; apply sinterp_emit.
+  - exact Hq.
 Qed.
 
 (** ** The nonpreemptive cyclic scheduler.
@@ -180,8 +146,8 @@ Lemma turnk_bind {X} q hdr (kt : ictree sE X) :
   turnk q hdr kt ≅ (turn q hdr;; kt).
 Proof.
   unfold turn, turnk.
-  do 9 (rewrite bind_bind; apply equ_clo_bind_eq; intro).
-  rewrite bind_ret_l; reflexivity.
+  rewrite queue_turn_bind.
+  apply queue_turn_equ; symmetry; apply bind_ret_l.
 Qed.
 
 Lemma srun_turn u v n h c :

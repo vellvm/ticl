@@ -9,31 +9,31 @@ Local Open Scope ictree_scope.
 
 Lemma allocated_read_returns a h c v :
   h a = Some v ->
-  runStateT (sh (SRd a)) (h,c) ≅ Ret (v,(h,c)).
+  runStateT (sh (inl (HRead a))) (h,c) ≅ Ret (v,(h,c)).
 Proof. apply sh_rd_some. Qed.
 
 Lemma empty_read_faults a c :
-  interp_state sh (srd a) (hemp,c) ≅
+  interp_state sh (heap_read (E:=sE) a) (hemp,c) ≅
     (stuck : ictreeW SObs (nat * SSig)).
 Proof. apply sinterp_srd_stuck; reflexivity. Qed.
 
 Lemma empty_write_faults a v c :
-  interp_state sh (swr a v) (hemp,c) ≅
+  interp_state sh (heap_write (E:=sE) a v) (hemp,c) ≅
     (stuck : ictreeW SObs (unit * SSig)).
 Proof. apply sinterp_swr_stuck; reflexivity. Qed.
 
 Lemma allocated_write_updates a h c v old :
   h a = Some old ->
-  runStateT (sh (SWr a v)) (h,c) ≅ Ret (tt,(upd h a v,c)).
+  runStateT (sh (inl (HWrite a v))) (h,c) ≅ Ret (tt,(upd h a v,c)).
 Proof. apply sh_wr_some. Qed.
 
 Lemma emit_records_current_index q v h c :
-  runStateT (sh (SEmit q v)) (h,c) ≅
+  runStateT (sh (inr (Log (q,v)))) (h,c) ≅
     (log (SPop q v c);; Ret (tt,(h,S c))).
 Proof. apply sh_emit. Qed.
 
 Lemma alloc_empty_two :
-  runStateT (sh (SAlloc 2)) (hemp,5) ~
+  runStateT (sh (inl (HAlloc 2))) (hemp,5) ~
     Ret (1,(hunion (hblock 1 2) hemp,5)).
 Proof.
   apply sh_alloc_first; try lia.
@@ -41,7 +41,7 @@ Proof.
 Qed.
 
 Lemma alloc_skips_partial_overlap :
-  runStateT (sh (SAlloc 2)) (Pcm.hsingle 2 99,5) ~
+  runStateT (sh (inl (HAlloc 2))) (Pcm.hsingle 2 99,5) ~
     Ret (3,(hunion (hblock 3 2) (Pcm.hsingle 2 99),5)).
 Proof.
   apply sh_alloc_first; try lia.
@@ -53,7 +53,7 @@ Proof.
 Qed.
 
 Lemma alloc_zero_stuck c :
-  interp_state sh (salloc 0) (hemp,c) ≅
+  interp_state sh (heap_alloc (E:=sE) 0) (hemp,c) ≅
     (stuck : ictreeW SObs (nat * SSig)).
 Proof. apply sinterp_salloc_zero. Qed.
 
@@ -61,19 +61,19 @@ Definition full_heap : Heap := fun _ : nat => Some 7.
 
 Lemma alloc_full_heap_stuck size c :
   Nat.lt 0 size ->
-  runStateT (sh (SAlloc size)) (full_heap,c) ≅
+  runStateT (sh (inl (HAlloc size))) (full_heap,c) ≅
     (stuck : ictreeW SObs (nat * SSig)).
 Proof.
-  intro Pos; apply alloc_search_no_space; [exact Pos |].
+  intro Pos; apply (alloc_search_no_space (W:=SObs)); [exact Pos |].
   intros j J Free; specialize (Free 0 Pos); discriminate Free.
 Qed.
 
 Example cas_replacement_preserves_frame frame c :
   frame <> 2 ->
   interp_state sh
-    (b <- scas 2 7 9 ;;
-     current <- srd 2 ;;
-     framed <- srd frame ;;
+    (b <- heap_cas (E:=sE) 2 7 9 ;;
+     current <- heap_read (E:=sE) 2 ;;
+     framed <- heap_read (E:=sE) frame ;;
      Ret (b,current,framed)) (full_heap,c) ~
     Ret ((true,9,7),(upd full_heap 2 9,c)).
 Proof.
@@ -88,9 +88,9 @@ Qed.
 
 Example cas_mismatch_preserves_entire_state frame c :
   interp_state sh
-    (b <- scas 2 8 9 ;;
-     current <- srd 2 ;;
-     framed <- srd frame ;;
+    (b <- heap_cas (E:=sE) 2 8 9 ;;
+     current <- heap_read (E:=sE) 2 ;;
+     framed <- heap_read (E:=sE) frame ;;
      Ret (b,current,framed)) (full_heap,c) ~
     Ret ((false,7,7),(full_heap,c)).
 Proof.
@@ -103,9 +103,9 @@ Qed.
 
 Example cas_same_value_still_succeeds frame c :
   interp_state sh
-    (b <- scas 2 7 7 ;;
-     current <- srd 2 ;;
-     framed <- srd frame ;;
+    (b <- heap_cas (E:=sE) 2 7 7 ;;
+     current <- heap_read (E:=sE) 2 ;;
+     framed <- heap_read (E:=sE) frame ;;
      Ret (b,current,framed)) (full_heap,c) ~
     Ret ((true,7,7),(upd full_heap 2 7,c)).
 Proof.
@@ -119,7 +119,7 @@ Qed.
 
 Example cas_missing_faults_before_continuation c :
   interp_state sh
-    (b <- scas 1 0 9 ;;
+    (b <- heap_cas (E:=sE) 1 0 9 ;;
      semit 10 (if b then 1 else 0) ;;
      Ret b) (Pcm.hsingle 2 99,c) ~
     (stuck : ictreeW SObs (bool * SSig)).

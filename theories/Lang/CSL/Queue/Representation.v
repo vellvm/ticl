@@ -1,4 +1,4 @@
-(** * HeapQ: a heap-backed rotating queue -- resource model and pure theory.
+(** * Heap-backed queue representation and pure resource theory.
 
     This file contains NO temporal reasoning.  It fixes
 
@@ -19,9 +19,8 @@
 
     - [qwf] states non-overlap directly ([a <> S b] for any two node names)
       rather than through an allocation policy.  [qwf_aligned] shows that
-      two-word alignment is a sufficient concrete policy.  No allocation
-      happens anywhere in this development; [qwf] is a precondition on a
-      PREALLOCATED structure.
+      two-word alignment is a sufficient concrete policy. The representation
+      predicate is independent of the allocator used to obtain those cells.
 
     - The tail pointer is constrained only when the queue is non-empty.  That
       is what makes the intermediate ownership split of [Rotate.v] uniform: at
@@ -43,18 +42,6 @@ Import ListNotations.
 
 From TICL Require Export Lang.CSL.Heap.
 
-Lemma upd_eq: forall h a v, upd h a v a = Some v.
-Proof. intros; unfold upd; now rewrite Nat.eqb_refl. Qed.
-
-Lemma upd_neq: forall h a v x, x <> a -> upd h a v x = h x.
-Proof. intros; unfold upd; now apply Nat.eqb_neq in H as ->. Qed.
-
-Lemma upd_dom: forall h a v x, h a <> None -> (upd h a v x <> None <-> h x <> None).
-Proof.
-  intros h a v x Ha; unfold upd; destruct (Nat.eqb_spec x a) as [-> | Hne].
-  - split; [intros _; exact Ha | intros _; discriminate].
-  - reflexivity.
-Qed.
 (** ** Cells, footprints and well-formedness *)
 
 (** The two cells of a node named [a]: the payload cell [a] and the link cell
@@ -256,9 +243,8 @@ Definition tailok (hdr: nat) (ns: list nat) (h: Heap) : Prop :=
     experiment is weakened: every old hypothesis still implies the new one
     ([Frame.qrepX_qrep]).
 
-    The arity of the conjunction is unchanged, so every destructuring pattern
-    [(Hwf & Hhd & Htl & Hch & Hdom)] downstream still typechecks.  [QLang.v]
-    and [Recurrence.v] are byte-identical to the recurrence experiment. *)
+    The grouped conjunction supports the common destructuring pattern
+    [(Hwf & Hhd & Htl & Hch & Hdom)] used by the queue operation proofs. *)
 Definition qrep (hdr: nat) (ns vs: list nat) (h: Heap) : Prop :=
   qwf hdr ns
   /\ h (S hdr) = Some (hdf ns 0)
@@ -795,9 +781,6 @@ Qed.
 
 (** ** Two facts the language layer needs about the rotation's footprint. *)
 
-Lemma upd_mono: forall h a v x, h x <> None -> upd h a v x <> None.
-Proof. intros h a v x H; unfold upd; destruct (Nat.eqb x a); [discriminate | exact H]. Qed.
-
 Lemma last_in: forall (l: list nat) d, l <> [] -> In (last l d) l.
 Proof.
   intros l d H; destruct (exists_last H) as (l' & x & ->).
@@ -840,3 +823,17 @@ Qed.
 
 Lemma rotl_cons: forall (v: nat) vs, rotl (v :: vs) = vs ++ [v].
 Proof. reflexivity. Qed.
+
+Lemma chain_mono: forall h h' ns vs fin,
+    chain h ns vs fin ->
+    (forall x, In x (cells ns) -> h' x = h x) ->
+    chain h' ns vs fin.
+Proof.
+  intros h h'; induction ns as [| a ns IH]; intros [| v vs] fin Hc Hag;
+    cbn in *; try contradiction; auto.
+  destruct Hc as (Ha & Hsa & Hc).
+  split; [| split].
+  - rewrite Hag; [exact Ha | auto].
+  - rewrite Hag; [exact Hsa | auto].
+  - apply (IH vs fin Hc); intros x Hx; apply Hag; auto.
+Qed.

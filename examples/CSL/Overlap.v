@@ -19,7 +19,9 @@ From Stdlib Require Import
   Lia
   Arith.PeanoNat.
 
-From examples Require Import CSL.HeapQ CSL.Trace CSL.Layout CSL.Frame.
+From TICL Require Import Lang.CSL.Queue.Representation Lang.CSL.Queue.Trace
+  Lang.CSL.Queue.Frame.
+From examples Require Import CSL.Layout.
 
 Import ListNotations.
 Local Open Scope list_scope.
@@ -28,7 +30,7 @@ Local Open Scope list_scope.
 
 (** The candidate frame claims address 3, which is the queue's HEAD POINTER
     cell -- squarely inside [qcells hdr1 ns1]. *)
-Definition fbad : Heap := Layout.hsingle 3 42.
+Definition fbad : Heap := Pcm.hsingle 3 42.
 
 Lemma three_in_footprint: In 3 (qcells hdr1 ns1).
 Proof. unfold hdr1, ns1, qcells; cbn; tauto. Qed.
@@ -38,7 +40,7 @@ Theorem overlap_rejected: ~ hdisj h1 fbad.
 Proof.
   intro Hd; destruct (Hd 3) as [H | H].
   - apply (qrep_fp hdr1 ns1 vs1 h1 qrep1 3 three_in_footprint); exact H.
-  - unfold fbad, Layout.hsingle in H; cbn in H; discriminate.
+  - unfold fbad, Pcm.hsingle in H; cbn in H; discriminate.
 Qed.
 
 (** (b) ...and the conclusion it would license is FALSE.  The cell the
@@ -75,11 +77,11 @@ Qed.
 
 (** The candidate frame allocates address 0, which the language's
     representation uses as the end-of-list terminator. *)
-Definition fnull : Heap := Layout.hsingle 0 1.
+Definition fnull : Heap := Pcm.hsingle 0 1.
 
 (** (a) The compatibility check rejects it. *)
 Theorem null_frame_rejected: fnull 0 <> None.
-Proof. unfold fnull, Layout.hsingle; cbn; discriminate. Qed.
+Proof. unfold fnull, Pcm.hsingle; cbn; discriminate. Qed.
 
 (** (b) ...and the conclusion it would license is FALSE: the extended heap is
     not a representation of the queue at all, so the frozen recurrence theorem
@@ -90,12 +92,12 @@ Theorem null_frame_disjoint_but_bad:
 Proof.
   split.
   - intro x; destruct (h1 x) eqn:E; [| now left].
-    right; unfold fnull, Layout.hsingle.
-    destruct (Nat.eqb_spec x 0) as [Ex | Hne]; [| reflexivity].
-    exfalso; rewrite Ex in E.
+    right; unfold fnull, Pcm.hsingle.
+    destruct (Nat.eq_dec 0 x) as [Ex | Hne]; [| reflexivity].
+    exfalso; rewrite <- Ex in E.
     pose proof (qrep_null hdr1 ns1 vs1 h1 qrep1) as H0; congruence.
   - intro Hq; pose proof (qrep_null _ _ _ _ Hq) as H0.
-    unfold hunion, fnull, Layout.hsingle in H0; cbn in H0; discriminate.
+    unfold hunion, fnull, Pcm.hsingle in H0; cbn in H0; discriminate.
 Qed.
 
 (** ** The two conditions are independent

@@ -14,6 +14,7 @@ From TICL Require Import
   ICTree.SBisim
   ICTree.Equ
   ICTree.Interp.State.Mod
+  ICTree.Events.Heap
   ICTree.Events.State
   ICTree.Events.Writer
   ICTree.Logic.Trans
@@ -110,6 +111,38 @@ Module HeapImp.
     | S n' => add base 0 (heap_init (S base) n' h)
     end.
 
+  (** Lower shared heap commands to this backend's existing state effects. *)
+  Definition h_heapimp : heapE ~> ictree memE :=
+    fun e =>
+      match e return ictree memE (encode e) with
+      | HRead a =>
+          m <- get ;;
+          match lookup a (heap m) with
+          | Some v => Ret v
+          | None => stuck
+          end
+      | HWrite a v =>
+          m <- get ;;
+          put (update_heap a v m)
+      | HAlloc n =>
+          m <- get ;;
+          let base := fresh_addr (heap m) in
+          put {| store := store m; heap := heap_init base n (heap m) |} ;;
+          Ret base
+      | HFree a =>
+          m <- get ;;
+          put (free_heap a m)
+      | HCAS a expected desired =>
+          m <- get ;;
+          match lookup a (heap m) with
+          | None => stuck
+          | Some current =>
+              if Nat.eqb current expected
+              then put (update_heap a desired m) ;; Ret true
+              else Ret false
+          end
+      end.
+
   (** Denotation of expressions to [ictree] *)
   Fixpoint cdenote_exp(e: CExp): ictree memE nat :=
     match e with
@@ -129,18 +162,10 @@ Module HeapImp.
         Ret (x - y)
     | CHeapAlloc sz =>
         n <- cdenote_exp sz ;;
-        m <- get ;;
-        let base := fresh_addr (heap m) in
-        let h' := heap_init base n (heap m) in
-        put {| store := store m; heap := h' |} ;;
-        Ret base
+        h_heapimp (HAlloc n)
     | CHeapRead a =>
         addr <- cdenote_exp a ;;
-        m <- get ;;
-        match lookup addr (heap m) with
-        | Some x => Ret x
-        | None => stuck
-        end
+        h_heapimp (HRead addr)
     end.
 
   (** Denotation of boolean comparison expressions to [ictree] *)
@@ -170,12 +195,10 @@ Module HeapImp.
     | CHeapWrite a v =>
         addr <- cdenote_exp a ;;
         val <- cdenote_exp v ;;
-        m <- get ;;
-        put {| store := store m; heap := add addr val (heap m) |}
+        h_heapimp (HWrite addr val)
     | CHeapFree a =>
         addr <- cdenote_exp a ;;
-        m <- get ;;
-        put {| store := store m; heap := remove addr (heap m) |}
+        h_heapimp (HFree addr)
     | CIf c t e =>
         bv <- cdenote_comp c ;;
         if bv then

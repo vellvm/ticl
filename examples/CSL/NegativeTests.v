@@ -3,8 +3,10 @@ From TICL Require Import
   Lang.CSL ICTree.Core ICTree.Equ ICTree.SBisim ICTree.Events.Writer
   ICTree.Interp.State.Mod ICTree.Interp.Yield.RoundRobin
   ICTree.Logic.AG ICTree.Logic.Trans Logic.Core.
-From examples Require Import
-  CSL.HeapQ CSL.Layout CSL.Overlap CSL.Recurrence CSL.SLang CSL.Program CSL.Queue.
+From TICL Require Import Lang.CSL.Queue.Representation Lang.CSL.Queue.Recurrence
+  Lang.CSL.Queue.Alternating Lang.CSL.Queue.Program Lang.CSL.Queue.Ticl
+  Lang.CSL.Queue.Operations.
+From examples Require Import CSL.Layout CSL.Overlap.
 
 Import ICtree ICTreeNotations TiclNotations ListNotations.
 Local Open Scope ictree_scope.
@@ -13,9 +15,9 @@ Local Open Scope list_scope.
 
 (* Ownership controls retain their original statements in CSL.Overlap:
    overlap_rejected, overlap_frame_not_preserved, null_frame_disjoint_but_bad.
-   The sequential controls remain CSL.Recurrence.empty_queue_no_ag and
-   CSL.Recurrence.absent_never_observed; they do not quantify over concurrent pools.
-   CSL.SLang.sfresh_excludes_retained rules out reusing an old tagged observation. *)
+   Sequential controls live in Lang.CSL.Queue.Recurrence and do not quantify
+   over concurrent pools. Lang.CSL.Queue.Alternating.sfresh_excludes_retained
+   rules out reusing an old tagged observation. *)
 
 Lemma empty_heap_parallel_stuck :
   run_rr (parallel_queues 2 10) hemp 0 ~
@@ -29,10 +31,10 @@ Proof.
   assert (Hfault : interp_state sh (turn 1 2) (hemp,0) ≅
     (stuck : ictreeW SObs (unit * SSig))).
   {
-    unfold turn, turnk.
+    unfold turn, turnk, queue_turn.
     etransitivity; [apply interp_state_bind|].
     lazymatch goal with
-    | |- (interp_state sh (srd 3) (hemp,0) >>= ?next) ≅ _ =>
+    | |- (interp_state sh (heap_read (E:=sE) 3) (hemp,0) >>= ?next) ≅ _ =>
       etransitivity;
       [ apply equ_clo_bind with (S := eq) (k2 := next);
         [exact (sinterp_srd_stuck 3 hemp 0 eq_refl) | intros x y <-; reflexivity]
@@ -78,11 +80,11 @@ Proof.
   etransitivity; [apply queue_pool_turn |].
   assert (Hfault : interp_state sh (turn 1 u) (h,0) ~
     (stuck : ictreeW SObs (unit * SSig))).
-  { unfold turn, turnk.
+  { unfold turn, turnk, queue_turn.
     etransitivity; [eapply sinterp_rd; exact Hhead |].
     eapply equ_clos_sbisim_goal; [apply interp_state_bind | reflexivity |].
     lazymatch goal with
-    | |- (interp_state sh (srd 0) (h,0) >>= ?next) ~ _ =>
+    | |- (interp_state sh (heap_read (E:=sE) 0) (h,0) >>= ?next) ~ _ =>
       eapply equ_clos_sbisim_goal;
       [ etransitivity;
         [ apply equ_clo_bind with (S := eq) (k2 := next);

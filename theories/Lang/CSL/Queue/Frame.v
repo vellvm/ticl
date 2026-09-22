@@ -1,8 +1,6 @@
-(** * Frame: the separation-logic layer over the frozen recurrence proof.
+(** * Separation and framing of heap-backed queue recurrence.
 
-    This file adds the RESOURCE reasoning that the recurrence experiment did
-    not need, and nothing else.  It is used by the LOCAL proof family only;
-    the whole-state family in [Whole.v] never imports it.
+    This module separates resource reasoning from temporal recurrence:
 
     - the PRECISE representation predicate [qrepX = qrep /\ qex] and the
       transport theorem [qrepX_frame]: a heap that IS the queue, disjointly
@@ -13,10 +11,8 @@
       say [qrep = qrepX * True] with [qrepX] precise, so "the frame" is a
       function of the state rather than a re-chosen existential;
 
-    - the transport COROLLARIES, which are four-line applications of the
-      byte-frozen theorems of [Recurrence.v].  No temporal invariant, rank,
-      induction or coinduction is reopened: the corollaries only supply a
-      weaker precondition to an already-proved theorem;
+    - transport corollaries reuse [Recurrence.v] without reopening its temporal
+      invariant, rank, induction, or coinduction;
 
     - frame PRESERVATION: the run's heap after any number of rotations agrees
       with the initial heap outside the queue's footprint ([qstepN_agree]), so
@@ -24,8 +20,7 @@
       ([frame_assertion_preserved]).  [Trace.run_stepN] is what makes "after
       n rotations" the same thing as "n observations into the run".
 
-    Nothing here mentions a particular frame.  The frames live in the
-    per-variant files [variants/v*/FrameDef.v]. *)
+    All frame heaps are parameters; concrete fixtures remain in examples. *)
 
 From Stdlib Require Import
   List
@@ -49,7 +44,9 @@ From TICL Require Import
   ICTree.Logic.State
   Logic.Core.
 
-From examples Require Import CSL.HeapQ CSL.QLang CSL.Recurrence CSL.Trace CSL.Layout.
+From TICL Require Import
+  Lang.CSL.Queue.Representation Lang.CSL.Queue.Sequential Lang.CSL.Queue.Recurrence
+  Lang.CSL.Queue.Trace Lang.CSL.Queue.Layout.
 
 Import ICtree ICTreeNotations TiclNotations ListNotations.
 Local Open Scope ictree_scope.
@@ -213,10 +210,8 @@ Qed.
 
 (** ** The transport corollaries.
 
-    Each of these is an application of a BYTE-FROZEN theorem of
-    [Recurrence.v] to a weaker precondition.  The temporal invariant [Rq], the
-    ghost invariant [InvQ], the lexicographic rank [lexnat] and the loop rule
-    [owned_aul_iter_ghost] are untouched, and no fixed point is unfolded. *)
+    Apply [Recurrence.v] with framed representation premises. The shared
+    [aul_state_iter_ghost] rule and queue invariants are reused unchanged. *)
 
 Theorem rotate_agaf_pop_framed: forall hdr nlv ns vs d h f c,
     qrepX hdr ns vs h ->
@@ -354,14 +349,6 @@ Proof.
   eapply HA; [exact Hfeq | exact HAf].
 Qed.
 
-(** ** Instantiating the compatibility conditions from an address bound.
-
-    Every frame variant is described by "I allocate only addresses at least
-    8"; the owned queue lives below 8 ([Layout.h1_low]).  These two lemmas turn
-    that numeric statement into the two compatibility conditions, once. *)
-
-Lemma qrepX1: qrepX hdr1 ns1 vs1 h1.
-Proof. split; [apply qrep1 | apply qex1]. Qed.
 
 (** A newly initialized queue owns its block beside the unchanged old heap. *)
 Lemma new_queue_heap_owned hdr values h :

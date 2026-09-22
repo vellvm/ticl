@@ -123,6 +123,20 @@ Proof.
   reflexivity.
 Qed.  
 
+(** A trigger's administrative guard disappears under strong bisimulation. *)
+Local Typeclasses Transparent equ.
+Lemma interp_state_trigger_bind {E F} {HE : Encode E} {HF : Encode F} {W X}
+  (h : E ~> stateT W (ictree F)) (e : E)
+  (k : (encode e * W)%type -> ictree F X) (s : W) :
+  (interp_state h (@ICtree.trigger E E HE HE ReSum_refl ReSumRet_refl e) s >>= k) ~
+  (runStateT (h e) s >>= k).
+Proof.
+  rewrite interp_state_trigger, bind_bind.
+  apply sbisim_clo_bind_eq; [reflexivity | intro result].
+  rewrite bind_guard, sb_guard, bind_ret_l; reflexivity.
+Qed.
+Local Typeclasses Opaque equ.
+
 (** [interp_state] applied on branch events commutes with the branching structure. *)
 Lemma interp_state_br `{Encode E} `{Encode F} `(h: E ~> stateT W (ictree F)) {X}
   (n : nat) (k : fin' n -> ictree E X) (w : W) :

@@ -642,6 +642,77 @@ Section BindLemmas.
 
   (** ** Convenience lemmas for [bind] and instrumentation events [log s]. *)
   Typeclasses Transparent equ.
+
+  (** A log retains the current world for its prefix obligation and has
+      exactly one successor, at the world recording that log. *)
+  Lemma anl_log_iff {X W} (s : W) (k : ictreeW W X) w (φ ψ : ticll (writerE W)) :
+    <( {log s;; k}, w |= φ AN ψ )> <->
+    <( {log s;; k}, w |= φ )> /\ <( k, {Obs (Log s) tt} |= ψ )>.
+  Proof.
+    unfold log, ICtree.trigger, resum, resum_ret, ReSum_refl, ReSumRet_refl.
+    rewrite !bind_vis; setoid_rewrite bind_ret_l.
+    rewrite (anl_vis (Log s) _ tt).
+    split.
+    - intros [Hφ Hnext]; split; [exact Hφ | exact (Hnext tt)].
+    - intros [Hφ Hnext]; split; [exact Hφ | intros []; exact Hnext].
+  Qed.
+
+  Lemma anr_log_iff {X W} (s : W) (k : ictreeW W X) w
+    (φ : ticll (writerE W)) (ψ : ticlr (writerE W) X) :
+    <[ {log s;; k}, w |= φ AN ψ ]> <->
+    <( {log s;; k}, w |= φ )> /\ <[ k, {Obs (Log s) tt} |= ψ ]>.
+  Proof.
+    unfold log, ICtree.trigger, resum, resum_ret, ReSum_refl, ReSumRet_refl.
+    rewrite !bind_vis; setoid_rewrite bind_ret_l.
+    rewrite (anr_vis (Log s) _ tt).
+    split.
+    - intros [Hφ Hnext]; split; [exact Hφ | exact (Hnext tt)].
+    - intros [Hφ Hnext]; split; [exact Hφ | intros []; exact Hnext].
+  Qed.
+
+  Lemma aul_log_iff {X W} (s : W) (k : ictreeW W X) w (φ ψ : ticll (writerE W)) :
+    <( {log s;; k}, w |= φ AU ψ )> <->
+    <( {log s;; k}, w |= ψ )> \/
+    (<( {log s;; k}, w |= φ )> /\ <( k, {Obs (Log s) tt} |= φ AU ψ )>).
+  Proof.
+    unfold log, ICtree.trigger, resum, resum_ret, ReSum_refl, ReSumRet_refl.
+    rewrite !bind_vis; setoid_rewrite bind_ret_l.
+    rewrite <- (aul_vis (Log s) _ tt).
+    split.
+    - intros [Hψ | [Hφ Hnext]];
+        [left; exact Hψ | right; split; [exact Hφ | exact (Hnext tt)]].
+    - intros [Hψ | [Hφ Hnext]];
+        [left; exact Hψ | right; split; [exact Hφ | intros []; exact Hnext]].
+  Qed.
+
+  Lemma aur_log_iff {X W} (s : W) (k : ictreeW W X) w
+    (φ : ticll (writerE W)) (ψ : ticlr (writerE W) X) :
+    <[ {log s;; k}, w |= φ AU ψ ]> <->
+    <[ {log s;; k}, w |= ψ ]> \/
+    (<( {log s;; k}, w |= φ )> /\ <[ k, {Obs (Log s) tt} |= φ AU ψ ]>).
+  Proof.
+    unfold log, ICtree.trigger, resum, resum_ret, ReSum_refl, ReSumRet_refl.
+    rewrite !bind_vis; setoid_rewrite bind_ret_l.
+    rewrite <- (aur_vis (Log s) _ tt).
+    split.
+    - intros [Hψ | [Hφ Hnext]];
+        [left; exact Hψ | right; split; [exact Hφ | exact (Hnext tt)]].
+    - intros [Hψ | [Hφ Hnext]];
+        [left; exact Hψ | right; split; [exact Hφ | intros []; exact Hnext]].
+  Qed.
+
+  Lemma ag_log_iff {X W} (s : W) (k : ictreeW W X) w (φ : ticll (writerE W)) :
+    <( {log s;; k}, w |= AG φ )> <->
+    <( {log s;; k}, w |= φ )> /\ <( k, {Obs (Log s) tt} |= AG φ )>.
+  Proof.
+    unfold log, ICtree.trigger, resum, resum_ret, ReSum_refl, ReSumRet_refl.
+    rewrite !bind_vis; setoid_rewrite bind_ret_l.
+    rewrite <- (ag_vis (Log s) _ tt).
+    split.
+    - intros [Hφ Hnext]; split; [exact Hφ | exact (Hnext tt)].
+    - intros [Hφ Hnext]; split; [exact Hφ | intros []; exact Hnext].
+  Qed.
+
   Lemma anl_log{X S}: forall (s: S) (k: ictreeW S X) w ψ φ,
       <( k, {Obs (Log s) tt} |= ψ )> ->
       <( {log s;; k }, w |= φ )> ->

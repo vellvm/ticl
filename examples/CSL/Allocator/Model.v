@@ -1,7 +1,8 @@
 From Stdlib Require Import List Lia Arith.PeanoNat Fin Sorting.Permutation.
 From TICL Require Import Lang.CSL ICTree.Core ICTree.Equ ICTree.SBisim
   ICTree.Events.Writer ICTree.Interp.Refine.
-From examples Require Import CSL.HeapQ CSL.Allocator.Layout.
+From TICL Require Import Lang.CSL.Queue.Representation.
+From examples Require Import CSL.Allocator.Layout.
 
 Import ICtree ICTreeNotations ListNotations.
 Local Open Scope ictree_scope.
@@ -285,16 +286,6 @@ Proof.
   - exact state_equiv_trans.
 Qed.
 
-Local Lemma trees_upd_heq h k a v :
-  heq h k -> heq (upd h a v) (upd k a v).
-Proof.
-  intros H x; unfold upd; destruct (Nat.eqb x a); [reflexivity | apply H].
-Qed.
-
-Local Lemma trees_upd_lookup h a v x :
-  upd h a v x = if Nat.eqb x a then Some v else h x.
-Proof. reflexivity. Qed.
-
 (** Both faults and successful turns are preserved.  In particular this
     statement does not assume the ownership invariant or heap finiteness. *)
 Lemma turn_respects_heq base who s t :
@@ -313,7 +304,7 @@ Proof.
   destruct who; [destruct op | destruct r0 | destruct r1];
     cbn [turn].
   all: repeat first
-    [ progress (rewrite trees_upd_lookup)
+    [ progress (rewrite upd_unfold)
     | progress (rewrite <- Hh)
     | progress (cbn [aheap acount owner_state remote0_state remote1_state])
     | match goal with
@@ -327,7 +318,7 @@ Proof.
   all: unfold state_equiv;
     cbn [aheap acount owner_state remote0_state remote1_state].
   all: split;
-    [ repeat apply trees_upd_heq; exact Hh
+    [ repeat apply upd_heq; exact Hh
     | repeat split; reflexivity ].
 Qed.
 
@@ -629,7 +620,8 @@ Qed.
 
 From Stdlib Require Import List Lia Arith.PeanoNat Sorting.Permutation.
 From TICL Require Import Lang.CSL.
-From examples Require Import CSL.HeapQ CSL.Allocator.Layout.
+From TICL Require Import Lang.CSL.Queue.Representation.
+From examples Require Import CSL.Allocator.Layout.
 
 Import ListNotations.
 Local Open Scope list_scope.

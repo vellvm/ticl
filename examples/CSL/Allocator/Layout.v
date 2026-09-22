@@ -6,10 +6,11 @@
     none of the queue's ownership or chain predicates is used here. *)
 
 From Stdlib Require Import List Lia Arith.PeanoNat.
-From examples Require Import CSL.HeapQ CSL.Layout.
+From TICL Require Import Lang.CSL.Queue.Representation Lang.CSL.Queue.Layout.
 
 Import ListNotations.
 Local Open Scope list_scope.
+Local Open Scope nat_scope.
 
 Definition page_size (capacity : nat) : nat := 5 + 2 * capacity.
 Definition remote_head (base : nat) : nat := base.
@@ -200,22 +201,6 @@ Definition page_heap (base capacity : nat) (h : Heap) : Heap :=
         (mailbox base true) 0)
       (local_head base) (match capacity with 0 => 0 | S _ => base + 5 end)).
 
-Lemma upd_preserves_present h a v x :
-  h x <> None -> upd h a v x <> None.
-Proof.
-  intro H; destruct (Nat.eq_dec x a) as [-> | Hne].
-  - rewrite upd_eq; discriminate.
-  - rewrite upd_neq by exact Hne; exact H.
-Qed.
-
-Lemma upd_lookup_agree h f a v x :
-  h x = f x -> upd h a v x = upd f a v x.
-Proof.
-  intro H; destruct (Nat.eq_dec x a) as [-> | Hne].
-  - now rewrite !upd_eq.
-  - now rewrite !upd_neq by exact Hne.
-Qed.
-
 Lemma init_links_heap_lookup_agree first count h f x :
   h x = f x -> init_links_heap first count h x = init_links_heap first count f x.
 Proof.
@@ -352,7 +337,7 @@ Lemma page_heap_in base capacity h x :
   page_heap base capacity h x <> None.
 Proof.
   intro Hin; unfold page_heap; apply init_links_heap_dom; right.
-  repeat apply upd_preserves_present.
+  repeat apply upd_mono.
   rewrite page_backing_in by exact Hin; discriminate.
 Qed.
 

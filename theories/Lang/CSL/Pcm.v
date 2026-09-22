@@ -27,6 +27,7 @@ From Stdlib Require Import
   Basics
   Arith.PeanoNat
   Lia
+  List
   Relations.
 
 Generalizable All Variables.
@@ -206,7 +207,7 @@ Arguments atrue {A _}.
 Notation "P ⋆ Q" := (asep P Q) (at level 55, right associativity): pcm_scope.
 Notation "P -⋆ Q" := (awand P Q) (at level 60, right associativity): pcm_scope.
 
-(** ** The concrete model: finite partial maps as total functions.
+(** ** The concrete model: partial maps as total functions.
 
     Representation: [nat -> option nat].  Equivalence: pointwise equality.
     Composition: union, defined exactly on disjoint pairs.  This is the
@@ -227,11 +228,65 @@ Definition hupd (a v: nat) (h: Heap) : Heap :=
 Definition hfree (a: nat) (h: Heap) : Heap :=
   fun b => if Nat.eq_dec a b then None else h b.
 
+(** The empty heap has no allocated cell. *)
+
+Lemma hemp_dom: forall x, hemp x <> None -> False.
+Proof. intros x H; apply H; reflexivity. Qed.
+
+(** Pointwise contents of a finite collection of heap cells. *)
+Definition cellsat (W: list (nat * nat)) (h: Heap) : Prop :=
+  Forall (fun p => h (fst p) = Some (snd p)) W.
+
+Lemma cellsat_heq: forall W h1 h2, heq h1 h2 -> cellsat W h1 -> cellsat W h2.
+Proof.
+  intros W k1 k2 Heq H; unfold cellsat in *.
+  rewrite Forall_forall in *; intros p Hp; rewrite <- Heq; now apply H.
+Qed.
+
+Lemma cellsat_agree: forall W h h',
+    (forall p, In p W -> h' (fst p) = h (fst p)) -> cellsat W h -> cellsat W h'.
+Proof.
+  intros W h h' Hag H; unfold cellsat in *.
+  rewrite Forall_forall in *; intros p Hp; rewrite Hag by exact Hp; now apply H.
+Qed.
+
 Ltac hcase a := unfold hunion, hupd, hfree, hsingle, hemp in *;
                 intros; repeat (destruct (Nat.eq_dec _ _)); subst; auto.
 
 Lemma hdisj_none: forall h1 h2 a v, hdisj h1 h2 -> h1 a = Some v -> h2 a = None.
 Proof. intros h1 h2 a v Hd Hs; destruct (Hd a) as [Hn | Hn]; congruence. Qed.
+
+(** Elementary lookup consequences of [hunion]/[hdisj].  These read a single
+    address out of a union; the monoid laws below are stated pointwise on top
+    of them. *)
+
+Lemma hunion_some: forall h f x v, h x = Some v -> hunion h f x = Some v.
+Proof. intros h f x v H; unfold hunion; now rewrite H. Qed.
+
+Lemma hunion_eq: forall h f x, h x <> None -> hunion h f x = h x.
+Proof.
+  intros h f x H; destruct (h x) as [v |] eqn:E; [| congruence].
+  now apply hunion_some.
+Qed.
+
+Lemma hunion_none: forall h f x, h x = None -> hunion h f x = f x.
+Proof. intros h f x H; unfold hunion; now rewrite H. Qed.
+
+Lemma hunion_dom: forall h f x, h x <> None -> hunion h f x <> None.
+Proof. intros h f x H; now rewrite hunion_eq. Qed.
+
+Lemma hunion_null: forall h f, h 0 = None -> f 0 = None -> hunion h f 0 = None.
+Proof. intros h f Hh Hf; unfold hunion; now rewrite Hh. Qed.
+
+Lemma hdisj_union: forall h1 h2 f,
+    hdisj h1 h2 -> hdisj h1 f -> hdisj h1 (hunion h2 f).
+Proof.
+  intros h1 h2 f H12 H1f x.
+  destruct (h1 x) eqn:E1; [| now left].
+  right; unfold hunion.
+  destruct (H12 x) as [C | E2]; [congruence |]; rewrite E2.
+  destruct (H1f x) as [C | Ef]; [congruence | exact Ef].
+Qed.
 
 (** Every law is proved as a standalone lemma first, so that the instance is a
     list of [exact]s and its field order cannot silently drift. *)

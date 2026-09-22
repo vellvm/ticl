@@ -31,7 +31,8 @@ From Stdlib Require Import
   Lia
   Arith.PeanoNat.
 
-From examples Require Import CSL.HeapQ CSL.Trace CSL.Layout CSL.Frame.
+From TICL Require Import Lang.CSL.Queue.Representation Lang.CSL.Queue.Trace
+  Lang.CSL.Queue.Layout Lang.CSL.Queue.Frame.
 
 Import ListNotations.
 Local Open Scope list_scope.
@@ -107,19 +108,6 @@ Qed.
     The two queues are given as PRECISE resources ([qrepX], "this heap IS the
     queue"), the outer frame [f] as an arbitrary null-avoiding heap.  The
     conclusion supplies the composed run's three preconditions. *)
-
-Lemma hdisj_union: forall h1 h2 f,
-    hdisj h1 h2 -> hdisj h1 f -> hdisj h1 (hunion h2 f).
-Proof.
-  intros h1 h2 f H12 H1f x.
-  destruct (h1 x) eqn:E1; [| now left].
-  right; unfold hunion.
-  destruct (H12 x) as [C | E2]; [congruence |]; rewrite E2.
-  destruct (H1f x) as [C | Ef]; [congruence | exact Ef].
-Qed.
-
-Lemma hunion_null: forall h f, h 0 = None -> f 0 = None -> hunion h f 0 = None.
-Proof. intros h f Hh Hf; unfold hunion; now rewrite Hh. Qed.
 
 Theorem compose3: forall u n1 vs1 h1 v n2 vs2 h2 f,
     qrepX u n1 vs1 h1 ->

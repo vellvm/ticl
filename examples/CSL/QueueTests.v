@@ -3,8 +3,8 @@ From TICL Require Import
   Lang.CSL ICTree.Core ICTree.Equ ICTree.SBisim ICTree.Events.Writer
   ICTree.Interp.State.Mod ICTree.Logic.Trans Logic.Core
   ICTree.Events.Yield ICTree.Interp.Yield.RoundRobin Utils.Vectors.
-From examples Require Import
-  CSL.HeapQ CSL.Layout CSL.Frame CSL.Sep2 CSL.SLang CSL.Trace CSL.Program CSL.Queue.
+From TICL Require Import Lang.CSL.Queue.
+From examples Require Import CSL.Layout.
 
 Import ICtree ICTreeNotations TiclNotations VectorNotations ListNotations.
 Local Open Scope ictree_scope.
@@ -28,7 +28,7 @@ Proof.
 Qed.
 
 Lemma demo_h1_owned : qrepX 2 [4;6] [7;9] demo_h1.
-Proof. exact Frame.qrepX1. Qed.
+Proof. exact Layout.qrepX1. Qed.
 
 Lemma demo_h2_owned : qrepX 10 [12] [8] demo_h2.
 Proof.
@@ -120,8 +120,7 @@ Proof.
     (qstep v [d] (qstep u [b;a]
       (qstep v [d] (qstep u [a;b] h)))) 4).
   etransitivity.
-  - exact (run_rr_parallel_bisim u v x z h 0 [a;b] [x;y] [d] [z] 0 0
-      H1 H2 Hd F1 F2).
+  - exact (run_rr_parallel_bisim u v h 0).
   - reference_turn H1.
   reference_turn H2a.
   reference_turn H1b.
@@ -285,73 +284,6 @@ Lemma allocated_duplicate_queue2_fresh k :
       |= AG (AF visW {spopped_after 2 7 k}) )>.
 Proof. exact (rotate_agaf_pop_alloc_q2_fresh [7;7] [7] 7 7 k 0 0 0 eq_refl eq_refl). Qed.
 
-Local Lemma interp_rr_new_queue_empty n (ts : pool sE (S n)) (i : Fin.t (S n))
-  values (K : option nat -> thread sE) m c :
-  interp_schedule_rr sh (S n)
-    (ts @ i := (denote_flow (new_queue values) >>= K)) (Some i) m (hemp,c) ~
-  interp_schedule_rr sh (S n) (ts @ i := K (Some 1))
-    (Some i) m (new_queue_heap 1 values hemp,c).
-Proof.
-  assert (Free : block_free hemp 1 (2 * S (length values)))
-    by (intros offset O; reflexivity).
-  assert (First : forall j, Nat.lt 0 j -> Nat.lt j 1 ->
-    ~ block_free hemp j (2 * S (length values))) by (intros; lia).
-  pose proof (sinterp_alloc_first hemp (2 * S (length values)) 1 c
-    (fun a : nat => (Ret a : ictree sE nat)) ltac:(lia) ltac:(lia) Free First) as Hstate.
-  rewrite bind_ret_r, interp_state_ret in Hstate.
-  unfold new_queue; rewrite interp_rr_bind, interp_rr_alloc.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [exact Hstate | intro result; reflexivity] |]
-  end.
-  eapply equ_clos_sbisim_goal; [apply bind_ret_l | reflexivity |].
-  rewrite interp_rr_bind; etransitivity.
-  - apply interp_rr_init_queue; intros offset O.
-    unfold hunion; rewrite (hblock_in 1 (2 * S (length values)) offset O).
-    discriminate.
-  - rewrite interp_rr_ret; reflexivity.
-Qed.
-
-Local Ltac probe_read value :=
-  lazymatch goal with
-  | |- (interp_state sh (srd ?a) (?h,?c) >>= ?next) ~ _ =>
-    let Hr := fresh "Hread" in
-    pose proof (sinterp_rd a h c value
-      (fun x : nat => (Ret x : ictree sE nat)) eq_refl) as Hr;
-    rewrite bind_ret_r, interp_state_ret in Hr;
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [exact Hr | intro result; reflexivity] |];
-    eapply equ_clos_sbisim_goal; [apply bind_ret_l | reflexivity |]
-  end.
-
-Local Ltac probe_emit :=
-  lazymatch goal with
-  | |- (interp_state sh (semit ?q ?v) (?h,?c) >>= ?next) ~ _ =>
-    let He := fresh "Hemit" in
-    assert (He : interp_state sh (semit q v) (h,c) ~
-      (log (SPop q v c);; Ret (tt,(h,S c)))) by
-    (let Hraw := fresh "Hraw" in
-     pose proof (sinterp_emit q v h c
-       (fun x : unit => (Ret x : ictree sE unit))) as Hraw;
-     rewrite bind_ret_r in Hraw;
-     etransitivity; [exact Hraw |];
-     apply sbisim_clo_bind_eq; [reflexivity | intros []];
-     rewrite interp_state_ret; reflexivity);
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [exact He | intro result; reflexivity] |];
-    eapply equ_clos_sbisim_goal; [apply bind_bind | reflexivity |];
-    apply sbisim_clo_bind_eq; [reflexivity | intros []];
-    eapply equ_clos_sbisim_goal; [apply bind_ret_l | reflexivity |]
-  end.
-
-Local Ltac probe_finish :=
-  cbv [Vector.replace Vector.caseS'];
-  erewrite interp_schedule_rr_ret by reflexivity;
-  rewrite vector_remove_head, interp_schedule_rr_empty; reflexivity.
 
 Definition initialized_queue_probe : CProg unit :=
   CBind (new_queue [7;9]) (fun hdr =>
@@ -371,10 +303,11 @@ Proof.
     (Some Fin.F1) 0 (hemp,0) ~
     (log (SPop 1 7 0);; Ret (tt,(new_queue_heap 1 [7;9] hemp,1)))).
   rewrite interp_rr_bind, interp_rr_new_queue_empty.
-  rewrite interp_rr_bind, interp_rr_read; probe_read 3.
-  rewrite interp_rr_bind, interp_rr_read; probe_read 7.
-  rewrite interp_rr_emit; probe_emit.
-  probe_finish.
+  rewrite interp_rr_bind, interp_rr_read_value with (value:=3) by reflexivity.
+  rewrite interp_rr_bind, interp_rr_read_value with (value:=7) by reflexivity.
+  rewrite interp_rr_emit_log.
+  apply sbisim_clo_bind_eq; [reflexivity | intros []].
+  finish_pool.
 Qed.
 
 Definition empty_queue_probe : CProg unit :=
@@ -395,9 +328,10 @@ Proof.
     (Some Fin.F1) 0 (hemp,0) ~
     (log (SPop 0 0 0);; Ret (tt,(new_queue_heap 1 [] hemp,1)))).
   rewrite interp_rr_bind, interp_rr_new_queue_empty.
-  rewrite interp_rr_bind, interp_rr_read; probe_read 0.
-  rewrite interp_rr_bind, interp_rr_read; probe_read 0.
-  rewrite interp_rr_emit; probe_emit.
-  probe_finish.
+  rewrite interp_rr_bind, interp_rr_read_value with (value:=0) by reflexivity.
+  rewrite interp_rr_bind, interp_rr_read_value with (value:=0) by reflexivity.
+  rewrite interp_rr_emit_log.
+  apply sbisim_clo_bind_eq; [reflexivity | intros []].
+  finish_pool.
 Qed.
 

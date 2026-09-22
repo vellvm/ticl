@@ -27,7 +27,7 @@ From TICL Require Import
   ICTree.Logic.State
   Logic.Core.
 
-From examples Require Import CSL.HeapQ CSL.QLang.
+From TICL Require Import Lang.CSL.Queue.Representation Lang.CSL.Queue.Sequential.
 
 Import ICtree ICTreeNotations TiclNotations ListNotations.
 Local Open Scope ictree_scope.
@@ -38,7 +38,7 @@ Local Typeclasses Transparent equ.
 Local Typeclasses Transparent sbisim.
 
 (** One completed rotation of the run: a single logged pop, then the run from
-    the rotated heap.  This is [QLang.rot_body_spec] lifted through the
+    the rotated heap. This is [Sequential.rot_body_spec] lifted through the
     iteration; the [Guard] is discharged by [sb_guard], so no stuttering
     theory is needed. *)
 Lemma run_step: forall hdr a ns v vs h c,

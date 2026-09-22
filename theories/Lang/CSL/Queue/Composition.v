@@ -1,9 +1,7 @@
-(** * Compose: recurring per-queue progress for TWO ACTIVE queues.
+(** * Recurring per-queue progress for two active queues.
 
-    This is the experiment's positive result.  Both queues are running, under
-    the nonpreemptive cyclic scheduler that is part of the program
-    ([SLang.sbody]), and each one still satisfies the nested recurrence
-    formula of the frozen single-queue theorem.
+    Both queues execute under [Alternating.sbody]'s nonpreemptive cyclic
+    scheduler, preserving the single-queue recurrence contract.
 
     The claim is deliberately NOT "the second queue is a frame".  A frame is a
     resource nobody touches; here the other queue is rewritten on every second
@@ -12,15 +10,15 @@
     - [step_focus] / [step_foreign] are the two resource-level turn lemmas.
       [step_foreign] is where active composition differs from framing: the
       focused queue's representation must survive a step of the OTHER
-      component, and that is [Sep2.foreign_pres], not a frame rule.
+      component, and that is [Separation.foreign_pres], not a frame rule.
 
-    - the temporal layer reuses the frozen loop rules unchanged
+    - the temporal layer reuses the structural iteration rules
       ([ICTree.Logic.State.ag_state_iter] for the outer [AG] and
-      [Recurrence.owned_aul_iter_ghost] for the inner [AF]).  No fixed point
+      [ICTree.Logic.State.aul_state_iter_ghost] for the inner [AF]). No fixed point
       is unfolded anywhere in this file.
 
     - the variant is the reused natural position rank plus ONE new component,
-      the scheduler phase ([Lex.rank3]).  The phase component is what makes a
+      the scheduler phase ([Utils.Relations.rank3]). The phase component makes a
       foreign turn count as progress; without it the composition does not
       close.  It is still a [nat]: no ordinal is used or needed.
 
@@ -53,7 +51,10 @@ From TICL Require Import
   ICTree.Logic.State
   Logic.Core.
 
-From examples Require Import CSL.HeapQ CSL.Trace CSL.Layout CSL.Frame CSL.Recurrence CSL.Sep2 CSL.SLang CSL.Lex.
+From TICL Require Import
+  Lang.CSL.Queue.Representation Lang.CSL.Queue.Trace Lang.CSL.Queue.Layout
+  Lang.CSL.Queue.Frame Lang.CSL.Queue.Recurrence Lang.CSL.Queue.Separation
+  Lang.CSL.Queue.Alternating Utils.Relations.
 
 Import ICtree ICTreeNotations TiclNotations ListNotations.
 Local Open Scope ictree_scope.
@@ -95,9 +96,9 @@ Section Composition.
 
   (** ** The two resource-level turn lemmas *)
 
-  (** A turn of the FOCUSED queue.  Reused: [HeapQ.rot_heap_spec].  New: the
-      foreign queue must survive it ([Sep2.foreign_pres_rot]) and footprint
-      disjointness must be transported ([HeapQ.qcells_rot]). *)
+  (** A focused turn reuses [Representation.rot_heap_spec], preserves the
+      foreign queue through [Separation.foreign_pres_rot], and transports
+      disjointness through [Representation.qcells_rot]. *)
   Lemma step_focus: forall nsf vsf nsg vsg a pv h,
       qrep fh (a :: nsf) (pv :: vsf) h ->
       qrep gh nsg vsg h ->
@@ -169,7 +170,7 @@ Section Composition.
     Proof.
       intros n h c w Hd (nsf & vsf & nsg & vsg & df & dg & Hqf & Hqg & Hdj & Hff & Hfg).
       unfold sched.
-      apply (owned_aul_iter_ghost sh rank3 (Ig nlf nlg kb) (sbody u v) _ _
+      apply (aul_state_iter_ghost sh rank3 (Ig nlf nlg kb) (sbody u v) _ _
                rank3_wf (kb - c, (df, if fturn n then 0 else 1)) n (h, c) w Hd).
       - exists nsf, vsf, nsg, vsg, df, dg; cbn.
         split; [exact Hqf |]; split; [exact Hqg |]; split; [exact Hdj |];

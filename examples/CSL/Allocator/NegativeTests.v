@@ -1,5 +1,6 @@
 From Stdlib Require Import List Lia Arith.PeanoNat.
 From TICL Require Import Lang.CSL ICTree.Core ICTree.Equ ICTree.SBisim ICTree.Trans.
+From TICL Require Import Utils.Relations.
 From examples Require Import CSL.Allocator.Layout CSL.Allocator.Program
   CSL.Allocator.Model CSL.Allocator.Execution CSL.Allocator.Liveness.
 

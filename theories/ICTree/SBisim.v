@@ -15,6 +15,7 @@ From Stdlib Require Import
   Classes.RelationPairs
   Vectors.Fin.
 
+Import ICtree.
 Local Open Scope ictree_scope.
 Generalizable All Variables.
 
@@ -43,6 +44,21 @@ Proof.
   destruct (H _ _ TR) as (l' & t' & TR' & Hsb & Hl).
   exists l', t'; auto.
 Qed.
+
+(** A tree bisimilar to silent divergence has no transition. *)
+Lemma sbisim_stuck_is_stuck {E} {HE : Encode E} {X} (t : ictree E X) :
+  t ~ (stuck : ictree E X) -> is_stuck t.
+Proof.
+  intros Ets [l [u Hstep]].
+  destruct (sbisim_trans t stuck u l eq Ets Hstep)
+    as [l' [u' [Hbad _]]].
+  eapply trans_stuck; exact Hbad.
+Qed.
+
+(** Raw tree equivalence preserves every observable transition. *)
+Lemma equ_sbisim {E} {HE : Encode E} {X} (t u : ictree E X) :
+  t ≅ u -> t ~ u.
+Proof. intro Htu; rewrite Htu; reflexivity. Qed.
 
 (** Lemma relating [trans] and strong simulation [ssim]*)
 Lemma ssim_trans `{HE: Encode E} {X}:

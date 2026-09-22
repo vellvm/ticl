@@ -1000,6 +1000,40 @@ Section StateLemmas.
   Qed.  
 End StateLemmas.
 
+(** A state-iteration rule with a well-founded rank on ghost data.  The
+    invariant relates that data to the control and concrete state; neither
+    the concrete state nor the observation world must determine the rank.
+    The proof uses the structural one-iteration and bind laws. *)
+Theorem aul_state_iter_ghost {E Sg W} {HE: Encode E}
+  (hh: E ~> stateT Sg (ictreeW W)) {X I G}
+  (Rv: relation G) (Inv: G -> I -> Sg -> Prop)
+  (bd: I -> ictree E (I + X)) (phi psi: ticllW W):
+  well_founded Rv ->
+  forall (g: G) (i: I) (s: Sg) (w: WorldW W),
+    not_done w ->
+    Inv g i s ->
+    (forall g i s w,
+        not_done w ->
+        Inv g i s ->
+        <( {interp_state hh (bd i) s}, w |= phi AU psi )>
+        \/ (exists g' i' s' w',
+               not_done w'
+               /\ <[ {interp_state hh (bd i) s}, w
+                     |= phi AU AX done= {(inl i', s')} w' ]>
+               /\ Inv g' i' s'
+               /\ Rv g' g)) ->
+    <( {interp_state hh (ICtree.iter bd i) s}, w |= phi AU psi )>.
+Proof.
+  intros Hwf g.
+  induction g as [g IH] using (well_founded_induction Hwf).
+  intros i s w Hd Hinv Hbody.
+  destruct (Hbody g i s w Hd Hinv)
+    as [Hnow | (g' & i' & s' & w' & Hd' & Hstep & Hinv' & Hlt)].
+  - rewrite interp_state_unfold_iter; now apply ticll_bind_l.
+  - eapply aul_state_iter_next_eq; [exact Hstep | exact Hd' |].
+    eapply (IH g'); eauto.
+Qed.
+
 (** * Lemmas for [stateE] handler [h_stateW] *)
 Section StateELemmas.
   (** S: State, s: initial state *)

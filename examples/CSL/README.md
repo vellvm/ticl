@@ -1,11 +1,42 @@
 # Cooperative heap queues
 
 `TICL.Lang.CSL` is a typed cooperative fork/yield language over a disjoint heap
-PCM. `Program.allocated_parallel_queues values1 values2` constructs two linked
+PCM. `Lang.CSL.Queue.Program.allocated_parallel_queues values1 values2` constructs two linked
 queues by source execution on `hemp`, then starts their workers. The lower-level
-`Program.parallel_queues u v` remains available for preallocated heaps. Both
+`Lang.CSL.Queue.Program.parallel_queues u v` remains available for preallocated heaps. Both
 workers own **different queues in one shared heap**; they do not concurrently
 modify one queue, and the facade does not assert a general CSL parallel rule.
+
+## Library ownership
+
+Import `Lang.CSL` for the language, interpreter, source segments, and structural
+TICL matrix. Import `Lang.CSL.Queue` for the reusable queue development. The old
+example-local implementation modules were moved, not retained as compatibility
+re-export files.
+
+| Layer | Canonical reusable content |
+| --- | --- |
+| `ICTree.Trace` | Observation-polymorphic finite log prefixes, labeled finite steps, guarded prefix alignment |
+| `ICTree.Logic.Trace` | Structural AF/AGAF rules for finite observation prefixes |
+| `ICTree.Logic.Bind` | Five exact `*_log_iff` rules, shared by the CSL emit matrix |
+| `ICTree.Logic.State` | Ghost-ranked `aul_state_iter_ghost` over arbitrary handlers |
+| `ICTree.Interp.State.Mod` | Generic `interp_state_trigger_bind` normalization |
+| `Utils.Relations` | One lexicographic construction, finite first-index search, interval counts, and infinite-occurrence facts |
+| `Lang.CSL.Heap` | Checked heap laws shared by both observation alphabets |
+| `Lang.CSL.Segments` | Exact and bisimilar first-yield segments, guard transport, arbitrary-pool ND/RR equations |
+| `Lang.CSL.Queue` | Queue representation/layout, one polymorphic rotation implementation and proof, framing, composition, source programs, and recurrence |
+
+Concrete address layouts, overlap counterexamples, allocator-specific state
+machines and their fairness/rank arguments, and regression consumers remain in
+`examples/CSL`. No library module imports an example. The exact and bisimilar
+segment judgments remain distinct; administrative guards are not replaced by
+visible scheduler steps.
+
+Operational consumers use the public checked-operation normal forms instead of
+local read/write/emit/allocation/CAS tactics. Temporal consumers use the source
+matrix, log-prefix rules, and state-iteration rules. Queue recurrence shares the
+same ghost-ranked rule with active queue composition; it does not reprove the
+underlying fixed point.
 
 ## Actual execution and proof boundary
 
@@ -49,15 +80,15 @@ instructions, preserving fault behavior and the entire post-emit heap suffix.
 `queue_pool_bisim` matches both failed-read cases and takes its coinductive step
 at a real `Log (SPop ...)` transition, not at an administrative guard.
 `Program.run_rr_parallel_bisim` proves equivalence of the actual `run_rr` source
-execution to the tagged cyclic reference. The reference alone is not the
-implementation or evidence of source execution.
+execution to the tagged cyclic reference for any heap, without unused queue
+representation premises. The reference alone is not evidence of source execution.
 
 `Program.run_rr_allocated_parallel` proves that actual silent allocation and
 checked initialization from `hemp` reach a finite heap with two PCM-separated
 queues and the original worker execution, at the same observation counter.
 It also covers empty input lists. No initialized heap is assumed.
 
-`Queue.v` exposes recurrence directly for
+`Lang.CSL.Queue.Ticl` exposes recurrence directly for
 `run_rr (allocated_parallel_queues values1 values2) hemp c`:
 
 - `rotate_agaf_pop_alloc`: queue 1 ordinary recurrence.
@@ -89,7 +120,16 @@ The canonical heap is `nat -> option nat`, with pointwise `heq`, pointwise
 support. `heap_finite` is an existential proof bound, not a new carrier or runtime
 field. `SSig` remains `(Heap * nat)%type`; results remain `(result, SSig)`.
 
-`CAlloc size` uses `SAlloc` and a guarded, constructive search inside the shared
+`Events.HeapE` supplies the single shared command algebra: `HRead`, `HWrite`,
+`HAlloc`, `HFree`, and `HCAS`. `ICTree.Events.Heap` supplies the polymorphic
+`heap_read`, `heap_write`, `heap_alloc`, `heap_free`, and `heap_cas` triggers.
+Neither module imports a language, concrete heap, allocator, or observation type.
+CSL uses `sE := heapE + writerE (nat * nat)`; QLang uses
+`qE := heapE + writerE nat`. Their observation handlers are separate from the
+shared checked `heap_handler`, whose allocation search is polymorphic in the
+observation alphabet.
+
+`CAlloc size` uses `heap_alloc`/`HAlloc` and a guarded, constructive search inside the shared
 handler. It returns the least positive base whose entire interval is free and
 initializes exactly `size` cells to zero, preserving every old allocated value
 and address zero. It neither emits nor yields, and advances neither the
@@ -101,8 +141,23 @@ infinite heap with no suitable interval silently diverges, as proved by
 
 Reads and writes remain checked; writes never allocate implicitly. Emit records
 `SPop tag value c`, preserves the heap, and increments the global observation
-counter. The scheduler cursor is separate. There is no variable store, CAS,
-lock, or implicit read/write yield.
+counter. CAS faults on an absent cell, updates and returns `true` on a matching
+value, and otherwise returns `false` without changing the heap. It does not log.
+The scheduler cursor is separate. There is no variable store, lock, or implicit
+read/write yield.
+
+`HFree a` removes exactly one cell via `Pcm.hfree`, without a presence check,
+observation, or counter change. An absent free succeeds; a subsequent read of
+that address faults. `free_local_frame` still requires ownership of the removed
+cell. Physical free is available to raw CSL threads, not a new `CFree` syntax
+constructor; the allocator example's `remote_free` remains CAS-based free-list
+publication, not heap deletion.
+
+HeapImp lowers the same five commands to its existing `Get`/`Put` effects.
+Its association-list policies remain different: writes may create a cell,
+allocation starts at `fresh_addr` (zero on an empty heap), and allocation of zero
+cells still performs `Put`. Writes, free of an absent cell, and successful CAS
+including same-value CAS retain full-memory logging. Failed CAS does not `Put`.
 
 `qrep` reserves address zero through `h 0 = None`; the handler itself has no
 special address-zero check. Header `hdr` stores tail and `S hdr` stores head;
@@ -115,6 +170,31 @@ disjointness and a frame that leaves address zero unallocated.
 `HeapPCM`, not a conjunction standing in for separation. `owned_queues_sound`
 uses `compose3` and pointwise footprint agreement; it does not equate heap
 functions by Leibniz equality.
+
+## Structural temporal interface
+
+`From TICL Require Import Lang.CSL.` exports `Lang.CSL.Ticl`. Its 100 source rules
+are the full name product
+`{anl,anr,aul,aur,ag}_csl_{nd,rr}_{read,write,emit,yield,fork,ret,bind,until_none,alloc,cas}`.
+They apply to arbitrary nonempty focused pools and continuations, not only queue
+or allocator fixtures. Another 30 rules use suffixes `select`, `alloc_finite`,
+and `heap_free`, giving 130 independently named equivalences.
+
+Silent rules transport the interpreted residual in the same world. Emit rules
+keep the current-prefix obligation in the old world and place only the successor
+in `Obs (Log (SPop tag value c)) tt`. ND yield checks every branch, including the
+single branch of a singleton pool; RR yield selects `rr_pick n m` and advances
+only the cursor. Fork prepends its child but keeps the parent focused. Bind and
+until preserve the pool and the outer `None` halt flow. These rules assert no
+fairness or unconditional loop termination.
+
+`interp_nd_source_` and `interp_rr_` expose the checked success and fault normal
+forms in `Lang.CSL.Interp`; the promoted read/write helpers are public there.
+Finite-allocation rules quantify over the first-fit witness supplied by
+`heap_finite`, rather than requiring a caller-chosen address. Raw `heap_free`
+rules take a `unit` continuation and preserve focus, pool size, cursor, counter,
+and observation world. Fault rules compose with the generic stuck rules:
+strong AN and AG are false, while AU may match its target immediately.
 
 ## Runtime queue construction
 
@@ -146,50 +226,34 @@ Q = /home/eioannidis/ticl-sl/spark_submission/experiments/heap-backed-rotating-q
 S = /home/eioannidis/ticl-sl/spark_submission/experiments/separate-active-composition-from-unused-framing/proofs
 ```
 
-| Source | Destination |
+| Source | Current owner |
 | --- | --- |
 | `P/Pcm.v`, complete | `theories/Lang/CSL/Pcm.v` |
 | `S/SLang.v`, heap prefix | `theories/Lang/CSL/Heap.v` |
-| `Q/HeapQ.v` | `examples/CSL/HeapQ.v` |
-| `Q/QLang.v` | `examples/CSL/QLang.v` |
-| `Q/Recurrence.v` | `examples/CSL/Recurrence.v` |
-| `Q/Trace.v` | `examples/CSL/Trace.v` |
-| `Q/Layout.v` | `examples/CSL/Layout.v` |
-| `Q/Frame.v` | `examples/CSL/Frame.v` |
-| `S/Sep2.v` | `examples/CSL/Sep2.v` |
-| `S/SLang.v`, imports/scopes and turn/scheduler suffix | `examples/CSL/SLang.v` |
-| `S/Lex.v` | `examples/CSL/Lex.v` |
-| `S/Compose.v` | `examples/CSL/Compose.v` |
+| `Q/HeapQ.v` | `theories/Lang/CSL/Queue/Representation.v` |
+| `Q/QLang.v` | `theories/Lang/CSL/Queue/Sequential.v`, shared `Operations.v` |
+| `Q/Recurrence.v` | `theories/Lang/CSL/Queue/Recurrence.v`, `ICTree/Logic/State.v`, `Utils/Relations.v` |
+| `Q/Trace.v` | `theories/Lang/CSL/Queue/Trace.v` |
+| `Q/Layout.v` | `theories/Lang/CSL/Queue/Layout.v`; concrete fixtures in `examples/CSL/Layout.v` |
+| `Q/Frame.v` | `theories/Lang/CSL/Queue/Frame.v` |
+| `S/Sep2.v` | `theories/Lang/CSL/Queue/Separation.v` |
+| `S/SLang.v`, turn/scheduler suffix | `theories/Lang/CSL/Queue/Alternating.v`, shared `Operations.v` |
+| `S/Lex.v` | `theories/Utils/Relations.v` |
+| `S/Compose.v` | `theories/Lang/CSL/Queue/Composition.v` |
 | `Q/Overlap.v` | `examples/CSL/Overlap.v` |
 
-The transformations were:
-
-- Preserve all of `Pcm.v`, including proofs and transparent `HeapPCM`.
-- Extract `Heap.v` from `From Stdlib Require Import` up to, excluding,
-  `(** ** A turn:`. Replace its `HQ.HeapQ` import with an export of canonical
-  `Pcm` and the boolean `upd` definition; add no `hdom` alias. Only Pcm is
-  exported. Add write-none, continuation-free fault, and pointwise update
-  agreement proofs in this owning heap layer.
-- In `HeapQ.v`, replace the span from `Definition Heap :=` up to `Lemma upd_eq:`
-  with `From TICL Require Export Lang.CSL.Heap.`. This removes the duplicate
-  foundation and unused local points-to definition, retaining all queue proofs,
-  including `rot_detach_split` and both `rot_heap_spec` conjuncts.
-- Rewrite old `ICTree.Interp.State` imports to `.State.Mod`, and `From HQ Require
-  Import/Export ...` to `From examples Require Import/Export CSL....`, preserving
-  the import/export distinction.
-- For the example `SLang.v`, retain donor imports/scopes before the observation
-  alphabet and the suffix beginning `(** ** A turn:`. Export canonical Heap and
-  import CSL.HeapQ rather than duplicating events or handlers. Append its own
-  `turnk_bind` and `srun_turn` proofs; it imports neither the source program nor
-  the round-robin policy.
-- Keep `Layout.hsingle` private to that layout and qualify Overlap's definitions
-  and unfolds with `Layout.hsingle`. PCM tests use `Pcm.hsingle`.
+The initial donor integration preserved the resource and observable contracts.
+The current library cutover consolidates the duplicated heap handlers, rotation
+programs/proofs, lexicographic induction, finite search, trace algebra, and
+source-constructor normalization. `Pcm.hsingle`, `cellsat`, and the PCM framing
+laws have one owning heap layer. The queue model retains `rot_detach_split` and
+both `rot_heap_spec` conjuncts; no ownership premise was dropped from framing.
 
 No `Layout2.v`, frozen donor TICL installation, or older exact-domain heap donor
-was used. `QLang` remains the distinct untagged sequential reference required by
-the inherited proof chain. `SLang.sbody` alternates `turnk 1 u` and `turnk 2 v`
-according to parity and increments its iteration index; `srun` interprets that
-cyclic reference with the tagged handler.
+was used. `Queue.Sequential` retains the untagged sequential observation
+alphabet; `Queue.Alternating.sbody` alternates `turnk 1 u` and `turnk 2 v`
+according to parity. Both instantiate `Queue.Operations.queue_turn` and
+`queue_turn_spec`, so their memory operations and resource proof have one owner.
 
 The new refiner's modulo-counter mechanism follows the read-only provenance
 `git show 161d1eadedb7479b162fcde688e750b3a45ae37e:theories/Interp/Refine.v`.
@@ -202,7 +266,7 @@ donor dependency and changes no generic scheduler or refiner API.
 
 ## Behavioral verification
 
-The six retained regression modules compile:
+The existing operational regression modules and the shared-event/temporal suites compile:
 
 - `PcmTests`: same-cell and overlapping-block ownership exclusion, distinct-cell
   separation, and the actual fresh-block split beside an unchanged points-to frame.
@@ -227,6 +291,26 @@ The six retained regression modules compile:
   `[]` and `[8]` succeeds, but the first worker then faults on its null payload
   read; that execution is `stuck` and fails queue-1 recurrence. Sequential
   controls are not claims about arbitrary concurrent pools.
+- `examples/HeapEventTests`: allocation/free/reallocation through shared triggers,
+  single-cell deletion with a surviving block cell and frame, absent free,
+  checked read-after-free, all 15 trigger embeddings, and the distinct HeapImp
+  zero-allocation/write/free/CAS instrumentation policies.
+- `TiclTests`: 23 temporal consumers using the new structural cells, including
+  first-fit and finite allocation, shared write/CAS ordering, scoped child halt,
+  universal ND versus cursor-dependent RR selection, productive and silent loops,
+  strong termination/fault controls, immediate AU matching, and one-step raw free
+  completion. Final heap postconditions use pointwise `heq`.
+
+The shared-event and structural-rule extension passed its event-only, backend,
+interpreter/helper, temporal-interface, and consumer compilation gates, followed
+by `dune build`. All 130 public names were individually checked after importing
+only the `Lang.CSL` umbrella. The current focused checks are:
+
+```sh
+dune build _build/default/examples/HeapEventTests.vo \
+  _build/default/examples/CSL/TiclTests.vo
+dune build
+```
 
 The initial baseline, every dependency gate, and the final `make build` passed.
 The allocation extension rejected both requested temporary mutations with
@@ -262,6 +346,23 @@ ran the post-build `Print Assumptions` audit for `sh_alloc_finite`,
 The changed `.v` files contain no `Admitted`, `admit`, `Axiom`, `Parameter`,
 `Classical`, or choice declaration. Imports were checked for obsolete State
 paths, HQ dependencies, donor runtime paths, and layer violations.
+
+The structural-rule audit separately checked `anl_csl_nd_yield`,
+`anr_csl_rr_emit`, `aul_csl_nd_until_none`, `aur_csl_rr_cas`,
+`ag_csl_rr_until_none`, `aur_csl_nd_alloc_finite`, `ag_csl_rr_alloc_finite`,
+`anr_csl_nd_heap_free`, `ag_csl_rr_heap_free`, `nd_emit_loop_ag`, and
+`rr_emit_loop_ag` through `rocq_assumptions`. Each reports only the inherited
+`FunctionalExtensionality.functional_extensionality_dep` and
+`Eqdep.Eq_rect_eq.eq_rect_eq`. No new axiom or unfinished proof command was
+introduced; the new heap postconditions do not identify functions by
+functional extensionality.
+
+The library extraction audit found `Utils.Relations.finite_first` closed under
+the global context. `ICTree.Logic.State.aul_state_iter_ghost` and
+`ICTree.Trace.rr_aligned_sbisim` use only inherited UIP. The generalized
+`Lang.CSL.Segments.source_segment_scheduler_steps` uses inherited UIP and
+dependent functional extensionality. Boolean-observation smoke proofs exercise
+the promoted trace and AF-return rules independently of `SObs`.
 
 The previously recorded baseline `examples.Queue.Queue.rotate_agaf_pop` prints:
 

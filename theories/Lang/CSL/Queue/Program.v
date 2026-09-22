@@ -3,7 +3,9 @@ From TICL Require Import
   ICTree.Core ICTree.Equ ICTree.Events.Yield Lang.CSL
   ICTree.Events.Writer ICTree.SBisim ICTree.Interp.State.Mod
   ICTree.Interp.Yield.RoundRobin ICTree.Interp.Yield.SBisim Utils.Vectors.
-From examples Require Import CSL.SLang CSL.HeapQ CSL.Sep2 CSL.Layout CSL.Frame.
+From TICL Require Import Lang.CSL.Queue.Alternating Lang.CSL.Queue.Representation
+  Lang.CSL.Queue.Separation Lang.CSL.Queue.Layout Lang.CSL.Queue.Frame
+  Lang.CSL.Queue.Operations.
 
 Import ICtree ICTreeNotations ListNotations VectorNotations.
 Local Open Scope ictree_scope.
@@ -54,15 +56,15 @@ Definition allocated_parallel_queues (values1 values2 : list nat) : CProg unit :
 
 Lemma denote_rotate_once q hdr :
   denote_flow (rotate_once q hdr) ≅
-  (a <- heap_event (SRd (S hdr));;
-   v <- heap_event (SRd a);;
-   heap_event (SEmit q v);;
-   n <- heap_event (SRd (S a));;
-   heap_event (SWr (S hdr) n);;
-   z0 <- heap_event (SRd hdr);;
-   heap_event (SWr (S (if Nat.eqb n 0 then hdr else z0)) a);;
-   heap_event (SWr (S a) 0);;
-   heap_event (SWr hdr a);;
+  (a <- heap_read (E:=CEff) (S hdr);;
+   v <- heap_read (E:=CEff) a;;
+   ICtree.trigger (E2:=CEff) (Log (q,v));;
+   n <- heap_read (E:=CEff) (S a);;
+   heap_write (E:=CEff) (S hdr) n;;
+   z0 <- heap_read (E:=CEff) hdr;;
+   heap_write (E:=CEff) (S (if Nat.eqb n 0 then hdr else z0)) a;;
+   heap_write (E:=CEff) (S a) 0;;
+   heap_write (E:=CEff) hdr a;;
    Ret (Some tt)).
 Proof.
   unfold rotate_once; cbn [denote_flow].
@@ -145,7 +147,7 @@ Lemma interp_rr_rotate_once n (ts : pool sE (S n))
     fun '(_, (h',c')) =>
       interp_schedule_rr sh (S n) (ts @ i := K (Some tt)) (Some i) m (h',c')).
 Proof.
-  unfold rotate_once, turn, turnk.
+  unfold rotate_once, turn, turnk, queue_turn.
   rotate_effect interp_rr_read.
   rotate_effect interp_rr_read.
   rotate_effect interp_rr_emit.
@@ -278,9 +280,9 @@ Local Ltac queue_prefix R law :=
 Local Ltac queue_fault Hnone :=
   cbv beta;
   lazymatch goal with
-  | |- interp_state sh (ICtree.bind (srd ?a) ?next) (?h,?c) ~ _ =>
+  | |- interp_state sh (ICtree.bind (heap_read (E:=sE) ?a) ?next) (?h,?c) ~ _ =>
     let Hfault := fresh "Hfault" in
-    assert (Hfault : interp_state sh (srd a >>= next) (h,c) ≅ stuck) by
+    assert (Hfault : interp_state sh (heap_read (E:=sE) a >>= next) (h,c) ≅ stuck) by
       (etransitivity; [apply interp_state_bind|];
        etransitivity;
        [ apply equ_clo_bind with (S := eq)
@@ -299,7 +301,7 @@ Proof.
     [apply (coinduction.gfp_bt (sb eq) R), queue_pool_turn|].
   etransitivity;
     [|apply (coinduction.gfp_bt (sb eq) R); symmetry; apply srun_turn].
-  unfold turn, turnk.
+  unfold turn, turnk, queue_turn.
   destruct (h (S (hdrof u v n))) as [a|] eqn:Hhead.
   - queue_prefix R ltac:(eapply sinterp_rd; exact Hhead).
     destruct (h a) as [payload|] eqn:Hpayload.
@@ -323,13 +325,9 @@ Proof.
       [apply bind_stuck_equ | apply bind_stuck_equ | reflexivity].
 Qed.
 
-Theorem run_rr_parallel_bisim :
-  forall u v nl1 nl2 h c ns1 vs1 ns2 vs2 d1 d2,
-    qrep u ns1 vs1 h -> qrep v ns2 vs2 h -> Disj u ns1 v ns2 ->
-    find nl1 vs1 = Some d1 -> find nl2 vs2 = Some d2 ->
-    run_rr (parallel_queues u v) h c ~ srun u v 0 h c.
+Theorem run_rr_parallel_bisim u v h c :
+  run_rr (parallel_queues u v) h c ~ srun u v 0 h c.
 Proof.
-  intros u v nl1 nl2 h c ns1 vs1 ns2 vs2 d1 d2 _ _ _ _ _.
   unfold parallel_queues; rewrite run_rr_fork_bind.
   change (interp_schedule_rr sh 2 (queue_workers u v false false)
     (Some (queue_slot 0)) 0 (h,c) ~ srun u v 0 h c).
@@ -338,32 +336,6 @@ Qed.
 
 (** Silent initialization in the real shared source scheduler. *)
 
-Local Lemma interp_rr_write_present n (ts : pool sE (S n)) (i : Fin.t (S n))
-  a v (K : option unit -> thread sE) m h c :
-  h a <> None ->
-  interp_schedule_rr sh (S n)
-    (ts @ i := (denote_flow (CWrite a v) >>= K)) (Some i) m (h,c) ~
-  interp_schedule_rr sh (S n) (ts @ i := K (Some tt)) (Some i) m (upd h a v,c).
-Proof.
-  intro Present; destruct (h a) as [old|] eqn:E; [|contradiction].
-  rewrite interp_rr_write.
-  assert (Hwrite : interp_state sh (swr a v) (h,c) ≅
-    Guard (Ret (tt,(upd h a v,c)))).
-  { etransitivity; [unfold swr; apply interp_state_vis |].
-    transitivity (Ret (tt,(upd h a v,c)) >>= fun result : (unit * SSig)%type =>
-      let '(_,sigma') := result in Guard (interp_state sh (Ret tt) sigma')).
-    - apply equ_clo_bind with (S := eq);
-        [exact (sh_wr_some a h c v old E) | intros x y <-; reflexivity].
-    - etransitivity; [apply bind_ret_l |].
-      step; constructor; apply interp_state_ret. }
-  transitivity (Ret (tt,(upd h a v,c)) >>= fun result : (unit * SSig)%type =>
-    let '(_,sigma') := result in
-    interp_schedule_rr sh (S n) (ts @ i := K (Some tt)) (Some i) m sigma').
-  - apply sbisim_clo_bind_eq.
-    + eapply equ_clos_sbisim_goal; [exact Hwrite | reflexivity | apply sb_guard].
-    + intro result; reflexivity.
-  - rewrite bind_ret_l; reflexivity.
-Qed.
 
 Lemma interp_rr_fill_nodes n (ts : pool sE (S n)) (i : Fin.t (S n))
   first values (K : option unit -> thread sE) m h c :
@@ -411,6 +383,37 @@ Proof.
       apply Allocated; lia.
 Qed.
 
+Lemma interp_rr_new_queue_first n (ts : pool sE (S n)) (i : Fin.t (S n))
+  values hdr (K : option nat -> thread sE) m h c :
+  Nat.lt 0 hdr -> block_free h hdr (2 * S (length values)) ->
+  (forall j, Nat.lt 0 j -> Nat.lt j hdr ->
+    ~ block_free h j (2 * S (length values))) ->
+  interp_schedule_rr sh (S n)
+    (ts @ i := (denote_flow (new_queue values) >>= K)) (Some i) m (h,c) ~
+  interp_schedule_rr sh (S n) (ts @ i := K (Some hdr))
+    (Some i) m (new_queue_heap hdr values h,c).
+Proof.
+  intros Positive Free First.
+  unfold new_queue; rewrite interp_rr_bind.
+  rewrite interp_rr_alloc_first with (base:=hdr) by (try lia; assumption).
+  rewrite interp_rr_bind; etransitivity.
+  - apply interp_rr_init_queue; intros offset O.
+    unfold hunion; rewrite (hblock_in hdr (2 * S (length values)) offset O).
+    discriminate.
+  - rewrite interp_rr_ret; reflexivity.
+Qed.
+
+Lemma interp_rr_new_queue_empty n (ts : pool sE (S n)) (i : Fin.t (S n))
+  values (K : option nat -> thread sE) m c :
+  interp_schedule_rr sh (S n)
+    (ts @ i := (denote_flow (new_queue values) >>= K)) (Some i) m (hemp,c) ~
+  interp_schedule_rr sh (S n) (ts @ i := K (Some 1))
+    (Some i) m (new_queue_heap 1 values hemp,c).
+Proof.
+  apply interp_rr_new_queue_first;
+    [lia | intros offset Hlt; reflexivity | intros j Hj Hfirst; lia].
+Qed.
+
 Lemma interp_rr_new_queue n (ts : pool sE (S n)) (i : Fin.t (S n))
   values (K : option nat -> thread sE) m h c :
   heap_finite h ->
@@ -426,26 +429,11 @@ Lemma interp_rr_new_queue n (ts : pool sE (S n)) (i : Fin.t (S n))
 Proof.
   intro Finite.
   destruct (sh_alloc_finite h (2 * S (length values)) c Finite ltac:(lia))
-    as (hdr & Positive & Free & First & Alloc).
+    as (hdr & Positive & Free & First & _).
   exists hdr; split; [exact Positive |]; split; [exact Free |]; split.
   - now apply new_queue_heap_finite.
   - split; [now apply new_queue_heap_owned |].
-    pose proof (sinterp_alloc_first h (2 * S (length values)) hdr c
-      (fun a : nat => (Ret a : ictree sE nat)) ltac:(lia) Positive Free First) as Hstate.
-    rewrite bind_ret_r, interp_state_ret in Hstate.
-    unfold new_queue; rewrite interp_rr_bind, interp_rr_alloc.
-    lazymatch goal with
-    | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-      etransitivity;
-      [apply sbisim_clo_bind_eq with (k2 := next);
-        [exact Hstate | intro result; reflexivity] |]
-    end.
-    eapply equ_clos_sbisim_goal; [apply bind_ret_l | reflexivity |].
-    rewrite interp_rr_bind; etransitivity.
-    + apply interp_rr_init_queue; intros offset O.
-      unfold hunion; rewrite (hblock_in hdr (2 * S (length values)) offset O).
-      discriminate.
-    + rewrite interp_rr_ret; reflexivity.
+    apply interp_rr_new_queue_first; assumption.
 Qed.
 
 Theorem run_rr_allocated_parallel : forall values1 values2 c,

@@ -1,6 +1,6 @@
 From Stdlib Require Import List Lia Arith.PeanoNat.
 From TICL Require Import Lang.CSL ICTree.Core ICTree.Equ ICTree.SBisim
-  ICTree.Trans ICTree.Events.Writer ICTree.Events.Yield.
+  ICTree.Trans ICTree.Events.Writer ICTree.Events.Yield ICTree.Logic.Trace Utils.Relations.
 From examples Require Import CSL.Allocator.Layout CSL.Allocator.Program
   CSL.Allocator.Model CSL.Allocator.Execution.
 
@@ -17,8 +17,6 @@ Record AExecution := {
 Definition valid_execution (capacity c : nat) (e : AExecution) : Prop :=
   states e 0 = initial_state capacity c /\
   forall k, turn 1 (selected e k) (states e k) = Some (states e (S k),emitted e k).
-Definition infinitely (P : nat -> Prop) : Prop :=
-  forall n, exists k, n <= k /\ P k.
 Definition event_is (tag : nat) (e : AExecution) (k : nat) : bool :=
   match emitted e k with None => false | Some o => Nat.eqb (stag o) tag end.
 Definition pending_turn (e : AExecution) (k : nat) : bool :=
@@ -27,8 +25,6 @@ Definition pending_turn (e : AExecution) (k : nat) : bool :=
   | Remote0 => match remote0_state (states e k) with RPoll => false | _ => true end
   | Remote1 => match remote1_state (states e k) with RPoll => false | _ => true end
   end.
-Definition count_if (p : nat -> bool) (lo len : nat) : nat :=
-  List.length (List.filter p (List.seq lo len)).
 Definition fair (e : AExecution) : Prop :=
   forall actor, infinitely (fun k => selected e k = actor).
 Definition actor_eqb (a b : Actor) : bool :=
@@ -90,18 +86,6 @@ Lemma execution_step capacity c e k :
   turn 1 (selected e k) (states e k) = Some (states e (S k),emitted e k).
 Proof. intros [_ H]; apply H. Qed.
 
-Lemma count_if_zero p lo : count_if p lo 0 = 0.
-Proof. reflexivity. Qed.
-Lemma count_if_succ p lo len :
-  count_if p lo (S len) = (if p lo then 1 else 0) + count_if p (S lo) len.
-Proof.
-  unfold count_if; cbn [List.seq List.filter]; destruct (p lo); reflexivity.
-Qed.
-Lemma count_if_add p lo left right :
-  count_if p lo (left + right) = count_if p lo left + count_if p (lo + left) right.
-Proof.
-  unfold count_if; rewrite List.seq_app, List.filter_app, List.length_app; reflexivity.
-Qed.
 Lemma actor_eqb_spec a b : actor_eqb a b = true <-> a = b.
 Proof. destruct a,b; cbn [actor_eqb]; split; intro H; congruence. Qed.
 Lemma owner_turn_spec e k : owner_turn e k = true <-> selected e k = Owner.
@@ -151,7 +135,7 @@ Lemma execution_run_turns capacity c e lo len :
   valid_execution capacity c e ->
   run_turns 1 (List.map (selected e) (List.seq lo len)) (states e lo) =
     Some (states e (lo + len),
-      List.flat_map (fun k => turn_observations (emitted e k)) (List.seq lo len)).
+      List.flat_map (fun k => event_obs (emitted e k)) (List.seq lo len)).
 Proof.
   intro Hvalid; revert lo; induction len as [|len IH]; intro lo.
   - cbn [List.seq List.map run_turns List.flat_map]; now rewrite Nat.add_0_r.
@@ -163,7 +147,8 @@ Qed.
 
 From Stdlib Require Import List Lia Arith.PeanoNat.
 From TICL Require Import Lang.CSL.
-From examples Require Import CSL.HeapQ CSL.Allocator.Layout CSL.Allocator.Model.
+From TICL Require Import Lang.CSL.Queue.Representation.
+From examples Require Import CSL.Allocator.Layout CSL.Allocator.Model.
 
 Import ListNotations.
 Local Open Scope nat_scope.
@@ -415,36 +400,7 @@ Proof.
   pose proof (contention_pending_rank_bound (states e lo)); lia.
 Qed.
 
-(** Both searches are finite and constructive.  In particular an unbounded
-    double-negation search for a future successful CAS is not used. *)
-Lemma infinitely_count_if (p : nat -> bool) :
-  infinitely (fun k => p k = true) ->
-  forall wanted lo, exists len, wanted <= count_if p lo len.
-Proof.
-  intros Hinf wanted; induction wanted as [|wanted IH]; intro lo.
-  - exists 0; rewrite count_if_zero; lia.
-  - destruct (Hinf lo) as [k [Hlo Hk]].
-    destruct (IH (S k)) as [len Hlen].
-    exists ((k - lo) + S len).
-    rewrite count_if_add.
-    replace (lo + (k - lo)) with k by lia.
-    rewrite count_if_succ, Hk; cbn; lia.
-Qed.
 
-Lemma contention_finite_bool_search (p : nat -> bool) lo len :
-  (exists k, lo <= k < lo + len /\ p k = true) \/
-  (forall k, lo <= k < lo + len -> p k = false).
-Proof.
-  revert lo; induction len as [|len IH]; intro lo.
-  - right; intros k Hk; lia.
-  - destruct (p lo) eqn:Hlo.
-    + left; exists lo; split; [lia|exact Hlo].
-    + destruct (IH (S lo)) as [[k [Hk Hp]]|Hnone].
-      * left; exists k; split; [lia|exact Hp].
-      * right; intros k Hk; destruct (Nat.eq_dec k lo) as [->|Hne].
-        -- exact Hlo.
-        -- apply Hnone; lia.
-Qed.
 
 Theorem remote_free_lockfree capacity c e :
   valid_execution capacity c e ->
@@ -453,7 +409,7 @@ Theorem remote_free_lockfree capacity c e :
 Proof.
   intros Hvalid Hpending lo.
   destruct (infinitely_count_if (pending_turn e) Hpending 17 lo) as [len Hmany].
-  destruct (contention_finite_bool_search (event_is tag_retire e) lo len)
+  destruct (finite_bool_search (event_is tag_retire e) lo len)
     as [[k [Hk Hevent]]|Hnone].
   - exists k; split; [lia|exact Hevent].
   - pose proof (no_publication_pending_bound capacity c e lo len Hvalid Hnone); lia.
@@ -513,11 +469,6 @@ Proof.
   rewrite slot_of_actor_of_slot; apply Hsteps.
 Qed.
 
-Lemma source_pool_equ_guard_trans {n} (ts us vs : pool sE n) :
-  pool_equ ts us -> pool_guard_equ us vs -> pool_guard_equ ts vs.
-Proof.
-  intros E H i; eapply guard_equ_trans; [apply guard_equ_equ, E|apply H].
-Qed.
 
 Theorem source_execution_complete capacity c se :
   valid_source_execution capacity c se ->
@@ -525,7 +476,7 @@ Theorem source_execution_complete capacity c se :
   valid_execution capacity c e /\
   (forall k, state_agrees (source_states se k) (states e k) /\
     pool_guard_equ (source_pools se k) (allocator_pool 1 (states e k))) /\
-  (forall k, source_emitted se k = turn_observations (emitted e k)) /\
+  (forall k, source_emitted se k = event_obs (emitted e k)) /\
   (forall k, selected e k = source_selected se k).
 Proof.
   intros (Hpool0 & Hstate0 & Hsegments) e.
@@ -612,23 +563,6 @@ Proof.
     eapply source_reachable_step; eassumption.
 Qed.
 
-Lemma ThreadSegment_branchfree t sigma logs residual sigma' :
-  ThreadSegment t sigma logs residual sigma' ->
-  BranchFree t -> BranchFree residual.
-Proof.
-  intro H; induction H as
-    [k sigma|t sigma logs residual sigma' H IH
-    |e k sigma result sigma1 before after residual sigma' Eh H IH
-    |t u sigma logs u' residual sigma' Etu H IH Eout]; intro Hbf.
-  - apply branchfree_unfold in Hbf; cbn in Hbf.
-    dependent destruction Hbf; auto.
-  - apply IH; apply branchfree_unfold in Hbf; cbn in Hbf.
-    dependent destruction Hbf; assumption.
-  - apply IH; apply branchfree_unfold in Hbf; cbn in Hbf.
-    dependent destruction Hbf; auto.
-  - eapply branchfree_equ_impl; [exact Eout|].
-    apply IH; eapply branchfree_equ_impl; eassumption.
-Qed.
 
 Lemma source_pool0_branchfree i : BranchFree (source_pool0 1 $ i).
 Proof.
@@ -673,14 +607,6 @@ Qed.
 (** The raw scheduler presents all three physical choices, including idle
     polls.  Its scheduling Yield is erased, whereas the following Br contributes
     a genuine tau transition.  Focus is retained through all source effects. *)
-Lemma source_scheduler_offer (ts : pool sE 3) :
-  observe (schedule 3 ts None) =
-    VisF (inl Yield) (fun _ => Br 2 (fun i => schedule 3 ts (Some i))).
-Proof. apply schedule_no_focus_nonempty. Qed.
-
-Lemma source_scheduler_choice (ts : pool sE 3) (i : Fin.t 3) :
-  trans tau (Br 2 (fun j => schedule 3 ts (Some j))) (schedule 3 ts (Some i)).
-Proof. eapply trans_br with (x := i); reflexivity. Qed.
 
 Lemma source_scheduler_choice_inv (ts : pool sE 3) l next :
   trans l (Br 2 (fun i => schedule 3 ts (Some i))) next ->
@@ -691,63 +617,12 @@ Proof.
   rewrite slot_of_actor_of_slot; exact E.
 Qed.
 
-Lemma source_scheduler_focused_yield (ts : pool sE 3) i k :
-  observe (ts $ i) = VisF (inl Yield) k ->
-  observe (schedule 3 ts (Some i)) = GuardF (schedule 3 (ts @ i := k tt) None).
-Proof. apply schedule_focused_yield. Qed.
-Lemma source_scheduler_focused_guard (ts : pool sE 3) i t :
-  observe (ts $ i) = GuardF t ->
-  observe (schedule 3 ts (Some i)) = GuardF (schedule 3 (ts @ i := t) (Some i)).
-Proof. apply schedule_focused_guard. Qed.
-Lemma source_scheduler_focused_user (ts : pool sE 3) i (e : sE)
-  (k : encode e -> thread sE) :
-  observe (ts $ i) = VisF (inr (inr e)) k ->
-  observe (schedule 3 ts (Some i)) =
-    VisF (inr (inr e)) (fun x => schedule 3 (ts @ i := k x) (Some i)).
-Proof. apply schedule_focused_user_event. Qed.
 
-Inductive finite_steps {E : Type} {HE : Encode E} {X : Type} :
-  ictree E X -> list (@label E HE) -> ictree E X -> Prop :=
-| finite_steps_nil t : finite_steps t [] t
-| finite_steps_cons t u v l labels :
-    trans l t u -> finite_steps u labels v -> finite_steps t (l :: labels) v.
 
-Definition turn_labels (event : option SObs) : list (@label (writerE SObs) _) :=
-  match event with None => [tau] | Some o => [tau; obs (Log o) tt] end.
 
-Lemma turn_labels_nonempty event : turn_labels event <> [].
-Proof. destruct event; discriminate. Qed.
 
-Lemma finite_steps_app {E : Type} {HE : Encode E} {X : Type}
-  (t u v : ictree E X) left right :
-  finite_steps t left u -> finite_steps u right v ->
-  finite_steps t (left ++ right) v.
-Proof.
-  intros H; induction H; intro Htail; cbn [List.app];
-    [exact Htail|econstructor; eauto].
-Qed.
 
-Lemma finite_steps_sbisim {E : Type} {HE : Encode E} {X : Type}
-  (t t' : ictree E X) labels :
-  finite_steps t labels t' -> forall u : ictree E X, t ~ u ->
-  exists u', finite_steps u labels u' /\ t' ~ u'.
-Proof.
-  intro H; induction H as [t|t mid last l labels Hstep Htail IH]; intros u Eeq.
-  - exists u; split; [constructor|exact Eeq].
-  - destruct (sbisim_trans t u mid l eq Eeq Hstep)
-      as (l' & mid' & Hstep' & El & Emid).
-    subst l'; destruct (IH mid' Emid) as (last' & Htail' & Elast).
-    exists last'; split; [econstructor; eassumption|exact Elast].
-Qed.
 
-Lemma finite_steps_emit_list {X} logs (t : ictreeW SObs X) :
-  finite_steps (emit_list logs t) (List.map (fun o => obs (Log o) tt) logs) t.
-Proof.
-  induction logs as [|o logs IH]; [constructor|].
-  cbn [List.map]; econstructor; [|exact IH].
-  rewrite emit_list_cons.
-  exact (@trans_vis (writerE SObs) _ X (Log o) tt (fun _ => emit_list logs t)).
-Qed.
 
 Lemma model_turn_finite_steps base who s next event :
   turn base who s = Some (next,event) ->
@@ -815,11 +690,6 @@ Fixpoint run_turn_labels (base : nat) (script : list Actor) (s : AState)
       end
   end.
 
-Definition label_logs (labels : list (@label (writerE SObs) _)) : list SObs :=
-  List.flat_map (fun l => match l with obs (Log o) _ => [o] | _ => [] end) labels.
-Definition label_taus (labels : list (@label (writerE SObs) _)) : nat :=
-  List.length (List.filter (fun l => match l with tau => true | _ => false end) labels).
-
 Lemma run_turns_labels base script : forall s last logs,
   run_turns base script s = Some (last,logs) ->
   exists labels, run_turn_labels base script s = Some labels /\
@@ -871,47 +741,6 @@ Proof.
   transitivity model; [symmetry; exact Eresidual|exact Emodel].
 Qed.
 
-Lemma source_pool_replace_current n (ts : pool sE n) i :
-  pool_equ (ts @ i := (ts $ i)) ts.
-Proof.
-  intro j; destruct (Fin.eq_dec j i) as [->|Hne].
-  - rewrite Vector.nth_replace_eq; reflexivity.
-  - rewrite Vector.nth_replace_neq by congruence; reflexivity.
-Qed.
-
-Theorem source_segment_scheduler_steps (ts : pool sE 3) sigma i logs residual sigma' ts' :
-  ThreadSegment (ts $ i) sigma logs residual sigma' ->
-  pool_equ ts' (ts @ i := residual) ->
-  exists next,
-    finite_steps (interp_nd 3 ts None sigma)
-      (tau :: List.map (fun o => obs (Log o) tt) logs) next /\
-    next ~ interp_nd 3 ts' None sigma'.
-Proof.
-  intros Hseg Epool.
-  assert (Efocused : interp_nd 3 ts (Some i) sigma ~
-    emit_list logs (interp_nd 3 ts' None sigma')).
-  {
-    transitivity (interp_nd 3 (ts @ i := (ts $ i)) (Some i) sigma).
-    - rewrite (interp_nd_equ 3 _ _ (Some i) sigma (source_pool_replace_current 3 ts i));
-        reflexivity.
-    - transitivity (emit_list logs (interp_nd 3 (ts @ i := residual) None sigma')).
-      + eapply segment_interp_nd; exact Hseg.
-      + apply emit_list_sbisim.
-        rewrite <- (interp_nd_equ 3 _ _ None sigma' Epool); reflexivity.
-  }
-  assert (Hbranch : trans tau (Br 2 (fun j => interp_nd 3 ts (Some j) sigma))
-    (interp_nd 3 ts (Some i) sigma)).
-  { eapply trans_br with (x := i); reflexivity. }
-  pose proof (interp_nd_select 2 ts sigma) as Eselect; symmetry in Eselect.
-  destruct (sbisim_trans _ _ _ tau eq Eselect Hbranch)
-    as (l & focused & Hchoose & El & Efocus); subst l.
-  assert (Eemit : emit_list logs (interp_nd 3 ts' None sigma') ~ focused).
-  { transitivity (interp_nd 3 ts (Some i) sigma); [symmetry; exact Efocused|exact Efocus]. }
-  destruct (finite_steps_sbisim _ _ _
-    (finite_steps_emit_list logs (interp_nd 3 ts' None sigma')) focused Eemit)
-    as (next & Hlogs & Enext).
-  exists next; split; [econstructor; eassumption|symmetry; exact Enext].
-Qed.
 
 Theorem valid_source_execution_scheduler_steps capacity c se k :
   valid_source_execution capacity c se ->
@@ -941,34 +770,11 @@ Definition selected_source_pending (se : SourceExecution) k : Prop :=
 
 Definition remote_first_event base client pc : sE :=
   match pc with
-  | RPoll => SRd (mailbox base client)
-  | RRead _ => SRd (remote_head base)
-  | RLink block old => SWr block old
-  | RCAS block old => SCAS (remote_head base) old block
+  | RPoll => inl (HRead (mailbox base client))
+  | RRead _ => inl (HRead (remote_head base))
+  | RLink block old => inl (HWrite block old)
+  | RCAS block old => inl (HCAS (remote_head base) old block)
   end.
-
-Lemma source_raw_read_head a (K : option nat -> thread sE) :
-  (denote_flow (CRead a) >>= K) ≅ Vis (inr (inr (SRd a))) (fun v => K (Some v)).
-Proof.
-  cbn [denote_flow]; unfold heap_event; rewrite !bind_bind, bind_vis.
-  step; constructor; intro x; rewrite !bind_ret_l; reflexivity.
-Qed.
-Lemma source_raw_write_head a v (K : option unit -> thread sE) :
-  (denote_flow (CWrite a v) >>= K) ≅ Vis (inr (inr (SWr a v))) (fun _ => K (Some tt)).
-Proof.
-  cbn [denote_flow]; unfold heap_event; rewrite !bind_bind, bind_vis.
-  step; constructor; intros [].
-  change (((Ret tt : thread sE) >>= fun _ : unit => Ret (Some tt) >>= K) ≅
-    K (Some tt)).
-  rewrite !bind_ret_l; reflexivity.
-Qed.
-Lemma source_raw_cas_head a old desired (K : option bool -> thread sE) :
-  (denote_flow (CCAS a old desired) >>= K) ≅
-    Vis (inr (inr (SCAS a old desired))) (fun b => K (Some b)).
-Proof.
-  cbn [denote_flow]; unfold heap_event; rewrite !bind_bind, bind_vis.
-  step; constructor; intro x; rewrite !bind_ret_l; reflexivity.
-Qed.
 
 Lemma remote_residual_first_event base client pc :
   exists k : encode (remote_first_event base client pc) -> thread sE,
@@ -1080,12 +886,13 @@ Proof.
   intro n; destruct (Hlive n) as (k & Hnk & Hevent).
   apply event_is_spec in Hevent as (block & idx & Hevent).
   exists k; split; [exact Hnk|]; exists block, idx.
-  rewrite Hlogs, Hevent; cbn [turn_observations]; now left.
+  rewrite Hlogs, Hevent; cbn [event_obs]; now left.
 Qed.
 
 From Stdlib Require Import List Lia Arith.PeanoNat Sorting.Permutation.
 From TICL Require Import Lang.CSL.
-From examples Require Import CSL.HeapQ CSL.Allocator.Layout CSL.Allocator.Model
+From TICL Require Import Lang.CSL.Queue.Representation.
+From examples Require Import CSL.Allocator.Layout CSL.Allocator.Model
   CSL.Allocator.Execution.
 Import ListNotations.
 Local Open Scope nat_scope.
@@ -1432,23 +1239,6 @@ Proof.
   unfold owner_round_bound in Hbound; lia.
 Qed.
 
-Lemma owner_finite_first (P : nat -> Prop)
-  (dec : forall j, sumbool (P j) (not (P j))) lo len :
-  (forall j, lo <= j < lo + len -> ~ P j) \/
-  exists j, lo <= j < lo + len /\ P j /\ forall i, lo <= i < j -> ~ P i.
-Proof.
-  revert lo; induction len as [|len IH]; intro lo.
-  - left; intros; lia.
-  - destruct (dec lo) as [Hyes|Hno].
-    + right; exists lo; split; [lia|]; split; [exact Hyes|].
-      intros i Hi; lia.
-    + destruct (IH (S lo)) as [Hnone|(j & Hj & HP & Hfirst)].
-      * left; intros i Hi; destruct (Nat.eq_dec i lo) as [->|Hne];
-          [exact Hno|apply Hnone; lia].
-      * right; exists j; split; [lia|]; split; [exact HP|].
-        intros i Hi; destruct (Nat.eq_dec i lo) as [->|Hne];
-          [exact Hno|apply Hfirst; lia].
-Qed.
 Definition round_completion_dec e k :
   sumbool (round_completion e k) (not (round_completion e k)).
 Proof.
@@ -1462,7 +1252,7 @@ Theorem owner_round_selection_bound capacity c e lo len :
     count_if (owner_turn e) lo (S j - lo) <= 3 * capacity + 5.
 Proof.
   intros Hv Hcount.
-  destruct (owner_finite_first (round_completion e) (round_completion_dec e) lo len)
+  destruct (finite_first (round_completion e) (round_completion_dec e) lo len)
     as [Hnone|(j & Hj & Hdone & Hfirst)].
   - pose proof (no_round_completion_owner_bound capacity c e lo len Hv Hnone); lia.
   - exists j; split; [exact Hj|]; split; [exact Hdone|].
@@ -1658,7 +1448,7 @@ Theorem retired_reclaimed_owner_selection_bound capacity c e k block idx len :
     count_if (owner_turn e) (S k) (j-k) <= 6 * capacity + 10.
 Proof.
   intros Hv Hret Hcount.
-  destruct (owner_finite_first (fun j => block_event tag_reclaim block (emitted e j))
+  destruct (finite_first (fun j => block_event tag_reclaim block (emitted e j))
     (fun j => block_event_dec tag_reclaim block (emitted e j)) (S k) len)
     as [Hnone|(j & Hj & [idx' Hreclaim] & Hfirst)].
   - pose proof (no_reclaim_owner_bound capacity c e k block idx len Hv Hret Hnone); lia.
@@ -1676,16 +1466,12 @@ Lemma infinitely_owner_count e :
   infinitely (fun k => selected e k = Owner) ->
   forall lo n, exists len, n <= count_if (owner_turn e) lo len.
 Proof.
-  intros Hinf lo n; induction n as [|n IH].
-  - exists 0; rewrite count_if_zero; lia.
-  - destruct IH as [len Hlen].
-    destruct (Hinf (lo+len)) as (k & Hk & Howner).
-    exists (len + ((k-(lo+len))+1)).
-    rewrite count_if_add, count_if_add.
-    replace (lo + len + (k - (lo + len))) with k by lia.
-    rewrite count_if_succ, count_if_zero.
-    assert (Heq : owner_turn e k = true) by (apply owner_turn_spec; exact Howner).
-    rewrite Heq; lia.
+  intros Hinf lo n.
+  apply infinitely_count_if.
+  intro start.
+  destruct (Hinf start) as (k & Hk & Howner).
+  exists k; split; [exact Hk|].
+  apply owner_turn_spec; exact Howner.
 Qed.
 
 Theorem retired_eventually_reclaimed capacity c e :
@@ -1733,7 +1519,7 @@ Theorem retired_reallocation_requires_reclaim capacity c e k j block idx alloc_i
     reclaim_idx < alloc_idx /\ emitted e q = Some (SPop tag_reclaim block reclaim_idx).
 Proof.
   intros Hv Hkj Hret Halloc.
-  destruct (owner_finite_first (fun q => block_event tag_reclaim block (emitted e q))
+  destruct (finite_first (fun q => block_event tag_reclaim block (emitted e q))
     (fun q => block_event_dec tag_reclaim block (emitted e q)) (S k) (j-S k))
     as [Hnone|(q & Hq & [qi Hreclaim] & _)].
   - exfalso; eapply retired_not_reallocated_before_reclaim;
@@ -1765,13 +1551,13 @@ Proof.
   assert (Eretire : emitted e k = Some (SPop tag_retire block idx)).
   {
     rewrite Hlogs in Hretire.
-    destruct (emitted e k) as [o|] eqn:E; cbn [turn_observations] in Hretire;
+    destruct (emitted e k) as [o|] eqn:E; cbn [event_obs] in Hretire;
       [destruct Hretire as [<-|[]]; reflexivity|contradiction].
   }
   destruct (retired_eventually_reclaimed capacity c e Hmodel Howner'
     k block idx Eretire) as (j & idx' & Hkj & Hij & Ereclaim).
   exists j, idx'; repeat split; try assumption.
-  rewrite Hlogs, Ereclaim; cbn [turn_observations]; now left.
+  rewrite Hlogs, Ereclaim; cbn [event_obs]; now left.
 Qed.
 
 From Stdlib Require Import List Lia Arith.PeanoNat.
@@ -1927,9 +1713,9 @@ Proof.
   eapply equ_sbt_closed_goal; [apply emit_list_cons|apply emit_list_cons|].
   apply step_sb_vis.
   - intros []; exists tt; split; [|reflexivity].
-    apply nd_st_emit_list; apply IH.
+    apply emit_list_st; apply IH.
   - intros []; exists tt; split; [|reflexivity].
-    apply nd_st_emit_list; apply IH.
+    apply emit_list_st; apply IH.
 Qed.
 
 Theorem run_rr_allocator_demo_bisim c :
@@ -1945,74 +1731,10 @@ Proof.
   apply demo_rr_cycle_bisim.
 Qed.
 
-Fixpoint after_logs (xs : list SObs) (w : WorldW SObs) : WorldW SObs :=
-  match xs with
-  | [] => w
-  | o :: rest => after_logs rest (Obs (Log o) tt)
-  end.
 
-Lemma after_logs_not_done xs w : not_done w -> not_done (after_logs xs w).
-Proof.
-  revert w; induction xs as [|o rest IH]; intros w Hd; cbn [after_logs].
-  - exact Hd.
-  - apply IH; constructor.
-Qed.
 
-Lemma af_emit_list {X} xs (t : ictreeW SObs X) w P :
-  not_done w ->
-  <( t, {after_logs xs w} |= AF visW {P} )> ->
-  <( {emit_list xs t}, w |= AF visW {P} )>.
-Proof.
-  revert w; induction xs as [|o rest IH]; intros w Hd H; [exact H|].
-  change <( {log o ;; emit_list rest t}, w |= AF visW {P} )>.
-  apply afl_log; [exact Hd|].
-  apply IH; [constructor|exact H].
-Qed.
 
-Lemma agaf_emit_list {X} xs (t : ictreeW SObs X) w P :
-  not_done w ->
-  <( t, {after_logs xs w} |= AG (AF visW {P}) )> ->
-  <( {emit_list xs t}, w |= AG (AF visW {P}) )>.
-Proof.
-  revert w; induction xs as [|o rest IH]; intros w Hd H; [exact H|].
-  assert (Htail : <( {emit_list rest t}, {Obs (Log o) tt}
-    |= AG (AF visW {P}) )>).
-  { apply IH; [constructor|exact H]. }
-  assert (Haf : <( {emit_list rest t}, {Obs (Log o) tt} |= AF visW {P} )>).
-  { pose proof Htail as HH; cdestruct HH; assumption. }
-  assert (Hprefix : <( {emit_list (o :: rest) t}, w |= AF visW {P} )>).
-  { change <( {log o ;; emit_list rest t}, w |= AF visW {P} )>.
-    apply afl_log; assumption. }
-  rewrite emit_list_cons in Hprefix |- *.
-  apply (proj1 (@ag_vis (writerE SObs) _ X (Log o)
-    (fun _ => emit_list rest t) tt w _)); split.
-  - exact Hprefix.
-  - intros []; exact Htail.
-Qed.
 
-Lemma af_emit_list_member {X} xs (t : ictreeW SObs X) w P o :
-  not_done w -> List.In o xs -> P o ->
-  <( {emit_list xs t}, w |= AF visW {P} )>.
-Proof.
-  revert w; induction xs as [|a rest IH]; intros w Hd Hin HP;
-    [contradiction|].
-  change <( {log a ;; emit_list rest t}, w |= AF visW {P} )>.
-  apply afl_log; [exact Hd|].
-  destruct Hin as [<-|Hin].
-  - cleft; apply ticll_vis; constructor; exact HP.
-  - apply IH; [constructor|exact Hin|exact HP].
-Qed.
-
-Lemma af_emit_list_ret {X} xs (r : X) w (Q : X -> WorldW SObs -> Prop) :
-  not_done w -> Q r (after_logs xs w) ->
-  <[ {emit_list xs (Ret r)}, w |= AF AX done {Q} ]>.
-Proof.
-  revert w; induction xs as [|o rest IH]; intros w Hd HQ.
-  - cleft; apply axr_ret; assumption.
-  - change <[ {log o ;; emit_list rest (Ret r)}, w |= AF AX done {Q} ]>.
-    apply afr_log; [exact Hd|].
-    apply IH; [constructor|exact HQ].
-Qed.
 
 Lemma demo_cycle_fresh_member c kind :
   List.In kind [tag_alloc;tag_retire;tag_reclaim] ->

@@ -1,8 +1,9 @@
 From TICL Require Import
   Lang.CSL ICTree.Core ICTree.Equ ICTree.Events.Writer ICTree.SBisim
   ICTree.Logic.Trans Logic.Core.
-From examples Require Import
-  CSL.HeapQ CSL.Layout CSL.Frame CSL.Sep2 CSL.SLang CSL.Compose CSL.Program.
+From TICL Require Import Lang.CSL.Queue.Representation Lang.CSL.Queue.Layout
+  Lang.CSL.Queue.Frame Lang.CSL.Queue.Separation Lang.CSL.Queue.Alternating
+  Lang.CSL.Queue.Composition Lang.CSL.Queue.Program.
 
 Import ICtree ICTreeNotations TiclNotations.
 Local Open Scope ictree_scope.
@@ -17,9 +18,8 @@ Theorem rotate_agaf_pop_rr :
         |= AG (AF visW {spopped 1 nl1}) )>.
 Proof.
   intros u v nl1 nl2 h c ns1 vs1 ns2 vs2 d1 d2 H1 H2 Hd F1 F2.
-  rewrite (run_rr_parallel_bisim u v nl1 nl2 h c ns1 vs1 ns2 vs2 d1 d2
-    H1 H2 Hd F1 F2).
-  exact (Compose.sched_agaf_q1 u v nl1 nl2 0 h c
+  rewrite (run_rr_parallel_bisim u v h c).
+  exact (Composition.sched_agaf_q1 u v nl1 nl2 0 h c
     ns1 vs1 ns2 vs2 d1 d2 H1 H2 Hd F1 F2).
 Qed.
 
@@ -31,9 +31,8 @@ Theorem rotate_agaf_pop_rr_q2 :
         |= AG (AF visW {spopped 2 nl2}) )>.
 Proof.
   intros u v nl1 nl2 h c ns1 vs1 ns2 vs2 d1 d2 H1 H2 Hd F1 F2.
-  rewrite (run_rr_parallel_bisim u v nl1 nl2 h c ns1 vs1 ns2 vs2 d1 d2
-    H1 H2 Hd F1 F2).
-  exact (Compose.sched_agaf_q2 u v nl1 nl2 0 h c
+  rewrite (run_rr_parallel_bisim u v h c).
+  exact (Composition.sched_agaf_q2 u v nl1 nl2 0 h c
     ns1 vs1 ns2 vs2 d1 d2 H1 H2 Hd F1 F2).
 Qed.
 
@@ -45,9 +44,8 @@ Theorem rotate_agaf_pop_rr_fresh :
         |= AG (AF visW {spopped_after 1 nl1 k}) )>.
 Proof.
   intros u v nl1 nl2 k h c ns1 vs1 ns2 vs2 d1 d2 H1 H2 Hd F1 F2.
-  rewrite (run_rr_parallel_bisim u v nl1 nl2 h c ns1 vs1 ns2 vs2 d1 d2
-    H1 H2 Hd F1 F2).
-  exact (Compose.sched_agaf_q1_fresh u v nl1 nl2 k 0 h c
+  rewrite (run_rr_parallel_bisim u v h c).
+  exact (Composition.sched_agaf_q1_fresh u v nl1 nl2 k 0 h c
     ns1 vs1 ns2 vs2 d1 d2 H1 H2 Hd F1 F2).
 Qed.
 
@@ -59,9 +57,8 @@ Theorem rotate_agaf_pop_rr_q2_fresh :
         |= AG (AF visW {spopped_after 2 nl2 k}) )>.
 Proof.
   intros u v nl1 nl2 k h c ns1 vs1 ns2 vs2 d1 d2 H1 H2 Hd F1 F2.
-  rewrite (run_rr_parallel_bisim u v nl1 nl2 h c ns1 vs1 ns2 vs2 d1 d2
-    H1 H2 Hd F1 F2).
-  exact (Compose.sched_agaf_q2_fresh u v nl1 nl2 k 0 h c
+  rewrite (run_rr_parallel_bisim u v h c).
+  exact (Composition.sched_agaf_q2_fresh u v nl1 nl2 k 0 h c
     ns1 vs1 ns2 vs2 d1 d2 H1 H2 Hd F1 F2).
 Qed.
 
