@@ -10,7 +10,7 @@ From TICL Require Import
   ICTree.Logic.State
   ICTree.Logic.Iter
   ICTree.Logic.Bind
-  ICTree.Interp.State
+  ICTree.Interp.State.Mod
   ICTree.Events.Writer.
 
 From Stdlib Require Import

@@ -3,8 +3,8 @@ From ExtLib Require Import Data.Map.FMapAList Data.String Structures.Maps.
 From TICL Require Import
   ICTree.Core
   Events.StateE
+  ICTree.Events.Yield
   Lang.Maps
-  Lang.Yield.Events
   Lang.Yield.Syntax.
 
 Import ICtree ICTreeNotations.
@@ -108,3 +108,107 @@ Fixpoint denote_stmt_flow (s : YStmt) : ictree YEff YStmtFlow :=
 Definition denote_stmt (s : YStmt) : ictree YEff unit :=
   _ <- denote_stmt_flow s;;
   Ret tt.
+
+(** * Constructor unfold facts *)
+
+(** Expression denotation constructor unfold facts. *)
+Lemma denote_exp_yvar name :
+  denote_exp (YVar name) =
+    (ctx <- yget;;
+     match lookup name ctx with
+     | Some value => yyield;; Ret value
+     | None => stuck
+     end).
+Proof. reflexivity. Qed.
+
+Lemma denote_exp_ylit n : denote_exp (YLit n) = Ret n.
+Proof. reflexivity. Qed.
+
+Lemma denote_exp_yplus a b :
+  denote_exp (YPlus a b) =
+    (x <- denote_exp a;; y <- denote_exp b;; Ret (x + y)%nat).
+Proof. reflexivity. Qed.
+
+Lemma denote_exp_yminus a b :
+  denote_exp (YMinus a b) =
+    (x <- denote_exp a;; y <- denote_exp b;; Ret (x - y)%nat).
+Proof. reflexivity. Qed.
+
+Lemma denote_exp_ymult a b :
+  denote_exp (YMult a b) =
+    (x <- denote_exp a;; y <- denote_exp b;; Ret (x * y)%nat).
+Proof. reflexivity. Qed.
+
+(** Flow-sensitive statement denotation constructor unfold facts. *)
+Lemma denote_stmt_unfold s :
+  denote_stmt s = (_ <- denote_stmt_flow s;; Ret tt).
+Proof. reflexivity. Qed.
+
+Lemma denote_stmt_flow_yassign name expr :
+  denote_stmt_flow (YAssign name expr) =
+    (value <- denote_exp expr;;
+     ctx <- yget;;
+     yput (add name value ctx);;
+     Ret Fallthrough).
+Proof. reflexivity. Qed.
+
+Lemma denote_stmt_flow_yseq a b :
+  denote_stmt_flow (YSeq a b) =
+    (flow <- denote_stmt_flow a;;
+     match flow with
+     | Fallthrough => denote_stmt_flow b
+     | HaltThread => Ret HaltThread
+     end).
+Proof. reflexivity. Qed.
+
+Lemma denote_stmt_flow_yif test then_branch else_branch :
+  denote_stmt_flow (YIf test then_branch else_branch) =
+    (condition_value <- denote_exp test;;
+     if YieldSyntax.is_true condition_value then
+       denote_stmt_flow then_branch
+     else
+       denote_stmt_flow else_branch).
+Proof. reflexivity. Qed.
+
+Lemma denote_stmt_flow_ywhile test body :
+  denote_stmt_flow (YWhile test body) =
+    ICtree.iter
+      (fun _ =>
+         condition_value <- denote_exp test;;
+         if YieldSyntax.is_true condition_value then
+           flow <- denote_stmt_flow body;;
+           match flow with
+           | Fallthrough => Ret (inl tt)
+           | HaltThread => Ret (inr HaltThread)
+           end
+         else
+           Ret (inr Fallthrough)) tt.
+Proof. reflexivity. Qed.
+
+Lemma denote_stmt_flow_yfork body :
+  denote_stmt_flow (YFork body) =
+    (in_child <- yfork;;
+     if in_child then
+       _ <- denote_stmt_flow body;;
+       Ret HaltThread
+     else
+       Ret Fallthrough).
+Proof. reflexivity. Qed.
+
+Lemma denote_stmt_yfork body :
+  denote_stmt (YFork body) =
+    (_ <- (in_child <- yfork;;
+           if in_child then
+             _ <- denote_stmt_flow body;;
+             Ret HaltThread
+           else
+             Ret Fallthrough);;
+     Ret tt).
+Proof. reflexivity. Qed.
+
+Lemma denote_stmt_flow_yskip : denote_stmt_flow YSkip = Ret Fallthrough.
+Proof. reflexivity. Qed.
+
+Lemma denote_stmt_flow_yyield :
+  denote_stmt_flow YYield = (yyield;; Ret Fallthrough).
+Proof. reflexivity. Qed.

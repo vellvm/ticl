@@ -13,10 +13,10 @@ From TICL Require Import
   ICTree.Core
   ICTree.SBisim
   ICTree.Equ
-  ICTree.Interp.State
+  ICTree.Interp.State.Mod
   ICTree.Events.State
   ICTree.Events.Writer
-  Logic.Trans
+  ICTree.Logic.Trans
   Logic.Core
   ICTree.Logic.AX
   ICTree.Logic.AF

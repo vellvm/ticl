@@ -1,6 +1,5 @@
 From TICL Require Import
   ICTree.Core
-  Events.Writer
   Logic.Core
   ICTree.Equ
   ICTree.SBisim
@@ -10,7 +9,7 @@ From TICL Require Import
   ICTree.Logic.Bind
   ICTree.Logic.State
   ICTree.Logic.CanStep
-  ICTree.Interp.State
+  ICTree.Interp.State.Mod
   ICTree.Events.State
   ICTree.Events.Writer
   Lang.MeQ.

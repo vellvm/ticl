@@ -53,6 +53,48 @@ Equations vector_remove{A n}(v: vec (S n) A)(i: fin (S n)) : vec n A by wf n lt 
   vector_remove (h :: h' :: ts) F1 := h' :: ts;
   vector_remove (h::nil) F1 := @nil A.
 
+(** Removing the head slot keeps the tail unchanged. *)
+Lemma vector_remove_head {A n} (x : A) (v : vec n A) :
+  vector_remove (Vector.cons A x n v) Fin.F1 = v.
+Proof.
+  destruct v; simp vector_remove; reflexivity.
+Qed.
+
+(** Removing a non-head slot keeps the head and recurses on the tail. *)
+Lemma vector_remove_tail {A n} (x : A) (v : vec (S n) A)
+    (i : Fin.t (S n)) :
+  vector_remove (Vector.cons A x (S n) v) (Fin.FS i) =
+  Vector.cons A x n (vector_remove v i).
+Proof.
+  dependent destruction v.
+  dependent destruction i.
+  - rewrite vector_remove_head; simp vector_remove; reflexivity.
+  - simp vector_remove; reflexivity.
+Qed.
+
+(** Pointwise agreement away from the removed slot survives the removal. *)
+Lemma vector_remove_pointwise {A n} (R : A -> A -> Prop)
+    (v1 v2 : vec (S n) A) (i : Fin.t (S n)) :
+  (forall j, i <> j -> R (Vector.nth v1 j) (Vector.nth v2 j)) ->
+  forall j, R (Vector.nth (vector_remove v1 i) j)
+              (Vector.nth (vector_remove v2 i) j).
+Proof.
+  revert v1 v2 i.
+  induction n as [| m IH]; intros v1 v2 i Hagree j.
+  - inversion j.
+  - dependent destruction v1.
+    dependent destruction v2.
+    dependent destruction i.
+    + rewrite !vector_remove_head.
+      exact (Hagree (Fin.FS j) ltac:(discriminate)).
+    + rewrite !vector_remove_tail.
+      dependent destruction j.
+      * exact (Hagree Fin.F1 ltac:(discriminate)).
+      * apply IH.
+        intros k Hk.
+        exact (Hagree (Fin.FS k) ltac:(intro Heq; apply Hk, (Fin.FS_inj _ _ Heq))).
+Qed.
+
 Equations nth_map{A n}(v: vec n A)(i: fin n)(f: A -> A): vec n A by wf n lt :=
   nth_map [] _ _ := [];
   nth_map (h :: h' :: ts) (FS (FS j)) _ := h :: (nth_map (h' :: ts) (FS j) f);

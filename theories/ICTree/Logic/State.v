@@ -14,7 +14,7 @@ From TICL Require Import
   ICTree.Logic.AG
   ICTree.Logic.EX
   Logic.Core  
-  ICTree.Interp.State
+  ICTree.Interp.State.Mod
   ICTree.Events.State.
 
 

@@ -409,6 +409,15 @@ Lemma bind_guard {E X Y} {HE: Encode E} (t : ictree E X) (g : X -> ictree E Y):
   Guard t >>= g ≅ Guard (t >>= g).
 Proof. now rewrite unfold_bind. Qed.
 
+Lemma bind_stuck_equ {E : Type} `{Encode E} {A B : Type}
+  (k : A -> ictree E B) :
+  ICtree.bind (@stuck E _ A) k ≅ @stuck E _ B.
+Proof.
+  revert k; coinduction R CIH; intros k.
+  rewrite (unfold_stuck (R := A)), bind_guard, (unfold_stuck (R := B)).
+  constructor; apply CIH.
+Qed.
+
 Lemma vis_equ_bind {E X Y} {HE: Encode E}:
   forall (t : ictree E X) (e : E) k (k' : encode e -> ictree E Y),
     x <- t;; k' x ≅ Vis e k ->
