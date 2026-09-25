@@ -9,18 +9,18 @@ From TICL Require Import
   ICTree.Equ
   ICTree.SBisim
   ICTree.Interp.Core
-  ICTree.Interp.State
+  ICTree.Interp.State.Mod
   ICTree.Logic.Trans
   ICTree.Logic.Bind
   ICTree.Logic.Iter
   ICTree.Logic.CanStep
   Logic.Core
-  Logic.AX
-  Logic.AF
-  Logic.EX
-  Logic.EF
-  Logic.AG
-  Logic.EG
+  ICTree.Logic.AX
+  ICTree.Logic.AF
+  ICTree.Logic.EX
+  ICTree.Logic.EF
+  ICTree.Logic.AG
+  ICTree.Logic.EG
   Logic.Kripke
   Logic.Setoid.
 

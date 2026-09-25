@@ -308,6 +308,13 @@ Proof. step; now cbn. Qed.
 Lemma unfold_stuck {E R} {HE: Encode E}: @stuck E _ R ≅ Guard stuck.
 Proof. exact (ictree_eta stuck). Qed.
 
+(** A tree that is raw-equivalent to its own guard is the guarded divergence. *)
+Lemma equ_guard_stuck {E X} {HE : Encode E} (t : ictree E X) : t ≅ Guard t -> t ≅ stuck.
+Proof.
+  intros Hguard; unfold equ; coinduction R CIH.
+  rewrite Hguard, unfold_stuck; constructor; exact CIH.
+Qed.
+
 Lemma unfold_spin {E R} {HE: Encode E}: @spin E _ R ≅ step spin.
 Proof. exact (ictree_eta spin). Qed.
 
@@ -408,6 +415,15 @@ Qed.
 Lemma bind_guard {E X Y} {HE: Encode E} (t : ictree E X) (g : X -> ictree E Y):
   Guard t >>= g ≅ Guard (t >>= g).
 Proof. now rewrite unfold_bind. Qed.
+
+Lemma bind_stuck_equ {E : Type} `{Encode E} {A B : Type}
+  (k : A -> ictree E B) :
+  ICtree.bind (@stuck E _ A) k ≅ @stuck E _ B.
+Proof.
+  revert k; coinduction R CIH; intros k.
+  rewrite (unfold_stuck (R := A)), bind_guard, (unfold_stuck (R := B)).
+  constructor; apply CIH.
+Qed.
 
 Lemma vis_equ_bind {E X Y} {HE: Encode E}:
   forall (t : ictree E X) (e : E) k (k' : encode e -> ictree E Y),

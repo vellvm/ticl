@@ -10,11 +10,11 @@ From TICL Require Import
   ICTree.Equ
   ICTree.SBisim
   ICTree.Interp.Core
-  ICTree.Interp.State
+  ICTree.Interp.State.Mod
   ICTree.Logic.Trans
   ICTree.Logic.CanStep
   Logic.Core
-  Logic.AX
+  ICTree.Logic.AX
   Logic.Kripke
   Logic.Setoid.
 

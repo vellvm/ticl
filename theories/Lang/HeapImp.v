@@ -1,7 +1,8 @@
 From Stdlib Require Import
   Nat
   Strings.String
-  QArith.QArith.
+  QArith.QArith
+  Arith.PeanoNat.
 
 
 From ExtLib Require Import
@@ -13,10 +14,11 @@ From TICL Require Import
   ICTree.Core
   ICTree.SBisim
   ICTree.Equ
-  ICTree.Interp.State
+  ICTree.Interp.State.Mod
+  ICTree.Events.Heap
   ICTree.Events.State
   ICTree.Events.Writer
-  Logic.Trans
+  ICTree.Logic.Trans
   Logic.Core
   ICTree.Logic.AX
   ICTree.Logic.AF
@@ -110,6 +112,133 @@ Module HeapImp.
     | S n' => add base 0 (heap_init (S base) n' h)
     end.
 
+  (** Lower shared heap commands to this backend's existing state effects. *)
+  Definition h_heapimp : heapE ~> ictree memE :=
+    fun e =>
+      match e return ictree memE (encode e) with
+      | HRead a =>
+          m <- get ;;
+          match lookup a (heap m) with
+          | Some v => Ret v
+          | None => stuck
+          end
+      | HWrite a v =>
+          m <- get ;;
+          put (update_heap a v m)
+      | HAlloc n =>
+          m <- get ;;
+          let base := fresh_addr (heap m) in
+          put {| store := store m; heap := heap_init base n (heap m) |} ;;
+          Ret base
+      | HFree a =>
+          m <- get ;;
+          put (free_heap a m)
+      | HCAS a expected desired =>
+          m <- get ;;
+          match lookup a (heap m) with
+          | None => stuck
+          | Some current =>
+              if Nat.eqb current expected
+              then put (update_heap a desired m) ;; Ret true
+              else Ret false
+          end
+      end.
+
+  (** Handler equations.  Zero allocation and absent frees still log the
+      state; a matching CAS logs even when the value is unchanged, while a
+      mismatching CAS returns without logging. *)
+  Lemma instr_heapimp_alloc_zero (m : Mem) :
+    instr_stateE (h_heapimp (HAlloc 0)) m ~
+      (log m;; Ret (fresh_addr (heap m),m)).
+  Proof.
+    destruct m as [s h].
+    unfold h_heapimp, instr_stateE.
+    rewrite interp_state_bind.
+    lazymatch goal with |- (?t >>= ?k) ~ _ =>
+      etransitivity; [apply sbisim_clo_bind_eq with (k2:=k);
+        [apply interp_state_get | intro result; reflexivity] |]
+    end.
+    rewrite bind_ret_l.
+    cbn [heap_init heap store].
+    rewrite interp_state_bind.
+    lazymatch goal with |- (?t >>= ?k) ~ _ =>
+      etransitivity; [apply sbisim_clo_bind_eq with (k2:=k);
+        [apply interp_state_put | intro result; reflexivity] |]
+    end.
+    rewrite bind_bind.
+    apply sbisim_clo_bind_eq; [reflexivity | intros []].
+    rewrite bind_ret_l, interp_state_ret; reflexivity.
+  Qed.
+
+  Lemma instr_heapimp_free a (m : Mem) :
+    instr_stateE (h_heapimp (HFree a)) m ~
+      (log (free_heap a m);; Ret (tt,free_heap a m)).
+  Proof.
+    unfold h_heapimp, instr_stateE.
+    rewrite interp_state_bind.
+    lazymatch goal with |- (?t >>= ?k) ~ _ =>
+      etransitivity; [apply sbisim_clo_bind_eq with (k2:=k);
+        [apply interp_state_get | intro result; reflexivity] |]
+    end.
+    rewrite bind_ret_l.
+    apply interp_state_put.
+  Qed.
+
+  Lemma instr_heapimp_write a v (m : Mem) :
+    instr_stateE (h_heapimp (HWrite a v)) m ~
+      (log (update_heap a v m);; Ret (tt,update_heap a v m)).
+  Proof.
+    unfold h_heapimp, instr_stateE.
+    rewrite interp_state_bind.
+    lazymatch goal with |- (?t >>= ?k) ~ _ =>
+      etransitivity; [apply sbisim_clo_bind_eq with (k2:=k);
+        [apply interp_state_get | intro result; reflexivity] |]
+    end.
+    rewrite bind_ret_l.
+    apply interp_state_put.
+  Qed.
+
+  Lemma instr_heapimp_cas_success a expected desired (m : Mem) :
+    lookup a (heap m) = Some expected ->
+    instr_stateE (h_heapimp (HCAS a expected desired)) m ~
+      (log (update_heap a desired m);; Ret (true,update_heap a desired m)).
+  Proof.
+    intros Lookup.
+    unfold h_heapimp, instr_stateE.
+    rewrite interp_state_bind.
+    lazymatch goal with |- (?t >>= ?k) ~ _ =>
+      etransitivity; [apply sbisim_clo_bind_eq with (k2:=k);
+        [apply interp_state_get | intro result; reflexivity] |]
+    end.
+    rewrite bind_ret_l.
+    rewrite Lookup, Nat.eqb_refl.
+    rewrite interp_state_bind.
+    lazymatch goal with |- (?t >>= ?k) ~ _ =>
+      etransitivity; [apply sbisim_clo_bind_eq with (k2:=k);
+        [apply interp_state_put | intro result; reflexivity] |]
+    end.
+    rewrite bind_bind.
+    apply sbisim_clo_bind_eq; [reflexivity | intros []].
+    rewrite bind_ret_l, interp_state_ret; reflexivity.
+  Qed.
+
+  Lemma instr_heapimp_cas_failure a actual expected desired (m : Mem) :
+    lookup a (heap m) = Some actual -> actual <> expected ->
+    instr_stateE (h_heapimp (HCAS a expected desired)) m ~ Ret (false,m).
+  Proof.
+    intros Lookup Hne.
+    unfold h_heapimp, instr_stateE.
+    rewrite interp_state_bind.
+    lazymatch goal with |- (?t >>= ?k) ~ _ =>
+      etransitivity; [apply sbisim_clo_bind_eq with (k2:=k);
+        [apply interp_state_get | intro result; reflexivity] |]
+    end.
+    rewrite bind_ret_l.
+    apply Nat.eqb_neq in Hne.
+    rewrite Lookup, Hne.
+    rewrite interp_state_ret; reflexivity.
+  Qed.
+
   (** Denotation of expressions to [ictree] *)
   Fixpoint cdenote_exp(e: CExp): ictree memE nat :=
     match e with
@@ -129,18 +258,10 @@ Module HeapImp.
         Ret (x - y)
     | CHeapAlloc sz =>
         n <- cdenote_exp sz ;;
-        m <- get ;;
-        let base := fresh_addr (heap m) in
-        let h' := heap_init base n (heap m) in
-        put {| store := store m; heap := h' |} ;;
-        Ret base
+        h_heapimp (HAlloc n)
     | CHeapRead a =>
         addr <- cdenote_exp a ;;
-        m <- get ;;
-        match lookup addr (heap m) with
-        | Some x => Ret x
-        | None => stuck
-        end
+        h_heapimp (HRead addr)
     end.
 
   (** Denotation of boolean comparison expressions to [ictree] *)
@@ -170,12 +291,10 @@ Module HeapImp.
     | CHeapWrite a v =>
         addr <- cdenote_exp a ;;
         val <- cdenote_exp v ;;
-        m <- get ;;
-        put {| store := store m; heap := add addr val (heap m) |}
+        h_heapimp (HWrite addr val)
     | CHeapFree a =>
         addr <- cdenote_exp a ;;
-        m <- get ;;
-        put {| store := store m; heap := remove addr (heap m) |}
+        h_heapimp (HFree addr)
     | CIf c t e =>
         bv <- cdenote_comp c ;;
         if bv then

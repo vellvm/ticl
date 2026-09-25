@@ -11,10 +11,10 @@ From TICL Require Import
   ICTree.Core
   ICTree.SBisim
   ICTree.Equ
-  ICTree.Interp.State
+  ICTree.Interp.State.Mod
   ICTree.Events.State
   ICTree.Events.Writer
-  Logic.Trans
+  ICTree.Logic.Trans
   Logic.Core
   ICTree.Logic.AX
   ICTree.Logic.AF
@@ -45,9 +45,8 @@ Generalizable All Variables.
 *)
 Module StImp.
   (** A context is a map from strings to natural numbers *)
-  Definition Ctx := alist string nat.
-  Definition Mem := stateE Ctx.
   Import Ctx.
+  Definition Mem := stateE Ctx.
   Opaque lookup.
   
   (** * The syntax of StImp programs *)

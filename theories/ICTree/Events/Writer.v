@@ -8,7 +8,8 @@ From TICL Require Import
   Logic.World
   Events.Core
   ICTree.Events.State
-  ICTree.Core.
+  ICTree.Core
+  ICTree.Equ.
 
 From TICL Require Export
   Events.WriterE.
@@ -50,6 +51,22 @@ Definition h_stateW{S}: stateE S ~> InstrM S S :=
                     | Get => Ret (s, s)
                     | Put s' => log s' ;; Ret (tt, s')
                     end).
+
+(** The one shared indexing handler: every [Log a] emits exactly one indexed
+    observation and increments the shared counter once.  The untouched
+    auxiliary state [Sigma] is passed through unchanged, so the same handler
+    serves a heap-and-counter signature and a bare counter. *)
+Definition h_indexed {A Sigma : Type} :
+  writerE A ~> stateT (Sigma * nat) (ictreeW (indexed A)) :=
+  fun '(Log a) => mkStateT (fun '(s,c) =>
+    log (stamp a c);; Ret (tt,(s,S c))).
+
+(** The canonical RAW response certificate of an emitting segment.  It is a
+    handler equation, not an interpreter equation. *)
+Lemma h_indexed_log {A Sigma} (a : A) (s : Sigma) (c : nat) :
+  runStateT (h_indexed (Sigma:=Sigma) (Log a)) (s,c)
+    ≅ (log (stamp a c);; Ret (tt,(s,S c))).
+Proof. reflexivity. Qed.
 
 #[global] Instance ReSum_inlW {A B} : ReSum (writerE A) (writerE (A + B)) :=
   fun '(Log a) => Log (inl a).
