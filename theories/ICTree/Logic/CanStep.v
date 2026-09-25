@@ -58,6 +58,8 @@ Section CanStepICtrees.
       now (exists t', w').
     - destruct H as (t' & w' & TR).
       apply ktrans_guard in TR.
+
+From Coinduction Require Import coinduction.
       now (exists t', w').
   Qed.
   Hint Resolve can_step_guard: ticl.
@@ -306,3 +308,15 @@ Section CanStepLog.
     constructor.
   Qed.
 End CanStepLog.
+
+(** A bind cannot step when its prefix cannot: the residual continuation is
+    never reached.  Arbitrary effect, arbitrary result types. *)
+Lemma nostep_bind {E} {HE : Encode E} {X Y}:
+  forall (t : ictree E Y) (k : Y -> ictree E X) w,
+    ~ can_step t w -> ~ can_step (x <- t ;; k x) w.
+Proof.
+  intros t k w Hns Hs.
+  apply can_step_bind in Hs as [(t' & w' & TR & _) | (y & w' & TR & _)].
+  - apply Hns; exists t', w'; exact TR.
+  - apply Hns; exists ICtree.stuck, w'; exact TR.
+Qed.

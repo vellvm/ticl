@@ -1,7 +1,13 @@
 From Stdlib Require Import
+  List
+  Arith.PeanoNat
+  Classes.Morphisms
+  Classes.RelationPairs
   Fin
   Vector
   Program.Equality.
+
+From ExtLib Require Import Data.Option.
 
 From TICL Require Import
   ICTree.Core
@@ -11,14 +17,19 @@ From TICL Require Import
   ICTree.Events.State
   ICTree.Events.Writer
   ICTree.Interp.Core
+  ICTree.Interp.Refine
   ICTree.Interp.State.Mod
   ICTree.Interp.Yield.Mod
+  ICTree.Interp.Yield.Nondeterministic
+  ICTree.Interp.Yield.Execution
   ICTree.Logic.AX
   ICTree.Logic.AF
   ICTree.Logic.Bind
   ICTree.Logic.CanStep
   ICTree.Logic.State
+  ICTree.Logic.Trace
   Logic.Core
+  Utils.Execution
   Utils.Vectors.
 
 Import ICtree ICTreeNotations TiclNotations VectorNotations.
@@ -31,112 +42,10 @@ Local Open Scope ticl_scope.
     [forkE] and [stateE] events.  They know nothing about source syntax; a
     language lifts them by instantiating the raw trees with its denotations. *)
 
-(** ** Singleton scheduler reductions. *)
-(** A source program starts as a one-slot pool focused on its only thread.
-    These local reductions normalize that pool one observable step at a time. *)
-
-Local Lemma schedule_singleton_empty {E} `{Encode E} (v : pool E 0) :
-  schedule 0 v None ≅ Ret tt.
-Proof.
-  rewrite (ictree_eta (schedule 0 v None)), schedule_empty_none.
-  reflexivity.
-Qed.
-
-Local Lemma schedule_singleton_ret {E} `{Encode E} (v : pool E 1) :
-  observe (v $ Fin.F1) = RetF tt ->
-  schedule 1 v (Some Fin.F1) ≅ Guard (Ret tt).
-Proof.
-  intro Hobs.
-  rewrite (ictree_eta (schedule 1 v (Some Fin.F1))),
-    (schedule_focused_ret 0 v Fin.F1 Hobs).
-  apply guard_equ_node, schedule_singleton_empty.
-Qed.
-
-Local Lemma schedule_singleton_yield {E} `{Encode E} (v : pool E 1) k :
-  observe (v $ Fin.F1) = VisF (inl Yield) k ->
-  schedule 1 v (Some Fin.F1)
-    ≅ Guard (Vis ((inl Yield) : yieldE + (spawnE + E))
-               (fun _ => Br 0 (fun i =>
-                  schedule 1 (v @ Fin.F1 := (k tt)) (Some i)))).
-Proof.
-  intro Hobs.
-  rewrite (ictree_eta (schedule 1 v (Some Fin.F1))),
-    (schedule_focused_yield 0 v Fin.F1 k Hobs).
-  apply guard_equ_node.
-  rewrite (ictree_eta (schedule 1 (v @ Fin.F1 := (k tt)) None)),
-    (schedule_no_focus_nonempty 0 (v @ Fin.F1 := (k tt))).
-  reflexivity.
-Qed.
-
-Local Lemma schedule_singleton_user {E} `{Encode E} (v : pool E 1) (e : E) k :
-  observe (v $ Fin.F1) = VisF (inr (inr e)) k ->
-  schedule 1 v (Some Fin.F1)
-    ≅ Vis ((inr (inr e)) : yieldE + (spawnE + E))
-        (fun x => schedule 1 (v @ Fin.F1 := (k x)) (Some Fin.F1)).
-Proof.
-  intro Hobs.
-  rewrite (ictree_eta (schedule 1 v (Some Fin.F1))),
-    (schedule_focused_user_event 0 v Fin.F1 e k Hobs).
-  reflexivity.
-Qed.
-
-Local Lemma instr_schedule_singleton_ret {Σ} (v : pool (stateE Σ) 1) (σ : Σ) :
-  observe (v $ Fin.F1) = RetF tt ->
-  instr_schedule 1 v (Some Fin.F1) σ ~ Ret (tt, σ).
-Proof.
-  intro Hobs.
-  unfold instr_schedule, instr_stateE.
-  rewrite (schedule_singleton_ret v Hobs), interp_erase_guard_ret.
-  rewrite interp_state_tau, sb_guard, interp_state_ret.
-  reflexivity.
-Qed.
-
-(** The singleton update step: read the state, write [f] of it, and finish.
-    Exactly one [Log] of the new state is observable. *)
-Local Lemma instr_schedule_singleton_update {Σ} (f : Σ -> Σ)
-    (v : pool (stateE Σ) 1) (σ : Σ) :
-  observe (v $ Fin.F1) =
-    VisF ((inr (inr Get)) : yieldE + (forkE + stateE Σ))
-      (fun σ0 : Σ =>
-         Vis ((inr (inr (Put (f σ0)))) : yieldE + (forkE + stateE Σ))
-           (fun _ : unit => Ret tt)) ->
-  instr_schedule 1 v (Some Fin.F1) σ ~ (log (f σ);; Ret (tt, f σ)).
-Proof with eauto.
-  intro Hobs.
-  assert (Hput : observe
-      ((v @ Fin.F1 :=
-          (Vis ((inr (inr (Put (f σ)))) : yieldE + (forkE + stateE Σ))
-             (fun _ : unit => Ret tt))) $ Fin.F1)
-      = VisF ((inr (inr (Put (f σ)))) : yieldE + (forkE + stateE Σ))
-          (fun _ : unit => Ret tt))
-    by (now rewrite Vector.nth_replace_eq).
-  assert (Hend : observe
-      (((v @ Fin.F1 :=
-           (Vis ((inr (inr (Put (f σ)))) : yieldE + (forkE + stateE Σ))
-              (fun _ : unit => Ret tt)))
-          @ Fin.F1 := (Ret tt)) $ Fin.F1) = RetF tt)
-    by (now rewrite Vector.nth_replace_eq).
-  unfold instr_schedule, instr_stateE.
-  rewrite (schedule_singleton_user v Get _ Hobs).
-  rewrite interp_erase_user, interp_state_vis.
-  cbn [h_stateW runStateT].
-  rewrite bind_ret_l, sb_guard.
-  cbv beta.
-  rewrite interp_state_tau, sb_guard, interp_state_tau, sb_guard.
-  rewrite (schedule_singleton_user _ (Put (f σ)) _ Hput).
-  rewrite interp_erase_user, interp_state_vis.
-  cbn [h_stateW runStateT].
-  rewrite bind_bind.
-  __upto_bind_sbisim...
-  intros [].
-  rewrite bind_ret_l, sb_guard.
-  cbv beta.
-  rewrite interp_state_tau, sb_guard, interp_state_tau, sb_guard.
-  rewrite (schedule_singleton_ret _ Hend).
-  rewrite interp_erase_guard_ret.
-  rewrite interp_state_tau, sb_guard, interp_state_ret.
-  reflexivity.
-Qed.
+(** The singleton scheduler reductions are the operational equations of
+    [ICTree.Interp.Yield.Nondeterministic]: [instr_schedule] is definitionally
+    [interp_schedule_nd h_stateW], so the modal rules below only combine those
+    equations with the tree-level [AX]/[AN]/log rules. *)
 
 (** ** Raw thread rules. *)
 
@@ -249,9 +158,11 @@ Lemma axr_schedule_ret {Σ} : forall (σ : Σ) w R,
           (Some Fin.F1) σ}, w |= AX done R ]>.
 Proof with eauto with ticl.
   intros σ w R Hnd HR.
-  rewrite (instr_schedule_singleton_ret
+  rewrite (interp_schedule_nd_ret h_stateW 0
              [(Ret tt : ictree (yieldE + (forkE + stateE Σ)) unit)]%vector
-             σ eq_refl).
+             Fin.F1 σ eq_refl
+           : instr_schedule 1 _ (Some Fin.F1) σ ~ _).
+  rewrite interp_schedule_nd_empty.
   apply axr_ret...
 Qed.
 
@@ -266,28 +177,20 @@ Lemma axax_schedule_yield {Σ} : forall (σ : Σ) w R,
           (Some Fin.F1) σ}, w |= AX AX done R ]>.
 Proof with eauto with ticl.
   intros σ w R Hnd HR.
-  assert (Hend : observe
-      (([Vis ((inl Yield) : yieldE + (forkE + stateE Σ))
-            (fun _ : unit => Ret tt)]%vector
-          @ Fin.F1 := (Ret tt)) $ Fin.F1) = RetF tt)
-    by (now rewrite Vector.nth_replace_eq).
-  unfold instr_schedule, instr_stateE.
-  rewrite (schedule_singleton_yield
+  rewrite (interp_schedule_nd_yield h_stateW 0
              [Vis ((inl Yield) : yieldE + (forkE + stateE Σ))
                 (fun _ : unit => Ret tt)]%vector
+             Fin.F1
              (fun _ : unit => (Ret tt : ictree (yieldE + (forkE + stateE Σ)) unit))
-             eq_refl).
-  rewrite interp_erase_guard_yield.
-  rewrite interp_state_tau, sb_guard, interp_state_tau, sb_guard,
-    interp_state_tau, sb_guard.
-  rewrite interp_erase_br.
-  apply anr_state_br; split.
+             σ eq_refl
+           : instr_schedule 1 _ (Some Fin.F1) σ ~ _).
+  rewrite interp_schedule_nd_select.
+  apply anr_br; split.
   - csplit...
   - intro i; dependent destruction i.
-    + rewrite interp_state_tau, sb_guard, interp_state_tau, sb_guard.
-      rewrite (schedule_singleton_ret _ Hend).
-      rewrite interp_erase_guard_ret.
-      rewrite interp_state_tau, sb_guard, interp_state_ret.
+    + rewrite (interp_schedule_nd_ret h_stateW 0 _ Fin.F1 σ)
+        by (now rewrite Vector.nth_replace_eq).
+      rewrite interp_schedule_nd_empty.
       apply axr_ret...
     + inversion i.
 Qed.
@@ -307,12 +210,13 @@ Lemma aur_schedule_update {Σ} :
 Proof with eauto with ticl.
   intros f σ w ψ R Hlog HR.
   pose proof (ticll_not_done unit _ _ _ Hlog) as Hnd.
-  rewrite (instr_schedule_singleton_update f
+  rewrite (interp_schedule_nd_singleton_update f
              [Vis ((inr (inr Get)) : yieldE + (forkE + stateE Σ))
                 (fun σ0 : Σ =>
                    Vis ((inr (inr (Put (f σ0)))) : yieldE + (forkE + stateE Σ))
                      (fun _ : unit => Ret tt))]%vector
-             σ eq_refl).
+             σ eq_refl
+           : instr_schedule 1 _ (Some Fin.F1) σ ~ _).
   eapply aur_log.
   - cleft; apply axr_ret...
   - now apply ticll_bind_l.
@@ -332,14 +236,49 @@ Lemma aul_schedule_update {Σ} :
        w |= ψ AU φ )>.
 Proof with eauto with ticl.
   intros f σ w ψ φ Hlog Hret.
-  rewrite (instr_schedule_singleton_update f
+  rewrite (interp_schedule_nd_singleton_update f
              [Vis ((inr (inr Get)) : yieldE + (forkE + stateE Σ))
                 (fun σ0 : Σ =>
                    Vis ((inr (inr (Put (f σ0)))) : yieldE + (forkE + stateE Σ))
                      (fun _ : unit => Ret tt))]%vector
-             σ eq_refl).
+             σ eq_refl
+           : instr_schedule 1 _ (Some Fin.F1) σ ~ _).
   cright.
   apply anl_log.
   - cleft...
   - now apply ticll_bind_l.
 Qed.
+
+(** ** Round-robin recurrence from executable cycle certificates.
+
+    The top-level entry point for clients holding finite RR cycle runs
+    rather than a preconstructed log loop: transport through
+    [model_rr_emit_batches], then [emit_batches_agaf]. *)
+Section ModelRRRecurrence.
+  Context {St Act W X I : Type}
+    (n : nat) (actor : Fin.t (S n) -> Act)
+    (step : Act -> St -> option (St * option W))
+    (R : St -> St -> Prop)
+    (Hstep : Proper (eq ==> R ==> Roption (RelProd R eq)) step)
+    (boundary : I -> St) (batch : I -> list W) (next : I -> I)
+    (Inv : I -> Prop) (cursor period : nat)
+    (Hcursor : (cursor + period) mod (S n) = cursor mod (S n))
+    (Hnext : forall i, Inv i -> Inv (next i))
+    (Hnonempty : forall i, Inv i -> batch i <> Datatypes.nil)
+    (Hcycle : forall i, Inv i -> exists last,
+      run_turns step event_obs (rr_script n actor cursor period) (boundary i) =
+        Some (last,batch i) /\ R last (boundary (next i)))
+    (rank : I -> nat) (P : W -> Prop)
+    (Hprogress : forall i, Inv i ->
+      (exists o, List.In o (batch i) /\ P o) \/ rank (next i) < rank i).
+
+  Lemma model_rr_agaf : forall i w, Inv i -> not_done w ->
+    <( {(model_rr n actor step (boundary i) cursor : ictreeW W X)}, {w}
+      |= AG (AF visW {P}) )>.
+  Proof.
+    intros i w Hi Hd.
+    rewrite (model_rr_emit_batches n actor step R Hstep boundary batch next Inv
+      cursor period Hcursor Hnext Hnonempty Hcycle i Hi).
+    exact (emit_batches_agaf batch next Inv rank P Hnext Hnonempty Hprogress i w Hi Hd).
+  Qed.
+End ModelRRRecurrence.

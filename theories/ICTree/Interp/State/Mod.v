@@ -9,7 +9,6 @@ From TICL Require Import
   ICTree.Interp.Core
   Events.Core
   ICTree.Events.Writer
-  ICTree.Logic.Trans
   ICTree.Events.State
   ICTree.Equ
   ICTree.SBisim.
@@ -340,3 +339,27 @@ Proof with eauto.
   unfold instr_stateE.
   apply interp_state_put.
 Qed.
+
+(** * Interpreting one indexed emission.
+
+    [h_indexed] leaves exactly one observation and advances the shared
+    occurrence counter once; the untouched auxiliary state and the other
+    handler are arbitrary.  This is the interpretation-level companion of the
+    raw equation [h_indexed_log]. *)
+Local Typeclasses Transparent equ.
+Lemma interp_indexed_emit {A Sigma E X} {HE : Encode E}
+  (other : E ~> stateT (Sigma * nat) (ictreeW (indexed A)))
+  (a : A) (s : Sigma) (c : nat)
+  (k : unit -> ictree (E + writerE A) X) :
+  interp_state (h_sum other h_indexed)
+    ((ICtree.trigger (Log a) : ictree (E + writerE A) unit) >>= k) (s,c) ~
+  (log (stamp a c);; interp_state (h_sum other h_indexed) (k tt) (s,S c)).
+Proof.
+  unfold ICtree.trigger, resum, resum_ret, ReSum_inr, ReSumRet_inr;
+    rewrite bind_vis; setoid_rewrite bind_ret_l.
+  rewrite interp_state_vis; cbn [h_sum].
+  rewrite (h_indexed_log (Sigma:=Sigma) a s c), bind_bind.
+  apply sbisim_clo_bind_eq; [reflexivity | intros []].
+  rewrite bind_ret_l; apply sb_guard.
+Qed.
+Local Typeclasses Opaque equ.

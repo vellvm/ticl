@@ -52,12 +52,14 @@ Definition turn (q hdr: nat) : ictree sE unit := turnk q hdr (Ret tt).
 Theorem turnk_spec {X}: forall q hdr a ns pv vs h c (kt: ictree sE X),
     qrep hdr (a :: ns) (pv :: vs) h ->
     interp_state sh (turnk q hdr kt) (h, c)
-    ~ (log (SPop q pv c) ;;
-       interp_state sh kt (rot_heap hdr a (hdf ns 0) (zof hdr ns) h, S c)).
+    ~ (log (stamp (q,pv) c) ;;
+       interp_state sh kt (rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, S c)).
 Proof.
   intros q hdr a ns pv vs h c kt Hq; unfold turnk.
-  eapply (queue_turn_spec sh_tagged (semit q) (fun value index => SPop q value index)).
-  - intros; apply sinterp_emit.
+  eapply (queue_turn_spec h_indexed (semit q) (fun value index => stamp (q,value) index)).
+  - intros; unfold semit; apply (interp_indexed_emit heap_handler).
+
+From Coinduction Require Import coinduction.
   - exact Hq.
 Qed.
 
@@ -76,7 +78,7 @@ Definition sbody (u v: nat) (n: nat) : ictree sE (nat + unit) :=
 
 Definition sched (u v n: nat) : ictree sE unit := ICtree.iter (sbody u v) n.
 
-Definition srun (u v n: nat) (h: Heap) (c: nat) : ictreeW SObs (unit * SSig) :=
+Definition srun (u v n: nat) (h: Heap) (c: nat) : ictreeW (indexed (nat * nat)) (unit * SSig) :=
   interp_state sh (sched u v n) (h, c).
 
 (** One scheduler turn, for EITHER phase, in one statement.  [hdrof]/[tagof]
@@ -85,9 +87,9 @@ Definition srun (u v n: nat) (h: Heap) (c: nat) : ictreeW SObs (unit * SSig) :=
 Theorem sbody_spec: forall u v n a ns pv vs h c,
     qrep (hdrof u v n) (a :: ns) (pv :: vs) h ->
     interp_state sh (sbody u v n) (h, c)
-    ~ (log (SPop (tagof n) pv c) ;;
+    ~ (log (stamp ((tagof n),pv) c) ;;
        Ret (@inl nat unit (S n),
-            (rot_heap (hdrof u v n) a (hdf ns 0) (zof (hdrof u v n) ns) h, S c))).
+            (rot_heap (hdrof u v n) a (List.hd 0 ns) (zof (hdrof u v n) ns) h, S c))).
 Proof.
   intros u v n a ns pv vs h c Hq.
   unfold sbody, hdrof, tagof in *.
@@ -122,24 +124,16 @@ Proof. intros n H; unfold tagof; now rewrite H. Qed.
 Lemma tagof_odd: forall n, Nat.even n = false -> tagof n = 2.
 Proof. intros n H; unfold tagof; now rewrite H. Qed.
 
-(** ** Observation predicates *)
+(** ** Observation predicates
 
-Definition spopped (q nl: nat) : SObs -> Prop :=
-  fun o => stag o = q /\ sval o = nl.
+    Tagged observations are [indexed (nat * nat)]: the payload pairs the
+    queue tag with the (fun o => indexed_value o = value), and the occurrence index is the record's
+    own field.  A plain predicate is therefore
+    [fun o => indexed_value o = (q,nl)] and its freshness companion is
+    [indexed_after (fun x => x = (q,nl)) kb].
 
-Definition spopped_after (q nl kb: nat) : SObs -> Prop :=
-  fun o => stag o = q /\ sval o = nl /\ Nat.le kb (sidx o).
-
-(** A retained observation cannot masquerade as a later one: the frozen
-    freshness argument, restated at the tagged alphabet. *)
-Lemma sfresh_excludes_retained {X}: forall (t: ictreeW SObs X) q nl p pv j,
-    ~ <( t, {Obs (Log (SPop p pv j)) tt} |= visW {spopped_after q nl (S j)} )>.
-Proof.
-  intros t q nl p pv j H.
-  apply ticll_vis in H.
-  inversion H as [e0 v0 Hphi Heq]; subst.
-  destruct v0; destruct Hphi as (_ & _ & Hle); cbn in Hle; lia.
-Qed.
+    A retained observation cannot masquerade as a later one; that is
+    [ICTree.Logic.Trace.indexed_excludes_retained]. *)
 
 
 Lemma turnk_bind {X} q hdr (kt : ictree sE X) :

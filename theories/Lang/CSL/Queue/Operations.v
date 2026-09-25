@@ -54,28 +54,28 @@ Lemma queue_turn_spec {E W : Type} {HE : Encode E} {X}
     interp_state (h_sum heap_handler other) (queue_turn emit_value hdr tail) (h,c) ~
       (log (observe_value value c);;
        interp_state (h_sum heap_handler other) tail
-         (rot_heap hdr a (hdf ns 0) (zof hdr ns) h,S c)).
+         (rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h,S c)).
 Proof.
   intros Emit hdr a ns value values h c tail Hq.
   pose proof Hq as (Hwf & Hhd & Htl & Hch & Hdom).
   cbn in Hhd, Htl.
-  destruct Hch as (Ha & Hsa & Hch).
+  apply chain_cons in Hch as (Ha & Hsa & Hch).
   pose proof (qwf_neqs _ _ _ Hwf) as (Hha & Hsha & Hhsa & Hshsa & Hhshdr).
   pose proof (qrep_zof_dom _ _ _ _ _ _ Hq) as Hzdom.
   assert (Hhdrdom : h hdr <> None) by (rewrite Htl; discriminate).
   assert (Hsadom : h (S a) <> None) by (rewrite Hsa; discriminate).
   assert (Hshdrdom : h (S hdr) <> None) by (rewrite Hhd; discriminate).
-  assert (Hread_hdr : upd h (S hdr) (hdf ns 0) hdr = Some (last (a :: ns) 0))
+  assert (Hread_hdr : upd h (S hdr) (List.hd 0 ns) hdr = Some (last (a :: ns) 0))
     by (rewrite upd_neq by congruence; exact Htl).
   unfold queue_turn.
   etransitivity; [apply (interp_heap_rd other (S hdr) h c a _ Hhd)|].
   etransitivity; [apply (interp_heap_rd other a h c value _ Ha)|].
   etransitivity; [apply Emit|].
   apply sbisim_clo_bind_eq; [reflexivity | intros []].
-  etransitivity; [apply (interp_heap_rd other (S a) h (S c) (hdf ns 0) _ Hsa)|].
+  etransitivity; [apply (interp_heap_rd other (S a) h (S c) (List.hd 0 ns) _ Hsa)|].
   etransitivity;
-    [apply (interp_heap_wr_present other (S hdr) h (S c) (hdf ns 0) _ Hshdrdom)|].
-  etransitivity; [apply (interp_heap_rd other hdr (upd h (S hdr) (hdf ns 0)) (S c)
+    [apply (interp_heap_wr_present other (S hdr) h (S c) (List.hd 0 ns) _ Hshdrdom)|].
+  etransitivity; [apply (interp_heap_rd other hdr (upd h (S hdr) (List.hd 0 ns)) (S c)
     (last (a :: ns) 0) _ Hread_hdr)|].
   cbn beta iota.
   rewrite (zof_compute hdr a ns Hwf).

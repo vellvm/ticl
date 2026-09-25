@@ -1,7 +1,8 @@
 From Stdlib Require Import
   Nat
   Strings.String
-  QArith.QArith.
+  QArith.QArith
+  Arith.PeanoNat.
 
 
 From ExtLib Require Import
@@ -142,6 +143,101 @@ Module HeapImp.
               else Ret false
           end
       end.
+
+  (** Handler equations.  Zero allocation and absent frees still log the
+      state; a matching CAS logs even when the value is unchanged, while a
+      mismatching CAS returns without logging. *)
+  Lemma instr_heapimp_alloc_zero (m : Mem) :
+    instr_stateE (h_heapimp (HAlloc 0)) m ~
+      (log m;; Ret (fresh_addr (heap m),m)).
+  Proof.
+    destruct m as [s h].
+    unfold h_heapimp, instr_stateE.
+    rewrite interp_state_bind.
+    lazymatch goal with |- (?t >>= ?k) ~ _ =>
+      etransitivity; [apply sbisim_clo_bind_eq with (k2:=k);
+        [apply interp_state_get | intro result; reflexivity] |]
+    end.
+    rewrite bind_ret_l.
+    cbn [heap_init heap store].
+    rewrite interp_state_bind.
+    lazymatch goal with |- (?t >>= ?k) ~ _ =>
+      etransitivity; [apply sbisim_clo_bind_eq with (k2:=k);
+        [apply interp_state_put | intro result; reflexivity] |]
+    end.
+    rewrite bind_bind.
+    apply sbisim_clo_bind_eq; [reflexivity | intros []].
+    rewrite bind_ret_l, interp_state_ret; reflexivity.
+  Qed.
+
+  Lemma instr_heapimp_free a (m : Mem) :
+    instr_stateE (h_heapimp (HFree a)) m ~
+      (log (free_heap a m);; Ret (tt,free_heap a m)).
+  Proof.
+    unfold h_heapimp, instr_stateE.
+    rewrite interp_state_bind.
+    lazymatch goal with |- (?t >>= ?k) ~ _ =>
+      etransitivity; [apply sbisim_clo_bind_eq with (k2:=k);
+        [apply interp_state_get | intro result; reflexivity] |]
+    end.
+    rewrite bind_ret_l.
+    apply interp_state_put.
+  Qed.
+
+  Lemma instr_heapimp_write a v (m : Mem) :
+    instr_stateE (h_heapimp (HWrite a v)) m ~
+      (log (update_heap a v m);; Ret (tt,update_heap a v m)).
+  Proof.
+    unfold h_heapimp, instr_stateE.
+    rewrite interp_state_bind.
+    lazymatch goal with |- (?t >>= ?k) ~ _ =>
+      etransitivity; [apply sbisim_clo_bind_eq with (k2:=k);
+        [apply interp_state_get | intro result; reflexivity] |]
+    end.
+    rewrite bind_ret_l.
+    apply interp_state_put.
+  Qed.
+
+  Lemma instr_heapimp_cas_success a expected desired (m : Mem) :
+    lookup a (heap m) = Some expected ->
+    instr_stateE (h_heapimp (HCAS a expected desired)) m ~
+      (log (update_heap a desired m);; Ret (true,update_heap a desired m)).
+  Proof.
+    intros Lookup.
+    unfold h_heapimp, instr_stateE.
+    rewrite interp_state_bind.
+    lazymatch goal with |- (?t >>= ?k) ~ _ =>
+      etransitivity; [apply sbisim_clo_bind_eq with (k2:=k);
+        [apply interp_state_get | intro result; reflexivity] |]
+    end.
+    rewrite bind_ret_l.
+    rewrite Lookup, Nat.eqb_refl.
+    rewrite interp_state_bind.
+    lazymatch goal with |- (?t >>= ?k) ~ _ =>
+      etransitivity; [apply sbisim_clo_bind_eq with (k2:=k);
+        [apply interp_state_put | intro result; reflexivity] |]
+    end.
+    rewrite bind_bind.
+    apply sbisim_clo_bind_eq; [reflexivity | intros []].
+    rewrite bind_ret_l, interp_state_ret; reflexivity.
+  Qed.
+
+  Lemma instr_heapimp_cas_failure a actual expected desired (m : Mem) :
+    lookup a (heap m) = Some actual -> actual <> expected ->
+    instr_stateE (h_heapimp (HCAS a expected desired)) m ~ Ret (false,m).
+  Proof.
+    intros Lookup Hne.
+    unfold h_heapimp, instr_stateE.
+    rewrite interp_state_bind.
+    lazymatch goal with |- (?t >>= ?k) ~ _ =>
+      etransitivity; [apply sbisim_clo_bind_eq with (k2:=k);
+        [apply interp_state_get | intro result; reflexivity] |]
+    end.
+    rewrite bind_ret_l.
+    apply Nat.eqb_neq in Hne.
+    rewrite Lookup, Hne.
+    rewrite interp_state_ret; reflexivity.
+  Qed.
 
   (** Denotation of expressions to [ictree] *)
   Fixpoint cdenote_exp(e: CExp): ictree memE nat :=

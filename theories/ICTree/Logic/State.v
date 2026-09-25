@@ -58,6 +58,8 @@ Section StateLemmas.
   Qed.
 
   (** Ret lemma for [interp_state] and suffix [AX] *)
+
+From Coinduction Require Import coinduction.
   Theorem axr_state_ret{X}: forall R (x: X) w,
       R (x, σ) w ->
       not_done w ->

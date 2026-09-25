@@ -2,7 +2,7 @@
 
     The reference theorem is [examples/Queue.v], [rotate_agaf_pop]:
 
-      find nl q = Some i ->
+      find_index rel_dec nl q = Some i ->
       <( instr_prog rotate q, Pure |= AG AF visW {fun h => h = nl} )>
 
     over an ABSTRACT queue held in the interpretation state as a [list T].
@@ -47,6 +47,8 @@ From TICL Require Import
 From TICL Require Import Lang.CSL.Queue.Representation Lang.CSL.Queue.Sequential
   Lang.CSL.Queue.Operations Utils.Relations.
 
+From Coinduction Require Import coinduction.
+
 Import ICtree ICTreeNotations TiclNotations ListNotations.
 Local Open Scope ictree_scope.
 Local Open Scope ticl_scope.
@@ -58,27 +60,18 @@ Local Typeclasses Transparent sbisim.
 
 (** ** The observation projection.
 
-    [qval] is the documented projection from the queue-tagged observation to
-    the reference alphabet: the reference logs the popped payload, this
-    language logs the popped payload PLUS its occurrence index.  Erasing
-    [qidx] recovers the reference formula exactly. *)
-Definition popped (nl: nat) : QObs -> Prop := fun o => qval o = nl.
-Definition popped_after (nl kb: nat) : QObs -> Prop :=
-  fun o => qval o = nl /\ Nat.le kb (qidx o).
+    [indexed_value] is the documented projection from the queue observation
+    to the reference alphabet: the reference logs the (fun o => indexed_value o = payload), this
+    language logs the (fun o => indexed_value o = payload) PLUS its occurrence index.  Erasing
+    [indexed_index] recovers the reference formula exactly, and
+    [indexed_after] adds the occurrence bound.
 
-(** A retained observation cannot masquerade as a later one.  This is what
-    makes the freshness companion say something the plain theorem does not:
-    the world [Obs (Log (Pop v j)) tt] does NOT satisfy [popped_after nl (S j)],
-    so an [AF] of that formula cannot be discharged by the world already in
-    hand. *)
-Lemma fresh_excludes_retained {X}: forall (t: ictreeW QObs X) nl v j,
-    ~ <( t, {Obs (Log (Pop v j)) tt} |= visW {popped_after nl (S j)} )>.
-Proof.
-  intros t nl v j H.
-  apply ticll_vis in H.
-  inversion H as [e0 v0 Hphi Heq]; subst.
-  destruct v0; destruct Hphi as (_ & Hle); cbn in Hle; lia.
-Qed.
+    A retained observation cannot masquerade as a later one: the world
+    [Obs (Log (stamp v j)) tt] does NOT satisfy
+    [indexed_after (fun x => x = nl) (S j)], so an [AF] of that formula
+    cannot be discharged by the world already in hand.  That is
+    [ICTree.Logic.Trace.indexed_excludes_retained], proved once for every
+    payload and return type. *)
 
 
 Section Recurrence.
@@ -86,14 +79,14 @@ Section Recurrence.
       bound, and [P] any observation predicate satisfied by every pop of [nl]
       at or after [kb].  Instantiating [kb := 0] gives the plain recurrence
       theorem; leaving [kb] free gives the freshness companion. *)
-  Context (hdr nl kb: nat) (P: QObs -> Prop)
-          (HP: forall j, Nat.le kb j -> P (Pop nl j)).
+  Context (hdr nl kb: nat) (P: (indexed nat) -> Prop)
+          (HP: forall j, Nat.le kb j -> P (stamp nl j)).
 
   (** The [AG] invariant: the state is a valid representation of SOME queue
       that still contains [nl].  The abstract queue is existentially
       quantified -- no extraction function from heaps to lists is needed. *)
-  Definition Rq (_: unit) (s: Sig) (_: WorldW QObs) : Prop :=
-    exists ns vs d, qrep hdr ns vs (fst s) /\ find nl vs = Some d.
+  Definition Rq (_: unit) (s: Sig) (_: WorldW (indexed nat)) : Prop :=
+    exists ns vs d, qrep hdr ns vs (fst s) /\ find_index Nat.eqb nl vs = Some d.
 
   (** *** One iteration, as a deterministic suffix formula.
 
@@ -104,8 +97,8 @@ Section Recurrence.
       not_done w ->
       <[ {interp_state h_qE (rot_body hdr) (h, c)}, w
          |= ⊤ AU AX done= {(@inl unit unit tt,
-                            (rot_heap hdr a (hdf ns 0) (zof hdr ns) h, S c))}
-              {Obs (Log (Pop v c)) tt} ]>.
+                            (rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, S c))}
+              {Obs (Log (stamp v c)) tt} ]>.
   Proof.
     intros ns vs a v h c w Hq Hd.
     rewrite (rot_body_spec hdr a ns v vs h c Hq).
@@ -122,13 +115,13 @@ Section Recurrence.
       application of [aul_state_iter_ghost] plus a body case analysis. *)
   Definition InvQ (m: nat * nat) (_: unit) (s: Sig) : Prop :=
     exists ns vs d, qrep hdr ns vs (fst s)
-               /\ find nl vs = Some d
+               /\ find_index Nat.eqb nl vs = Some d
                /\ m = (kb - snd s, d).
 
   Lemma inner_af: forall h c ns vs d w,
       not_done w ->
       qrep hdr ns vs h ->
-      find nl vs = Some d ->
+      find_index Nat.eqb nl vs = Some d ->
       <( {interp_state h_qE (rotate hdr) (h, c)}, w |= AF visW {P} )>.
   Proof.
     intros h c ns vs d w Hd Hq Hf.
@@ -142,7 +135,7 @@ Section Recurrence.
       destruct vs as [| v vs']; [cbn in Hf; discriminate |].
       destruct ns as [| a ns']; [apply qrep_len in Hq; cbn in Hq; discriminate |].
       (* the shared "rotate once" step *)
-      assert (Hstep: forall d', find nl (vs' ++ [v]) = Some d' ->
+      assert (Hstep: forall d', find_index Nat.eqb nl (vs' ++ [v]) = Some d' ->
                            lexnat (kb - S c, d') m ->
                            (exists g' i' s' w',
                                not_done w'
@@ -153,8 +146,8 @@ Section Recurrence.
                                /\ lexnat g' m)).
       { intros d' Hd' Hlex.
         exists (kb - S c, d'), tt,
-          (rot_heap hdr a (hdf ns' 0) (zof hdr ns') h, S c),
-          (Obs (Log (Pop v c)) tt).
+          (rot_heap hdr a (List.hd 0 ns') (zof hdr ns') h, S c),
+          (Obs (Log (stamp v c)) tt).
         split; [constructor |].
         split; [eapply body_det; eassumption |].
         split; [| exact Hlex].
@@ -163,7 +156,7 @@ Section Recurrence.
           | split; [exact Hd' | reflexivity]]. }
       destruct d as [| d0].
       + (* the element is at the head *)
-        pose proof (find_head _ _ _ Hf) as Hv; subst v.
+        pose proof (find_index_head Nat.eqb Nat.eqb_eq _ _ _ Hf) as Hv; subst v.
         destruct (Nat.le_gt_cases kb c) as [Hle | Hgt].
         * (* and the occurrence bound is already met: observe it now *)
           left.
@@ -172,12 +165,12 @@ Section Recurrence.
           cleft; apply ticll_vis; constructor; now apply HP.
         * (* the bound is not met yet: rotate, the bound gets closer *)
           right.
-          destruct (find_last_ex nl vs') as (d' & Hd').
+          destruct (find_index_last_ex Nat.eqb Nat.eqb_eq nl vs') as (d' & Hd').
           apply (Hstep d'); [exact Hd' | rewrite Hm; left; cbn; lia].
       + (* the element is deeper in the queue: rotate, it gets closer *)
         right.
         apply (Hstep d0).
-        * rewrite <- rotl_cons; eapply find_rotl; exact Hf.
+        * rewrite <- rotl_cons; eapply find_index_rotl; exact Hf.
         * rewrite Hm; destruct (Nat.le_gt_cases kb c);
             [right; cbn; split; lia | left; cbn; lia].
   Qed.
@@ -186,7 +179,7 @@ Section Recurrence.
   Theorem rotate_agaf_core: forall h c ns vs d w,
       not_done w ->
       qrep hdr ns vs h ->
-      find nl vs = Some d ->
+      find_index Nat.eqb nl vs = Some d ->
       <( {interp_state h_qE (rotate hdr) (h, c)}, w |= AG (AF visW {P}) )>.
   Proof.
     intros h c ns vs d w Hd Hq Hf.
@@ -204,7 +197,7 @@ Section Recurrence.
         apply anr_log; [| apply ticll_top; assumption].
         cleft; apply axr_ret; [constructor |].
         exists tt; split; [reflexivity | split; [constructor |]].
-        destruct (find_rotl_pres _ _ _ _ Hf1) as (d' & Hd'').
+        destruct (find_index_rotl_pres Nat.eqb Nat.eqb_eq _ _ _ _ Hf1) as (d' & Hd'').
         exists (ns1' ++ [a1]), (vs1' ++ [v1]), d'; split.
         * apply (rot_heap_spec hdr a1 ns1' v1 vs1' h1 Hq1).
         * rewrite <- rotl_cons; exact Hd''.
@@ -215,7 +208,7 @@ End Recurrence.
 
     [rotate_agaf_pop_heap] is the heap-backed counterpart of the reference
     [rotate_agaf_pop]: same modal shape, same natural position argument, same
-    pure [find] lemmas, but over owned heap nodes.
+    pure [find_index] lemmas, but over owned heap nodes.
 
     [rotate_agaf_pop_fresh] is what the reference formula does NOT give: for
     every occurrence bound [k], every reachable state still eventually
@@ -225,23 +218,23 @@ End Recurrence.
 
 Theorem rotate_agaf_pop_heap: forall hdr nl h c ns vs d,
     qrep hdr ns vs h ->
-    find nl vs = Some d ->
-    <( {run hdr h c}, Pure |= AG (AF visW {popped nl}) )>.
+    find_index Nat.eqb nl vs = Some d ->
+    <( {run hdr h c}, Pure |= AG (AF visW {(fun o => indexed_value o = nl)}) )>.
 Proof.
   intros hdr nl h c ns vs d Hq Hf.
   unfold run.
-  eapply (rotate_agaf_core hdr nl 0 (popped nl));
+  eapply (rotate_agaf_core hdr nl 0 ((fun o => indexed_value o = nl)));
     [ intros j _; reflexivity | constructor | exact Hq | exact Hf ].
 Qed.
 
 Theorem rotate_agaf_pop_fresh: forall hdr nl h c ns vs d k,
     qrep hdr ns vs h ->
-    find nl vs = Some d ->
-    <( {run hdr h c}, Pure |= AG (AF visW {popped_after nl k}) )>.
+    find_index Nat.eqb nl vs = Some d ->
+    <( {run hdr h c}, Pure |= AG (AF visW {(indexed_after (fun x => x = nl) k)}) )>.
 Proof.
   intros hdr nl h c ns vs d k Hq Hf.
   unfold run.
-  eapply (rotate_agaf_core hdr nl k (popped_after nl k));
+  eapply (rotate_agaf_core hdr nl k ((indexed_after (fun x => x = nl) k)));
     [ intros j Hj; split; [reflexivity | exact Hj] | constructor | exact Hq | exact Hf ].
 Qed.
 
@@ -251,21 +244,12 @@ Qed.
     about the SAFE handler: an out-of-footprint dereference is stuck, and a
     stuck state satisfies no [AG] formula. *)
 
-Lemma nostep_bind {X Y}: forall (t: ictreeW QObs Y) (k: Y -> ictreeW QObs X) w,
-    ~ can_step t w -> ~ can_step (x <- t ;; k x) w.
-Proof.
-  intros t k w Hns Hs.
-  apply can_step_bind in Hs as [(t' & w' & TR & _) | (y & w' & TR & _)].
-  - apply Hns; exists t', w'; exact TR.
-  - apply Hns; exists ICtree.stuck, w'; exact TR.
-Qed.
-
 (** *** Control 1: the EMPTY queue.
 
     The head pointer is null, the null address is not allocated, so the first
     dereference of the body is out of footprint.  The run cannot step at all,
     hence NO [AG] formula holds of it -- in particular not the recurrence
-    formula.  This is what the hypothesis [find nl vs = Some d] (which forces
+    formula.  This is what the hypothesis [find_index Nat.eqb nl vs = Some d] (which forces
     a non-empty queue) buys. *)
 Theorem empty_queue_no_ag: forall hdr h c vs w phi,
     qrep hdr [] vs h -> ~ <( {run hdr h c}, w |= AG phi )>.
@@ -274,11 +258,12 @@ Proof.
   pose proof Hq as (Hwf & Hhd & _ & _ & _); cbn in Hhd.
   pose proof (qrep_null _ _ _ _ Hq) as H0.
   assert (Hns: ~ can_step (run hdr h c) w).
-  { unfold run, rotate; rewrite interp_state_unfold_iter.
+  { unfold run, rotate, h_qE; rewrite interp_state_unfold_iter.
     apply nostep_bind.
     unfold rot_body, queue_turn.
-    rewrite (interp_heap_rd q_emit_handler (S hdr) h c 0 _ Hhd).
-    now apply (interp_heap_rd_nostep q_emit_handler). }
+    rewrite (interp_heap_rd (h_indexed (A:=nat) (Sigma:=Heap))
+      (S hdr) h c 0 _ Hhd).
+    now apply (interp_heap_rd_nostep (h_indexed (A:=nat) (Sigma:=Heap))). }
   cdestruct H; now apply Hns.
 Qed.
 
@@ -290,8 +275,8 @@ Qed.
     statement below is the [AG] invariance; deriving [~ AF] from [AG ~] is the
     standard duality and is NOT mechanised here. *)
 
-Definition obs_sat (Q: nat -> Prop) : WorldW QObs -> Prop :=
-  fun w => forall o, w = Obs (Log o) tt -> Q (qval o).
+Definition obs_sat (Q: nat -> Prop) : WorldW (indexed nat) -> Prop :=
+  fun w => forall o, w = Obs (Log o) tt -> Q (indexed_value o).
 
 Theorem rotate_ag_obs: forall hdr h c ns vs w (Q: nat -> Prop),
     (forall x, In x vs -> Q x) ->
@@ -304,7 +289,7 @@ Proof.
   intros hdr h c ns vs w Q HQ Hd Hq Hne Hw.
   unfold rotate.
   apply (ag_state_iter h_qE (h, c)
-           (fun (_: unit) (s: Sig) (w: WorldW QObs) =>
+           (fun (_: unit) (s: Sig) (w: WorldW (indexed nat)) =>
               (exists ns' vs', qrep hdr ns' vs' (fst s) /\ ns' <> []
                           /\ (forall x, In x vs' -> Q x))
               /\ obs_sat Q w)

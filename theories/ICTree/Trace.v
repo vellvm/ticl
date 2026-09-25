@@ -172,6 +172,33 @@ Proof.
   exact (@trans_vis (writerE W) _ X (Log o) tt (fun _ => emit_list logs t)).
 Qed.
 
+(** * Realizing an infinite sequence of finite label chunks.
+
+    Each chunk must be NONEMPTY: an empty chunk cannot witness progress of a
+    stuck tree, so the productivity of the realization is genuine. *)
+CoInductive realizes {E : Type} {HE : Encode E} {X : Type}
+  (chunks : nat -> list (@label E HE)) (k : nat) (t : ictree E X) : Prop :=
+| realizes_next next :
+    chunks k <> [] ->
+    finite_steps t (chunks k) next ->
+    realizes chunks (S k) next -> realizes chunks k t.
+
+(** Any tree bisimilar to a root of a chunked sequence realizes its suffix. *)
+Lemma realizes_from_steps {E : Type} {HE : Encode E} {X : Type}
+  (chunks : nat -> list (@label E HE)) (roots : nat -> ictree E X) :
+  (forall k, chunks k <> []) ->
+  (forall k, exists next,
+     finite_steps (roots k) (chunks k) next /\ next ~ roots (S k)) ->
+  forall k (t : ictree E X), t ~ roots k -> realizes chunks k t.
+Proof.
+  intros Hne Hstep; cofix CIH; intros k t Eeq.
+  destruct (Hstep k) as (next & Hsteps & Enext).
+  assert (Esym : roots k ~ t) by (symmetry; exact Eeq).
+  destruct (finite_steps_sbisim _ _ _ Hsteps t Esym) as (next' & Hsteps' & Enext').
+  eapply realizes_next; [apply Hne|exact Hsteps'|].
+  apply CIH; transitivity next; [symmetry; exact Enext'|exact Enext].
+Qed.
+
 (** * Guard/log alignment and finite prefixes. *)
 
 Fixpoint rr_guards {W X} (n : nat) (t : ictreeW W X) : ictreeW W X :=
@@ -362,4 +389,78 @@ Proof.
   - injection E as Ep Er; subst p.
     exists 0, (List.length rest); cbn [rr_prefix rr_guards].
     step; constructor; intros []; rewrite (rr_prefix_no_events rest t Er); reflexivity.
+Qed.
+
+(** * Repeating finite observation batches.
+
+    One public representation of a log loop: each round emits the finite
+    batch of its index and advances the index.  Batches may be empty, but an
+    empty batch cannot satisfy the productivity premise of the coinduction
+    below -- no dummy log is inserted. *)
+Definition emit_batches {W I X : Type}
+  (batch : I -> list W) (next : I -> I) (i : I) : ictreeW W X :=
+  ICtree.iter (fun j => emit_list (batch j) (Ret (@inl I X (next j)))) i.
+
+(** The RAW unfolding: the administrative guard of [iter] is retained. *)
+Lemma emit_batches_unfold {W I X} (batch : I -> list W) (next : I -> I) i :
+  (emit_batches batch next i : ictreeW W X) ≅
+    emit_list (batch i) (Guard (emit_batches batch next (next i))).
+Proof.
+  unfold emit_batches at 1; rewrite unfold_iter.
+  rewrite emit_list_ret_bind; reflexivity.
+Qed.
+
+(** The same unfolding after absorbing the administrative guard. *)
+Lemma emit_batches_unfold_sbisim {W I X} (batch : I -> list W) (next : I -> I) i :
+  (emit_batches batch next i : ictreeW W X) ~
+    emit_list (batch i) (emit_batches batch next (next i) : ictreeW W X).
+Proof.
+  etransitivity; [apply equ_sbisim, emit_batches_unfold |].
+  apply emit_list_sbisim, sb_guard.
+Qed.
+
+(** A root family that emits its own batch each round IS the batch loop.
+    The nonempty-batch premise is essential: silent self-equations alone do
+    not justify this coinduction.
+
+    NOTE: every companion step below is discharged by [exact] at explicit
+    arguments.  With [W], [I] and [X] all variables, an [etransitivity] whose
+    middle term is still an evar leaves [apply] to solve a higher-order
+    unification problem that does not terminate.  This is unrelated to
+    typeclass transparency -- [coinduction] is imported above, so the
+    companion is already opaque to instance resolution. *)
+Lemma emit_batches_bisim {W I X} (batch : I -> list W) (next : I -> I)
+  (Inv : I -> Prop) (root : I -> ictreeW W X)
+  (Hnext : forall i, Inv i -> Inv (next i))
+  (Hnonempty : forall i, Inv i -> batch i <> [])
+  (Hroot : forall i, Inv i -> root i ~ emit_list (batch i) (root (next i))) :
+  forall i, Inv i -> root i ~ (emit_batches batch next i : ictreeW W X).
+Proof.
+  unfold sbisim; apply_coinduction; fold_sbisim; intros R IH i Hi.
+  assert (Hstep : coinduction.bt (sb eq) R
+      (emit_list (batch i) (root (next i)))
+      (emit_list (batch i) (emit_batches batch next (next i) : ictreeW W X))).
+  { destruct (batch i) as [|o rest] eqn:Eb;
+      [exfalso; exact (Hnonempty i Hi Eb) |].
+    eapply equ_sbt_closed_goal; [apply emit_list_cons | apply emit_list_cons |].
+    apply step_sb_vis; intros []; exists tt; split; try reflexivity;
+      apply emit_list_st; apply IH, Hnext, Hi. }
+  etransitivity; [apply (coinduction.gfp_bt (sb eq) R), (Hroot i Hi) |].
+  etransitivity; [exact Hstep |].
+  apply (coinduction.gfp_bt (sb eq) R); symmetry.
+  exact (emit_batches_unfold_sbisim batch next i).
+Qed.
+
+(** An everywhere-empty batch loop is raw-equivalent to [stuck].  Both sides
+    unfold to a [Guard], so the recursive obligation sits under matching
+    [GuardF] constructors; this is a RAW equivalence, not an invisible-guard
+    justification of a strong bisimulation. *)
+Lemma emit_batches_empty {W I X} (batch : I -> list W) (next : I -> I) :
+  (forall j, batch j = []) ->
+  forall i, (emit_batches batch next i : ictreeW W X) ≅ stuck.
+Proof.
+  intro Hempty; __coinduction_equ R CIH; intro i.
+  rewrite emit_batches_unfold, (Hempty i), emit_list_nil.
+  rewrite unfold_stuck.
+  constructor; apply CIH.
 Qed.

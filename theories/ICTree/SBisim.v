@@ -60,6 +60,18 @@ Lemma equ_sbisim {E} {HE : Encode E} {X} (t u : ictree E X) :
   t ≅ u -> t ~ u.
 Proof. intro Htu; rewrite Htu; reflexivity. Qed.
 
+(** Forgetting finitely many leading guards is a strong bisimulation. *)
+Lemma guard_equ_sbisim {E} {HE : Encode E} {X} (t u : ictree E X) :
+  guard_equ t u -> t ~ u.
+Proof.
+  intro H; induction H as [t u [E1|E1]|t|t u H IH|t u v H1 IH1 H2 IH2].
+  - now rewrite E1.
+  - rewrite E1; apply sb_guard.
+  - reflexivity.
+  - now symmetry.
+  - now transitivity u.
+Qed.
+
 (** Lemma relating [trans] and strong simulation [ssim]*)
 Lemma ssim_trans `{HE: Encode E} {X}:
   forall (s t s': ictree E X) l (L: rel _ _),

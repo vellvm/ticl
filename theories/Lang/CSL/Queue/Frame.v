@@ -48,6 +48,8 @@ From TICL Require Import
   Lang.CSL.Queue.Representation Lang.CSL.Queue.Sequential Lang.CSL.Queue.Recurrence
   Lang.CSL.Queue.Trace Lang.CSL.Queue.Layout.
 
+From Coinduction Require Import coinduction.
+
 Import ICtree ICTreeNotations TiclNotations ListNotations.
 Local Open Scope ictree_scope.
 Local Open Scope ticl_scope.
@@ -217,8 +219,8 @@ Theorem rotate_agaf_pop_framed: forall hdr nlv ns vs d h f c,
     qrepX hdr ns vs h ->
     hdisj h f ->
     f 0 = None ->
-    find nlv vs = Some d ->
-    <( {run hdr (hunion h f) c}, Pure |= AG (AF visW {popped nlv}) )>.
+    find_index Nat.eqb nlv vs = Some d ->
+    <( {run hdr (hunion h f) c}, Pure |= AG (AF visW {(fun o => indexed_value o = nlv)}) )>.
 Proof.
   intros hdr nlv ns vs d h f c Hx Hd Hf Hfind.
   eapply rotate_agaf_pop_heap; [eapply qrepX_frame; eassumption | exact Hfind].
@@ -228,8 +230,8 @@ Theorem rotate_agaf_pop_fresh_framed: forall hdr nlv ns vs d h f c k,
     qrepX hdr ns vs h ->
     hdisj h f ->
     f 0 = None ->
-    find nlv vs = Some d ->
-    <( {run hdr (hunion h f) c}, Pure |= AG (AF visW {popped_after nlv k}) )>.
+    find_index Nat.eqb nlv vs = Some d ->
+    <( {run hdr (hunion h f) c}, Pure |= AG (AF visW {(indexed_after (fun x => x = nlv) k)}) )>.
 Proof.
   intros hdr nlv ns vs d h f c k Hx Hd Hf Hfind.
   eapply rotate_agaf_pop_fresh; [eapply qrepX_frame; eassumption | exact Hfind].

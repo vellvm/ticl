@@ -12,7 +12,8 @@ From TICL Require Import
   ICTree.Interp.State.Mod
   ICTree.Events.State
   ICTree.Events.Writer
-  Lang.MeQ.
+  Lang.MeQ
+  Utils.Lists.
 
 From ExtLib Require Export
   Structures.MonadState
@@ -44,78 +45,26 @@ Module Queue.
               (CIfSome opt (fun x => CPush x))
               (fun 'tt => CRet (Some tt)))).
               
-  (* Element [t] appears unique in [l] in some position *)
-  Fixpoint find(t: T) (l: list T): option nat :=
-    match l with
-    | nil => None
-    | h :: ts => if h =? t then
-                 Some 0
-               else
-                 option_map S (find t ts)
-    end.
-
-  Lemma unfold_find_hd: forall t h ts,
-      find t (h :: ts) =
-        (if h =? t then
-           Some 0
-         else
-           option_map S (find t ts)).
-  Proof. reflexivity. Qed.
-
-  Lemma find_last_ex: forall nl ts,
-    exists i0 : nat, find nl (ts ++ [nl]) = Some i0.
-  Proof with eauto with ticl.
-    induction ts.
-    - exists 0; cbn.
-      rewrite rel_dec_eq_true...
-      typeclasses eauto.
-    - destruct IHts.
-      destruct (a =? nl) eqn:Hnl.
-      + rewrite rel_dec_correct in Hnl; subst.
-        exists 0; cbn.
-        rewrite rel_dec_eq_true...
-        typeclasses eauto.
-      + exists (S x); cbn.
-        rewrite Hnl, H.
-        reflexivity.
-  Qed.
-
-  Lemma find_app_l: forall nl ts n l,
-    find nl ts = Some n ->
-    find nl (ts ++ l) = Some n.
-  Proof with eauto.
-    induction ts; intros.
-    - inv H.
-    - cbn.
-      rewrite unfold_find_hd in H.
-      destruct (a =? nl) eqn:Hnl...
-      destruct (find nl ts); inv H.
-      rewrite IHts with (n:=n0)...
-  Qed.
-
-  Lemma nat_eqb_S: forall n,
-      Nat.eqb n (S n) = false.
-  Proof. induction n; auto. Qed.
 
   Local Typeclasses Transparent equ.
   Local Typeclasses Transparent sbisim.
 
   Theorem rotate_agaf_pop: forall q i (nl: T),
-      find nl q = Some i ->
+      find_index (@rel_dec T eq HDec) nl q = Some i ->
       <( {instr_prog rotate q}, Pure |= AG AF visW {fun h => h = nl} )>.
   Proof with eauto with ticl.
     intros.
     unfold rotate; cbn. 
     apply ag_qprog_invariance with
-      (R:= fun q w => exists h ts, q = h :: ts /\ (h = nl \/ (h <> nl /\ exists i, find nl ts = Some i)))...
+      (R:= fun q w => exists h ts, q = h :: ts /\ (h = nl \/ (h <> nl /\ exists i, find_index (@rel_dec T eq HDec) nl ts = Some i)))...
     - destruct q; try solve [ inv H ].
       exists t, q; intuition.
-      rewrite unfold_find_hd in H.
+      rewrite find_index_cons in H.
       destruct (t =? nl) eqn:Hnl; inv H.
       + rewrite rel_dec_correct in Hnl.
         left...
       + right.
-        destruct (find nl q) eqn:Hq, i; inv H1.
+        destruct (find_index (@rel_dec T eq HDec) nl q) eqn:Hq, i; inv H1.
         apply neg_rel_dec_correct in Hnl; split...
     - clear H q.
       intros q w (h & ts & -> & [-> | (Hnl & Hi)]) Hd.
@@ -148,16 +97,16 @@ Module Queue.
                        now apply rel_dec_correct.
                    --- right.
                        apply neg_rel_dec_correct in Hnl; split...
-                       apply find_last_ex.
+                       apply (find_index_last_ex (@rel_dec T eq HDec) rel_dec_correct).
       + (* h <> nl *)
         clear i.
         destruct Hi as (i & Hi).
         split.
         * eapply aul_qprog_eventually with
             (Ri:=fun q _ =>
-                   exists h ts, q = h :: ts /\ (h = nl \/ (h <> nl /\ exists i, find nl ts = Some i)))
+                   exists h ts, q = h :: ts /\ (h = nl \/ (h <> nl /\ exists i, find_index (@rel_dec T eq HDec) nl ts = Some i)))
             (f:=fun q =>
-                  match find nl q with
+                  match find_index (@rel_dec T eq HDec) nl q with
                   | None => length q
                   | Some v => v
                   end)...
@@ -189,19 +138,19 @@ Module Queue.
                        split.
                        +++ destruct ts'; cbn; try solve [inv Hi'].
                            exists t, (ts' ++ [h']); split...
-                           rewrite unfold_find_hd in Hi'.
+                           rewrite find_index_cons in Hi'.
                            destruct (t =? nl) eqn:Hnl''; inv Hi'.
                            *** rewrite rel_dec_correct in Hnl''; subst.
                                now left.
                            *** right; split.
                                ---- now apply neg_rel_dec_correct in Hnl''.
-                               ---- destruct (find nl ts') eqn:Hts'; inv H0.
+                               ---- destruct (find_index (@rel_dec T eq HDec) nl ts') eqn:Hts'; inv H0.
                                     exists n.
-                                    now apply find_app_l.
+                                    now apply find_index_app_l.
                        +++ (* variant *)
                          apply rel_dec_neq_false with (r:=HDec) in Hnl'; [|typeclasses eauto].
                          rewrite Hnl', Hi'; cbn.
-                         erewrite find_app_l...
+                         erewrite find_index_app_l...
         * eapply anr_qprog_bind_l.
           -- apply anr_pop_cons...
              csplit...
@@ -219,11 +168,11 @@ Module Queue.
                 ** rewrite rel_dec_correct in Hnl'; subst...
                 ** right.
                    rewrite Hnl' in H0.
-                   destruct (find nl ts) eqn:Hts; inv H0.
+                   destruct (find_index (@rel_dec T eq HDec) nl ts) eqn:Hts; inv H0.
                    split.
                    --- now apply neg_rel_dec_correct.
                    --- exists n.
-                       now apply find_app_l.
+                       now apply find_index_app_l.
   Qed.
 End Queue.
 

@@ -37,12 +37,9 @@ Section PoolSBisim.
     t1 ~ t2 ->
     pool_sbisim (v1 @ i := t1) (v2 @ i := t2).
   Proof.
-    intros Hv Ht j.
-    destruct (Fin.eq_dec i j) as [Hij | Hij].
-    - subst j. rewrite Vector.nth_replace_eq, Vector.nth_replace_eq. exact Ht.
-    - rewrite Vector.nth_replace_neq by congruence.
-      rewrite Vector.nth_replace_neq by congruence.
-      apply Hv.
+    intros Hv Ht.
+    exact (vector_replace_pointwise (fun a b : thread E => a ~ b)
+      v1 v2 i t1 t2 (fun j _ => Hv j) Ht).
   Qed.
 
   Lemma remove_pool_sbisim {n} (v1 v2 : pool E (S n)) (i : Fin.t (S n)) :
@@ -59,11 +56,7 @@ Section PoolSBisim.
     pool_sbisim v1 v2 ->
     pool_sbisim ((t1 :: v1)%vector) ((t2 :: v2)%vector).
   Proof.
-    intros Ht Hv i.
-    refine (Fin.caseS' i
-      (fun i => (((t1 :: v1)%vector) $ i) ~ (((t2 :: v2)%vector) $ i)) _ _).
-    - exact Ht.
-    - intro j. apply Hv.
+    exact (vector_cons_pointwise (fun a b : thread E => a ~ b) t1 t2 v1 v2).
   Qed.
 
   (** ** [equ]-level pool congruences, used by [schedule_pool_proper]. *)
@@ -76,12 +69,9 @@ Section PoolSBisim.
     t1 ≅ t2 ->
     pool_equ (v1 @ i := t1) (v2 @ i := t2).
   Proof.
-    intros Hv Ht j.
-    destruct (Fin.eq_dec i j) as [Hij | Hij].
-    - subst j. rewrite Vector.nth_replace_eq, Vector.nth_replace_eq. exact Ht.
-    - rewrite Vector.nth_replace_neq by congruence.
-      rewrite Vector.nth_replace_neq by congruence.
-      apply Hv.
+    intros Hv Ht.
+    exact (vector_replace_pointwise (fun a b : thread E => a ≅ b)
+      v1 v2 i t1 t2 (fun j _ => Hv j) Ht).
   Qed.
 
   Lemma remove_pool_equ {n} (v1 v2 : pool E (S n)) (i : Fin.t (S n)) :
@@ -98,11 +88,7 @@ Section PoolSBisim.
     pool_equ v1 v2 ->
     pool_equ ((t1 :: v1)%vector) ((t2 :: v2)%vector).
   Proof.
-    intros Ht Hv i.
-    refine (Fin.caseS' i
-      (fun i => (((t1 :: v1)%vector) $ i) ≅ (((t2 :: v2)%vector) $ i)) _ _).
-    - exact Ht.
-    - intro j. apply Hv.
+    exact (vector_cons_pointwise (fun a b : thread E => a ≅ b) t1 t2 v1 v2).
   Qed.
 End PoolSBisim.
 
@@ -936,3 +922,41 @@ Proof.
   rewrite (schedule_pool_proper n v v' focus Hvv).
   reflexivity.
 Qed.
+
+(** * Pools up to finitely many leading guards.
+
+    The canonical slotwise lift of [guard_equ].  Reuses
+    [vector_replace_pointwise] and the Stdlib vector replacement laws; there
+    is no second pool relation. *)
+Section PoolGuardEqu.
+  Context {E : Type} {HE : Encode E}.
+
+  Definition pool_guard_equ {n} (ts us : pool E n) : Prop :=
+    forall i, guard_equ (ts $ i) (us $ i).
+
+  Lemma pool_equ_guard {n} (ts us : pool E n) :
+    pool_equ ts us -> pool_guard_equ ts us.
+  Proof. intros H i; apply guard_equ_equ, H. Qed.
+
+  Lemma pool_guard_replace {n} (ts us : pool E n) (i : Fin.t n) t u :
+    pool_guard_equ ts us -> guard_equ t u ->
+    pool_guard_equ (ts @ i := t) (us @ i := u).
+  Proof.
+    intros Hpool Htu.
+    exact (vector_replace_pointwise guard_equ ts us i t u (fun j _ => Hpool j) Htu).
+  Qed.
+
+  Lemma pool_replace_current {n} (ts : pool E n) (i : Fin.t n) :
+    pool_equ (ts @ i := (ts $ i)) ts.
+  Proof.
+    intro j; destruct (Fin.eq_dec j i) as [->|Hne].
+    - rewrite Vector.nth_replace_eq; reflexivity.
+    - rewrite Vector.nth_replace_neq by congruence; reflexivity.
+  Qed.
+
+  Lemma pool_equ_guard_trans {n} (ts us vs : pool E n) :
+    pool_equ ts us -> pool_guard_equ us vs -> pool_guard_equ ts vs.
+  Proof.
+    intros Eq H i; eapply guard_equ_trans; [apply guard_equ_equ, Eq|apply H].
+  Qed.
+End PoolGuardEqu.

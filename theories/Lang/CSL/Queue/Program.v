@@ -5,7 +5,7 @@ From TICL Require Import
   ICTree.Interp.Yield.RoundRobin ICTree.Interp.Yield.SBisim Utils.Vectors.
 From TICL Require Import Lang.CSL.Queue.Alternating Lang.CSL.Queue.Representation
   Lang.CSL.Queue.Separation Lang.CSL.Queue.Layout Lang.CSL.Queue.Frame
-  Lang.CSL.Queue.Operations.
+  Lang.CSL.Queue.Operations Lang.CSL.Queue.Trace.
 
 Import ICtree ICTreeNotations ListNotations VectorNotations.
 Local Open Scope ictree_scope.
@@ -43,7 +43,7 @@ Fixpoint fill_nodes (first : nat) (values : list nat) : CProg unit :=
 Definition init_queue (hdr : nat) (values : list nat) : CProg unit :=
   let ns := queue_nodes hdr (length values) in
   CBind (CWrite hdr (last ns 0)) (fun _ =>
-  CBind (CWrite (S hdr) (hdf ns 0)) (fun _ =>
+  CBind (CWrite (S hdr) (List.hd 0 ns)) (fun _ =>
   fill_nodes (hdr + 2) values)).
 
 Definition new_queue (values : list nat) : CProg nat :=
@@ -280,14 +280,14 @@ Local Ltac queue_prefix R law :=
 Local Ltac queue_fault Hnone :=
   cbv beta;
   lazymatch goal with
-  | |- interp_state sh (ICtree.bind (heap_read (E:=sE) ?a) ?next) (?h,?c) ~ _ =>
+  | |- interp_state ?H (ICtree.bind (heap_read (E:=sE) ?a) ?next) (?h,?c) ~ _ =>
     let Hfault := fresh "Hfault" in
-    assert (Hfault : interp_state sh (heap_read (E:=sE) a >>= next) (h,c) ≅ stuck) by
+    assert (Hfault : interp_state H (heap_read (E:=sE) a >>= next) (h,c) ≅ stuck) by
       (etransitivity; [apply interp_state_bind|];
        etransitivity;
        [ apply equ_clo_bind with (S := eq)
-           (k2 := fun '(x,s') => interp_state sh (next x) s');
-         [exact (sinterp_srd_stuck a h c Hnone) | intros x y <-; reflexivity]
+           (k2 := fun '(x,s') => interp_state H (next x) s');
+         [exact ((interp_heap_rd_stuck (h_indexed (A:=(nat * nat)) (Sigma:=Heap))) a h c Hnone) | intros x y <-; reflexivity]
        | apply bind_stuck_equ ]);
     eapply equ_clos_sbisim_goal; [exact Hfault | reflexivity | reflexivity]
   end.
@@ -303,10 +303,10 @@ Proof.
     [|apply (coinduction.gfp_bt (sb eq) R); symmetry; apply srun_turn].
   unfold turn, turnk, queue_turn.
   destruct (h (S (hdrof u v n))) as [a|] eqn:Hhead.
-  - queue_prefix R ltac:(eapply sinterp_rd; exact Hhead).
+  - queue_prefix R ltac:(eapply (interp_heap_rd (h_indexed (A:=(nat * nat)) (Sigma:=Heap))); exact Hhead).
     destruct (h a) as [payload|] eqn:Hpayload.
-    + queue_prefix R ltac:(eapply sinterp_rd; exact Hpayload).
-      queue_prefix R ltac:(apply sinterp_emit).
+    + queue_prefix R ltac:(eapply (interp_heap_rd (h_indexed (A:=(nat * nat)) (Sigma:=Heap))); exact Hpayload).
+      queue_prefix R ltac:(unfold semit; apply (interp_indexed_emit heap_handler)).
       eapply equ_sbt_closed_goal; [apply bind_bind | apply bind_bind |].
       unfold log, ICtree.trigger.
       eapply equ_sbt_closed_goal; [apply bind_vis | apply bind_vis |].
@@ -332,6 +332,101 @@ Proof.
   change (interp_schedule_rr sh 2 (queue_workers u v false false)
     (Some (queue_slot 0)) 0 (h,c) ~ srun u v 0 h c).
   apply queue_pool_bisim.
+Qed.
+
+(** One whole rotation of the reference scheduler, read off [sbody_spec]. *)
+Local Ltac srun_pop_turn Hq :=
+  lazymatch type of Hq with
+  | qrep ?hdr (?a :: ?ns) (?pv :: ?vs) ?h =>
+    lazymatch goal with
+    | |- srun ?u ?v ?n h ?c ~ ?rhs =>
+      let Hbody := constr:(sbody_spec u v n a ns pv vs h c Hq) in
+      unfold srun, sched at 1;
+      rewrite interp_state_unfold_iter;
+      cbv beta;
+      match goal with
+      | |- sbisim _ (ICtree.bind _ ?k) _ =>
+        eapply Transitive_sbisim;
+        [ eapply sbisim_clo_bind_eq with (k2 := k);
+          [ exact Hbody | intros ?; reflexivity ]
+        | ]
+      end;
+      rewrite bind_bind;
+      apply sbisim_clo_bind_eq; [reflexivity | intros []];
+      rewrite bind_ret_l, sb_guard;
+      lazymatch goal with
+      | |- _ ~ ?tail =>
+        change (srun u v (S n) (qstep hdr (a :: ns) h) (S c) ~ tail)
+      end
+    end
+  end.
+
+(** The first four pops of two disjoint queues under the shared source
+    round-robin scheduler: queue 1 rotates [a;b], queue 2 its singleton [d],
+    alternating, with the observation counter advancing once per pop. *)
+Lemma parallel_queues_four_pop_bisim u a b v d h x y z c :
+  qrep u [a;b] [x;y] h -> qrep v [d] [z] h -> Disj u [a;b] v [d] ->
+  let h1 := qstep u [a;b] h in
+  let h2 := qstep v [d] h1 in
+  let h3 := qstep u [b;a] h2 in
+  let h4 := qstep v [d] h3 in
+  run_rr (parallel_queues u v) h c ~
+    (log (stamp (1,x) c);; log (stamp (2,z) (S c));;
+     log (stamp (1,y) (S (S c)));; log (stamp (2,z) (S (S (S c))));;
+     srun u v 4 h4 (S (S (S (S c))))).
+Proof.
+  intros H1 H2 Hd; cbv zeta.
+  pose proof (qstep_qrep u [a;b] [x;y] h H1 ltac:(discriminate)) as H1a.
+  change (qrep u [b;a] [y;x] (qstep u [a;b] h)) in H1a.
+  pose proof (foreign_pres u [a;b] [x;y] v [d] [z] h
+    H1 ltac:(discriminate) H2 Hd) as H2a.
+  pose proof (Disj_rotl_l u [a;b] v [d] ltac:(discriminate) Hd) as Hda.
+  change (Disj u [b;a] v [d]) in Hda.
+  pose proof (foreign_pres v [d] [z] u [b;a] [y;x]
+    (qstep u [a;b] h) H2a ltac:(discriminate) H1a
+    (Disj_sym u [b;a] v [d] Hda)) as H1b.
+  pose proof (qstep_qrep v [d] [z] (qstep u [a;b] h)
+    H2a ltac:(discriminate)) as H2b.
+  change (qrep v [d] [z] (qstep v [d] (qstep u [a;b] h))) in H2b.
+  pose proof (foreign_pres u [b;a] [y;x] v [d] [z]
+    (qstep v [d] (qstep u [a;b] h)) H1b ltac:(discriminate) H2b Hda) as H2c.
+  etransitivity; [exact (run_rr_parallel_bisim u v h c) |].
+  srun_pop_turn H1.
+  srun_pop_turn H2a.
+  srun_pop_turn H1b.
+  srun_pop_turn H2c.
+  reflexivity.
+Qed.
+
+(** Queue 1 takes the first source turn; a fault there faults the whole run. *)
+Local Lemma parallel_queues_first_turn_stuck u v h c :
+  interp_state sh (turn 1 u) (h,c) ~
+    (stuck : ictreeW (indexed (nat * nat)) (unit * SSig)) ->
+  run_rr (parallel_queues u v) h c ~
+    (stuck : ictreeW (indexed (nat * nat)) (unit * SSig)).
+Proof.
+  intro Hfault.
+  unfold parallel_queues; rewrite run_rr_fork_bind.
+  change (interp_schedule_rr sh 2 (queue_workers u v false false)
+    (Some (queue_slot 0)) 0 (h,c) ~
+    (stuck : ictreeW (indexed (nat * nat)) (unit * SSig))).
+  etransitivity; [apply queue_pool_turn |].
+  lazymatch goal with
+  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
+    etransitivity;
+    [apply sbisim_clo_bind_eq with (k2 := next);
+      [exact Hfault | intro result; reflexivity] |]
+  end.
+  eapply equ_clos_sbisim_goal; [apply bind_stuck_equ | reflexivity | reflexivity].
+Qed.
+
+Lemma parallel_queues_hemp_stuck u v c :
+  run_rr (parallel_queues u v) hemp c ~
+    (stuck : ictreeW (indexed (nat * nat)) (unit * SSig)).
+Proof.
+  apply parallel_queues_first_turn_stuck.
+  assert (Hhead : hemp (S u) = None) by reflexivity.
+  unfold turn, turnk, queue_turn; queue_fault Hhead.
 Qed.
 
 (** Silent initialization in the real shared source scheduler. *)
@@ -428,7 +523,7 @@ Lemma interp_rr_new_queue n (ts : pool sE (S n)) (i : Fin.t (S n))
       (Some i) m (new_queue_heap hdr values h,c).
 Proof.
   intro Finite.
-  destruct (sh_alloc_finite h (2 * S (length values)) c Finite ltac:(lia))
+  destruct (heap_handler_alloc_finite h (2 * S (length values)) c Finite ltac:(lia))
     as (hdr & Positive & Free & First & _).
   exists hdr; split; [exact Positive |]; split; [exact Free |]; split.
   - now apply new_queue_heap_finite.
@@ -491,4 +586,21 @@ Proof.
     cbn [after1]; rewrite interp_rr_bind.
     etransitivity; [exact Run2 |].
     reflexivity.
+Qed.
+
+(** An allocated empty first queue has head pointer [0], and the null cell is
+    unallocated: the first source turn faults, whatever the second queue is. *)
+Lemma allocated_parallel_queues_empty_stuck values c :
+  run_rr (allocated_parallel_queues [] values) hemp c ~
+    (stuck : ictreeW (indexed (nat * nat)) (unit * SSig)).
+Proof.
+  destruct (run_rr_allocated_parallel [] values c)
+    as (u & v & h & _ & Owned & Run).
+  destruct (owned_queues_sound _ _ _ _ _ _ _ Owned)
+    as ((_ & Hhead & _ & _ & Hnull & _) & _ & _).
+  change (h (S u) = Some 0) in Hhead.
+  rewrite Run; apply parallel_queues_first_turn_stuck.
+  unfold turn, turnk, queue_turn.
+  etransitivity; [eapply (interp_heap_rd h_indexed); exact Hhead |].
+  queue_fault Hnull.
 Qed.

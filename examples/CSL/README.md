@@ -21,7 +21,9 @@ re-export files.
 | `ICTree.Logic.Bind` | Five exact `*_log_iff` rules, shared by the CSL emit matrix |
 | `ICTree.Logic.State` | Ghost-ranked `aul_state_iter_ghost` over arbitrary handlers |
 | `ICTree.Interp.State.Mod` | Generic `interp_state_trigger_bind` normalization |
-| `Utils.Relations` | One lexicographic construction, finite first-index search, interval counts, and infinite-occurrence facts |
+| `Utils.Relations` | Lexicographic ranks, bounded predicate search, interval counts, and infinite-occurrence facts |
+| `Utils.Lists` | Comparator-parametric first-match search and shared list-rotation lemmas |
+| `Utils.Vectors` | Pointwise update/removal/cons laws shared by pool equivalence and bisimulation |
 | `Lang.CSL.Heap` | Checked heap laws shared by both observation alphabets |
 | `Lang.CSL.Segments` | Exact and bisimilar first-yield segments, guard transport, arbitrary-pool ND/RR equations |
 | `Lang.CSL.Queue` | Queue representation/layout, one polymorphic rotation implementation and proof, framing, composition, source programs, and recurrence |
@@ -37,6 +39,22 @@ local read/write/emit/allocation/CAS tactics. Temporal consumers use the source
 matrix, log-prefix rules, and state-iteration rules. Queue recurrence shares the
 same ghost-ranked rule with active queue composition; it does not reprove the
 underlying fixed point.
+
+The abstract and heap-backed queues use the same `find_index` implementation.
+Natural payloads pass `Nat.eqb`; the abstract queue passes its existing
+`@rel_dec T eq HDec`. Equality-dependent search lemmas take comparator
+correctness explicitly. Repeated payloads select their **first** occurrence;
+rotation preserves existence without claiming that duplicate payloads have a
+unique position. `List.hd default list` replaces the old `hdf list default`.
+
+Duplicate vector inversion and unused triple-projection well-foundedness
+helpers were removed in favor of `inversion_0` and Stdlib's `wf_inverse_image`.
+Scheduler parity and allocator cursor proofs share `rr_pick_mod_congr`.
+Obsolete allocator transport/specialization helpers were removed, but unused
+public structural rules and substantive verification goals remain intentional
+proof roots. In particular, the 130 CSL rules, `aur_schedule_update`,
+`free_local_disj`, `free_local_frame`, and allocator safety/liveness results are
+not classified as dead merely because no other theorem references them.
 
 ## Actual execution and proof boundary
 
@@ -96,7 +114,7 @@ It also covers empty input lists. No initialized heap is assumed.
 - `rotate_agaf_pop_alloc_fresh`: queue 1 recurrence at every inclusive index bound.
 - `rotate_agaf_pop_alloc_q2_fresh`: queue 2 recurrence at every inclusive index bound.
 
-These four theorems require only one successful `find` premise for each payload
+These four theorems require one successful `find_index Nat.eqb` premise per payload
 list, not representation, disjointness, or preallocated-heap premises. They
 transport the existing worker recurrence through the proved initialization
 bisimulation. The lower-level statements remain:
@@ -228,13 +246,13 @@ S = /home/eioannidis/ticl-sl/spark_submission/experiments/separate-active-compos
 
 | Source | Current owner |
 | --- | --- |
-| `P/Pcm.v`, complete | `theories/Lang/CSL/Pcm.v` |
+| `P/Pcm.v`, complete | `theories/Utils/Pcm.v` (interface), `theories/Events/HeapModel.v` (heap model) |
 | `S/SLang.v`, heap prefix | `theories/Lang/CSL/Heap.v` |
 | `Q/HeapQ.v` | `theories/Lang/CSL/Queue/Representation.v` |
 | `Q/QLang.v` | `theories/Lang/CSL/Queue/Sequential.v`, shared `Operations.v` |
 | `Q/Recurrence.v` | `theories/Lang/CSL/Queue/Recurrence.v`, `ICTree/Logic/State.v`, `Utils/Relations.v` |
 | `Q/Trace.v` | `theories/Lang/CSL/Queue/Trace.v` |
-| `Q/Layout.v` | `theories/Lang/CSL/Queue/Layout.v`; concrete fixtures in `examples/CSL/Layout.v` |
+| `Q/Layout.v` | `theories/Lang/CSL/Queue/Layout.v`; stride-two node geometry in `theories/Events/HeapModel.v` |
 | `Q/Frame.v` | `theories/Lang/CSL/Queue/Frame.v` |
 | `S/Sep2.v` | `theories/Lang/CSL/Queue/Separation.v` |
 | `S/SLang.v`, turn/scheduler suffix | `theories/Lang/CSL/Queue/Alternating.v`, shared `Operations.v` |
@@ -266,76 +284,31 @@ donor dependency and changes no generic scheduler or refiner API.
 
 ## Behavioral verification
 
-The existing operational regression modules and the shared-event/temporal suites compile:
+Verification uses the actual proof development and its source programs; there
+are no separate test, smoke, or fixture modules. The former regression
+consumers were reduced to general statements in their semantic owners:
 
-- `PcmTests`: same-cell and overlapping-block ownership exclusion, distinct-cell
-  separation, and the actual fresh-block split beside an unchanged points-to frame.
-- `HeapTests`: checked access/fault behavior, exact emit observation/counter,
-  zero-initialized allocation, whole-block first-fit rejection of partial overlap,
-  zero-size faults, and silent divergence on a saturated infinite heap.
-- `RoundRobinTests`: modulo choices, returned cursors, singleton-branch cursor
-  advance, actual scheduler selection, and a language-independent shared state
-  counter with complete trace `1,11,12,22` and final state 22.
-- `InterpTests`: a child sees the parent's write, a scoped child skips both
-  remaining loop body and post-loop continuation, and the finite alternating
-  tagged trace. Allocation tests read a fresh zero cell and allocate across two
-  active threads: parent base 1, child base 3, emit indices 0 and 1. All contracts
-  include the final returned shared state.
-- `QueueTests`: both literal preallocated fixtures and dynamically initialized
-  programs on `hemp`, with both tags' ordinary/fresh recurrence and four-pop
-  prefixes. The demo prefix is `(1,7,0),(2,8,1),(1,9,2),(2,8,3)`. Duplicate
-  payloads still produce tags `1,2,1,2` at indices `0,1,2,3`. Source probes read
-  the newly initialized `[7;9]` queue and both zero pointers of an empty queue.
-- `NegativeTests`: retains the ownership/sequential/freshness controls. The
-  low-level `parallel_queues` still faults on `hemp`. Dynamically initializing
-  `[]` and `[8]` succeeds, but the first worker then faults on its null payload
-  read; that execution is `stuck` and fails queue-1 recurrence. Sequential
-  controls are not claims about arbitrary concurrent pools.
-- `examples/HeapEventTests`: allocation/free/reallocation through shared triggers,
-  single-cell deletion with a surviving block cell and frame, absent free,
-  checked read-after-free, all 15 trigger embeddings, and the distinct HeapImp
-  zero-allocation/write/free/CAS instrumentation policies.
-- `TiclTests`: 23 temporal consumers using the new structural cells, including
-  first-fit and finite allocation, shared write/CAS ordering, scoped child halt,
-  universal ND versus cursor-dependent RR selection, productive and silent loops,
-  strong termination/fault controls, immediate AU matching, and one-step raw free
-  completion. Final heap postconditions use pointwise `heq`.
+- `Events.HeapModel`: `block_pto_overlap_false` (a block and an overlapping
+  points-to cannot separate) and `hfree_absent_noop` (freeing an absent cell is
+  pointwise the identity).
+- `Lang.HeapImp.HeapImp`: the five `instr_heapimp_*` equations for zero
+  allocation, free, write, and successful/failed CAS. Same-value CAS still logs;
+  a mismatching CAS does not.
+- `ICTree.Eq.Bind.equ_guard_stuck`: a tree raw-equivalent to its own guard is
+  raw-equivalent to `stuck`.
+- `Lang.CSL.Ticl`: `run_{nd,rr}_emit_loop_ag` (a productive `CUntilNone` loop
+  satisfies `AG ⊤` in every not-done world) and `run_{nd,rr}_silent_loop_no_ag`
+  (a silent loop is `stuck`, hence fails `AG ⊤`), beside the unchanged 130 rules.
+- `Lang.CSL.Queue.Program`: `parallel_queues_four_pop_bisim` (the exact first
+  four pops of any two represented, disjoint queues, then the reference loop;
+  payloads may repeat), `parallel_queues_hemp_stuck`, and
+  `allocated_parallel_queues_empty_stuck`; `Lang.CSL.Queue.Ticl` derives the two
+  corresponding `*_no_ag` results for an arbitrary formula.
+- `examples/CSL/Overlap.v` and `examples/CSL/Allocator/Counterexamples.v` keep
+  their witness queue, heaps, scripts, and observation tables as section-local
+  `Let`s, discharged into the public statements.
 
-The shared-event and structural-rule extension passed its event-only, backend,
-interpreter/helper, temporal-interface, and consumer compilation gates, followed
-by `dune build`. All 130 public names were individually checked after importing
-only the `Lang.CSL` umbrella. The current focused checks are:
-
-```sh
-dune build _build/default/examples/HeapEventTests.vo \
-  _build/default/examples/CSL/TiclTests.vo
-dune build
-```
-
-The initial baseline, every dependency gate, and the final `make build` passed.
-The allocation extension rejected both requested temporary mutations with
-nonzero proof compilation status:
-
-1. Replacing `block_freeb`'s recursive `None` branch with `true` failed in
-   `Heap.block_freeb_spec`, before the heap/source regression modules.
-2. Replacing only `new_queue`'s `CAlloc` prefix with `CRet 1` failed in
-   `Program.interp_rr_new_queue` at the source allocation equation, before
-   `QueueTests`.
-
-Both correct bodies were restored immediately. Afterwards:
-
-```sh
-dune build examples/CSL/PcmTests.vo examples/CSL/HeapTests.vo \
-  examples/CSL/RoundRobinTests.vo examples/CSL/InterpTests.vo \
-  examples/CSL/QueueTests.vo examples/CSL/NegativeTests.vo
-make build
-```
-
-Both commands exited zero. No commit or index modification was performed.
-
-The earlier scheduler migration separately recorded rejection of `rr_pick`
-returning `Fin.F1` in `rr_pick_even`, and per-thread `run_rr` interpretation in
-`run_rr_unfold`. Those generic mechanisms were not mutated for this extension.
+`dune build` compiles all of them.
 
 ## Trust-base audit
 
@@ -350,8 +323,8 @@ paths, HQ dependencies, donor runtime paths, and layer violations.
 The structural-rule audit separately checked `anl_csl_nd_yield`,
 `anr_csl_rr_emit`, `aul_csl_nd_until_none`, `aur_csl_rr_cas`,
 `ag_csl_rr_until_none`, `aur_csl_nd_alloc_finite`, `ag_csl_rr_alloc_finite`,
-`anr_csl_nd_heap_free`, `ag_csl_rr_heap_free`, `nd_emit_loop_ag`, and
-`rr_emit_loop_ag` through `rocq_assumptions`. Each reports only the inherited
+`anr_csl_nd_heap_free`, `ag_csl_rr_heap_free`, `run_nd_emit_loop_ag`, and
+`run_rr_emit_loop_ag` through `rocq_assumptions`. Each reports only the inherited
 `FunctionalExtensionality.functional_extensionality_dep` and
 `Eqdep.Eq_rect_eq.eq_rect_eq`. No new axiom or unfinished proof command was
 introduced; the new heap postconditions do not identify functions by
@@ -360,9 +333,12 @@ functional extensionality.
 The library extraction audit found `Utils.Relations.finite_first` closed under
 the global context. `ICTree.Logic.State.aul_state_iter_ghost` and
 `ICTree.Trace.rr_aligned_sbisim` use only inherited UIP. The generalized
-`Lang.CSL.Segments.source_segment_scheduler_steps` uses inherited UIP and
-dependent functional extensionality. Boolean-observation smoke proofs exercise
-the promoted trace and AF-return rules independently of `SObs`.
+`ICTree.Interp.Yield.Segments.segment_scheduler_steps` uses inherited UIP and
+dependent functional extensionality.
+
+The list-search deduplication audit found `find_index_rotl_pres`,
+`vector_replace_pointwise`, and `rr_pick_mod_congr` closed under the global
+context.
 
 The previously recorded baseline `examples.Queue.Queue.rotate_agaf_pop` prints:
 
@@ -405,8 +381,8 @@ The functional-extensionality dependency is inherited from the **pre-existing**
 `ICTree.Interp.Yield.SBisim.schedule_pool_proper`, whose `Print Assumptions`
 reports those same two axioms. That scheduler proof was not changed.
 `interp_schedule_rr_equ` consumes it as required by the pool-congruence API.
-This is not an added heap-extensionality axiom: `Heap.upd_pcm` and
-`Queue.owned_queues_sound` each print `Closed under the global context`.
+This is not an added heap-extensionality axiom: `HeapModel.HeapCancellative` and
+`Queue.Separation.owned_queues_sound` each print `Closed under the global context`.
 There is no new admitted constant, allocator-choice or finite-support oracle,
 assumed initialization correctness, fairness or recurrence axiom, or assumed
 program bisimulation.

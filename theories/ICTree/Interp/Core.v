@@ -58,6 +58,8 @@ Proof.
     rewrite ?bind_ret_l.
     reflexivity.
   - reflexivity.
+
+From Coinduction Require Import coinduction.
   - setoid_rewrite bind_ret_l.
     reflexivity.
 Qed.

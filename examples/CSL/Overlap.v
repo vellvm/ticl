@@ -12,6 +12,8 @@
     showing that the conclusion the frame rule would license is actually
     false.
 
+    The witness queue (header 2, nodes [4;6], payloads [7;9]) and the two
+    candidate frames are section [Let]s, discharged into the statements.
     This file is frame-variant independent. *)
 
 From Stdlib Require Import
@@ -20,27 +22,41 @@ From Stdlib Require Import
   Arith.PeanoNat.
 
 From TICL Require Import Lang.CSL.Queue.Representation Lang.CSL.Queue.Trace
-  Lang.CSL.Queue.Frame.
-From examples Require Import CSL.Layout.
+  Lang.CSL.Queue.Frame Lang.CSL.Queue.Layout.
 
 Import ListNotations.
 Local Open Scope list_scope.
 
-(** ** C1: overlap *)
+Section Overlap.
 
+Let h1 : Heap := qheap 2 [4;6] [7;9].
 (** The candidate frame claims address 3, which is the queue's HEAD POINTER
-    cell -- squarely inside [qcells hdr1 ns1]. *)
-Definition fbad : Heap := Pcm.hsingle 3 42.
+    cell -- squarely inside [qcells 2 [4;6]]. *)
+Let fbad : Heap := hsingle 3 42.
+(** The candidate frame allocates address 0, which the language's
+    representation uses as the end-of-list terminator. *)
+Let fnull : Heap := hsingle 0 1.
 
-Lemma three_in_footprint: In 3 (qcells hdr1 ns1).
-Proof. unfold hdr1, ns1, qcells; cbn; tauto. Qed.
+Local Lemma qwf1 : qwf 2 [4;6].
+Proof.
+  split; [| split].
+  - repeat (apply NoDup_cons; [cbn; intuition congruence |]); apply NoDup_nil.
+  - cbn; intuition congruence.
+  - cbn; intros x y Hx Hy; intuition lia.
+Qed.
+
+Local Lemma qrep1 : qrep 2 [4;6] [7;9] h1.
+Proof. apply qheap_qrep; [apply qwf1 | reflexivity | discriminate]. Qed.
+
+(** ** C1: overlap *)
 
 (** (a) The compatibility check rejects it. *)
 Theorem overlap_rejected: ~ hdisj h1 fbad.
 Proof.
   intro Hd; destruct (Hd 3) as [H | H].
-  - apply (qrep_fp hdr1 ns1 vs1 h1 qrep1 3 three_in_footprint); exact H.
-  - unfold fbad, Pcm.hsingle in H; cbn in H; discriminate.
+  - assert (Hin : In 3 (qcells 2 [4;6])) by (unfold qcells; cbn; tauto).
+    apply (qrep_fp 2 [4;6] [7;9] h1 qrep1 3 Hin); exact H.
+  - unfold fbad, hsingle in H; cbn in H; discriminate.
 Qed.
 
 (** (b) ...and the conclusion it would license is FALSE.  The cell the
@@ -48,56 +64,40 @@ Qed.
     assertion about it can be carried across the queue's execution.  This is
     what makes [hdisj] a genuine hypothesis rather than a convenience: the
     failure is semantic, not a stuck proof. *)
-Lemma rot_changes_head_pointer: qstep hdr1 ns1 h1 3 = Some 6 /\ h1 3 = Some 4.
+Local Lemma rot_changes_head_pointer : qstep 2 [4;6] h1 3 = Some 6 /\ h1 3 = Some 4.
 Proof. split; reflexivity. Qed.
 
 Theorem overlap_frame_not_preserved:
-    cellsat [(3, 4)] h1 /\ ~ cellsat [(3, 4)] (qstep hdr1 ns1 h1).
+    cellsat [(3, 4)] h1 /\ ~ cellsat [(3, 4)] (qstep 2 [4;6] h1).
 Proof.
   split.
   - unfold cellsat; repeat constructor.
   - intro H; unfold cellsat in H; rewrite Forall_forall in H.
-    specialize (H (3, 4) (in_eq _ _)); cbn in H; discriminate.
-Qed.
-
-(** For contrast, the SAME shape of assertion about a cell outside the
-    footprint is preserved -- so the refutation above is about overlap and not
-    about [cellsat] being unpreservable in general. *)
-Theorem disjoint_cell_is_preserved: forall n a v,
-    high a ->
-    cellsat [(a, v)] h1 -> cellsat [(a, v)] (qstepN hdr1 n ns1 h1).
-Proof.
-  intros n a v Ha H; eapply cellsat_agree; [| exact H].
-  intros p Hp; cbn in Hp; destruct Hp as [E | []]; rewrite <- E; cbn.
-  apply (qstepN_agree n hdr1 ns1 vs1 h1 qrep1 ns1_nonnil).
-  intro C; apply (high_not_low a); [exact Ha | now apply qcells1_low].
+    specialize (H (3, 4) (in_eq _ _)); cbn [fst snd] in H.
+    rewrite (proj1 rot_changes_head_pointer) in H; discriminate.
 Qed.
 
 (** ** C2: the null address *)
 
-(** The candidate frame allocates address 0, which the language's
-    representation uses as the end-of-list terminator. *)
-Definition fnull : Heap := Pcm.hsingle 0 1.
-
 (** (a) The compatibility check rejects it. *)
 Theorem null_frame_rejected: fnull 0 <> None.
-Proof. unfold fnull, Pcm.hsingle; cbn; discriminate. Qed.
+Proof. unfold fnull, hsingle; cbn; discriminate. Qed.
 
 (** (b) ...and the conclusion it would license is FALSE: the extended heap is
     not a representation of the queue at all, so the frozen recurrence theorem
     does not even apply to it.  [hdisj h1 fnull] DOES hold, so this is a
     condition that disjointness alone does not supply. *)
 Theorem null_frame_disjoint_but_bad:
-    hdisj h1 fnull /\ ~ qrep hdr1 ns1 vs1 (hunion h1 fnull).
+    hdisj h1 fnull /\ ~ qrep 2 [4;6] [7;9] (hunion h1 fnull).
 Proof.
   split.
   - intro x; destruct (h1 x) eqn:E; [| now left].
-    right; unfold fnull, Pcm.hsingle.
+    right; unfold fnull, hsingle.
     destruct (Nat.eq_dec 0 x) as [Ex | Hne]; [| reflexivity].
     exfalso; rewrite <- Ex in E.
-    pose proof (qrep_null hdr1 ns1 vs1 h1 qrep1) as H0; congruence.
+    pose proof (qrep_null 2 [4;6] [7;9] h1 qrep1) as H0; congruence.
   - intro Hq; pose proof (qrep_null _ _ _ _ Hq) as H0.
-    unfold hunion, fnull, Pcm.hsingle in H0; cbn in H0; discriminate.
+    unfold hunion, fnull, hsingle in H0; cbn in H0; discriminate.
 Qed.
 
 (** ** The two conditions are independent
@@ -113,3 +113,5 @@ Proof.
   - split; [reflexivity | apply overlap_rejected].
   - split; [apply (proj1 null_frame_disjoint_but_bad) | apply null_frame_rejected].
 Qed.
+
+End Overlap.

@@ -44,7 +44,7 @@ Local Typeclasses Transparent sbisim.
 Lemma run_step: forall hdr a ns v vs h c,
     qrep hdr (a :: ns) (v :: vs) h ->
     run hdr h c
-    ~ (log (Pop v c) ;; run hdr (rot_heap hdr a (hdf ns 0) (zof hdr ns) h) (S c)).
+    ~ (log (stamp v c) ;; run hdr (rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h) (S c)).
 Proof.
   intros hdr a ns v vs h c Hq.
   unfold run, rotate.
@@ -55,13 +55,15 @@ Proof.
   apply sbisim_clo_bind_eq; [reflexivity | intros []].
   rewrite bind_ret_l.
   apply sb_guard.
+
+From Coinduction Require Import coinduction.
 Qed.
 
 (** The heap after one rotation, and after [n] of them. *)
 Definition qstep (hdr: nat) (ns: list nat) (h: Heap) : Heap :=
   match ns with
   | [] => h
-  | a :: ns' => rot_heap hdr a (hdf ns' 0) (zof hdr ns') h
+  | a :: ns' => rot_heap hdr a (List.hd 0 ns') (zof hdr ns') h
   end.
 
 Fixpoint qstepN (hdr: nat) (n: nat) (ns: list nat) (h: Heap) : Heap :=
@@ -70,24 +72,17 @@ Fixpoint qstepN (hdr: nat) (n: nat) (ns: list nat) (h: Heap) : Heap :=
   | S k => qstepN hdr k (rotl ns) (qstep hdr ns h)
   end.
 
-Fixpoint rotlN {A} (n: nat) (l: list A) : list A :=
-  match n with 0 => l | S k => rotlN k (rotl l) end.
 
 (** The observation prefix of [n] rotations, with the continuation threaded so
     that no [bind]-associativity reasoning is needed. *)
 Fixpoint runN (hdr: nat) (n: nat) (ns vs: list nat) (h: Heap) (c: nat)
-              (k: ictreeW QObs (unit * Sig)) : ictreeW QObs (unit * Sig) :=
+              (k: ictreeW (indexed nat) (unit * Sig)) : ictreeW (indexed nat) (unit * Sig) :=
   match n with
   | 0 => k
-  | S m => log (Pop (hd 0 vs) c) ;;
+  | S m => log (stamp (hd 0 vs) c) ;;
            runN hdr m (rotl ns) (rotl vs) (qstep hdr ns h) (S c) k
   end.
 
-Lemma rotl_nonnil: forall (l: list nat), l <> [] -> rotl l <> [].
-Proof.
-  intros [| a l] H; [contradiction |]; cbn.
-  intro C; apply app_eq_nil in C as (_ & C); discriminate.
-Qed.
 
 Lemma qstep_qrep: forall hdr ns vs h,
     qrep hdr ns vs h -> ns <> [] ->

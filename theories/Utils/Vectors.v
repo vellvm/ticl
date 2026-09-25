@@ -95,6 +95,31 @@ Proof.
         exact (Hagree (Fin.FS k) ltac:(intro Heq; apply Hk, (Fin.FS_inj _ _ Heq))).
 Qed.
 
+(** Updating related vectors preserves their relation at every slot. *)
+Lemma vector_replace_pointwise {A n} (R : A -> A -> Prop)
+    (v1 v2 : vec n A) (i : Fin.t n) (x1 x2 : A) :
+  (forall j, i <> j -> R (Vector.nth v1 j) (Vector.nth v2 j)) ->
+  R x1 x2 ->
+  forall j, R (Vector.nth (Vector.replace v1 i x1) j)
+              (Vector.nth (Vector.replace v2 i x2) j).
+Proof.
+  intros Hv Hx j; destruct (Fin.eq_dec i j) as [->|Hne].
+  - rewrite !Vector.nth_replace_eq; exact Hx.
+  - rewrite !Vector.nth_replace_neq by congruence; apply Hv, Hne.
+Qed.
+
+Lemma vector_cons_pointwise {A n} (R : A -> A -> Prop)
+    (x1 x2 : A) (v1 v2 : vec n A) :
+  R x1 x2 -> (forall j, R (Vector.nth v1 j) (Vector.nth v2 j)) ->
+  forall i, R (Vector.nth (x1 :: v1) i) (Vector.nth (x2 :: v2) i).
+Proof.
+  intros Hx Hv i.
+  refine (Fin.caseS' i
+    (fun j => R (Vector.nth (x1 :: v1) j) (Vector.nth (x2 :: v2) j)) _ _).
+  - exact Hx.
+  - intro j; apply Hv.
+Qed.
+
 Equations nth_map{A n}(v: vec n A)(i: fin n)(f: A -> A): vec n A by wf n lt :=
   nth_map [] _ _ := [];
   nth_map (h :: h' :: ts) (FS (FS j)) _ := h :: (nth_map (h' :: ts) (FS j) f);
@@ -179,10 +204,6 @@ Proof.
   exists x. intuition.
 Qed.
 
-Lemma vec0 {T}: forall (v:Vector.t T 0), v = [].
-  apply (Vector.case0 (fun x => x=[])).
-  reflexivity.
-Qed.
 
 Fixpoint zip {A B : Type} {n : nat} (a : Vector.t A n) (b : Vector.t B n) : Vector.t (A * B) n :=
   match a in Vector.t _ n return Vector.t B n -> Vector.t (A * B) n  with

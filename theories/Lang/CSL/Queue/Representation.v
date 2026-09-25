@@ -8,8 +8,8 @@
       null-terminated singly linked list of two-cell nodes at the DISTINCT
       addresses [ns] carrying the payloads [vs], anchored at a two-cell header
       [hdr] (tail pointer) / [S hdr] (head pointer);
-    - the pure list theory the temporal proof consumes: [chain] append/split,
-      the footprint permutation, and the [find] lemmas restated at [nat].
+    - the pure list theory the temporal proof consumes: [chain] append/split
+      and the footprint permutation, using the generic [Utils.Lists] theory.
 
     Design notes, and why they are not free choices:
 
@@ -40,29 +40,17 @@ Import ListNotations.
 
 (** ** The resource model *)
 
-From TICL Require Export Lang.CSL.Heap.
+From TICL Require Export Lang.CSL.Heap Utils.Lists.
 
-(** ** Cells, footprints and well-formedness *)
+(** ** Footprints and well-formedness
 
-(** The two cells of a node named [a]: the payload cell [a] and the link cell
-    [S a]. *)
-Definition cells (l: list nat) : list nat := flat_map (fun a => [a; S a]) l.
+    The stride-two node geometry ([cells], [in_cells]) is owned by
+    [TICL.Events.HeapModel]; the queue adds only its header pair. *)
 
 (** The footprint of a queue: the header's two cells plus every node's two
     cells. *)
 Definition qcells (hdr: nat) (ns: list nat) : list nat := hdr :: S hdr :: cells ns.
 
-Lemma in_cells: forall x l, In x (cells l) <-> exists a, In a l /\ (x = a \/ x = S a).
-Proof.
-  intros x l; unfold cells; rewrite in_flat_map; split.
-  - intros (a & Ha & Hx); exists a; split; [assumption |].
-    cbn in Hx; destruct Hx as [Heq | [Heq | []]]; [left | right]; congruence.
-  - intros (a & Ha & Hx); exists a; split; [assumption |].
-    cbn; destruct Hx as [-> | ->]; auto.
-Qed.
-
-Lemma cells_app: forall l1 l2, cells (l1 ++ l2) = cells l1 ++ cells l2.
-Proof. intros; apply flat_map_app. Qed.
 
 (** Well-formedness of the node NAMES: distinct, non-null, and non-overlapping
     (no node's payload cell is another node's link cell).  Payloads are
@@ -141,36 +129,71 @@ Qed.
 
 (** ** The chain of nodes *)
 
-Definition hdf (l: list nat) (f: nat) : nat := match l with nil => f | a :: _ => a end.
-
-Lemma hdf_app: forall l1 l2 f, hdf (l1 ++ l2) f = hdf l1 (hdf l2 f).
-Proof. now intros [| a l1] l2 f. Qed.
-
 (** [chain h ns vs fin]: the addresses [ns] carry the payloads [vs] and are
     linked in order, the last link holding [fin].  The terminator is a
     PARAMETER: that is what lets the rotation retarget the last link by
-    [chain_split] + [chain_app] instead of a bespoke surgery lemma. *)
-Fixpoint chain (h: Heap) (ns vs: list nat) (fin: nat) : Prop :=
-  match ns, vs with
-  | nil, nil => True
-  | a :: ns', v :: vs' =>
-      h a = Some v /\ h (S a) = Some (hdf ns' fin) /\ chain h ns' vs' fin
-  | _, _ => False
-  end.
+    [chain_split] + [chain_app] instead of a bespoke surgery lemma.
+
+    The link structure is the generic [Utils.Lists.linked] predicate at the
+    successor cell [S a]; payload agreement is an ordinary [Forall2].  The
+    allocator's free list, whose links live at [a], reuses the same theory
+    through a different edge relation. *)
+Definition chain (h: Heap) (ns vs: list nat) (fin: nat) : Prop :=
+  linked (fun a next => h (S a) = Some next) ns fin
+  /\ List.Forall2 (fun a v => h a = Some v) ns vs.
+
+Lemma chain_nil: forall h fin, chain h [] [] fin.
+Proof. intros h fin; split; [exact I | constructor]. Qed.
+
+Lemma chain_cons: forall h a ns v vs fin,
+    chain h (a :: ns) (v :: vs) fin <->
+      h a = Some v /\ h (S a) = Some (List.hd fin ns) /\ chain h ns vs fin.
+Proof.
+  intros h a ns v vs fin; unfold chain; cbn [linked].
+  rewrite Forall2_cons_iff; tauto.
+Qed.
 
 Lemma chain_len: forall h ns vs f, chain h ns vs f -> length ns = length vs.
+Proof. intros h ns vs f (_ & Hf); eapply Forall2_length; exact Hf. Qed.
+
+Lemma Forall2_cells_mono: forall (h h': Heap) (ns vs: list nat),
+    Forall2 (fun a v => h a = Some v) ns vs ->
+    (forall x, In x (cells ns) -> h' x = h x) ->
+    Forall2 (fun a v => h' a = Some v) ns vs.
 Proof.
-  induction ns as [| a ns IH]; intros [| v vs] f Hc; cbn in *; try contradiction; auto.
-  destruct Hc as (_ & _ & Hc); f_equal; eauto.
+  intros h h' ns vs Hf; induction Hf as [| a v ns vs Hav Hf IH]; intro Hag;
+    [constructor |].
+  constructor.
+  - rewrite Hag; [exact Hav |].
+    apply in_cells; exists a; split; now left.
+  - apply IH; intros x Hx; apply Hag.
+    apply in_cells in Hx as (b & Hb & Hxb).
+    apply in_cells; exists b; split; [now right | exact Hxb].
+Qed.
+
+Lemma chain_mono: forall h h' ns vs fin,
+    chain h ns vs fin ->
+    (forall x, In x (cells ns) -> h' x = h x) ->
+    chain h' ns vs fin.
+Proof.
+  intros h h' ns vs fin (Hl & Hf) Hag; split.
+  - eapply linked_mono; [| exact Hl].
+    intros a b Ha Hab; rewrite Hag; [exact Hab |].
+    apply in_cells; exists a; split; [exact Ha | now right].
+  - eapply Forall2_cells_mono; [exact Hf | exact Hag].
 Qed.
 
 Lemma chain_dom: forall h ns vs f x, chain h ns vs f -> In x (cells ns) -> h x <> None.
 Proof.
-  induction ns as [| a ns IH]; intros [| v vs] f x Hc Hin; cbn in *;
-    try contradiction; try tauto.
-  destruct Hc as (Ha & Hsa & Hc).
-  destruct Hin as [Heq | [Heq | Hin]]; [subst; now rewrite Ha | subst; now rewrite Hsa |].
-  eapply IH; eauto.
+  intros h ns; induction ns as [| a ns IH]; intros vs f x Hc Hin.
+  - cbn in Hin; contradiction.
+  - destruct vs as [| v vs]; [destruct Hc as (_ & Hf); inversion Hf |].
+    apply chain_cons in Hc as (Ha & Hsa & Hc).
+    change (In x ([a; S a] ++ cells ns)) in Hin.
+    rewrite in_app_iff in Hin; destruct Hin as [Hin | Hin].
+    + cbn in Hin; destruct Hin as [Hx | [Hx | []]]; subst x;
+        [now rewrite Ha | now rewrite Hsa].
+    + eapply IH; eauto.
 Qed.
 
 Definition agree_out (m: list nat) (h h': Heap) : Prop :=
@@ -182,37 +205,29 @@ Lemma chain_frame: forall h h' m ns vs f,
     (forall x, In x m -> ~ In x (cells ns)) ->
     chain h' ns vs f.
 Proof.
-  intros h h' m; induction ns as [| a ns IH]; intros [| v vs] f Hc Hag Hm;
-    cbn in *; try contradiction; auto.
-  destruct Hc as (Ha & Hsa & Hc).
-  split; [| split].
-  - rewrite Hag; auto. intro Hin; eapply Hm; eauto; cbn; auto.
-  - rewrite Hag; auto. intro Hin; eapply Hm; eauto; cbn; auto.
-  - eapply IH; eauto. intros x Hx Hin; eapply Hm; eauto; cbn; auto.
+  intros h h' m ns vs f Hc Hag Hm; eapply chain_mono; [exact Hc |].
+  intros x Hx; apply Hag; intro Hin; exact (Hm x Hin Hx).
 Qed.
 
 Lemma chain_app: forall h ns1 vs1 ns2 vs2 f,
-    chain h ns1 vs1 (hdf ns2 f) ->
+    chain h ns1 vs1 (List.hd f ns2) ->
     chain h ns2 vs2 f ->
     chain h (ns1 ++ ns2) (vs1 ++ vs2) f.
 Proof.
-  intros h; induction ns1 as [| a ns1 IH]; intros [| v vs1] ns2 vs2 f H1 H2;
-    cbn in *; try contradiction; auto.
-  destruct H1 as (Ha & Hsa & Hc).
-  split; [assumption | split; [rewrite Hsa; now rewrite hdf_app | now apply IH]].
+  intros h ns1 vs1 ns2 vs2 f (H1l & H1f) (H2l & H2f); split.
+  - apply linked_app; assumption.
+  - apply Forall2_app; assumption.
 Qed.
 
 Lemma chain_split: forall h ns1 vs1 ns2 vs2 f,
     length ns1 = length vs1 ->
     chain h (ns1 ++ ns2) (vs1 ++ vs2) f ->
-    chain h ns1 vs1 (hdf ns2 f) /\ chain h ns2 vs2 f.
+    chain h ns1 vs1 (List.hd f ns2) /\ chain h ns2 vs2 f.
 Proof.
-  intros h; induction ns1 as [| a ns1 IH]; intros [| v vs1] ns2 vs2 f Hl Hc;
-    cbn in *; try discriminate; auto.
-  destruct Hc as (Ha & Hsa & Hc).
-  apply IH in Hc as (H1 & H2); [| lia].
-  split; [| assumption].
-  split; [assumption | split; [rewrite Hsa; now rewrite hdf_app | assumption]].
+  intros h ns1 vs1 ns2 vs2 f Hl (Hlk & Hf).
+  apply linked_split in Hlk as (H1l & H2l).
+  destruct (Forall2_app_inv_len _ _ _ _ _ Hl Hf) as (H1f & H2f).
+  split; split; assumption.
 Qed.
 
 (** ** The representation predicate *)
@@ -247,7 +262,7 @@ Definition tailok (hdr: nat) (ns: list nat) (h: Heap) : Prop :=
     [(Hwf & Hhd & Htl & Hch & Hdom)] used by the queue operation proofs. *)
 Definition qrep (hdr: nat) (ns vs: list nat) (h: Heap) : Prop :=
   qwf hdr ns
-  /\ h (S hdr) = Some (hdf ns 0)
+  /\ h (S hdr) = Some (List.hd 0 ns)
   /\ tailok hdr ns h
   /\ chain h ns vs 0
   /\ (h 0 = None /\ forall x, In x (qcells hdr ns) -> h x <> None).
@@ -279,7 +294,7 @@ Definition qex (hdr: nat) (ns: list nat) (h: Heap) : Prop :=
   forall x, h x <> None -> In x (qcells hdr ns).
 
 Lemma qrep_head_null_iff: forall hdr ns vs h,
-    qrep hdr ns vs h -> (hdf ns 0 = 0 <-> ns = []).
+    qrep hdr ns vs h -> (List.hd 0 ns = 0 <-> ns = []).
 Proof.
   intros hdr ns vs h (Hwf & _ & _ & _ & _); destruct Hwf as (_ & H0 & _).
   destruct ns as [| a ns]; cbn; split; intro Hx; auto.
@@ -289,23 +304,14 @@ Qed.
 
 (** ** Rotation on the abstract lists *)
 
-Definition rotl {A} (l: list A) : list A :=
-  match l with nil => nil | x :: xs => xs ++ [x] end.
-
-Lemma rotl_perm: forall {A} (l: list A), Permutation l (rotl l).
-Proof.
-  intros A [| x xs]; cbn; [constructor |].
-  apply Permutation_cons_app; rewrite app_nil_r; apply Permutation_refl.
-Qed.
 
 Lemma qcells_rot: forall hdr a ns x,
     In x (qcells hdr (ns ++ [a])) <-> In x (qcells hdr (a :: ns)).
 Proof.
   intros hdr a ns x; unfold qcells.
   assert (Hc: forall y, In y (cells (ns ++ [a])) <-> In y (cells (a :: ns))).
-  { intro y; rewrite cells_app.
-    replace (cells (a :: ns)) with (cells [a] ++ cells ns) by reflexivity.
-    rewrite !in_app_iff; tauto. }
+  { intro y; unfold cells; rewrite flat_map_app.
+    cbn; rewrite in_app_iff; cbn; tauto. }
   split; intros [H | [H | H]].
   - now left.
   - now right; left.
@@ -315,74 +321,6 @@ Proof.
   - right; right; now apply Hc.
 Qed.
 
-(** ** [find], restated at [nat].
-
-    The reference proof [examples/Queue.v] states these over the abstract
-    payload type [T] of the module [MeQ.ME] with a [RelDec] instance.  That
-    module's [T] is an opaque parameter, so the lemmas cannot be instantiated;
-    the statements and proof structure are reproduced here at [nat] with
-    [Nat.eqb].  This is a REPRESENTATION-SPECIFIC ADAPTATION, recorded as such
-    in the reuse report. *)
-
-Fixpoint find (t: nat) (l: list nat) : option nat :=
-  match l with
-  | nil => None
-  | h :: ts => if Nat.eqb h t then Some 0 else option_map S (find t ts)
-  end.
-
-Lemma unfold_find_hd: forall t h ts,
-    find t (h :: ts) = (if Nat.eqb h t then Some 0 else option_map S (find t ts)).
-Proof. reflexivity. Qed.
-
-Lemma find_last_ex: forall nl ts, exists i0 : nat, find nl (ts ++ [nl]) = Some i0.
-Proof.
-  induction ts as [| a ts IH]; cbn.
-  - exists 0; now rewrite Nat.eqb_refl.
-  - destruct IH as (x & Hx); destruct (Nat.eqb_spec a nl) as [-> |].
-    + now exists 0.
-    + exists (S x); now rewrite Hx.
-Qed.
-
-Lemma find_app_l: forall nl ts n l, find nl ts = Some n -> find nl (ts ++ l) = Some n.
-Proof.
-  induction ts as [| a ts IH]; intros n l H; cbn in *; [discriminate |].
-  destruct (Nat.eqb a nl); auto.
-  destruct (find nl ts) eqn:Hf; cbn in *; [| discriminate].
-  erewrite IH; eauto.
-Qed.
-
-Lemma find_in: forall nl l n, find nl l = Some n -> In nl l.
-Proof.
-  induction l as [| a l IH]; intros n H; cbn in *; [discriminate |].
-  destruct (Nat.eqb_spec a nl) as [-> |]; auto.
-  destruct (find nl l) eqn:Hf; cbn in *; [| discriminate]; eauto.
-Qed.
-
-Lemma find_nonnil: forall nl l n, find nl l = Some n -> l <> [].
-Proof. intros nl [| a l] n H; cbn in *; [discriminate | congruence]. Qed.
-
-(** The position of [nl] after one rotation: this is the natural rank of the
-    reference proof, restated here so that the temporal file never re-derives
-    it.  If [nl] is at position [S d] it moves to [d]; if it is at position [0]
-    it is popped now. *)
-Lemma find_rotl: forall nl v vs d,
-    find nl (v :: vs) = Some (S d) -> find nl (rotl (v :: vs)) = Some d.
-Proof.
-  intros nl v vs d H; cbn in *.
-  destruct (Nat.eqb_spec v nl) as [-> | Hne]; [discriminate |].
-  destruct (find nl vs) as [m |] eqn:Hf; cbn in *; [| discriminate].
-  assert (m = d) by congruence; subst.
-  now apply find_app_l.
-Qed.
-
-Lemma find_rotl_pres: forall nl v vs d,
-    find nl (v :: vs) = Some d -> exists d', find nl (rotl (v :: vs)) = Some d'.
-Proof.
-  intros nl v vs [| d] H.
-  - cbn in H; destruct (Nat.eqb_spec v nl) as [-> |]; [| destruct (find nl vs); cbn in H; congruence].
-    cbn; apply find_last_ex.
-  - eexists; eapply find_rotl; eauto.
-Qed.
 
 (** ** The rotation, as heap surgery.
 
@@ -555,17 +493,17 @@ Definition qnode (a: nat) (h: Heap) : Heap :=
 Theorem rot_detach_split: forall hdr a ns v vs h,
     qrep hdr (a :: ns) (v :: vs) h ->
     qex hdr (a :: ns) h ->
-    hdisj (qres hdr a (hdf ns 0) h) (qnode a h)
-    /\ heq (upd h (S hdr) (hdf ns 0)) (hunion (qres hdr a (hdf ns 0) h) (qnode a h))
-    /\ (qrep hdr ns vs (qres hdr a (hdf ns 0) h)
-        /\ qex hdr ns (qres hdr a (hdf ns 0) h))
-    /\ nodeat a v (hdf ns 0) (qnode a h).
+    hdisj (qres hdr a (List.hd 0 ns) h) (qnode a h)
+    /\ heq (upd h (S hdr) (List.hd 0 ns)) (hunion (qres hdr a (List.hd 0 ns) h) (qnode a h))
+    /\ (qrep hdr ns vs (qres hdr a (List.hd 0 ns) h)
+        /\ qex hdr ns (qres hdr a (List.hd 0 ns) h))
+    /\ nodeat a v (List.hd 0 ns) (qnode a h).
 Proof.
   intros hdr a ns v vs h Hq Hex.
   pose proof Hq as (Hwf & Hhd & Htl & Hch & Hdom0).
   assert (Hdom: forall x, h x <> None <-> In x (qcells hdr (a :: ns)))
     by (intro x; split; [apply Hex | apply (proj2 Hdom0)]).
-  destruct Hch as (Ha & Hsa & Hch).
+  apply chain_cons in Hch as (Ha & Hsa & Hch).
   pose proof (qwf_neqs _ _ _ Hwf) as (Hha & Hsha & Hhsa & Hshsa & Hhshdr).
   pose proof (qwf_node_cells _ _ _ Hwf) as (Hanc & Hsanc).
   pose proof (qwf_tail _ _ _ Hwf) as Hwfns.
@@ -575,18 +513,18 @@ Proof.
   assert (Esa: nodeb a (S a) = true) by (apply nodeb_true; now right).
   assert (Ehdr: nodeb a hdr = false) by (apply nodeb_false; split; congruence).
   assert (Eshdr: nodeb a (S hdr) = false) by (apply nodeb_false; split; congruence).
-  assert (Hqshdr: qres hdr a (hdf ns 0) h (S hdr) = Some (hdf ns 0))
+  assert (Hqshdr: qres hdr a (List.hd 0 ns) h (S hdr) = Some (List.hd 0 ns))
     by (unfold qres; rewrite Eshdr; apply upd_eq).
-  assert (Hqhdr: qres hdr a (hdf ns 0) h hdr = h hdr)
+  assert (Hqhdr: qres hdr a (List.hd 0 ns) h hdr = h hdr)
     by (unfold qres; rewrite Ehdr; rewrite upd_neq by congruence; reflexivity).
   split; [| split; [| split]].
   - intro x; unfold qres, qnode; destruct (nodeb a x); [now left | now right].
   - intro x; unfold qres, qnode, hunion; destruct (nodeb a x) eqn:E.
     + apply nodeb_true in E as [-> | ->]; rewrite upd_neq by congruence; reflexivity.
-    + destruct (upd h (S hdr) (hdf ns 0) x); reflexivity.
+    + destruct (upd h (S hdr) (List.hd 0 ns) x); reflexivity.
   - (* the remaining queue is a genuine representation; when the detach has
        emptied it, the tail pointer is stale and [tailok] does not constrain it *)
-    assert (Hres: forall x, qres hdr a (hdf ns 0) h x <> None
+    assert (Hres: forall x, qres hdr a (List.hd 0 ns) h x <> None
                        <-> In x (qcells hdr ns)).
     { intro x; unfold qres; split.
       - destruct (nodeb a x) eqn:E; [congruence |].
@@ -612,8 +550,8 @@ Proof.
         destruct Hx as [C | [C | Hx]];
           [subst; apply in_eq | subst; apply in_cons, in_eq
           | apply in_cons, in_cons; cbn; tauto]. }
-    assert (Hresnull: qres hdr a (hdf ns 0) h 0 = None).
-    { destruct (qres hdr a (hdf ns 0) h 0) eqn:E0; [| reflexivity].
+    assert (Hresnull: qres hdr a (List.hd 0 ns) h 0 = None).
+    { destruct (qres hdr a (List.hd 0 ns) h 0) eqn:E0; [| reflexivity].
       exfalso; apply (qwf_zero hdr ns Hwfns), Hres; congruence. }
     split; [| intros x Hx; apply Hres; exact Hx].
     split; [exact Hwfns | split; [exact Hqshdr | split; [| split]]].
@@ -648,20 +586,18 @@ Corollary rot_detach_sep: forall hdr a ns v vs h,
     qex hdr (a :: ns) h ->
     exists hq hn,
       hdisj hq hn
-      /\ heq (upd h (S hdr) (hdf ns 0)) (hunion hq hn)
+      /\ heq (upd h (S hdr) (List.hd 0 ns)) (hunion hq hn)
       /\ qrep hdr ns vs hq
-      /\ nodeat a v (hdf ns 0) hn.
+      /\ nodeat a v (List.hd 0 ns) hn.
 Proof.
   intros hdr a ns v vs h H Hex.
   apply (rot_detach_split hdr a ns v vs h H) in Hex as (H1 & H2 & (H3 & _) & H4).
   eauto 6.
 Qed.
 
-Lemma hdf_ne: forall l f g, l <> [] -> hdf l f = hdf l g.
-Proof. now intros [| a l] f g H. Qed.
 
 Lemma cells_mono_app: forall x l1 l2, In x (cells l1) -> In x (cells (l1 ++ l2)).
-Proof. intros x l1 l2 H; rewrite cells_app, in_app_iff; now left. Qed.
+Proof. intros x l1 l2 H; unfold cells in *; rewrite flat_map_app, in_app_iff; now left. Qed.
 
 Lemma cells_mono_cons: forall x b l, In x (cells l) -> In x (cells (b :: l)).
 Proof. intros x b l H; cbn; auto. Qed.
@@ -673,12 +609,12 @@ Proof. intros x b l H; cbn; auto. Qed.
     touches no cell outside the queue's own footprint. *)
 Theorem rot_heap_spec: forall hdr a ns v vs h,
     qrep hdr (a :: ns) (v :: vs) h ->
-    qrep hdr (ns ++ [a]) (vs ++ [v]) (rot_heap hdr a (hdf ns 0) (zof hdr ns) h)
-    /\ (forall x, rot_heap hdr a (hdf ns 0) (zof hdr ns) h x <> None <-> h x <> None).
+    qrep hdr (ns ++ [a]) (vs ++ [v]) (rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h)
+    /\ (forall x, rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h x <> None <-> h x <> None).
 Proof.
   intros hdr a ns v vs h Hq.
   pose proof Hq as (Hwf & Hhd & Htl & Hch & Hdom).
-  destruct Hch as (Ha & Hsa & Hch).
+  apply chain_cons in Hch as (Ha & Hsa & Hch).
   pose proof (qwf_neqs _ _ _ Hwf) as (Hha & Hsha & Hhsa & Hshsa & Hhshdr).
   pose proof (qwf_node_cells _ _ _ Hwf) as (Hanc & Hsanc).
   pose proof (qwf_hdr_cells _ _ Hwf) as Hhnc.
@@ -690,7 +626,7 @@ Proof.
   - (* the queue had one element: detaching empties it, the append re-links
        the header itself, and the structure comes back to where it started *)
     subst ns.
-    destruct vs as [| v1 vs1]; [| cbn in Hch; contradiction].
+    destruct vs as [| v1 vs1]; [| destruct Hch as (_ & Hf); inversion Hf].
     cbn in Hsa |- *.
     assert (Hdom': forall x, rot_heap hdr a 0 hdr h x <> None <-> h x <> None)
       by (apply rot_heap_dom; assumption).
@@ -698,9 +634,10 @@ Proof.
     split; [exact Hwf | split; [| split; [| split]]].
     + rewrite (rot_heap_sz hdr a 0 hdr h); [reflexivity | congruence | congruence].
     + cbn; apply rot_heap_hdr.
-    + cbn; split; [| split; [| exact I]].
+    + cbn [app]; apply (proj2 (chain_cons _ _ _ _ _ _)); split; [| split].
       * rewrite rot_heap_other by (first [congruence | lia]); exact Ha.
       * apply rot_heap_sa; congruence.
+      * apply chain_nil.
     + split.
       * destruct (rot_heap hdr a 0 hdr h 0) eqn:E0; [| reflexivity].
         exfalso; assert (Hc: h 0 <> None) by (apply Hdom'; congruence).
@@ -720,9 +657,9 @@ Proof.
     { apply chain_len in Hch; rewrite Hns, Hvs, !app_length in Hch; cbn in Hch; lia. }
     rewrite Hns, Hvs in Hch.
     apply chain_split in Hch as (Hch0 & Hchz); [| exact Hlen].
-    cbn in Hch0, Hchz; destruct Hchz as (Hzv & Hszv & _).
+    cbn [List.hd] in Hch0; apply chain_cons in Hchz as (Hzv & Hszv & _).
     assert (Hszdom: h (S zz) <> None) by (rewrite Hszv; discriminate).
-    assert (Hdom': forall x, rot_heap hdr a (hdf ns 0) zz h x <> None <-> h x <> None)
+    assert (Hdom': forall x, rot_heap hdr a (List.hd 0 ns) zz h x <> None <-> h x <> None)
       by (apply rot_heap_dom; assumption).
     rewrite Hz.
     split; [| exact Hdom'].
@@ -730,7 +667,7 @@ Proof.
     + eapply qwf_perm; [| exact Hwf].
       change (Permutation (a :: ns) (ns ++ [a])); apply (rotl_perm (a :: ns)).
     + rewrite rot_heap_shdr by congruence.
-      rewrite hdf_app; cbn; f_equal; symmetry; now apply hdf_ne.
+      rewrite hd_app; cbn; f_equal; symmetry; now apply hd_default.
     + unfold tailok; destruct (ns ++ [a]) eqn:E.
       * exfalso; apply app_eq_nil in E as (_ & C); discriminate.
       * rewrite <- E, last_last; apply rot_heap_hdr.
@@ -765,14 +702,16 @@ Proof.
                      apply NoDup_cons_iff in Hnd as (_ & Hnd).
                      rewrite Hns in Hnd; apply NoDup_remove_2 in Hnd.
                      apply Hnd; rewrite app_nil_r; rewrite <- Hcz; exact Hc.
-        -- cbn; split; [| split; [| exact I]].
+        -- cbn [app List.hd]; apply (proj2 (chain_cons _ _ _ _ _ _)); split; [| split].
            ++ rewrite rot_heap_other by (first [congruence | lia]); exact Hzv.
-           ++ apply rot_heap_sz; congruence.
-      * cbn; split; [| split; [| exact I]].
+           ++ cbn [List.hd]; apply rot_heap_sz; congruence.
+           ++ apply chain_nil.
+      * cbn [app List.hd]; apply (proj2 (chain_cons _ _ _ _ _ _)); split; [| split].
         -- rewrite rot_heap_other by (first [congruence | lia]); exact Ha.
-        -- apply rot_heap_sa; congruence.
+        -- cbn [List.hd]; apply rot_heap_sa; congruence.
+        -- apply chain_nil.
     + split.
-      * destruct (rot_heap hdr a (hdf ns 0) zz h 0) eqn:E0; [| reflexivity].
+      * destruct (rot_heap hdr a (List.hd 0 ns) zz h 0) eqn:E0; [| reflexivity].
         exfalso; assert (Hc: h 0 <> None) by (apply Hdom'; congruence).
         apply Hc; exact (proj1 Hdom).
       * intro x; rewrite Hdom'; intro Hx; apply (proj2 Hdom).
@@ -781,11 +720,6 @@ Qed.
 
 (** ** Two facts the language layer needs about the rotation's footprint. *)
 
-Lemma last_in: forall (l: list nat) d, l <> [] -> In (last l d) l.
-Proof.
-  intros l d H; destruct (exists_last H) as (l' & x & ->).
-  rewrite last_last, in_app_iff; right; apply in_eq.
-Qed.
 
 (** The cell the append phase writes is always already allocated: it is the
     header's link cell when the detach empties the queue, and the last node's
@@ -806,34 +740,11 @@ Qed.
 (** The address the program computes for the append is exactly [zof]. *)
 Lemma zof_compute: forall hdr a ns,
     qwf hdr (a :: ns) ->
-    (if Nat.eqb (hdf ns 0) 0 then hdr else last (a :: ns) 0) = zof hdr ns.
+    (if Nat.eqb (List.hd 0 ns) 0 then hdr else last (a :: ns) 0) = zof hdr ns.
 Proof.
   intros hdr a ns (Hnd & H0 & Hov); destruct ns as [| b ns1]; [reflexivity |].
-  cbn [hdf].
+  cbn [List.hd].
   destruct (Nat.eqb_spec b 0) as [-> | Hb]; [exfalso; apply H0; cbn; tauto |].
   reflexivity.
 Qed.
 
-Lemma find_head: forall nl v vs, find nl (v :: vs) = Some 0 -> v = nl.
-Proof.
-  intros nl v vs H; cbn in H.
-  destruct (Nat.eqb_spec v nl) as [-> | Hne]; [reflexivity |].
-  destruct (find nl vs); cbn in H; discriminate.
-Qed.
-
-Lemma rotl_cons: forall (v: nat) vs, rotl (v :: vs) = vs ++ [v].
-Proof. reflexivity. Qed.
-
-Lemma chain_mono: forall h h' ns vs fin,
-    chain h ns vs fin ->
-    (forall x, In x (cells ns) -> h' x = h x) ->
-    chain h' ns vs fin.
-Proof.
-  intros h h'; induction ns as [| a ns IH]; intros [| v vs] fin Hc Hag;
-    cbn in *; try contradiction; auto.
-  destruct Hc as (Ha & Hsa & Hc).
-  split; [| split].
-  - rewrite Hag; [exact Ha | auto].
-  - rewrite Hag; [exact Hsa | auto].
-  - apply (IH vs fin Hc); intros x Hx; apply Hag; auto.
-Qed.

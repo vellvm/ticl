@@ -1,4 +1,6 @@
 From Stdlib Require Import List Lia Arith.PeanoNat Fin Sorting.Permutation.
+From TICL Require Import Utils.Execution.
+From TICL Require Import ICTree.Interp.Yield.Execution.
 From TICL Require Import Lang.CSL ICTree.Core ICTree.Equ ICTree.SBisim
   ICTree.Events.Writer ICTree.Interp.Refine.
 From TICL Require Import Lang.CSL.Queue.Representation.
@@ -23,14 +25,14 @@ Record AState := {
 (** One selected source segment, ending at its first yield.  The helpers
     below only assemble this example's result; missing checked cells fault. *)
 Definition turn (base : nat) (who : Actor) (s : AState)
-  : option (AState * option SObs) :=
+  : option (AState * option (indexed (nat * nat))) :=
   let finish (h : Heap) (op : owner_pc) (r0 r1 : remote_pc)
       (event : option (nat * nat)) :=
     Some ({| aheap := h;
              acount := match event with None => acount s | Some _ => S (acount s) end;
              owner_state := op; remote0_state := r0; remote1_state := r1 |},
           match event with None => None
-          | Some (tag,block) => Some (SPop tag block (acount s)) end) in
+          | Some (tag,block) => Some (stamp (tag,block) (acount s)) end) in
   let own pc h event := finish h pc (remote0_state s) (remote1_state s) event in
   let remote (client : bool) :=
     let pc := if client then remote1_state s else remote0_state s in
@@ -137,12 +139,6 @@ Definition initial_state (capacity c : nat) : AState :=
   {| aheap := page_heap 1 capacity hemp; acount := c;
      owner_state := ORead; remote0_state := RPoll; remote1_state := RPoll |}.
 
-Fixpoint free_chain (h : Heap) (nodes : list nat) : Prop :=
-  match nodes with
-  | [] => True
-  | block :: rest => h block = Some (hd 0 rest) /\ free_chain h rest
-  end.
-
 Definition held (pc : remote_pc) : list nat :=
   match pc with RPoll => [] | RRead block | RLink block _ | RCAS block _ => [block] end.
 Definition mailbox_nodes (block : nat) : list nat :=
@@ -159,13 +155,21 @@ Definition cached_remote (base capacity : nat) (h : Heap) (pc : remote_pc) : Pro
 Definition backing (base capacity : nat) (h : Heap) : Prop :=
   forall x, h x <> None <-> base <= x /\ x < base + page_size capacity.
 
-Definition allocator_inv (base capacity : nat) (s : AState) : Prop :=
+(** The ownership VIEW: the invariant body with its ghost lists exposed.
+    [allocator_inv] is exactly its existential closure -- a regrouping of the
+    existing invariant, not a stronger ownership premise.  The ghost lists
+    are proposition-level witnesses; nothing is added to [AState] or
+    extracted into executable state. *)
+Definition allocator_view (base capacity : nat) (s : AState) (L R D : list nat)
+  : Prop :=
   0 < base /\ backing base capacity (aheap s) /\
-  exists (L R D : list nat) (m0 m1 : nat),
+  exists (m0 m1 : nat),
     aheap s (remote_head base) = Some (hd 0 R) /\
     aheap s (local_head base) = Some (hd 0 L) /\
     aheap s (drain_head base) = Some (hd 0 D) /\
-    free_chain (aheap s) L /\ free_chain (aheap s) R /\ free_chain (aheap s) D /\
+    linked (fun a next => aheap s a = Some next) L 0 /\
+    linked (fun a next => aheap s a = Some next) R 0 /\
+    linked (fun a next => aheap s a = Some next) D 0 /\
     aheap s (mailbox base false) = Some m0 /\
     aheap s (mailbox base true) = Some m1 /\
     Permutation (L ++ R ++ D ++ mailbox_nodes m0 ++ mailbox_nodes m1 ++
@@ -177,50 +181,28 @@ Definition allocator_inv (base capacity : nat) (s : AState) : Prop :=
     cached_remote base capacity (aheap s) (remote0_state s) /\
     cached_remote base capacity (aheap s) (remote1_state s).
 
+Definition allocator_inv (base capacity : nat) (s : AState) : Prop :=
+  exists L R D, allocator_view base capacity s L R D.
+
 Definition state_equiv (s t : AState) : Prop :=
   heq (aheap s) (aheap t) /\ acount s = acount t /\
   owner_state s = owner_state t /\ remote0_state s = remote0_state t /\
   remote1_state s = remote1_state t.
 
-Fixpoint run_turns (base : nat) (script : list Actor) (s : AState)
-  : option (AState * list SObs) :=
-  match script with
-  | [] => Some (s,[])
-  | who :: rest =>
-      match turn base who s with
-      | None => None
-      | Some (next,event) =>
-          match run_turns base rest next with
-          | None => None
-          | Some (last,logs) =>
-              Some (last,match event with None => logs | Some o => o :: logs end)
-          end
-      end
-  end.
-
-Lemma init_chain_links h nodes :
-  (forall prefix block rest, nodes = prefix ++ block :: rest ->
-    h block = Some (hd 0 rest)) -> free_chain h nodes.
-Proof.
-  induction nodes as [|block rest IH]; intro Links; [exact I|].
-  split.
-  - exact (Links [] block rest eq_refl).
-  - apply IH; intros prefix next tail E.
-    apply (Links (block :: prefix) next tail); cbn; now rewrite E.
-Qed.
-
 Lemma initial_state_inv capacity c :
   allocator_inv 1 capacity (initial_state capacity c).
 Proof.
-  unfold allocator_inv, initial_state; cbn [aheap owner_state remote0_state remote1_state].
+  unfold allocator_inv, allocator_view, initial_state;
+    cbn [aheap owner_state remote0_state remote1_state].
+  exists (page_blocks 1 capacity), [], [].
   split; [lia|]; split.
   - intro x; apply page_heap_closed_dom.
-  - exists (page_blocks 1 capacity), [], [], 0, 0.
+  - exists 0, 0.
     split; [apply page_heap_remote|].
     split; [apply page_heap_local_blocks|].
     split; [apply page_heap_drain|].
     split.
-    + apply init_chain_links; intros prefix block rest E.
+    + apply linked_of_splits; intros prefix block rest E.
       eapply page_heap_link; exact E.
     + split; [exact I|]; split; [exact I|].
       split; [apply page_heap_mailbox|].
@@ -234,7 +216,7 @@ Lemma turn_counter base who s t event :
   turn base who s = Some (t,event) ->
   match event with
   | None => acount t = acount s
-  | Some o => acount t = S (acount s) /\ sidx o = acount s
+  | Some o => acount t = S (acount s) /\ indexed_index o = acount s
   end.
 Proof.
   destruct s as [h c op r0 r1]; destruct who;
@@ -248,7 +230,8 @@ Proof.
 Qed.
 
 From Stdlib Require Import List Lia Arith.PeanoNat Fin
-  Classes.RelationClasses Program.Equality.
+  Classes.RelationClasses Classes.RelationPairs Program.Equality.
+From ExtLib Require Import Data.Option.
 From Coinduction Require Import coinduction rel tactics.
 From TICL Require Import Lang.CSL ICTree.Core ICTree.Equ ICTree.SBisim
   ICTree.Events.Writer ICTree.Interp.Refine.
@@ -288,17 +271,12 @@ Qed.
 
 (** Both faults and successful turns are preserved.  In particular this
     statement does not assume the ownership invariant or heap finiteness. *)
-Lemma turn_respects_heq base who s t :
-  state_equiv s t ->
-  match turn base who s, turn base who t with
-  | None, None => True
-  | Some (s',event), Some (t',event') =>
-      state_equiv s' t' /\ event = event'
-  | _, _ => False
-  end.
+#[global] Instance turn_proper base :
+  Proper (eq ==> state_equiv ==> Roption (RelProd state_equiv eq)) (turn base).
 Proof.
+  intros who who' <- s t Hst.
   destruct s as [h c op r0 r1], t as [k d oq q0 q1].
-  intros [Hh [Hc [Ho [H0 H1]]]].
+  destruct Hst as [Hh [Hc [Ho [H0 H1]]]].
   cbn in Hh, Hc, Ho, H0, H1.
   subst d oq q0 q1.
   destruct who; [destruct op | destruct r0 | destruct r1];
@@ -313,36 +291,13 @@ Proof.
       | |- context [if ?b then _ else _] =>
           let Hb := fresh "Htest" in destruct b eqn:Hb
       end ].
-  all: try exact I.
-  all: split; [|reflexivity].
+  all: constructor.
+  all: split; unfold RelCompFun; cbn [fst snd]; [|reflexivity].
   all: unfold state_equiv;
     cbn [aheap acount owner_state remote0_state remote1_state].
   all: split;
     [ repeat apply upd_heq; exact Hh
     | repeat split; reflexivity ].
-Qed.
-
-Corollary turn_respects_heq_some base who s t s' event :
-  state_equiv s t -> turn base who s = Some (s',event) ->
-  exists t', turn base who t = Some (t',event) /\ state_equiv s' t'.
-Proof.
-  intros Hst Hstep.
-  pose proof (turn_respects_heq base who s t Hst) as H.
-  rewrite Hstep in H.
-  destruct (turn base who t) as [[t' event']|] eqn:Ht;
-    cbn in H; [|contradiction].
-  destruct H as [Hnext Hevent]; subst event'.
-  exists t'; split; [assumption || reflexivity | exact Hnext].
-Qed.
-
-Corollary turn_respects_heq_none base who s t :
-  state_equiv s t -> (turn base who s = None <-> turn base who t = None).
-Proof.
-  intro Hst; pose proof (turn_respects_heq base who s t Hst) as H.
-  destruct (turn base who s) as [[s' event]|];
-    destruct (turn base who t) as [[t' event']|];
-    cbn in H; try contradiction; split; intro Hnone;
-    try discriminate; reflexivity.
 Qed.
 
 (** Physical source-pool order is [client1; client0; owner]. *)
@@ -378,244 +333,13 @@ Proof.
       * intro impossible; inversion impossible.
 Qed.
 
-(** Every nondeterministic turn begins with exactly one real branch node.
-    The post-effect guards are invisible, not additional scheduling choices. *)
-CoFixpoint model_nd (base : nat) (s : AState)
-  : ictreeW SObs (unit * SSig) :=
-  Br 2 (fun i =>
-    match turn base (actor_of_slot i) s with
-    | None => stuck
-    | Some (next,None) => Guard (model_nd base next)
-    | Some (next,Some event) =>
-        Vis (Log event) (fun _ => Guard (model_nd base next))
-    end).
-
-CoFixpoint model_rr (base : nat) (s : AState) (cursor : nat)
-  : ictreeW SObs (unit * SSig) :=
-  match turn base (actor_of_slot (rr_pick 2 cursor)) s with
-  | None => stuck
-  | Some (next,None) => Guard (model_rr base next (S cursor))
-  | Some (next,Some event) =>
-      Vis (Log event) (fun _ => Guard (model_rr base next (S cursor)))
-  end.
-
-Lemma unfold_model_nd base s :
-  model_nd base s ≅
-  Br 2 (fun i =>
-    match turn base (actor_of_slot i) s with
-    | None => stuck
-    | Some (next,None) => Guard (model_nd base next)
-    | Some (next,Some event) =>
-        Vis (Log event) (fun _ => Guard (model_nd base next))
-    end).
-Proof. step; now cbn. Qed.
-
-Lemma unfold_model_rr base s cursor :
-  model_rr base s cursor ≅
-  match turn base (actor_of_slot (rr_pick 2 cursor)) s with
-  | None => stuck
-  | Some (next,None) => Guard (model_rr base next (S cursor))
-  | Some (next,Some event) =>
-      Vis (Log event) (fun _ => Guard (model_rr base next (S cursor)))
-  end.
-Proof. step; now cbn. Qed.
-
-Lemma model_nd_respects_heq_equ base : forall s t,
-  state_equiv s t -> model_nd base s ≅ model_nd base t.
+Lemma turn_event_counter base who s s' event :
+  turn base who s = Some (s',event) ->
+  acount s' = (acount s + List.length (event_obs event))%nat.
 Proof.
-  coinduction R IH; intros s t Hst.
-  rewrite !unfold_model_nd.
-  constructor; intro i.
-  pose proof (turn_respects_heq base (actor_of_slot i) s t Hst) as Hturn.
-  destruct (turn base (actor_of_slot i) s) as [[s' event]|];
-    destruct (turn base (actor_of_slot i) t) as [[t' event']|];
-    cbn in Hturn; try contradiction.
-  - destruct Hturn as [Hnext Hevent]; subst event'.
-    destruct event as [o|].
-    + step; cbn; constructor; intros [].
-      step; cbn; constructor; apply IH; exact Hnext.
-    + step; cbn; constructor; apply IH; exact Hnext.
-  - reflexivity.
-Qed.
-
-Lemma model_nd_respects_heq base s t :
-  state_equiv s t -> model_nd base s ~ model_nd base t.
-Proof.
-  intro Hst.
-  eapply equ_clos_sbisim_goal;
-    [apply model_nd_respects_heq_equ; exact Hst | reflexivity | reflexivity].
-Qed.
-
-(** The proof compares finite indices through their numeric values, never
-    through equality of proof fields in [Fin.of_nat_lt]. *)
-Local Lemma trees_rr_pick_three_congr cursor cursor' :
-  cursor mod 3 = cursor' mod 3 -> rr_pick 2 cursor = rr_pick 2 cursor'.
-Proof.
-  intro Hmod; apply Fin.to_nat_inj; unfold rr_pick.
-  rewrite !Fin.to_nat_of_nat; exact Hmod.
-Qed.
-
-Local Lemma trees_succ_mod_three cursor cursor' :
-  cursor mod 3 = cursor' mod 3 -> S cursor mod 3 = S cursor' mod 3.
-Proof.
-  intro Hmod.
-  replace (S cursor) with (cursor + 1)%nat by lia.
-  replace (S cursor') with (cursor' + 1)%nat by lia.
-  rewrite (Nat.Div0.add_mod cursor 1 3), (Nat.Div0.add_mod cursor' 1 3).
-  now rewrite Hmod.
-Qed.
-
-Lemma model_rr_respects_heq_equ base : forall s t cursor cursor',
-  state_equiv s t -> cursor mod 3 = cursor' mod 3 ->
-  model_rr base s cursor ≅ model_rr base t cursor'.
-Proof.
-  coinduction R IH; intros s t cursor cursor' Hst Hmod.
-  rewrite !unfold_model_rr.
-  rewrite <- (trees_rr_pick_three_congr cursor cursor' Hmod).
-  pose proof (turn_respects_heq base
-    (actor_of_slot (rr_pick 2 cursor)) s t Hst) as Hturn.
-  destruct (turn base (actor_of_slot (rr_pick 2 cursor)) s)
-      as [[s' event]|];
-    destruct (turn base (actor_of_slot (rr_pick 2 cursor)) t)
-      as [[t' event']|];
-    cbn in Hturn; try contradiction.
-  - destruct Hturn as [Hnext Hevent]; subst event'.
-    destruct event as [o|]; cbn.
-    + constructor; intros [].
-      step; cbn; constructor; apply IH;
-        [exact Hnext | now apply trees_succ_mod_three].
-    + constructor; apply IH;
-        [exact Hnext | now apply trees_succ_mod_three].
-  - reflexivity.
-Qed.
-
-Lemma model_rr_respects_heq base s t cursor cursor' :
-  state_equiv s t -> cursor mod 3 = cursor' mod 3 ->
-  model_rr base s cursor ~ model_rr base t cursor'.
-Proof.
-  intros Hst Hmod.
-  eapply equ_clos_sbisim_goal;
-    [exact (model_rr_respects_heq_equ base s t cursor cursor' Hst Hmod)
-    | reflexivity | reflexivity].
-Qed.
-
-(** The finite fold uses the actual result of each turn; faults propagate. *)
-Lemma run_turns_append base left right s :
-  run_turns base (left ++ right) s =
-  match run_turns base left s with
-  | None => None
-  | Some (middle,first) =>
-      match run_turns base right middle with
-      | None => None
-      | Some (last,second) => Some (last,first ++ second)
-      end
-  end.
-Proof.
-  revert s; induction left as [|who left IH]; intro s.
-  - cbn [run_turns app].
-    destruct (run_turns base right s) as [[last logs]|]; reflexivity.
-  - cbn [run_turns app].
-    destruct (turn base who s) as [[next event]|]; [|reflexivity].
-    rewrite IH.
-    destruct (run_turns base left next) as [[middle first]|]; [|reflexivity].
-    destruct (run_turns base right middle) as [[last second]|]; [|reflexivity].
-    destruct event; reflexivity.
-Qed.
-
-Corollary run_turns_compose base left right s middle last first second :
-  run_turns base left s = Some (middle,first) ->
-  run_turns base right middle = Some (last,second) ->
-  run_turns base (left ++ right) s = Some (last,first ++ second).
-Proof.
-  intros Hleft Hright; rewrite run_turns_append, Hleft, Hright; reflexivity.
-Qed.
-
-Lemma run_turns_append_inv base left right s last logs :
-  run_turns base (left ++ right) s = Some (last,logs) ->
-  exists middle first second,
-    run_turns base left s = Some (middle,first) /\
-    run_turns base right middle = Some (last,second) /\
-    logs = first ++ second.
-Proof.
-  rewrite run_turns_append; intro Hrun.
-  destruct (run_turns base left s) as [[middle first]|] eqn:Hleft;
-    [|discriminate].
-  destruct (run_turns base right middle) as [[last' second]|] eqn:Hright;
-    [|discriminate].
-  inversion Hrun; subst.
-  exists middle, first, second; repeat split; assumption || reflexivity.
-Qed.
-
-Lemma run_turns_counter base script s last logs :
-  run_turns base script s = Some (last,logs) ->
-  acount last = (acount s + length logs)%nat.
-Proof.
-  revert s last logs; induction script as [|who rest IH];
-    intros s last logs Hrun.
-  - cbn [run_turns] in Hrun; inversion Hrun; subst; cbn; lia.
-  - cbn [run_turns] in Hrun.
-    destruct (turn base who s) as [[next event]|] eqn:Hstep;
-      [|discriminate].
-    destruct (run_turns base rest next) as [[last' suffix]|] eqn:Hrest;
-      [|discriminate].
-    pose proof (IH next last' suffix Hrest) as Hsuffix.
-    pose proof (turn_counter base who s next event Hstep) as Hcounter.
-    destruct event as [o|]; cbn in Hrun, Hcounter.
-    + destruct Hcounter as [Hcount Hindex].
-      inversion Hrun; subst; cbn; lia.
-    + inversion Hrun; subst; cbn; lia.
-Qed.
-
-Lemma run_turns_respects_heq base script s t :
-  state_equiv s t ->
-  match run_turns base script s, run_turns base script t with
-  | None, None => True
-  | Some (s',logs), Some (t',logs') =>
-      state_equiv s' t' /\ logs = logs'
-  | _, _ => False
-  end.
-Proof.
-  revert s t; induction script as [|who rest IH]; intros s t Hst.
-  - cbn [run_turns]; split; [exact Hst | reflexivity].
-  - cbn [run_turns].
-    pose proof (turn_respects_heq base who s t Hst) as Hturn.
-    destruct (turn base who s) as [[next event]|];
-      destruct (turn base who t) as [[next' event']|];
-      cbn in Hturn; try contradiction.
-    + destruct Hturn as [Hnext Hevent]; subst event'.
-      specialize (IH next next' Hnext).
-      destruct (run_turns base rest next) as [[last logs]|];
-        destruct (run_turns base rest next') as [[last' logs']|];
-        cbn in IH; try contradiction.
-      * destruct IH as [Hlast Hlogs]; subst logs'.
-        split; [exact Hlast | reflexivity].
-      * exact I.
-    + exact I.
-Qed.
-
-Corollary run_turns_respects_heq_some base script s t last logs :
-  state_equiv s t -> run_turns base script s = Some (last,logs) ->
-  exists last', run_turns base script t = Some (last',logs) /\
-    state_equiv last last'.
-Proof.
-  intros Hst Hrun.
-  pose proof (run_turns_respects_heq base script s t Hst) as H.
-  rewrite Hrun in H.
-  destruct (run_turns base script t) as [[last' logs']|] eqn:Ht;
-    cbn in H; [|contradiction].
-  destruct H as [Hlast Hlogs]; subst logs'.
-  exists last'; split; [assumption || reflexivity | exact Hlast].
-Qed.
-
-Corollary run_turns_respects_heq_none base script s t :
-  state_equiv s t ->
-  (run_turns base script s = None <-> run_turns base script t = None).
-Proof.
-  intro Hst; pose proof (run_turns_respects_heq base script s t Hst) as H.
-  destruct (run_turns base script s) as [[last logs]|];
-    destruct (run_turns base script t) as [[last' logs']|];
-    cbn in H; try contradiction; split; intro Hnone;
-    try discriminate; reflexivity.
+  intro Hstep; pose proof (turn_counter base who s s' event Hstep) as H.
+  destruct event as [o|]; cbn [event_obs List.length] in H |- *;
+    [destruct H as [Hcount _]; lia | lia].
 Qed.
 
 From Stdlib Require Import List Lia Arith.PeanoNat Sorting.Permutation.
@@ -627,27 +351,6 @@ Import ListNotations.
 Local Open Scope list_scope.
 Local Open Scope nat_scope.
 
-Lemma ai_free_chain_frame h h' xs :
-  free_chain h xs ->
-  (forall b, In b xs -> h' b = h b) ->
-  free_chain h' xs.
-Proof.
-  revert h h'; induction xs as [|b xs IH]; intros h h' Hchain Hframe.
-  - exact I.
-  - cbn [free_chain] in *; destruct Hchain as [Hb Hxs]; split.
-    + rewrite Hframe; [exact Hb | now left].
-    + eapply IH; [exact Hxs | intros x Hx; apply Hframe; now right].
-Qed.
-
-Lemma ai_free_chain_upd h xs a v :
-  free_chain h xs ->
-  (forall b, In b xs -> b <> a) ->
-  free_chain (upd h a v) xs.
-Proof.
-  intros Hchain Haway; eapply ai_free_chain_frame; [exact Hchain |].
-  intros b Hb; apply upd_neq, Haway, Hb.
-Qed.
-
 Lemma ai_cached_remote_frame base capacity h h' pc :
   cached_remote base capacity h pc ->
   (forall b, In b (held pc) -> h' b = h b) ->
@@ -656,52 +359,6 @@ Proof.
   destruct pc; cbn [cached_remote held]; intros H Hframe; try exact H.
   destruct H as [Hbound [Hneq Hlink]]; repeat split; try assumption.
   rewrite Hframe; [exact Hlink | now left].
-Qed.
-
-Lemma ai_partition_member base capacity xs x :
-  Permutation xs (page_blocks base capacity) ->
-  In x xs -> In x (page_blocks base capacity).
-Proof. intros Hp Hx; eapply Permutation_in; eauto. Qed.
-
-Lemma ai_partition_nodup base capacity xs :
-  Permutation xs (page_blocks base capacity) -> NoDup xs.
-Proof.
-  intro Hp; eapply Permutation_NoDup; [apply Permutation_sym, Hp |].
-  apply page_blocks_nodup.
-Qed.
-
-Lemma ai_partition_count base capacity xs :
-  Permutation xs (page_blocks base capacity) ->
-  forall x, count_occ Nat.eq_dec xs x <= 1.
-Proof.
-  intro Hp; apply (proj1 (NoDup_count_occ Nat.eq_dec xs)).
-  now apply (ai_partition_nodup base capacity).
-Qed.
-
-Lemma ai_partition_disjoint base capacity xs ys zs :
-  Permutation (xs ++ ys ++ zs) (page_blocks base capacity) ->
-  forall b, In b xs -> ~ In b ys.
-Proof.
-  intros Hp b Hx Hy.
-  pose proof (ai_partition_count base capacity _ Hp b) as Hcount.
-  repeat rewrite count_occ_app in Hcount.
-  apply (proj1 (count_occ_In Nat.eq_dec xs b)) in Hx.
-  apply (proj1 (count_occ_In Nat.eq_dec ys b)) in Hy.
-  lia.
-Qed.
-
-Lemma ai_head_bound base capacity xs :
-  (forall b, In b xs -> In b (page_blocks base capacity)) ->
-  hd 0 xs = 0 \/ In (hd 0 xs) (page_blocks base capacity).
-Proof.
-  destruct xs as [|b xs]; cbn; intro H; [now left | right; apply H; now left].
-Qed.
-
-Lemma ai_head_distinct xs b :
-  ~ In b xs -> 0 <> b -> hd 0 xs <> b.
-Proof.
-  destruct xs as [|a xs]; cbn; intros Hnot Hzero; [exact Hzero |].
-  intro E; apply Hnot; now left.
 Qed.
 
 Lemma ai_backing_present base capacity h x :
@@ -725,12 +382,12 @@ Qed.
 
 Lemma allocator_inv_backing base capacity s :
   allocator_inv base capacity s -> backing base capacity (aheap s).
-Proof. intros [_ [H _]]; exact H. Qed.
+Proof. intros (_ & _ & _ & _ & H & _); exact H. Qed.
 
 Lemma allocator_inv_null base capacity s :
   allocator_inv base capacity s -> aheap s 0 = None.
 Proof.
-  intros [Hbase [Hback _]].
+  intros (_ & _ & _ & Hbase & Hback & _).
   destruct (aheap s 0) as [v|] eqn:E; [|reflexivity].
   assert (Hpresent : aheap s 0 <> None) by (rewrite E; discriminate).
   apply Hback in Hpresent; lia.
@@ -740,7 +397,7 @@ Lemma allocator_inv_outside base capacity s x :
   allocator_inv base capacity s ->
   (x < base \/ base + page_size capacity <= x) -> aheap s x = None.
 Proof.
-  intros [_ [Hback _]] Hout.
+  intros (_ & _ & _ & _ & Hback & _) Hout.
   destruct (aheap s x) as [v|] eqn:E; [|reflexivity].
   assert (Hpresent : aheap s x <> None) by (rewrite E; discriminate).
   apply Hback in Hpresent; lia.
@@ -751,9 +408,9 @@ Lemma allocator_inv_held_member base capacity s (client : bool) b :
   In b (held (if client then remote1_state s else remote0_state s)) ->
   In b (page_blocks base capacity).
 Proof.
-  intros (_ & _ & L & R & D & m0 & m1 & Hr & Hl & Hd & CL & CR & CD &
+  intros (L & R & D & _ & _ & m0 & m1 & Hr & Hl & Hd & CL & CR & CD &
     Hm0 & Hm1 & Hp & Hop & Ho & Hc0 & Hc1) Hin.
-  eapply ai_partition_member; [exact Hp |].
+  eapply Permutation_in; [exact Hp |].
   repeat rewrite in_app_iff; destruct client; tauto.
 Qed.
 
@@ -763,7 +420,7 @@ Ltac ai_member :=
   match goal with
   | Hp : Permutation ?xs (page_blocks ?base ?capacity)
     |- In ?x (page_blocks _ _) =>
-      apply (ai_partition_member base capacity xs x Hp);
+      eapply Permutation_in; [exact Hp |];
       repeat rewrite in_app_iff; cbn [held mailbox_nodes Nat.eqb In]; intuition congruence
   end.
 
@@ -789,7 +446,10 @@ Ltac ai_count_contradiction x :=
   match goal with
   | Hp : Permutation ?xs (page_blocks ?base ?capacity) |- _ =>
       let Hcount := fresh "Hcount" in
-      pose proof (ai_partition_count base capacity xs Hp x) as Hcount;
+      assert (Hcount : count_occ Nat.eq_dec xs x <= 1) by
+        (apply (proj1 (NoDup_count_occ Nat.eq_dec xs));
+         eapply Permutation_NoDup;
+           [apply Permutation_sym, Hp | apply page_blocks_nodup]);
       repeat rewrite count_occ_app in Hcount;
       try unfold mailbox_nodes in Hcount;
       repeat match goal with
@@ -841,7 +501,11 @@ Ltac ai_heap :=
 
 Ltac ai_chain :=
   first [assumption | exact I |
-    eapply ai_free_chain_upd; [ai_chain | intros; ai_distinct]].
+    eapply linked_mono;
+    [ let a := fresh "a" in let b := fresh "b" in
+      let Hin := fresh "Hin" in let Hab := fresh "Hab" in
+      intros a b Hin Hab; rewrite upd_neq by ai_distinct; exact Hab
+    | ai_chain ]].
 
 Ltac ai_backing :=
   first [assumption |
@@ -877,10 +541,14 @@ Ltac ai_obligation h :=
     | solve [ai_cached h]
     | solve [ai_permutation]
     | solve [ai_member]
-    | solve [apply ai_head_bound; intros; ai_member]
+    | match goal with
+      | |- hd 0 ?xs = 0 \/ In (hd 0 ?xs) (page_blocks _ _) =>
+          solve [destruct (head_in_or_default 0 xs) as [Hzero | Hhead];
+            [now left | right; ai_member]]
+      end
     | match goal with
       | |- hd 0 ?xs <> ?b =>
-          solve [apply ai_head_distinct;
+          solve [apply head_not_in;
             [intro; ai_count_contradiction b | ai_distinct]]
       end
     | solve [ai_distinct] ].
@@ -888,27 +556,79 @@ Ltac ai_obligation h :=
 Local Ltac ai_reduce_turn :=
   cbn [turn aheap acount owner_state remote0_state remote1_state].
 
+(** ** Ownership change of one turn.
+
+    Every constructor below is a projection of an actual executable turn.
+    In particular detach uses the current R, and publication prepends to R. *)
+Definition owner_after_offer (client : bool) := if client then ORead else OOffer true.
+
+Inductive ownership_transition :
+  Actor -> owner_pc -> owner_pc -> option (indexed (nat * nat)) ->
+  list nat -> list nat -> list nat -> list nat -> list nat -> list nat -> Prop :=
+| ownership_read L R :
+    ownership_transition Owner ORead (OCAS (List.hd 0 R)) None L R [] L R []
+| ownership_cas_fail old L R :
+    List.hd 0 R <> old ->
+    ownership_transition Owner (OCAS old) ORead None L R [] L R []
+| ownership_detach L R :
+    ownership_transition Owner (OCAS (List.hd 0 R)) ODrain None L R [] L [] R
+| ownership_drain_empty L R :
+    ownership_transition Owner ODrain (OOffer false) None L R [] L R []
+| ownership_drain L R b D idx :
+    ownership_transition Owner ODrain ODrain (Some (stamp (tag_reclaim,b) idx))
+      L R (b :: D) (b :: L) R D
+| ownership_offer_empty client L R :
+    ownership_transition Owner (OOffer client) (owner_after_offer client) None
+      L R [] L R []
+| ownership_offer client L R b idx :
+    ownership_transition Owner (OOffer client) (owner_after_offer client)
+      (Some (stamp (tag_alloc,b) idx)) (b :: L) R [] L R []
+| ownership_remote who pc event L R D :
+    who <> Owner ->
+    (event = None \/ exists b idx, event = Some (stamp (tag_retry,b) idx)) ->
+    ownership_transition who pc pc event L R D L R D
+| ownership_publish who pc L R D b idx :
+    who <> Owner ->
+    ownership_transition who pc pc (Some (stamp (tag_retire,b) idx))
+      L R D L (b :: R) D.
+
+(** Finish one branch: the computed result, its ownership view at the new
+    ghost lists, and the ownership constructor of the branch. *)
 Ltac ai_finish h L R D m0 m1 :=
   cbn [aheap acount owner_state remote0_state remote1_state];
   try rewrite Nat.eqb_refl;
   repeat match goal with
   | E : Nat.eqb _ _ = _ |- _ => progress rewrite E
   end;
-  do 2 eexists; split; [reflexivity |];
-  unfold allocator_inv; cbn [aheap acount owner_state remote0_state remote1_state];
-  split; [assumption |]; split; [ai_backing |];
-  exists L, R, D, m0, m1;
-  cbn [hd held];
-  repeat split; ai_obligation h.
+  do 2 eexists; exists L, R, D; split; [reflexivity |]; split;
+  [ unfold allocator_view;
+      cbn [aheap acount owner_state remote0_state remote1_state];
+    split; [assumption |]; split; [ai_backing |];
+    exists m0, m1;
+    cbn [hd held];
+    repeat split; ai_obligation h
+  | cbn [owner_state];
+    first [apply ownership_read | apply ownership_detach |
+      apply ownership_drain_empty | apply ownership_drain |
+      apply ownership_offer_empty | apply ownership_offer |
+      apply ownership_cas_fail; now apply Nat.eqb_neq |
+      apply ownership_publish; discriminate |
+      apply ownership_remote; [discriminate|left; reflexivity] |
+      apply ownership_remote; [discriminate|right; do 2 eexists; reflexivity]] ].
 
-Lemma ai_turn_complete base capacity who s :
-  allocator_inv base capacity s ->
-  exists t event, turn base who s = Some (t,event) /\
-    allocator_inv base capacity t.
+(** Transition completeness: on the ownership view every turn succeeds,
+    re-establishes the view, and changes ownership by one constructor. *)
+Lemma turn_view_complete base capacity who s L R D :
+  allocator_view base capacity s L R D ->
+  exists t event L' R' D',
+    turn base who s = Some (t,event) /\
+    allocator_view base capacity t L' R' D' /\
+    ownership_transition who (owner_state s) (owner_state t)
+      event L R D L' R' D'.
 Proof.
   destruct s as [h count op p0 p1].
-  cbn [allocator_inv aheap acount owner_state remote0_state remote1_state].
-  intros (Hbase & Hback & L & R & D & m0 & m1 & Hr & Hl & Hd & CL & CR & CD &
+  cbn [allocator_view aheap acount owner_state remote0_state remote1_state].
+  intros (Hbase & Hback & m0 & m1 & Hr & Hl & Hd & CL & CR & CD &
     Hm0 & Hm1 & Hp & Hop & Ho & Hc0 & Hc1).
   cbn [aheap acount owner_state remote0_state remote1_state] in *.
   destruct who.
@@ -926,7 +646,7 @@ Proof.
     + destruct D as [|b D].
       * ai_reduce_turn; rewrite Hd; cbn [hd Nat.eqb].
         ai_finish h L R (@nil nat) m0 m1.
-      * cbn [free_chain] in CD; destruct CD as [Hnext CD].
+      * cbn [linked] in CD; destruct CD as [Hnext CD].
         assert (Eb : Nat.eqb b 0 = false) by
           (apply Nat.eqb_neq; ai_distinct).
         ai_reduce_turn; rewrite Hd; cbn [hd]; rewrite Eb, Hnext, Hl.
@@ -937,7 +657,7 @@ Proof.
            ++ ai_reduce_turn; rewrite Hm1; cbn [Nat.eqb]; rewrite Hl;
                 cbn [hd Nat.eqb].
               ai_finish h (@nil nat) R (@nil nat) m0 0.
-           ++ cbn [free_chain] in CL; destruct CL as [Hnext CL].
+           ++ cbn [linked] in CL; destruct CL as [Hnext CL].
               assert (Eb : Nat.eqb b 0 = false) by
                 (apply Nat.eqb_neq; ai_distinct).
               ai_reduce_turn; rewrite Hm1; cbn [Nat.eqb]; rewrite Hl;
@@ -950,7 +670,7 @@ Proof.
            ++ ai_reduce_turn; rewrite Hm0; cbn [Nat.eqb]; rewrite Hl;
                 cbn [hd Nat.eqb].
               ai_finish h (@nil nat) R (@nil nat) 0 m1.
-           ++ cbn [free_chain] in CL; destruct CL as [Hnext CL].
+           ++ cbn [linked] in CL; destruct CL as [Hnext CL].
               assert (Eb : Nat.eqb b 0 = false) by
                 (apply Nat.eqb_neq; ai_distinct).
               ai_reduce_turn; rewrite Hm0; cbn [Nat.eqb]; rewrite Hl;
@@ -1010,12 +730,27 @@ Proof.
       * ai_finish h L R D m0 m1.
 Qed.
 
+Lemma turn_view_step base capacity who s t event L R D :
+  allocator_view base capacity s L R D ->
+  turn base who s = Some (t,event) ->
+  exists L' R' D', allocator_view base capacity t L' R' D' /\
+    ownership_transition who (owner_state s) (owner_state t)
+      event L R D L' R' D'.
+Proof.
+  intros Hview Hturn.
+  destruct (turn_view_complete base capacity who s L R D Hview)
+    as (t' & event' & L' & R' & D' & Hturn' & Hview' & Hstep).
+  rewrite Hturn in Hturn'; injection Hturn' as <- <-.
+  exists L', R', D'; split; assumption.
+Qed.
+
 Lemma turn_total base capacity who s :
   allocator_inv base capacity s ->
   exists t event, turn base who s = Some (t,event).
 Proof.
-  intro Hinv; destruct (ai_turn_complete base capacity who s Hinv)
-    as (t & event & Hturn & Hnext).
+  intros (L & R & D & Hview).
+  destruct (turn_view_complete base capacity who s L R D Hview)
+    as (t & event & _ & _ & _ & Hturn & _).
   now exists t, event.
 Qed.
 
@@ -1023,51 +758,31 @@ Lemma turn_preserves_inv base capacity who s t event :
   allocator_inv base capacity s ->
   turn base who s = Some (t,event) -> allocator_inv base capacity t.
 Proof.
-  intros Hinv Hturn.
-  destruct (ai_turn_complete base capacity who s Hinv)
-    as (t' & event' & Hturn' & Hnext).
-  rewrite Hturn in Hturn'; inversion Hturn'; subst; exact Hnext.
+  intros (L & R & D & Hview) Hturn.
+  destruct (turn_view_step base capacity who s t event L R D Hview Hturn)
+    as (L' & R' & D' & Hview' & _).
+  now exists L', R', D'.
 Qed.
 
-Lemma turn_preserves_backing base capacity who s t event :
-  allocator_inv base capacity s ->
-  turn base who s = Some (t,event) ->
-  forall x, aheap t x <> None <-> aheap s x <> None.
-Proof.
-  intros Hinv Hturn x.
-  pose proof (turn_preserves_inv base capacity who s t event Hinv Hturn) as Hnext.
-  pose proof (allocator_inv_backing base capacity s Hinv) as Hbefore.
-  pose proof (allocator_inv_backing base capacity t Hnext) as Hafter.
-  rewrite (Hbefore x), (Hafter x); reflexivity.
-Qed.
+Lemma allocator_initial_inv capacity c s :
+  s = initial_state capacity c -> allocator_inv 1 capacity s.
+Proof. intros ->; apply initial_state_inv. Qed.
 
-Lemma run_turns_preserves_inv base capacity script s last logs :
-  allocator_inv base capacity s ->
-  run_turns base script s = Some (last,logs) ->
-  allocator_inv base capacity last.
-Proof.
-  revert s last logs; induction script as [|who rest IH];
-    intros s last logs Hinv Hrun.
-  - cbn [run_turns] in Hrun; inversion Hrun; subst; exact Hinv.
-  - cbn [run_turns] in Hrun.
-    destruct (turn base who s) as [[next event]|] eqn:Hstep;
-      [|discriminate].
-    destruct (run_turns base rest next) as [[last' suffix]|] eqn:Hrest;
-      [|discriminate].
-    inversion Hrun; subst.
-    eapply IH; [eapply turn_preserves_inv; eauto | exact Hrest].
-Qed.
+(** ** The allocator's validity and construction interface.
 
-Lemma run_turns_total base capacity script s :
-  allocator_inv base capacity s ->
-  exists last logs, run_turns base script s = Some (last,logs).
-Proof.
-  revert s; induction script as [|who rest IH]; intros s Hinv.
-  - exists s, []; reflexivity.
-  - destruct (turn_total base capacity who s Hinv) as (next & event & Hstep).
-    assert (Hnext : allocator_inv base capacity next).
-    { eapply turn_preserves_inv; eauto. }
-    destruct (IH next Hnext) as (last & logs & Hrest).
-    exists last, (match event with None => logs | Some o => o :: logs end).
-    cbn [run_turns]; rewrite Hstep, Hrest; reflexivity.
-Qed.
+    Exactly two instantiations of [Utils.Execution]; no example-local
+    execution record, constructor or replay proof remains. *)
+Definition allocator_valid (capacity c : nat)
+  (e : Execution AState Actor (option (indexed (nat * nat)))) : Prop :=
+  execution_valid (fun who s o s' => turn 1 who s = Some (s',o))
+    (fun s => s = initial_state capacity c) e.
+
+Definition allocator_execution (capacity c : nat) (picks : nat -> Actor)
+  : Execution AState Actor (option (indexed (nat * nat))) :=
+  execution_of_choices (turn 1) (allocator_inv 1 capacity)
+    (fun who s Hs =>
+       match turn_total 1 capacity who s Hs with
+       | ex_intro _ t (ex_intro _ ev H) => ex_intro _ (t,ev) H
+       end)
+    (fun who s s' o Hs Hstep => turn_preserves_inv 1 capacity who s s' o Hs Hstep)
+    (initial_state capacity c) (initial_state_inv capacity c) picks.

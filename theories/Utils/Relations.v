@@ -112,3 +112,80 @@ Proof.
     destruct (p k) eqn:Hp; [exfalso; exact (Hnone k Hk Hp)|reflexivity].
   - left; exists k; split; assumption.
 Qed.
+
+(** * Bounded-credit progress.
+
+    A [Credit] RELATION (not a computable rank extractor) that descends by at
+    least the charge of every uncharged-goal step bounds how many charged
+    indices can pass before the goal is met.  Keeping the witnesses in [Prop]
+    is what lets the same theorem serve a concrete potential and a
+    heap-related ghost list.
+
+    Charging counts selected USEFUL indices, not elapsed time, so arbitrarily
+    many idle indices are allowed.  The zero-length interval is supported and
+    cannot fabricate a hit. *)
+
+Lemma credit_interval
+  (Credit : nat -> nat -> Prop) (charged : nat -> bool) (goal : nat -> Prop)
+  (step : forall k credit, Credit k credit -> ~ goal k ->
+    exists credit', Credit (S k) credit' /\
+      (if charged k then 1 else 0) + credit' <= credit) :
+  forall lo len credit,
+    Credit lo credit ->
+    (forall k, lo <= k < lo + len -> ~ goal k) ->
+    exists credit', Credit (lo + len) credit' /\
+      count_if charged lo len + credit' <= credit.
+Proof.
+  intros lo len; revert lo; induction len as [|len IH]; intros lo credit Hc Hno.
+  - exists credit; rewrite Nat.add_0_r, count_if_zero; split; [exact Hc | lia].
+  - destruct (step lo credit Hc (Hno lo ltac:(lia))) as (mid & Hmid & Hdrop).
+    destruct (IH (S lo) mid Hmid ltac:(intros k Hk; apply Hno; lia))
+      as (credit' & Hcredit' & Hcount).
+    exists credit'; split.
+    + now replace (lo + S len) with (S lo + len) by lia.
+    + rewrite count_if_succ; destruct (charged lo); lia.
+Qed.
+
+(** The first goal index inside an interval whose charge reaches a bound that
+    no goal-free prefix can reach. *)
+Lemma count_if_first
+  (charged : nat -> bool) (goal : nat -> Prop)
+  (dec : forall k, sumbool (goal k) (not (goal k))) lo len bound :
+  (forall n, (forall k, lo <= k < lo + n -> ~ goal k) ->
+    count_if charged lo n < bound) ->
+  bound <= count_if charged lo len ->
+  exists k, lo <= k < lo + len /\ goal k /\
+    count_if charged lo (S k - lo) <= bound.
+Proof.
+  intros Hprefix Hreach.
+  destruct (finite_first goal dec lo len) as [Hnone | (k & Hk & Hgoal & Hfirst)].
+  - exfalso; specialize (Hprefix len Hnone); lia.
+  - exists k; split; [exact Hk |]; split; [exact Hgoal |].
+    (** The charge up to and including [k] is the goal-free prefix plus at
+        most one, and the goal-free prefix is strictly below [bound]. *)
+    assert (Hpre : count_if charged lo (k - lo) < bound)
+      by (apply Hprefix; intros i Hi; apply Hfirst; lia).
+    replace (S k - lo) with ((k - lo) + 1) by lia.
+    rewrite count_if_add.
+    replace (lo + (k - lo)) with k by lia.
+    rewrite count_if_succ, count_if_zero.
+    destruct (charged k); lia.
+Qed.
+
+(** If every goal-free interval has bounded charge and charging happens
+    infinitely often, the goal is met infinitely often. *)
+Lemma infinitely_progress
+  (charged : nat -> bool) (goal : nat -> Prop)
+  (dec : forall k, sumbool (goal k) (not (goal k))) :
+  (forall lo, exists bound, forall len,
+    (forall k, lo <= k < lo + len -> ~ goal k) ->
+    count_if charged lo len < bound) ->
+  infinitely (fun k => charged k = true) -> infinitely goal.
+Proof.
+  intros Hbound Hinf n.
+  destruct (Hbound n) as (bound & Hprefix).
+  destruct (infinitely_count_if charged Hinf bound n) as (len & Hlen).
+  destruct (count_if_first charged goal dec n len bound Hprefix Hlen)
+    as (k & Hk & Hgoal & _).
+  exists k; split; [lia | exact Hgoal].
+Qed.

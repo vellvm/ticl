@@ -11,6 +11,14 @@ Definition rr_pick (n cursor : nat) : Fin.t (S n) :=
   @Fin.of_nat_lt (cursor mod S n) (S n)
     (Nat.mod_upper_bound cursor (S n) (Nat.neq_succ_0 n)).
 
+(** Compare numeric choices, not the proof arguments of finite indices. *)
+Lemma rr_pick_mod_congr n cursor cursor' :
+  cursor mod S n = cursor' mod S n -> rr_pick n cursor = rr_pick n cursor'.
+Proof.
+  intro Hmod; apply Fin.to_nat_inj; unfold rr_pick.
+  rewrite !Fin.to_nat_of_nat; exact Hmod.
+Qed.
+
 CoFixpoint refine_rr {E : Type} `{Encode E} {A : Type}
   (t : ictree E A) (cursor : nat) : ictree E (A * nat) :=
   match observe t with
@@ -224,7 +232,7 @@ End BranchFreeLaws.
 Lemma rr_pick_even n : Nat.even n = true -> rr_pick 1 n = Fin.F1.
 Proof.
   intro Hn; apply Nat.even_spec in Hn; destruct Hn as [k ->].
-  apply Fin.to_nat_inj; unfold rr_pick; rewrite Fin.to_nat_of_nat.
+  transitivity (rr_pick 1 0); [apply rr_pick_mod_congr|reflexivity].
   change ((2 * k) mod 2 = 0).
   rewrite Nat.mul_comm; apply Nat.mod_mul; discriminate.
 Qed.
@@ -234,9 +242,9 @@ Proof.
   intro Hn.
   assert (Ho : Nat.odd n = true) by (unfold Nat.odd; now rewrite Hn).
   apply Nat.odd_spec in Ho; destruct Ho as [k ->].
-  apply Fin.to_nat_inj; unfold rr_pick; rewrite Fin.to_nat_of_nat.
+  transitivity (rr_pick 1 1); [apply rr_pick_mod_congr|reflexivity].
   change ((2 * k + 1) mod 2 = 1).
-  rewrite Nat.add_mod by discriminate.
+  rewrite Nat.Div0.add_mod.
   rewrite (Nat.mul_comm 2 k), Nat.mod_mul by discriminate.
   reflexivity.
 Qed.

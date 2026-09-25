@@ -1,5 +1,5 @@
 From Stdlib Require Import List Lia Arith.PeanoNat.
-From TICL Require Import Lang.CSL.Queue.Representation.
+From TICL Require Import Events.HeapModel Lang.CSL.Queue.Representation.
 
 Import ListNotations.
 Local Open Scope list_scope.
@@ -11,14 +11,14 @@ Fixpoint nodeval (ns vs: list nat) (x: nat) : option nat :=
   match ns, vs with
   | a :: ns', v :: vs' =>
       if Nat.eqb x a then Some v
-      else if Nat.eqb x (S a) then Some (hdf ns' 0)
+      else if Nat.eqb x (S a) then Some (List.hd 0 ns')
       else nodeval ns' vs' x
   | _, _ => None
   end.
 
 Definition qheap (hdr: nat) (ns vs: list nat) : Heap :=
   fun x => if Nat.eqb x hdr then Some (last ns 0)
-        else if Nat.eqb x (S hdr) then Some (hdf ns 0)
+        else if Nat.eqb x (S hdr) then Some (List.hd 0 ns)
         else nodeval ns vs x.
 
 Lemma nodeval_dom: forall ns vs x,
@@ -55,9 +55,10 @@ Lemma nodeval_chain: forall hdr ns vs,
     qwf hdr ns -> length ns = length vs -> chain (nodeval ns vs) ns vs 0.
 Proof.
   intros hdr; induction ns as [| a ns IH]; intros [| v vs] Hwf Hlen;
-    cbn in Hlen; try discriminate; [exact I |].
+    cbn in Hlen; try discriminate; [apply chain_nil |].
   destruct (qwf_node_cells _ _ _ Hwf) as (Hanc & Hsanc).
-  cbn [chain nodeval].
+  apply (proj2 (chain_cons _ _ _ _ _ _)).
+  cbn [nodeval].
   rewrite Nat.eqb_refl.
   split; [reflexivity |].
   destruct (Nat.eqb_spec (S a) a) as [C | _]; [lia |].
@@ -79,7 +80,7 @@ Proof.
   pose proof (qwf_shdr_cells _ _ Hwf) as Hshnc.
   assert (Hhdr: qheap hdr ns vs hdr = Some (last ns 0))
     by (unfold qheap; now rewrite Nat.eqb_refl).
-  assert (Hshdr: qheap hdr ns vs (S hdr) = Some (hdf ns 0)).
+  assert (Hshdr: qheap hdr ns vs (S hdr) = Some (List.hd 0 ns)).
   { unfold qheap; destruct (Nat.eqb_spec (S hdr) hdr) as [C | _]; [lia |].
     now rewrite Nat.eqb_refl. }
   assert (Hcell: forall x, In x (cells ns) -> qheap hdr ns vs x = nodeval ns vs x).
@@ -115,13 +116,10 @@ Proof.
   apply in_cons, in_cons, (nodeval_dom ns vs x), Hx.
 Qed.
 
-(** ** Runtime-base contiguous queue layout *)
+(** ** Runtime-base contiguous queue layout
 
-Fixpoint node_addrs (first count : nat) : list nat :=
-  match count with
-  | 0 => []
-  | S rest => first :: node_addrs (first + 2) rest
-  end.
+    The stride-two node geometry ([node_addrs], [node_cells_range]) is owned
+    by [Events.HeapModel]. *)
 
 Definition queue_nodes (hdr count : nat) : list nat :=
   node_addrs (hdr + 2) count.
@@ -138,43 +136,14 @@ Fixpoint fill_nodes_heap (first : nat) (values : list nat) (h : Heap) : Heap :=
 Definition init_queue_heap (hdr : nat) (values : list nat) (h : Heap) : Heap :=
   let ns := queue_nodes hdr (length values) in
   fill_nodes_heap (hdr + 2) values
-    (upd (upd h hdr (last ns 0)) (S hdr) (hdf ns 0)).
+    (upd (upd h hdr (last ns 0)) (S hdr) (List.hd 0 ns)).
 
 Definition new_queue_heap (hdr : nat) (values : list nat) (h : Heap) : Heap :=
   init_queue_heap hdr values
     (hunion (hblock hdr (2 * S (length values))) h).
 
-Lemma node_addrs_in first count x :
-  In x (node_addrs first count) <->
-    exists j, Nat.lt j count /\ x = first + 2*j.
-Proof.
-  revert first x; induction count as [| count IH]; intros first x.
-  - cbn [node_addrs]; split; [contradiction | intros (j & Hj & _); lia].
-  - cbn [node_addrs In]; rewrite IH; split.
-    + intros [Hx | (j & Hj & Hx)].
-      * exists 0; split; lia.
-      * exists (S j); split; lia.
-    + intros (j & Hj & Hx); destruct j as [| j].
-      * left; lia.
-      * right; exists j; split; lia.
-Qed.
-
-Lemma node_addrs_length first count : length (node_addrs first count) = count.
-Proof.
-  revert first; induction count as [| count IH]; intro first;
-    cbn [node_addrs length]; [reflexivity | now rewrite IH].
-Qed.
-
 Lemma queue_nodes_length hdr count : length (queue_nodes hdr count) = count.
 Proof. apply node_addrs_length. Qed.
-
-Lemma node_addrs_nodup first count : NoDup (node_addrs first count).
-Proof.
-  revert first; induction count as [| count IH]; intro first; cbn [node_addrs].
-  - constructor.
-  - constructor; [| apply IH].
-    intro Hin; apply node_addrs_in in Hin as (j & Hj & Hx); lia.
-Qed.
 
 Lemma queue_nodes_qwf hdr count : Nat.lt 0 hdr -> qwf hdr (queue_nodes hdr count).
 Proof.
@@ -189,23 +158,6 @@ Proof.
     apply node_addrs_in in Ha as (j & Hj & Ha).
     apply node_addrs_in in Hb as (k & Hk & Hb).
     lia.
-Qed.
-
-Lemma node_cells_range first count x :
-  In x (cells (node_addrs first count)) <->
-    Nat.le first x /\ Nat.lt x (first + 2 * count).
-Proof.
-  revert first x; induction count as [| count IH]; intros first x.
-  - cbn [node_addrs cells]; split; [contradiction | lia].
-  - change ((first = x \/ S first = x \/
-      In x (cells (node_addrs (first + 2) count))) <->
-      Nat.le first x /\ Nat.lt x (first + 2 * S count)).
-    rewrite IH; split.
-    + intros [Hx | [Hx | Hx]]; lia.
-    + intros [Hlo Hhi].
-      destruct (Nat.eq_dec first x) as [Hx | Hx]; [now left |].
-      destruct (Nat.eq_dec (S first) x) as [Hsx | Hsx]; [now right; left |].
-      right; right; split; lia.
 Qed.
 
 Lemma queue_cells_range hdr count x :
@@ -232,7 +184,7 @@ Proof.
     split; [exact (queue_nodes_qwf hdr 0 Hhdr) |].
     split; [exact Hhead |].
     split; [change (qheap hdr [] [] hdr <> None); rewrite Htail; discriminate |].
-    split; [exact I | split].
+    split; [apply chain_nil | split].
     + unfold qheap; destruct (Nat.eqb_spec 0 hdr) as [Hbad | Hne]; [lia |].
       reflexivity.
     + intros x [Hx | [Hx | []]]; subst x;

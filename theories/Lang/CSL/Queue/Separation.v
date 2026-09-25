@@ -7,7 +7,7 @@
     happens when the other region is itself running.
 
     This file is the resource-level content of that difference.  It contains
-    exactly two kinds of statement:
+    three kinds of statement:
 
     1. [foreign_pres] -- a step of ONE queue preserves the OTHER queue's
        representation.  This is NOT an instance of the frame rule: the frame
@@ -22,6 +22,9 @@
        frame) that instantiates the disjointness premises from precise
        ownership.  Here the frame rule IS reused, unchanged
        ([Frame.qrepX_frame]).
+
+    3. [owned_queues_sound] -- precise separating ownership of two queues
+       yields the two representations and their footprint disjointness.
 
     Everything in this file is a statement about heaps.  No temporal formula
     and no ICTree appears. *)
@@ -91,13 +94,13 @@ Proof.
 Qed.
 
 (** The same statement in the [rot_heap] form the language layer produces.
-    [qstep u (a :: n1) h] is [rot_heap u a (hdf n1 0) (zof u n1) h] by
+    [qstep u (a :: n1) h] is [rot_heap u a (List.hd 0 n1) (zof u n1) h] by
     definition, so this is a restatement, not a second proof. *)
 Corollary foreign_pres_rot: forall u a n1 vs1 v n2 vs2 h,
     qrep u (a :: n1) vs1 h ->
     qrep v n2 vs2 h ->
     Disj u (a :: n1) v n2 ->
-    qrep v n2 vs2 (rot_heap u a (hdf n1 0) (zof u n1) h).
+    qrep v n2 vs2 (rot_heap u a (List.hd 0 n1) (zof u n1) h).
 Proof.
   intros u a n1 vs1 v n2 vs2 h Hq1 Hq2 Hd.
   exact (foreign_pres u (a :: n1) vs1 v n2 vs2 h Hq1 ltac:(discriminate) Hq2 Hd).
@@ -141,4 +144,37 @@ Proof.
     assert (Hd1: h1 x <> None) by (eapply qrep_fp; eassumption).
     assert (Hd2: h2 x <> None) by (eapply qrep_fp; eassumption).
     destruct (H12 x); contradiction.
+Qed.
+
+(** ** Precise ownership of two queues
+
+    [owned_queues] is the separating conjunction of the two precise queue
+    resources.  Soundness goes through [compose3] with an empty outer frame and
+    pointwise footprint agreement; heap functions are never equated. *)
+
+Definition owned_queues u ns1 vs1 v ns2 vs2 : Heap -> Prop :=
+  asep (qrepX u ns1 vs1) (qrepX v ns2 vs2).
+
+Lemma owned_queues_sound u ns1 vs1 v ns2 vs2 h :
+  owned_queues u ns1 vs1 v ns2 vs2 h ->
+  qrep u ns1 vs1 h /\ qrep v ns2 vs2 h /\ Disj u ns1 v ns2.
+Proof.
+  intros (h1 & h2 & Hd & Heq & H1 & H2).
+  change (hdisj h1 h2) in Hd.
+  change (heq h (hunion h1 h2)) in Heq.
+  assert (H1e : hdisj h1 hemp) by (intro x; right; reflexivity).
+  assert (H2e : hdisj h2 hemp) by (intro x; right; reflexivity).
+  destruct (compose3 u ns1 vs1 h1 v ns2 vs2 h2 hemp
+    H1 H2 Hd H1e H2e eq_refl) as (Q1 & Q2 & Hdisj).
+  assert (Hagree : forall x, hunion h1 (hunion h2 hemp) x = h x).
+  { intro x; rewrite Heq; unfold hunion, hemp.
+    destruct (h1 x); [reflexivity | destruct (h2 x); reflexivity]. }
+  split; [| split].
+  - eapply qrep_agree_fp; [exact Q1 | |].
+    + intros x _; symmetry; apply Hagree.
+    + rewrite <- Hagree; exact (qrep_null _ _ _ _ Q1).
+  - eapply qrep_agree_fp; [exact Q2 | |].
+    + intros x _; symmetry; apply Hagree.
+    + rewrite <- Hagree; exact (qrep_null _ _ _ _ Q2).
+  - exact Hdisj.
 Qed.
