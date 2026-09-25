@@ -124,18 +124,29 @@ Section RoundRobinInterpretation.
       interp_state_tau, sb_guard; reflexivity.
   Qed.
 
-  Lemma interp_schedule_rr_branch
+  (** Keep one scheduler continuation fixed while interpreting a raw user event. *)
+  Lemma interp_schedule_rr_user_bind
     (handler : E ~> stateT Σ (ictree F)) n (ts : pool E (S n))
-    (i : Fin.t (S n)) b k m σ :
-    observe (ts $ i) = BrF b k ->
-    interp_schedule_rr handler (S n) ts (Some i) m σ ~
-    interp_schedule_rr handler (S n) (ts @ i := k (rr_pick b m))
-      (Some i) (S m) σ.
+    (i : Fin.t (S n)) (t : thread E) (e : E) (k : encode e -> thread E) m σ :
+    t ≅ Vis (inr (inr e)) k ->
+    interp_schedule_rr handler (S n) (ts @ i := t) (Some i) m σ ~
+    (interp_state handler
+       (@ICtree.trigger E E _ _ ReSum_refl ReSumRet_refl e) σ >>=
+      fun '(x,σ') =>
+        interp_schedule_rr handler (S n) (ts @ i := k x) (Some i) m σ').
   Proof.
-    intro Hobs; unfold interp_schedule_rr at 1.
-    rewrite unfold_run_round_robin, (schedule_focused_br n ts i b k Hobs).
-    rewrite interp_erase_guard, interp_state_tau, sb_guard; reflexivity.
+    intro Hnode.
+    pose proof (interp_schedule_rr_equ handler (S n)
+      (ts @ i := t) (ts @ i := Vis (inr (inr e)) k) (Some i) m σ
+      (replace_pool_equ ts ts i _ _ (pool_equ_refl ts) Hnode)) as Hpool.
+    rewrite Hpool.
+    erewrite interp_schedule_rr_user with (e:=e) (k:=k)
+      by (rewrite Vector.nth_replace_eq; reflexivity).
+    rewrite interp_state_trigger_bind.
+    apply sbisim_clo_bind_eq; [reflexivity | intros [x σ']].
+    rewrite Vector.replace_replace_eq; reflexivity.
   Qed.
+
 End RoundRobinInterpretation.
 
 Arguments interp_schedule_rr {E F HE HF Σ} handler n ts focus cursor σ.

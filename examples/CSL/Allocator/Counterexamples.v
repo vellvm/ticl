@@ -165,13 +165,6 @@ Proof.
   apply periodic_prefix_script.
 Qed.
 
-Local Lemma starve_selected_prefix k : k < 19 ->
-  selected starvation_execution k = List.nth k starvation_prefix Remote1.
-Proof.
-  intro Hk; change (starvation_choices k = List.nth k starvation_prefix Remote1).
-  unfold starvation_choices; apply periodic_choices_before; exact Hk.
-Qed.
-
 Local Lemma starve_selected_cycle n i : i < 13 ->
   selected starvation_execution (19+13*n+i) =
     List.nth i starvation_cycle Remote1.
@@ -206,91 +199,36 @@ Proof.
   induction n as [|n IH].
   - destruct (starve_prefix_run 0) as (last & Hrun & Hlast).
     eapply state_equiv_trans; [|exact Hlast].
-    destruct (execution_window_state (turn 1) event_obs
-      (fun s => s = initial_state 2 0) state_equiv (turn_proper 1)
-      starvation_execution 0 (List.length starvation_prefix) (initial_state 2 0)
-      starvation_execution_valid starve_initial_equiv) as (actual & Hactual & Hstate).
-    rewrite starve_prefix_script, Hrun in Hactual.
-    assert (Elast : actual = last) by congruence; subst actual.
     replace (19+13*0) with (0 + List.length starvation_prefix) by reflexivity.
-    exact Hstate.
+    exact (execution_script_state (turn 1) event_obs
+      (fun s => s = initial_state 2 0) state_equiv (turn_proper 1)
+      starvation_execution 0 starvation_prefix (initial_state 2 0) last
+      (starve_prefix_logs 0) starvation_execution_valid starve_initial_equiv
+      starve_prefix_script Hrun).
   - destruct (starve_cycle_run (6+4*n)) as (last & Hrun & Hlast).
     replace (6+4*S n) with (4+(6+4*n)) by lia.
     eapply state_equiv_trans; [|exact Hlast].
-    replace (19+13*S n) with
-      ((19+13*n)+List.length starvation_cycle)
+    replace (19+13*S n) with ((19+13*n)+List.length starvation_cycle)
       by (cbn [starvation_cycle List.length]; lia).
-    destruct (execution_window_state (turn 1) event_obs
+    exact (execution_script_state (turn 1) event_obs
       (fun s => s = initial_state 2 0) state_equiv (turn_proper 1)
-      starvation_execution (19+13*n) (List.length starvation_cycle)
-      (starve_boundary (6+4*n)) starvation_execution_valid IH)
-      as (actual & Hactual & Hstate).
-    rewrite starve_cycle_script, Hrun in Hactual.
-    assert (Elast : actual = last) by congruence; subst actual; exact Hstate.
-Qed.
-
-Local Lemma starve_actual_cycle_run n : exists last,
-  run_turns (turn 1) event_obs starvation_cycle (states starvation_execution (19+13*n)) =
-    Some (last,starve_cycle_logs (6+4*n)) /\
-  state_equiv last (starve_boundary (6+4*S n)).
-Proof.
-  replace (6+4*S n) with (4+(6+4*n)) by lia.
-  apply starve_cycle_run_actual; apply starve_boundaries.
-Qed.
-
-(** Every intermediate state is the result of a finite fold from the actual
-    returned boundary, not from a periodically reset representative. *)
-Local Lemma starve_actual_cycle_position n i : i < 13 ->
-  exists logs next,
-    run_turns (turn 1) event_obs (List.firstn i starvation_cycle)
-      (states starvation_execution (19+13*n)) =
-      Some (states starvation_execution (19+13*n+i),logs) /\
-    held (remote1_state (states starvation_execution (19+13*n+i))) = [8] /\
-    turn 1 (List.nth i starvation_cycle Remote1)
-      (states starvation_execution (19+13*n+i)) =
-      Some (next,starve_cycle_event (6+4*n) i).
-Proof.
-  intro Hi.
-  destruct (starve_cycle_position (6+4*n) i Hi)
-    as (middle & logs & next & Hrun & Hheld & Hturn).
-  destruct (run_turns_some_compatible (turn 1) event_obs state_equiv (turn_proper 1)
-    (List.firstn i starvation_cycle)
-    (starve_boundary (6+4*n)) (states starvation_execution (19+13*n))
-    middle logs (state_equiv_sym _ _ (starve_boundaries n)) Hrun)
-    as (actual & Hactual & Heq).
-  assert (Hscript : List.map (selected starvation_execution)
-    (List.seq (19+13*n) i) = List.firstn i starvation_cycle).
-  {
-    rewrite <- (map_seq_firstn (selected starvation_execution) (19+13*n)
-      (List.length starvation_cycle) i ltac:(change (i <= 13); lia)).
-    rewrite (starve_cycle_script n); reflexivity.
-  }
-  pose proof (execution_run_turns (turn 1) event_obs
-    (fun s => s = initial_state 2 0) starvation_execution (19+13*n) i
-    starvation_execution_valid) as Hwindow.
-  rewrite Hscript, Hactual in Hwindow.
-  assert (Estate : actual = states starvation_execution (19+13*n+i))
-    by congruence.
-  subst actual.
-  destruct (step_some_compatible (turn 1) state_equiv (turn_proper 1)
-    (List.nth i starvation_cycle Remote1)
-    middle (states starvation_execution (19+13*n+i)) next
-    (starve_cycle_event (6+4*n) i) Heq Hturn)
-    as (actual_next & Hnext & Hnext_eq).
-  exists logs, actual_next; split; [exact Hactual|]; split; [|exact Hnext].
-  destruct Heq as (_ & _ & _ & _ & Hremote1).
-  rewrite <- Hremote1; exact Hheld.
+      starvation_execution (19+13*n) starvation_cycle
+      (starve_boundary (6+4*n)) last (starve_cycle_logs (6+4*n))
+      starvation_execution_valid IH (starve_cycle_script n) Hrun).
 Qed.
 
 Local Lemma starve_cycle_emitted n i : i < 13 ->
   emitted starvation_execution (19+13*n+i) = starve_cycle_event (6+4*n) i.
 Proof.
   intro Hi.
-  destruct (starve_actual_cycle_position n i Hi)
-    as (logs & next & Hrun & Hheld & Hturn).
-  pose proof (execution_step (turn 1) (fun s => s = initial_state 2 0)
-    starvation_execution (19+13*n+i) starvation_execution_valid) as Hstep.
-  rewrite (starve_selected_cycle n i Hi), Hturn in Hstep; congruence.
+  destruct (starve_cycle_position (6+4*n) i Hi)
+    as (middle & logs & next & Hrun & Hheld & Hturn).
+  exact (proj2 (execution_script_emitted (turn 1) event_obs
+    (fun s => s = initial_state 2 0) state_equiv (turn_proper 1)
+    starvation_execution (19+13*n) starvation_cycle i Remote1
+    (starve_boundary (6+4*n)) middle logs next (starve_cycle_event (6+4*n) i)
+    starvation_execution_valid (starve_boundaries n) (starve_cycle_script n)
+    ltac:(change (i < 13); lia) Hrun Hturn)).
 Qed.
 
 Local Lemma starve_prefix_emitted i : i < 19 ->
@@ -298,37 +236,12 @@ Local Lemma starve_prefix_emitted i : i < 19 ->
 Proof.
   intro Hi.
   destruct (starve_prefix_position 0 i Hi) as (middle & logs & next & Hrun & Hturn).
-  assert (Hscript : List.map (selected starvation_execution) (List.seq 0 i) =
-    List.firstn i starvation_prefix).
-  {
-    rewrite <- (map_seq_firstn (selected starvation_execution) 0
-      (List.length starvation_prefix) i ltac:(change (i <= 19); lia)).
-    rewrite starve_prefix_script; reflexivity.
-  }
-  destruct (execution_window_state (turn 1) event_obs
+  exact (proj2 (execution_script_emitted (turn 1) event_obs
     (fun s => s = initial_state 2 0) state_equiv (turn_proper 1)
-    starvation_execution 0 i (initial_state 2 0)
-    starvation_execution_valid starve_initial_equiv) as (actual & Hactual & Heq).
-  rewrite Hscript, Hrun in Hactual.
-  assert (Emiddle : actual = middle) by congruence; subst actual.
-  rewrite Nat.add_0_l in Heq.
-  rewrite <- (starve_selected_prefix i Hi) in Hturn.
-  destruct (execution_turn_observation (turn 1) (fun s => s = initial_state 2 0)
-    state_equiv (turn_proper 1) starvation_execution i middle
-    starvation_execution_valid Heq) as (next' & Hturn' & _).
-  rewrite Hturn in Hturn'; congruence.
-Qed.
-
-Local Lemma starve_cycle_event_offsets n :
-  emitted starvation_execution (19+13*n+5) = Some (stamp (tag_retire,6) (6+4*n)) /\
-  emitted starvation_execution (19+13*n+6) = Some (stamp (tag_retry,8) (1+(6+4*n))) /\
-  emitted starvation_execution (19+13*n+9) = Some (stamp (tag_reclaim,6) (2+(6+4*n))) /\
-  emitted starvation_execution (19+13*n+11) = Some (stamp (tag_alloc,6) (3+(6+4*n))).
-Proof.
-  split; [exact (starve_cycle_emitted n 5 ltac:(lia))|].
-  split; [exact (starve_cycle_emitted n 6 ltac:(lia))|].
-  split; [exact (starve_cycle_emitted n 9 ltac:(lia))|].
-  exact (starve_cycle_emitted n 11 ltac:(lia)).
+    starvation_execution 0 starvation_prefix i Remote1
+    (initial_state 2 0) middle logs next (starve_prefix_event 0 i)
+    starvation_execution_valid starve_initial_equiv starve_prefix_script
+    ltac:(change (i < 19); lia) Hrun Hturn)).
 Qed.
 
 Local Lemma starve_index k : 19 <= k ->
@@ -354,8 +267,16 @@ Local Lemma starve_held_forever k : 19 <= k ->
   held (remote1_state (states starvation_execution k)) = [8].
 Proof.
   intro Hk; destruct (starve_index k Hk) as (n & i & Hi & ->).
-  destruct (starve_actual_cycle_position n i Hi)
-    as (logs & next & Hrun & Hheld & Hturn); exact Hheld.
+  destruct (starve_cycle_position (6+4*n) i Hi)
+    as (middle & logs & next & Hrun & Hheld & Hturn).
+  destruct (proj1 (execution_script_emitted (turn 1) event_obs
+    (fun s => s = initial_state 2 0) state_equiv (turn_proper 1)
+    starvation_execution (19+13*n) starvation_cycle i Remote1
+    (starve_boundary (6+4*n)) middle logs next (starve_cycle_event (6+4*n) i)
+    starvation_execution_valid (starve_boundaries n) (starve_cycle_script n)
+    ltac:(change (i < 13); lia) Hrun Hturn))
+    as (_ & _ & _ & _ & Hremote1).
+  rewrite Hremote1; exact Hheld.
 Qed.
 
 Local Lemma starve_prefix_never_retire8 c i idx : i < 19 ->
@@ -508,33 +429,11 @@ Proof.
   intros [-> | ->]; vm_compute; reflexivity.
 Qed.
 
-Local Lemma stalled_cycle_run c :
-  run_turns (turn 1) event_obs owner_stall_cycle (stalled_boundary c) =
-    Some (stalled_boundary c,[]).
-Proof. reflexivity. Qed.
-
-(** Transfer the finite polling calculation to the actual accumulated heap;
-    neither this lemma nor the infinite witness resets that heap. *)
-Local Lemma stalled_cycle_run_actual c s :
-  state_equiv s (stalled_boundary c) ->
-  exists last, run_turns (turn 1) event_obs owner_stall_cycle s = Some (last,[]) /\
-    state_equiv last s.
-Proof.
-  intro Hs.
-  destruct (run_turns_some_compatible (turn 1) event_obs state_equiv (turn_proper 1)
-    owner_stall_cycle (stalled_boundary c) s (stalled_boundary c) []
-    (state_equiv_sym _ _ Hs) (stalled_cycle_run c))
-    as (last & Hrun & Hlast).
-  exists last; split; [exact Hrun|].
-  eapply state_equiv_trans; [apply state_equiv_sym; exact Hlast|].
-  apply state_equiv_sym; exact Hs.
-Qed.
-
 Local Lemma stalled_prefix_position k : k < 13 ->
   exists before after logs,
     run_turns (turn 1) event_obs (List.firstn k owner_stall_prefix) (initial_state 2 0) =
       Some (before,logs) /\
-    turn 1 (owner_stall_choices k) before =
+    turn 1 (List.nth k owner_stall_prefix Remote0) before =
       Some (after,List.nth k stalled_prefix_observations None).
 Proof.
   intro Hk.
@@ -570,14 +469,13 @@ Local Lemma stalled_prefix_state :
   state_equiv (states owner_stall_execution 13) (stalled_boundary 4).
 Proof.
   destruct (stalled_prefix_run 0) as (last & Hrun & Hlast).
-  destruct (execution_window_state (turn 1) event_obs
+  eapply state_equiv_trans; [|exact Hlast].
+  replace 13 with (0 + List.length owner_stall_prefix) by reflexivity.
+  exact (execution_script_state (turn 1) event_obs
     (fun s => s = initial_state 2 0) state_equiv (turn_proper 1)
-    owner_stall_execution 0 (List.length owner_stall_prefix) (initial_state 2 0)
-    owner_stall_execution_valid stalled_initial_equiv) as (actual & Hactual & Hstate).
-  rewrite stalled_prefix_script, Hrun in Hactual.
-  assert (Elast : actual = last) by congruence; subst actual.
-  replace (0 + List.length owner_stall_prefix) with 13 in Hstate by reflexivity.
-  eapply state_equiv_trans; [exact Hstate|exact Hlast].
+    owner_stall_execution 0 owner_stall_prefix (initial_state 2 0) last
+    (stalled_prefix_logs 0) owner_stall_execution_valid stalled_initial_equiv
+    stalled_prefix_script Hrun).
 Qed.
 
 Local Lemma stalled_prefix_observation k : k < 13 ->
@@ -586,43 +484,18 @@ Local Lemma stalled_prefix_observation k : k < 13 ->
 Proof.
   intro Hk.
   destruct (stalled_prefix_position k Hk) as (before & after & logs & Hrun & Hturn).
-  assert (Hscript : List.map (selected owner_stall_execution) (List.seq 0 k) =
-      List.firstn k owner_stall_prefix).
-  {
-    rewrite <- (map_seq_firstn (selected owner_stall_execution) 0
-      (List.length owner_stall_prefix) k ltac:(change (k <= 13); lia)).
-    rewrite stalled_prefix_script; reflexivity.
-  }
-  destruct (execution_window_state (turn 1) event_obs
+  exact (proj2 (execution_script_emitted (turn 1) event_obs
     (fun s => s = initial_state 2 0) state_equiv (turn_proper 1)
-    owner_stall_execution 0 k (initial_state 2 0)
-    owner_stall_execution_valid stalled_initial_equiv) as (actual & Hactual & Hstate).
-  rewrite Hscript, Hrun in Hactual.
-  assert (Ebefore : actual = before) by congruence; subst actual.
-  rewrite Nat.add_0_l in Hstate.
-  change (turn 1 (selected owner_stall_execution k) before =
-    Some (after,List.nth k stalled_prefix_observations None)) in Hturn.
-  destruct (execution_turn_observation (turn 1) (fun s => s = initial_state 2 0)
-    state_equiv (turn_proper 1) owner_stall_execution k before
-    owner_stall_execution_valid Hstate) as (next & Hnext & _).
-  rewrite Hturn in Hnext; congruence.
-Qed.
-
-Local Lemma stalled_prefix_events :
-  List.map (emitted owner_stall_execution) (List.seq 0 13) =
-    stalled_prefix_observations.
-Proof.
-  apply (map_seq_eq 0 13 _ _ None); [reflexivity|].
-  intros i Hi; cbn [Nat.add]; now apply stalled_prefix_observation.
+    owner_stall_execution 0 owner_stall_prefix k Remote0
+    (initial_state 2 0) before logs after
+    (List.nth k stalled_prefix_observations None)
+    owner_stall_execution_valid stalled_initial_equiv stalled_prefix_script
+    ltac:(change (k < 13); lia) Hrun Hturn)).
 Qed.
 
 Local Lemma stalled_retire6 :
   emitted owner_stall_execution 8 = Some (stamp (tag_retire,6) 2).
 Proof. exact (stalled_prefix_observation 8 ltac:(lia)). Qed.
-
-Local Lemma stalled_retire8 :
-  emitted owner_stall_execution 12 = Some (stamp (tag_retire,8) 3).
-Proof. exact (stalled_prefix_observation 12 ltac:(lia)). Qed.
 
 Local Lemma stalled_tail_choices n :
   selected owner_stall_execution (13+n) =
@@ -703,31 +576,6 @@ Proof.
     owner_stall_execution_valid (stalled_suffix_state n)) as (next & Hnext & _).
   rewrite (stalled_polling_turn 4 _ (stalled_tail_client n)) in Hnext.
   congruence.
-Qed.
-
-Local Lemma stalled_suffix_stable n :
-  state_equiv (states owner_stall_execution (13+n))
-    (states owner_stall_execution 13) /\
-  emitted owner_stall_execution (13+n) = None.
-Proof.
-  split; [|apply stalled_suffix_silent].
-  eapply state_equiv_trans; [apply stalled_suffix_state|].
-  apply state_equiv_sym; exact stalled_prefix_state.
-Qed.
-
-Local Lemma stalled_remote_chain n :
-  aheap (states owner_stall_execution (13+n)) (remote_head 1) = Some 8 /\
-  linked (fun a next => aheap (states owner_stall_execution (13+n)) a = Some next) [8;6] 0 /\
-  acount (states owner_stall_execution (13+n)) = 4 /\
-  owner_state (states owner_stall_execution (13+n)) = ORead /\
-  remote0_state (states owner_stall_execution (13+n)) = RPoll /\
-  remote1_state (states owner_stall_execution (13+n)) = RPoll.
-Proof.
-  destruct (stalled_suffix_state n) as (Hheap & Hcount & Howner & Hzero & Hone).
-  split; [rewrite Hheap; reflexivity|].
-  split.
-  - cbn [linked List.hd]; repeat split; rewrite Hheap; reflexivity.
-  - exact (conj Hcount (conj Howner (conj Hzero Hone))).
 Qed.
 
 Local Lemma stalled_no_reclaim k block :

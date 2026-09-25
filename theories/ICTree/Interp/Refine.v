@@ -113,10 +113,6 @@ Section BranchFreeLaws.
   Lemma bf_ret {A} (x : A) : BranchFree (Ret x : ictree E A).
   Proof. apply branchfree_unfold; constructor. Qed.
 
-  Lemma bf_guard {A} (t : ictree E A) :
-    BranchFree t -> BranchFree (Guard t).
-  Proof. intro Ht; apply branchfree_unfold; now constructor. Qed.
-
   Lemma bf_vis {A} e (k : encode e -> ictree E A) :
     (forall x, BranchFree (k x)) -> BranchFree (Vis e k).
   Proof. intro Hk; apply branchfree_unfold; now constructor. Qed.

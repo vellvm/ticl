@@ -128,15 +128,6 @@ Proof. intros t u Ht. unfold interp_yield. now rewrite Ht. Qed.
   Proper (equ eq ==> equ eq) (@interp_thread E HE X).
 Proof. intros t u Ht. unfold interp_thread, interp_yield. now rewrite Ht. Qed.
 
-(** Erasure handlers intentionally hide scheduler/thread observations. *)
-Lemma handle_spawn_spawn_erased {E} {HE : Encode E} :
-  @handle_spawn E HE (inr (inl Spawn)) = Ret tt.
-Proof. reflexivity. Qed.
-
-Lemma handle_yield_yield_erased {E} {HE : Encode E} :
-  @handle_yield E HE (inl Yield) = Ret tt.
-Proof. reflexivity. Qed.
-
 (** * Scheduler one-step/case regression facts. *)
 Section SchedulerFacts.
   Context {E : Type} `{Encode E}.
@@ -218,86 +209,6 @@ Section SchedulerFacts.
   Qed.
 End SchedulerFacts.
 
-(** * Non-degenerate finite-pool scheduler regressions. *)
-Section SchedulerPoolRegressions.
-  Context {E : Type} `{Encode E}.
-
-  Lemma schedule_yield_two_threads_one_step (next other : thread E) :
-    observe
-      (schedule 2
-         [Vis ((inl Yield) : yieldE + (forkE + E)) (fun _ : unit => next);
-          other]%vector
-         (Some Fin.F1)) =
-      GuardF
-        (schedule 2
-           ([Vis ((inl Yield) : yieldE + (forkE + E)) (fun _ : unit => next);
-             other]%vector @ Fin.F1 := next)
-           None).
-  Proof. reflexivity. Qed.
-
-  Lemma schedule_yield_two_threads_focused_slot (next other : thread E) :
-    (([Vis ((inl Yield) : yieldE + (forkE + E)) (fun _ : unit => next);
-       other]%vector @ Fin.F1 := next) $ Fin.F1) = next.
-  Proof. apply Vector.nth_replace_eq. Qed.
-
-  Lemma schedule_yield_two_threads_other_slot (next other : thread E) :
-    (([Vis ((inl Yield) : yieldE + (forkE + E)) (fun _ : unit => next);
-       other]%vector @ Fin.F1 := next) $ (Fin.FS Fin.F1)) = other.
-  Proof.
-    rewrite Vector.nth_replace_neq by discriminate.
-    reflexivity.
-  Qed.
-
-  Lemma schedule_fork_two_threads_one_step
-      (child parent other : thread E) :
-    observe
-      (schedule 2
-         [Vis ((inr (inl Fork)) : yieldE + (forkE + E))
-            (fun in_child : bool => if in_child then child else parent);
-          other]%vector
-         (Some Fin.F1)) =
-      VisF ((inr (inl Spawn)) : yieldE + (spawnE + E))
-        (fun _ =>
-           schedule 3
-             ((child ::
-               ([Vis ((inr (inl Fork)) : yieldE + (forkE + E))
-                   (fun in_child : bool => if in_child then child else parent);
-                 other]%vector @ Fin.F1 := parent))%vector)
-             (Some (Fin.FS Fin.F1))).
-  Proof. reflexivity. Qed.
-
-  Lemma schedule_fork_two_threads_child_slot
-      (child parent other : thread E) :
-    (((child ::
-       ([Vis ((inr (inl Fork)) : yieldE + (forkE + E))
-           (fun in_child : bool => if in_child then child else parent);
-         other]%vector @ Fin.F1 := parent))%vector) $ Fin.F1) = child.
-  Proof. reflexivity. Qed.
-
-  Lemma schedule_fork_two_threads_parent_slot
-      (child parent other : thread E) :
-    (((child ::
-       ([Vis ((inr (inl Fork)) : yieldE + (forkE + E))
-           (fun in_child : bool => if in_child then child else parent);
-         other]%vector @ Fin.F1 := parent))%vector) $ (Fin.FS Fin.F1)) = parent.
-  Proof. apply Vector.nth_replace_eq. Qed.
-
-  Lemma schedule_fork_two_threads_other_slot
-      (child parent other : thread E) :
-    (((child ::
-       ([Vis ((inr (inl Fork)) : yieldE + (forkE + E))
-           (fun in_child : bool => if in_child then child else parent);
-         other]%vector @ Fin.F1 := parent))%vector)
-      $ (Fin.FS (Fin.FS Fin.F1))) = other.
-  Proof.
-    change ((([Vis ((inr (inl Fork)) : yieldE + (forkE + E))
-                 (fun in_child : bool => if in_child then child else parent);
-               other]%vector @ Fin.F1 := parent) $ (Fin.FS Fin.F1)) = other).
-    rewrite Vector.nth_replace_neq by discriminate.
-    reflexivity.
-  Qed.
-End SchedulerPoolRegressions.
-
 (** * Raw instrumentation entry points *)
 
 (** Instrument a standalone raw thread: erase [Fork] to the parent branch and
@@ -368,18 +279,6 @@ Proof.
   reflexivity.
 Qed.
 
-Lemma interp_thread_fork_node {E} `{Encode E} {X}
-    (k : bool -> ictree (yieldE + (forkE + E)) X) :
-  interp_thread (Vis (inr (inl Fork)) k) ≅ Guard (interp_thread (k false)).
-Proof.
-  unfold interp_thread, interp_yield.
-  rewrite interp_vis_node.
-  cbn [handle_thread].
-  rewrite bind_ret_l.
-  rewrite interp_guard_node.
-  reflexivity.
-Qed.
-
 Lemma interp_thread_user_node {E} `{Encode E} {X} (m : E)
     (k : encode m -> ictree (yieldE + (forkE + E)) X) :
   interp_thread (Vis (inr (inr m)) k)
@@ -443,16 +342,6 @@ Proof.
   reflexivity.
 Qed.
 
-Lemma instr_thread_fork {Σ X}
-    (k : bool -> ictree (yieldE + (forkE + stateE Σ)) X) (σ : Σ) :
-  instr_thread (Vis (inr (inl Fork)) k) σ ~ instr_thread (k false) σ.
-Proof.
-  unfold instr_thread, instr_stateE.
-  rewrite interp_thread_fork_node.
-  rewrite interp_state_tau, sb_guard.
-  reflexivity.
-Qed.
-
 Lemma instr_thread_get {Σ X}
     (k : Σ -> ictree (yieldE + (forkE + stateE Σ)) X) (σ : Σ) :
   instr_thread (Vis (inr (inr Get)) k) σ ~ instr_thread (k σ) σ.
@@ -505,14 +394,6 @@ Proof.
   reflexivity.
 Qed.
 
-Lemma interp_erase_guard_ret {E} `{Encode E} {X} (x : X) :
-  interp_yield (interp_spawn (Guard (Ret x) : ictree (yieldE + (spawnE + E)) X))
-    ≅ Guard (Ret x).
-Proof.
-  rewrite interp_erase_guard.
-  apply guard_equ_node, interp_erase_ret.
-Qed.
-
 Lemma interp_erase_br {E} `{Encode E} {X} n
     (k : fin' n -> ictree (yieldE + (spawnE + E)) X) :
   interp_yield (interp_spawn (Br n k))
@@ -542,15 +423,6 @@ Proof.
   apply guard_equ_node.
   rewrite interp_guard_node.
   reflexivity.
-Qed.
-
-Lemma interp_erase_guard_yield {E} `{Encode E} {X}
-    (k : unit -> ictree (yieldE + (spawnE + E)) X) :
-  interp_yield (interp_spawn (Guard (Vis (inl Yield) k)))
-    ≅ Guard (Guard (Guard (interp_yield (interp_spawn (k tt))))).
-Proof.
-  rewrite interp_erase_guard.
-  apply guard_equ_node, interp_erase_yield.
 Qed.
 
 Lemma interp_erase_spawn {E} `{Encode E} {X}

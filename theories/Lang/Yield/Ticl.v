@@ -7,16 +7,12 @@
     - [ICTree.Interp.Yield.Mod] exposes the scheduler, and [scheduled_visible]
       exposes scheduled programs with scheduler [Spawn], cooperative [Yield],
       and memory effects visible.
-    - [interp_scheduled_erased], [instr_exp_erased], and [instr_stmt_erased]
+    - [instr_exp_erased], [instr_stmt_flow_erased], and [instr_stmt_erased]
       expose the state-only TICL view where scheduler/yield observations are
       intentionally erased.
-    - [interp_scheduled], [instr_exp], and [instr_stmt] are compatibility
-      aliases for the erased tier.
 
     Every temporal lemma below is an instantiation of a raw rule from
-    [ICTree.Logic.Yield] at the Yield denotations.  This file also carries a
-    small regression surface: concrete visible YYield/YFork examples, and alias
-    facts documenting that the compatibility APIs are erased. *)
+    [ICTree.Logic.Yield] at the Yield denotations. *)
 From Stdlib Require Import
   Fin
   Morphisms
@@ -54,6 +50,7 @@ From TICL Require Import
   ICTree.Logic.Iter
   ICTree.Logic.State
   ICTree.SBisim
+  Lang.Maps
   Logic.Core
   Utils.Vectors.
 
@@ -67,7 +64,7 @@ Local Open Scope fin_vector_scope.
     [Vis] node the raw rules expect.  They unfold only source denotations and
     triggers; no interpreter is unfolded here. *)
 
-Local Lemma yget_bind {X} (k : Ctx -> ictree YEff X) :
+Local Lemma yget_bind {X} (k : Ctx.Ctx -> ictree YEff X) :
   (x <- yget;; k x) ≅ Vis ((inr (inr Get)) : YEff) k.
 Proof.
   unfold yget, ytrigger, ICtree.trigger.
@@ -77,7 +74,7 @@ Proof.
   reflexivity.
 Qed.
 
-Local Lemma yput_bind {X} (m : Ctx) (k : unit -> ictree YEff X) :
+Local Lemma yput_bind {X} (m : Ctx.Ctx) (k : unit -> ictree YEff X) :
   (x <- yput m;; k x) ≅ Vis ((inr (inr (Put m))) : YEff) k.
 Proof.
   unfold yput, ytrigger, ICtree.trigger.
@@ -101,7 +98,7 @@ Qed.
 Local Lemma denote_yassign_tail name value :
   (ctx <- yget;; yput (add name value ctx);; Ret Fallthrough)
     ≅ Vis ((inr (inr Get)) : YEff)
-        (fun σ0 : Ctx =>
+        (fun σ0 : Ctx.Ctx =>
            Vis ((inr (inr (Put (add name value σ0)))) : YEff)
              (fun _ : unit => Ret Fallthrough)).
 Proof.
@@ -134,7 +131,7 @@ Qed.
 Local Lemma denote_stmt_yassign_ylit_update name n :
   denote_stmt (YAssign name (YLit n))
     ≅ Vis ((inr (inr Get)) : YEff)
-        (fun σ0 : Ctx =>
+        (fun σ0 : Ctx.Ctx =>
            Vis ((inr (inr (Put (add name n σ0)))) : YEff)
              (fun _ : unit => Ret tt)).
 Proof.
@@ -151,15 +148,6 @@ Proof.
   cbv beta.
   repeat (setoid_rewrite bind_ret_l; cbv beta).
   reflexivity.
-Qed.
-
-Local Lemma pool_equ_singleton (t u : thread Mem) :
-  t ≅ u -> pool_equ [t]%vector [u]%vector.
-Proof.
-  intros Ht i.
-  dependent destruction i.
-  - exact Ht.
-  - inversion i.
 Qed.
 
 (** * Expression rules *)
@@ -310,7 +298,7 @@ Proof.
   intros ctx ctx' w w' Hctx Hw Hnd; subst.
   unfold instr_stmt_erased.
   rewrite (instr_schedule_pool_equ 1 _ _ (Some Fin.F1) ctx'
-             (pool_equ_singleton _ _ denote_stmt_yskip_ret)).
+             (cons_pool_equ _ _ _ _ denote_stmt_yskip_ret (pool_equ_refl _))).
   apply axr_schedule_ret; [ assumption | split; reflexivity ].
 Qed.
 
@@ -324,7 +312,7 @@ Proof.
   intros ctx ctx' w w' Hctx Hw Hnd; subst.
   unfold instr_stmt_erased.
   rewrite (instr_schedule_pool_equ 1 _ _ (Some Fin.F1) ctx'
-             (pool_equ_singleton _ _ denote_stmt_yyield_vis)).
+             (cons_pool_equ _ _ _ _ denote_stmt_yyield_vis (pool_equ_refl _))).
   apply axax_schedule_yield; [ assumption | split; reflexivity ].
 Qed.
 
@@ -641,7 +629,7 @@ Proof.
   intros name n ctx w ψ R Hlog HR.
   unfold instr_stmt_erased.
   rewrite (instr_schedule_pool_equ 1 _ _ (Some Fin.F1) ctx
-             (pool_equ_singleton _ _ (denote_stmt_yassign_ylit_update name n))).
+             (cons_pool_equ _ _ _ _ (denote_stmt_yassign_ylit_update name n) (pool_equ_refl _))).
   now apply (aur_schedule_update (add name n) ctx).
 Qed.
 
@@ -654,209 +642,6 @@ Proof.
   intros name n ctx w ψ φ Hlog Hret.
   unfold instr_stmt_erased.
   rewrite (instr_schedule_pool_equ 1 _ _ (Some Fin.F1) ctx
-             (pool_equ_singleton _ _ (denote_stmt_yassign_ylit_update name n))).
+             (cons_pool_equ _ _ _ _ (denote_stmt_yassign_ylit_update name n) (pool_equ_refl _))).
   now apply (aul_schedule_update (add name n) ctx).
 Qed.
-
-(** * Concrete scheduler-visible examples *)
-Local Ltac solve_visible_regression :=
-  cbn;
-  unfold resum, ReSum_refl, resum_ret, ReSumRet_refl;
-  reflexivity.
-
-Lemma scheduled_visible_yyield_one_step :
-  observe (scheduled_visible YYield) =
-    GuardF
-      (schedule 1
-         ([denote_stmt YYield]%vector @ Fin.F1 := (denote_stmt YSkip))
-         None).
-Proof.
-  unfold scheduled_visible.
-  apply (@schedule_focused_yield Mem _ 0
-           [denote_stmt YYield]%vector
-           Fin.F1
-           (fun _ : unit => denote_stmt YSkip)).
-  solve_visible_regression.
-Qed.
-
-Definition yfork_body_fork_continuation
-    (body : YStmt) (in_child : bool) : thread Mem :=
-  ICtree.subst'
-    (fun _ : YStmtFlow => Ret tt)
-    (observe
-       (ICtree.subst'
-          (fun branch : bool =>
-             if branch then
-               denote_stmt_flow body;; Ret HaltThread
-             else
-               Ret Fallthrough)
-          (RetF in_child))).
-
-Lemma scheduled_visible_yfork_body_one_step : forall body,
-  observe (scheduled_visible (YFork body)) =
-    VisF ((inr (inl Spawn)) : yieldE + (spawnE + Mem))
-      (fun _ =>
-         schedule 2
-           ((yfork_body_fork_continuation body true ::
-             ([denote_stmt (YFork body)]%vector
-                @ Fin.F1 := (yfork_body_fork_continuation body false)))%vector)
-           (Some (Fin.FS Fin.F1))).
-Proof.
-  intro body.
-  unfold scheduled_visible.
-  apply (@schedule_focused_fork Mem _ 0
-           [denote_stmt (YFork body)]%vector
-           Fin.F1
-           (yfork_body_fork_continuation body)).
-  solve_visible_regression.
-Qed.
-
-Lemma yfork_child_halts_after_body body :
-  yfork_body_fork_continuation body true =
-    ICtree.subst' (fun _ : YStmtFlow => Ret tt)
-      (observe (denote_stmt_flow body;; Ret HaltThread)).
-Proof. reflexivity. Qed.
-
-Lemma yfork_parent_falls_through body :
-  observe (yfork_body_fork_continuation body false) = RetF tt.
-Proof. solve_visible_regression. Qed.
-
-Definition yseq_yfork_body_rest_fork_continuation
-    (body rest : YStmt) (in_child : bool) : thread Mem :=
-  ICtree.subst'
-    (fun _ : YStmtFlow => Ret tt)
-    (observe
-       (ICtree.subst'
-          (fun flow : YStmtFlow =>
-             match flow with
-             | Fallthrough => denote_stmt_flow rest
-             | HaltThread => Ret HaltThread
-             end)
-          (observe
-             (ICtree.subst'
-                (fun branch : bool =>
-                   if branch then
-                     denote_stmt_flow body;; Ret HaltThread
-                   else
-                     Ret Fallthrough)
-                (RetF in_child))))).
-
-Lemma scheduled_visible_yseq_yfork_body_rest_one_step : forall body rest,
-  observe (scheduled_visible (YSeq (YFork body) rest)) =
-    VisF ((inr (inl Spawn)) : yieldE + (spawnE + Mem))
-      (fun _ =>
-         schedule 2
-           ((yseq_yfork_body_rest_fork_continuation body rest true ::
-             ([denote_stmt (YSeq (YFork body) rest)]%vector
-                @ Fin.F1 :=
-                  (yseq_yfork_body_rest_fork_continuation body rest false)))%vector)
-           (Some (Fin.FS Fin.F1))).
-Proof.
-  intros body rest.
-  unfold scheduled_visible.
-  apply (@schedule_focused_fork Mem _ 0
-           [denote_stmt (YSeq (YFork body) rest)]%vector
-           Fin.F1
-           (yseq_yfork_body_rest_fork_continuation body rest)).
-  solve_visible_regression.
-Qed.
-
-Lemma yseq_yfork_body_rest_parent_runs_rest body rest :
-  observe (yseq_yfork_body_rest_fork_continuation body rest false) =
-    observe (denote_stmt rest).
-Proof. solve_visible_regression. Qed.
-
-Definition yfork_yield_fork_continuation (in_child : bool) : thread Mem :=
-  ICtree.subst'
-    (fun _ : YStmtFlow => Ret tt)
-    (observe
-       (ICtree.subst'
-          (fun branch : bool =>
-             if branch then
-               denote_stmt_flow YYield;; Ret HaltThread
-             else
-               Ret Fallthrough)
-          (RetF in_child))).
-
-Lemma scheduled_visible_yfork_yield_one_step :
-  observe (scheduled_visible (YFork YYield)) =
-    VisF ((inr (inl Spawn)) : yieldE + (spawnE + Mem))
-      (fun _ =>
-         schedule 2
-           ((yfork_yield_fork_continuation true ::
-             ([denote_stmt (YFork YYield)]%vector
-                @ Fin.F1 := (yfork_yield_fork_continuation false)))%vector)
-           (Some (Fin.FS Fin.F1))).
-Proof.
-  unfold scheduled_visible.
-  apply (@schedule_focused_fork Mem _ 0
-           [denote_stmt (YFork YYield)]%vector
-           Fin.F1
-           yfork_yield_fork_continuation).
-  solve_visible_regression.
-Qed.
-
-Definition yseq_yfork_skip_yield_fork_continuation
-    (in_child : bool) : thread Mem :=
-  ICtree.subst'
-    (fun _ : YStmtFlow => Ret tt)
-    (observe
-       (ICtree.subst'
-          (fun flow : YStmtFlow =>
-             match flow with
-             | Fallthrough => denote_stmt_flow YYield
-             | HaltThread => Ret HaltThread
-             end)
-          (observe
-             (ICtree.subst'
-                (fun branch : bool =>
-                   if branch then
-                     denote_stmt_flow YSkip;; Ret HaltThread
-                   else
-                     Ret Fallthrough)
-                (RetF in_child))))).
-
-Lemma yseq_yfork_skip_yield_child_done :
-  observe (yseq_yfork_skip_yield_fork_continuation true) = RetF tt.
-Proof. solve_visible_regression. Qed.
-
-Lemma yseq_yfork_skip_yield_parent_yields :
-  observe (yseq_yfork_skip_yield_fork_continuation false) =
-    VisF ((inl Yield) : YEff) (fun _ : unit => denote_stmt YSkip).
-Proof. solve_visible_regression. Qed.
-
-Lemma scheduled_visible_yseq_yfork_skip_yield_one_step :
-  observe (scheduled_visible (YSeq (YFork YSkip) YYield)) =
-    VisF ((inr (inl Spawn)) : yieldE + (spawnE + Mem))
-      (fun _ =>
-         schedule 2
-           ((yseq_yfork_skip_yield_fork_continuation true ::
-             ([denote_stmt (YSeq (YFork YSkip) YYield)]%vector
-                @ Fin.F1 :=
-                  (yseq_yfork_skip_yield_fork_continuation false)))%vector)
-           (Some (Fin.FS Fin.F1))).
-Proof.
-  unfold scheduled_visible.
-  apply (@schedule_focused_fork Mem _ 0
-           [denote_stmt (YSeq (YFork YSkip) YYield)]%vector
-           Fin.F1
-           yseq_yfork_skip_yield_fork_continuation).
-  solve_visible_regression.
-Qed.
-
-(** * Compatibility aliases are erased APIs *)
-Lemma interp_scheduled_erased_unfold s :
-  interp_scheduled_erased s = interp_yield (interp_spawn (scheduled_visible s)).
-Proof. reflexivity. Qed.
-
-Lemma scheduled_alias s : scheduled s = scheduled_visible s.
-Proof. reflexivity. Qed.
-
-Lemma interp_scheduled_alias_erased s : interp_scheduled s = interp_scheduled_erased s.
-Proof. reflexivity. Qed.
-
-Lemma instr_exp_alias_erased e ctx : instr_exp e ctx = instr_exp_erased e ctx.
-Proof. reflexivity. Qed.
-
-Lemma instr_stmt_alias_erased s ctx : instr_stmt s ctx = instr_stmt_erased s ctx.
-Proof. reflexivity. Qed.

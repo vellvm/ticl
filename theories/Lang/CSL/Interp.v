@@ -149,10 +149,6 @@ Proof.
     + etransitivity; [apply bind_ret_l|]. apply bind_ret_l.
 Qed.
 
-Definition scheduled (p : CProg unit) : completed sE :=
-  schedule 1 [denote p]%vector (Some Fin.F1).
-Definition scheduled_rr (p : CProg unit) : completed sE :=
-  run_round_robin (scheduled p) 0.
 Definition run_rr (p : CProg unit) (h : Heap) (c : nat)
   : ictreeW (indexed (nat * nat)) (unit * SSig) :=
   interp_schedule_rr sh 1 [denote p]%vector (Some Fin.F1) 0 (h,c).
@@ -160,32 +156,6 @@ Definition run_rr (p : CProg unit) (h : Heap) (c : nat)
 Definition run_nd (p : CProg unit) (h : Heap) (c : nat)
   : ictreeW (indexed (nat * nat)) (unit * SSig) :=
   interp_schedule_nd sh 1 [denote p]%vector (Some Fin.F1) (h,c).
-
-Lemma run_rr_unfold p h c :
-  run_rr p h c ≅
-  interp_state sh (interp_yield (interp_spawn (scheduled_rr p))) (h,c).
-Proof. reflexivity. Qed.
-
-(** Keep one scheduler continuation fixed while interpreting a raw user event. *)
-Lemma interp_rr_user_bind n (ts : pool sE (S n)) (i : Fin.t (S n))
-  (t : thread sE) (e : sE) (k : encode e -> thread sE) m sigma :
-  t ≅ Vis (inr (inr e)) k ->
-  interp_schedule_rr sh (S n) (ts @ i := t) (Some i) m sigma ~
-  (interp_state sh (@ICtree.trigger sE sE _ _ ReSum_refl ReSumRet_refl e) sigma >>=
-    fun '(x,sigma') =>
-      interp_schedule_rr sh (S n) (ts @ i := k x) (Some i) m sigma').
-Proof.
-  intro Hnode.
-  pose proof (interp_schedule_rr_equ sh (S n)
-    (ts @ i := t) (ts @ i := Vis (inr (inr e)) k) (Some i) m sigma
-    (replace_pool_equ ts ts i _ _ (pool_equ_refl ts) Hnode)) as Hpool.
-  rewrite Hpool.
-  erewrite interp_schedule_rr_user with (e:=e) (k:=k)
-    by (rewrite Vector.nth_replace_eq; reflexivity).
-  rewrite interp_state_trigger_bind.
-  apply sbisim_clo_bind_eq; [reflexivity | intros [x sigma']].
-  rewrite Vector.replace_replace_eq; reflexivity.
-Qed.
 
 Lemma interp_rr_ret {A} n (ts : pool sE (S n)) (i : Fin.t (S n))
   (x : A) (K : option A -> thread sE) m σ :
@@ -202,7 +172,7 @@ Lemma interp_rr_read n (ts : pool sE (S n)) (i : Fin.t (S n))
   (interp_state sh (heap_read (E:=sE) a) σ >>= fun '(x,σ') =>
     interp_schedule_rr sh (S n) (ts @ i := K (Some x)) (Some i) m σ').
 Proof.
-  apply (interp_rr_user_bind n ts i _ (inl (HRead a))
+  apply ((interp_schedule_rr_user_bind sh) n ts i _ (inl (HRead a))
     (fun x => K (Some x)) m σ).
   apply source_raw_read_head.
 Qed.
@@ -214,7 +184,7 @@ Lemma interp_rr_alloc n (ts : pool sE (S n)) (i : Fin.t (S n))
   (interp_state sh (heap_alloc (E:=sE) size) sigma >>= fun '(base,sigma') =>
     interp_schedule_rr sh (S n) (ts @ i := K (Some base)) (Some i) m sigma').
 Proof.
-  apply (interp_rr_user_bind n ts i _ (inl (HAlloc size))
+  apply ((interp_schedule_rr_user_bind sh) n ts i _ (inl (HAlloc size))
     (fun base => K (Some base)) m sigma).
   apply source_raw_alloc_head.
 Qed.
@@ -227,7 +197,7 @@ Lemma interp_rr_cas n (ts : pool sE (S n)) (i : Fin.t (S n))
   (interp_state sh (heap_cas (E:=sE) a expected desired) sigma >>= fun '(b,sigma') =>
    interp_schedule_rr sh (S n) (ts @ i := K (Some b)) (Some i) m sigma').
 Proof.
-  apply (interp_rr_user_bind n ts i _ (inl (HCAS a expected desired))
+  apply ((interp_schedule_rr_user_bind sh) n ts i _ (inl (HCAS a expected desired))
     (fun b => K (Some b)) m sigma).
   apply source_raw_cas_head.
 Qed.
@@ -238,7 +208,7 @@ Lemma interp_rr_write n (ts : pool sE (S n)) (i : Fin.t (S n))
   (interp_state sh (heap_write (E:=sE) a v) σ >>= fun '(_,σ') =>
     interp_schedule_rr sh (S n) (ts @ i := K (Some tt)) (Some i) m σ').
 Proof.
-  apply (interp_rr_user_bind n ts i _ (inl (HWrite a v))
+  apply ((interp_schedule_rr_user_bind sh) n ts i _ (inl (HWrite a v))
     (fun _ => K (Some tt)) m σ).
   apply source_raw_write_head.
 Qed.
@@ -249,7 +219,7 @@ Lemma interp_rr_emit n (ts : pool sE (S n)) (i : Fin.t (S n))
   (interp_state sh (semit q v) σ >>= fun '(_,σ') =>
     interp_schedule_rr sh (S n) (ts @ i := K (Some tt)) (Some i) m σ').
 Proof.
-  apply (interp_rr_user_bind n ts i _ (inr (Log (q,v)))
+  apply ((interp_schedule_rr_user_bind sh) n ts i _ (inr (Log (q,v)))
     (fun _ => K (Some tt)) m σ).
   apply source_raw_emit_head.
 Qed.
@@ -666,99 +636,6 @@ Proof.
   rewrite bind_stuck_equ; reflexivity.
 Qed.
 
-Lemma interp_rr_write_missing n (ts : pool sE (S n)) (i : Fin.t (S n))
-  a v (K : option unit -> thread sE) m h c :
-  h a = None ->
-  interp_schedule_rr sh (S n)
-    (ts @ i := (denote_flow (CWrite a v) >>= K)) (Some i) m (h,c) ~
-  (stuck : ictreeW (indexed (nat * nat)) (unit * SSig)).
-Proof.
-  intro Missing.
-  pose proof ((interp_heap_wr_stuck (h_indexed (A:=(nat * nat)) (Sigma:=Heap)))
-    a v h c Missing) as Hstate.
-  rewrite interp_rr_write.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [eapply equ_clos_sbisim_goal; [exact Hstate | reflexivity | reflexivity] | intro result; reflexivity] |]
-  end.
-  rewrite bind_stuck_equ; reflexivity.
-Qed.
-
-Lemma interp_rr_cas_missing n (ts : pool sE (S n)) (i : Fin.t (S n))
-  a expected desired (K : option bool -> thread sE) m h c :
-  h a = None ->
-  interp_schedule_rr sh (S n)
-    (ts @ i := (denote_flow (CCAS a expected desired) >>= K)) (Some i) m (h,c) ~
-  (stuck : ictreeW (indexed (nat * nat)) (unit * SSig)).
-Proof.
-  intro Missing.
-  pose proof ((interp_heap_cas_missing (h_indexed (A:=(nat * nat)) (Sigma:=Heap))) a expected desired h c
-    (fun x : bool => (Ret x : ictree sE bool)) Missing) as Hstate.
-  rewrite bind_ret_r in Hstate.
-  rewrite interp_rr_cas.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [exact Hstate | intro result; reflexivity] |]
-  end.
-  rewrite bind_stuck_equ; reflexivity.
-Qed.
-
-Lemma interp_rr_alloc_zero n (ts : pool sE (S n)) (i : Fin.t (S n))
-   (K : option nat -> thread sE) m h c :
-  interp_schedule_rr sh (S n)
-    (ts @ i := (denote_flow (CAlloc 0) >>= K)) (Some i) m (h,c) ~
-  (stuck : ictreeW (indexed (nat * nat)) (unit * SSig)).
-Proof.
-  pose proof ((interp_heap_alloc_zero (h_indexed (A:=(nat * nat)) (Sigma:=Heap))) h c) as Hstate.
-  rewrite interp_rr_alloc.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [eapply equ_clos_sbisim_goal; [exact Hstate | reflexivity | reflexivity] | intro result; reflexivity] |]
-  end.
-  rewrite bind_stuck_equ; reflexivity.
-Qed.
-
-Lemma interp_rr_alloc_no_space n (ts : pool sE (S n)) (i : Fin.t (S n))
-  size (K : option nat -> thread sE) m h c :
-  Nat.lt 0 size ->
-  (forall base, Nat.lt 0 base -> ~ block_free h base size) ->
-  interp_schedule_rr sh (S n)
-    (ts @ i := (denote_flow (CAlloc size) >>= K)) (Some i) m (h,c) ~
-  (stuck : ictreeW (indexed (nat * nat)) (unit * SSig)).
-Proof.
-  intros Pos Full.
-  assert (Hstate : interp_state sh (heap_alloc (E:=sE) size) (h,c) ≅
-    (stuck : ictreeW (indexed (nat * nat)) (nat * SSig))).
-  { unfold heap_alloc, ICtree.trigger, resum, resum_ret, ReSum_inl, ReSumRet_inl.
-    rewrite interp_state_vis.
-    change ((alloc_search (F:=writerE (indexed (nat * nat))) (Sigma:=nat)
-        h size 1 c >>=
-      fun '(base,sigma') => Guard (interp_state sh (Ret base) sigma')) ≅ stuck).
-    etransitivity.
-    - apply equ_clo_bind with (S:=eq)
-        (k2:=fun '(base,sigma') => Guard (interp_state sh (Ret base) sigma')).
-      + apply (alloc_search_no_space (F:=writerE (indexed (nat * nat)))
-          (Sigma:=nat) h size 1 c Pos).
-        intros base Positive; apply Full; lia.
-      + intros result result' <-; reflexivity.
-    -
-    apply bind_stuck_equ. }
-  rewrite interp_rr_alloc.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [eapply equ_clos_sbisim_goal; [exact Hstate | reflexivity | reflexivity] | intro result; reflexivity] |]
-  end.
-  rewrite bind_stuck_equ; reflexivity.
-Qed.
-
 Lemma interp_nd_source_emit_log n (ts : pool sE (S n)) (i : Fin.t (S n))
   tag value (K : option unit -> thread sE) h c :
   interp_schedule_nd sh (S n)
@@ -868,98 +745,6 @@ Proof.
   rewrite bind_stuck_equ; reflexivity.
 Qed.
 
-Lemma interp_nd_source_write_missing n (ts : pool sE (S n)) (i : Fin.t (S n))
-  a v (K : option unit -> thread sE) h c :
-  h a = None ->
-  interp_schedule_nd sh (S n)
-    (ts @ i := (denote_flow (CWrite a v) >>= K)) (Some i) (h,c) ~
-  (stuck : ictreeW (indexed (nat * nat)) (unit * SSig)).
-Proof.
-  intro Missing.
-  pose proof ((interp_heap_wr_stuck (h_indexed (A:=(nat * nat)) (Sigma:=Heap))) a v h c Missing) as Hstate.
-  rewrite interp_nd_source_write.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [eapply equ_clos_sbisim_goal; [exact Hstate | reflexivity | reflexivity] | intro result; reflexivity] |]
-  end.
-  rewrite bind_stuck_equ; reflexivity.
-Qed.
-
-Lemma interp_nd_source_cas_missing n (ts : pool sE (S n)) (i : Fin.t (S n))
-  a expected desired (K : option bool -> thread sE) h c :
-  h a = None ->
-  interp_schedule_nd sh (S n)
-    (ts @ i := (denote_flow (CCAS a expected desired) >>= K)) (Some i) (h,c) ~
-  (stuck : ictreeW (indexed (nat * nat)) (unit * SSig)).
-Proof.
-  intro Missing.
-  pose proof ((interp_heap_cas_missing (h_indexed (A:=(nat * nat)) (Sigma:=Heap))) a expected desired h c
-    (fun x : bool => (Ret x : ictree sE bool)) Missing) as Hstate.
-  rewrite bind_ret_r in Hstate.
-  rewrite interp_nd_source_cas.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [exact Hstate | intro result; reflexivity] |]
-  end.
-  rewrite bind_stuck_equ; reflexivity.
-Qed.
-
-Lemma interp_nd_source_alloc_zero n (ts : pool sE (S n)) (i : Fin.t (S n))
-   (K : option nat -> thread sE) h c :
-  interp_schedule_nd sh (S n)
-    (ts @ i := (denote_flow (CAlloc 0) >>= K)) (Some i) (h,c) ~
-  (stuck : ictreeW (indexed (nat * nat)) (unit * SSig)).
-Proof.
-  pose proof ((interp_heap_alloc_zero (h_indexed (A:=(nat * nat)) (Sigma:=Heap))) h c) as Hstate.
-  rewrite interp_nd_source_alloc.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [eapply equ_clos_sbisim_goal; [exact Hstate | reflexivity | reflexivity] | intro result; reflexivity] |]
-  end.
-  rewrite bind_stuck_equ; reflexivity.
-Qed.
-
-Lemma interp_nd_source_alloc_no_space n (ts : pool sE (S n)) (i : Fin.t (S n))
-  size (K : option nat -> thread sE) h c :
-  Nat.lt 0 size ->
-  (forall base, Nat.lt 0 base -> ~ block_free h base size) ->
-  interp_schedule_nd sh (S n)
-    (ts @ i := (denote_flow (CAlloc size) >>= K)) (Some i) (h,c) ~
-  (stuck : ictreeW (indexed (nat * nat)) (unit * SSig)).
-Proof.
-  intros Pos Full.
-  assert (Hstate : interp_state sh (heap_alloc (E:=sE) size) (h,c) ≅
-    (stuck : ictreeW (indexed (nat * nat)) (nat * SSig))).
-  { unfold heap_alloc, ICtree.trigger, resum, resum_ret, ReSum_inl, ReSumRet_inl.
-    rewrite interp_state_vis.
-    change ((alloc_search (F:=writerE (indexed (nat * nat))) (Sigma:=nat)
-        h size 1 c >>=
-      fun '(base,sigma') => Guard (interp_state sh (Ret base) sigma')) ≅ stuck).
-    etransitivity.
-    - apply equ_clo_bind with (S:=eq)
-        (k2:=fun '(base,sigma') => Guard (interp_state sh (Ret base) sigma')).
-      + apply (alloc_search_no_space (F:=writerE (indexed (nat * nat)))
-          (Sigma:=nat) h size 1 c Pos).
-        intros base Positive; apply Full; lia.
-      + intros result result' <-; reflexivity.
-    -
-    apply bind_stuck_equ. }
-  rewrite interp_nd_source_alloc.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [eapply equ_clos_sbisim_goal; [exact Hstate | reflexivity | reflexivity] | intro result; reflexivity] |]
-  end.
-  rewrite bind_stuck_equ; reflexivity.
-Qed.
-
 (** Physical free is a raw shared command, not a source constructor. *)
 
 Lemma raw_heap_free_head a (K : unit -> thread sE) :
@@ -1020,26 +805,3 @@ Proof.
   end.
   rewrite bind_ret_l, Vector.replace_replace_eq; reflexivity.
 Qed.
-
-(** ** Pool-shape tactics for concrete round-robin computations. *)
-
-Ltac source_observe :=
-  lazy [observe _observe Vector.nth Vector.replace Vector.caseS'
-    denote denote_flow ICtree.bind ICtree.subst' rr_pick
-    heap_read heap_write heap_alloc heap_cas ICtree.trigger
-    resum resum_ret ReSum_heap_CEff ReSumRet_heap_CEff
-    ReSum_tagged_CEff ReSumRet_tagged_CEff
-    Nat.modulo Nat.divmod Fin.of_nat_lt]; reflexivity.
-
-Ltac pool_simpl :=
-  cbv [Vector.replace Vector.caseS' rr_pick Nat.modulo Nat.divmod Fin.of_nat_lt].
-
-Ltac finish_pool :=
-  repeat first
-    [ progress pool_simpl
-    | rewrite vector_remove_head
-    | rewrite vector_remove_tail
-    | erewrite interp_schedule_rr_ret by source_observe
-    | rewrite interp_schedule_rr_select
-    | rewrite interp_schedule_rr_empty ];
-  reflexivity.

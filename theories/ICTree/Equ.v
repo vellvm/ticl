@@ -48,6 +48,17 @@ Ltac observe_equ_all :=
   | _ => idtac
   end.
 
+(** Equal observations give [equ]-equal trees. *)
+Lemma observe_eq_equ {E} {HE : Encode E} {X} (t u : ictree E X) :
+  observe t = observe u -> t ≅ u.
+Proof.
+  intro Hobserve.
+  transitivity (go (observe t)).
+  - apply ictree_eta.
+  - rewrite Hobserve.
+    symmetry. apply ictree_eta.
+Qed.
+
 (** * Forgetting finitely many leading guards.
 
     [guard_equ] is the equivalence closure of "raw-equivalent, or one leading

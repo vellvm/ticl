@@ -3,7 +3,8 @@ From Stdlib Require Import
   Vector
   Program.Equality.
 
-From TICL Require Export
+From TICL Require Import
+  ICTree.Interp.Yield.Observed
   ICTree.Logic.SchedulerFairness.
 
 From TICL Require Import

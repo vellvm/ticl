@@ -333,15 +333,6 @@ Proof.
       * intro impossible; inversion impossible.
 Qed.
 
-Lemma turn_event_counter base who s s' event :
-  turn base who s = Some (s',event) ->
-  acount s' = (acount s + List.length (event_obs event))%nat.
-Proof.
-  intro Hstep; pose proof (turn_counter base who s s' event Hstep) as H.
-  destruct event as [o|]; cbn [event_obs List.length] in H |- *;
-    [destruct H as [Hcount _]; lia | lia].
-Qed.
-
 From Stdlib Require Import List Lia Arith.PeanoNat Sorting.Permutation.
 From TICL Require Import Lang.CSL.
 From TICL Require Import Lang.CSL.Queue.Representation.
@@ -378,40 +369,6 @@ Lemma ai_backing_upd base capacity h a v :
 Proof.
   intros Hback Ha x.
   rewrite upd_dom; [apply Hback | now apply (proj2 (Hback a))].
-Qed.
-
-Lemma allocator_inv_backing base capacity s :
-  allocator_inv base capacity s -> backing base capacity (aheap s).
-Proof. intros (_ & _ & _ & _ & H & _); exact H. Qed.
-
-Lemma allocator_inv_null base capacity s :
-  allocator_inv base capacity s -> aheap s 0 = None.
-Proof.
-  intros (_ & _ & _ & Hbase & Hback & _).
-  destruct (aheap s 0) as [v|] eqn:E; [|reflexivity].
-  assert (Hpresent : aheap s 0 <> None) by (rewrite E; discriminate).
-  apply Hback in Hpresent; lia.
-Qed.
-
-Lemma allocator_inv_outside base capacity s x :
-  allocator_inv base capacity s ->
-  (x < base \/ base + page_size capacity <= x) -> aheap s x = None.
-Proof.
-  intros (_ & _ & _ & _ & Hback & _) Hout.
-  destruct (aheap s x) as [v|] eqn:E; [|reflexivity].
-  assert (Hpresent : aheap s x <> None) by (rewrite E; discriminate).
-  apply Hback in Hpresent; lia.
-Qed.
-
-Lemma allocator_inv_held_member base capacity s (client : bool) b :
-  allocator_inv base capacity s ->
-  In b (held (if client then remote1_state s else remote0_state s)) ->
-  In b (page_blocks base capacity).
-Proof.
-  intros (L & R & D & _ & _ & m0 & m1 & Hr & Hl & Hd & CL & CR & CD &
-    Hm0 & Hm1 & Hp & Hop & Ho & Hc0 & Hc1) Hin.
-  eapply Permutation_in; [exact Hp |].
-  repeat rewrite in_app_iff; destruct client; tauto.
 Qed.
 
 (* These small tactics only discharge finite ownership arithmetic.  In

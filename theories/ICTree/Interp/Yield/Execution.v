@@ -307,38 +307,6 @@ Section RawExecution.
     execution_valid pool_step
       (fun p => pool_equ (fst p) ts0 /\ snd p = sigma0) se.
 
-  (** Selections are physical branch witnesses, never inferred from logs. *)
-  Definition source_execution_of_slots
-    (actor : Fin.t (S n) -> Act)
-    (pools : nat -> pool E (S n)) (sigmas : nat -> Sigma)
-    (slots : nat -> Fin.t (S n)) (logs : nat -> list W)
-    : Execution (pool E (S n) * Sigma) Act (list W) :=
-    {| states := fun k => (pools k,sigmas k);
-       selected := fun k => actor (slots k);
-       emitted := logs |}.
-
-  (** A slot-built execution is valid from its initial facts and one raw
-      segment per step; the actor map is only required to name each slot. *)
-  Lemma source_execution_of_slots_valid
-    (actor : Fin.t (S n) -> Act)
-    (slot_actor : forall i, slot (actor i) = i)
-    (ts0 : pool E (S n)) (sigma0 : Sigma)
-    (pools : nat -> pool E (S n)) (sigmas : nat -> Sigma)
-    (slots : nat -> Fin.t (S n)) (logs : nat -> list W) :
-    pool_equ (pools 0) ts0 -> sigmas 0 = sigma0 ->
-    (forall k, exists residual,
-      ThreadSegment handler Rsb (pools k $ slots k) (sigmas k)
-        (logs k) residual (sigmas (S k)) /\
-      pool_equ (pools (S k)) (pools k @ slots k := residual)) ->
-    pool_execution_valid ts0 sigma0
-      (source_execution_of_slots actor pools sigmas slots logs).
-  Proof.
-    intros Hpool Hsigma Hsteps; split.
-    - cbn [source_execution_of_slots states fst snd]; split; assumption.
-    - intro k; cbn [source_execution_of_slots states selected emitted pool_step].
-      rewrite slot_actor; apply Hsteps.
-  Qed.
-
   Lemma pool_step_branchfree who ts sigma logs ts' sigma' :
     pool_step who (ts,sigma) logs (ts',sigma') ->
     (forall j, BranchFree (ts $ j)) -> forall j, BranchFree (ts' $ j).
@@ -384,15 +352,14 @@ Arguments pool_execution_valid {E W Sigma Act HE} n handler slot ts0 sigma0 se.
     function equality of states. *)
 Section PoolSimulation.
   Context {E W Sigma St Act : Type} {HE : Encode E}
-    (n : nat)
-    (handler : E ~> stateT Sigma (ictreeW W))
-    (actor : Fin.t (S n) -> Act) (slot : Act -> Fin.t (S n))
-    (actor_slot : forall who, actor (slot who) = who)
+    {n : nat}
+    {handler : E ~> stateT Sigma (ictreeW W)}
+    (actor : Fin.t (S n) -> Act) {slot : Act -> Fin.t (S n)}
     (slot_actor : forall i, slot (actor i) = i)
-    (step : Act -> St -> option (St * option W))
-    (pool_of : St -> pool E (S n))
-    (agree : Sigma -> St -> Prop)
-    (Inv : St -> Prop).
+    {step : Act -> St -> option (St * option W)}
+    {pool_of : St -> pool E (S n)}
+    {agree : Sigma -> St -> Prop}
+    {Inv : St -> Prop}.
 
   Notation Rexact := (fun Y (t u : ictreeW W Y) => t ≅ u).
   Notation Rsb := (fun Y (t u : ictreeW W Y) => t ~ u).
@@ -435,6 +402,27 @@ Section PoolSimulation.
       + rewrite Vector.nth_replace_neq by congruence.
         eapply guard_equ_trans; [apply Hpool|].
         apply guard_equ_equ, Hframe; exact Hne.
+  Qed.
+
+  (** One model turn at a guard-aligned pool, run by the ND scheduler focused
+      on the selected slot. *)
+  Lemma pool_simulation_turn_nd (ts : pool E (S n)) s who s' event sigma :
+    Inv s -> agree sigma s -> pool_guard_equ ts (pool_of s) ->
+    step who s = Some (s',event) ->
+    exists residual sigma',
+      agree sigma' s' /\
+      pool_guard_equ (ts @ slot who := residual) (pool_of s') /\
+      interp_schedule_nd handler (S n) ts (Some (slot who)) sigma ~
+        emit_list (event_obs event)
+          (interp_schedule_nd handler (S n) (ts @ slot who := residual) None sigma').
+  Proof.
+    intros Hinv Hagree Hpool Hstep.
+    destruct (selected_turn_segment ts s who s' event sigma
+      Hinv Hagree Hpool Hstep) as (residual & sigma' & Hseg & Hagree' & Hpool').
+    exists residual, sigma'; split; [exact Hagree'|split; [exact Hpool'|]].
+    apply (segment_interp_nd handler Rsb (fun Y t u (H : t ~ u) => H)).
+    apply (ThreadSegment_mono handler Rexact Rsb
+      (fun Y t u => equ_sbisim t u)); exact Hseg.
   Qed.
 
   (** Completeness of the abstract model relative to the source: the segment
@@ -645,21 +633,10 @@ Section PoolSimulation.
     destruct (simulation_total Hsim (actor i) s Hinv)
       as (next & event & Hstep & Hnextinv).
     rewrite Hstep.
-    destruct (selected_turn_segment ts s (actor i) next event sigma
-      Hinv Hagree Hpool Hstep) as (residual & sigma' & Hseg & Hagree' & Hnextpool).
-    apply (ThreadSegment_mono handler Rexact Rsb
-      (fun Y t u => equ_sbisim t u)) in Hseg.
-    pose proof (segment_interp_nd handler Rsb (fun Y t u (H : t ~ u) => H)
-      n ts (slot (actor i)) (ts $ slot (actor i)) sigma
-      (event_obs event) residual sigma' Hseg) as Esegment.
-    rewrite slot_actor in Esegment, Hnextpool.
-    assert (Efocus : interp_schedule_nd handler (S n) ts (Some i) sigma ~
-      emit_list (event_obs event)
-        (interp_schedule_nd handler (S n) (ts @ i := residual) None sigma')).
-    { etransitivity; [| exact Esegment].
-      symmetry; apply equ_sbisim;
-        exact (interp_schedule_nd_equ handler (S n) (ts @ i := (ts $ i)) ts
-          (Some i) sigma (pool_replace_current ts i)). }
+    destruct (pool_simulation_turn_nd ts s (actor i) next event sigma
+      Hinv Hagree Hpool Hstep)
+      as (residual & sigma' & Hagree' & Hnextpool & Efocus).
+    rewrite slot_actor in Hnextpool, Efocus.
     etransitivity; [apply (coinduction.gfp_t (sb eq) R); exact Efocus |].
     assert (Hcontinue : st eq R
       (interp_schedule_nd handler (S n) (ts @ i := residual) None sigma')

@@ -7,6 +7,7 @@ From TICL Require Export
   Utils.Vectors
   ICTree.Interp.Yield.Mod
   ICTree.Interp.Yield.SBisim
+  ICTree.Interp.Yield.Observed
   ICTree.Logic.Yield
   ICTree.Logic.SchedulerFairness
   Lang.Yield.Syntax

@@ -45,9 +45,8 @@ Generalizable All Variables.
 *)
 Module StImp.
   (** A context is a map from strings to natural numbers *)
-  Definition Ctx := alist string nat.
-  Definition Mem := stateE Ctx.
   Import Ctx.
+  Definition Mem := stateE Ctx.
   Opaque lookup.
   
   (** * The syntax of StImp programs *)

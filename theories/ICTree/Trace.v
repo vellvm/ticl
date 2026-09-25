@@ -37,9 +37,6 @@ Proof.
   - apply IH; constructor.
 Qed.
 
-Lemma emit_list_nil {W X} (t : ictreeW W X) : emit_list [] t = t.
-Proof. reflexivity. Qed.
-
 Lemma emit_list_cons {W X} o xs (t : ictreeW W X) :
   emit_list (o :: xs) t ≅ Vis (Log o) (fun _ => emit_list xs t).
 Proof.
@@ -449,18 +446,4 @@ Proof.
   etransitivity; [exact Hstep |].
   apply (coinduction.gfp_bt (sb eq) R); symmetry.
   exact (emit_batches_unfold_sbisim batch next i).
-Qed.
-
-(** An everywhere-empty batch loop is raw-equivalent to [stuck].  Both sides
-    unfold to a [Guard], so the recursive obligation sits under matching
-    [GuardF] constructors; this is a RAW equivalence, not an invisible-guard
-    justification of a strong bisimulation. *)
-Lemma emit_batches_empty {W I X} (batch : I -> list W) (next : I -> I) :
-  (forall j, batch j = []) ->
-  forall i, (emit_batches batch next i : ictreeW W X) ≅ stuck.
-Proof.
-  intro Hempty; __coinduction_equ R CIH; intro i.
-  rewrite emit_batches_unfold, (Hempty i), emit_list_nil.
-  rewrite unfold_stuck.
-  constructor; apply CIH.
 Qed.

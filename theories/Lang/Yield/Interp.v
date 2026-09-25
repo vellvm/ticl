@@ -34,37 +34,19 @@ Local Open Scope ictree_scope.
 Definition scheduled_visible (s : YStmt) : completed Mem :=
   schedule 1 [denote_stmt s]%vector (Some Fin.F1).
 
-(** Backward-compatible name for the scheduler-visible scheduled computation. *)
-Definition scheduled : YStmt -> completed Mem := scheduled_visible.
-
-(** Erased scheduled interpretation: both scheduler [Spawn] and cooperative
-    [Yield] observations are intentionally erased, leaving only memory effects. *)
-Definition interp_scheduled_erased (s : YStmt) : ictree Mem unit :=
-  interp_yield (interp_spawn (scheduled_visible s)).
-
-(** Backward-compatible erased scheduled interpretation.  New concurrency-facing
-    code should choose explicitly between [scheduled_visible] and
-    [interp_scheduled_erased]. *)
-Definition interp_scheduled : YStmt -> ictree Mem unit := interp_scheduled_erased.
-
 (** Erased expression instrumentation: raw thread-level [Yield] observations
     are erased before state instrumentation. *)
-Definition instr_exp_erased (e : YExp) (ctx : Ctx) : ictreeW Ctx (nat * Ctx) :=
+Definition instr_exp_erased (e : YExp) (ctx : Ctx.Ctx) : ictreeW Ctx.Ctx (nat * Ctx.Ctx) :=
   instr_thread (denote_exp e) ctx.
 
 (** Flow-preserving erased statement instrumentation for structural facts whose
     contracts must expose [Fallthrough] versus [HaltThread].  The public
     [instr_stmt_erased] remains the scheduled unit-returning view. *)
 Definition instr_stmt_flow_erased
-    (s : YStmt) (ctx : Ctx) : ictreeW Ctx (YStmtFlow * Ctx) :=
+    (s : YStmt) (ctx : Ctx.Ctx) : ictreeW Ctx.Ctx (YStmtFlow * Ctx.Ctx) :=
   instr_thread (denote_stmt_flow s) ctx.
 
 (** Erased statement instrumentation: scheduler [Spawn] and cooperative [Yield]
     observations are erased before state instrumentation. *)
-Definition instr_stmt_erased (s : YStmt) (ctx : Ctx) : ictreeW Ctx (unit * Ctx) :=
+Definition instr_stmt_erased (s : YStmt) (ctx : Ctx.Ctx) : ictreeW Ctx.Ctx (unit * Ctx.Ctx) :=
   instr_schedule 1 [denote_stmt s]%vector (Some Fin.F1) ctx.
-
-(** Backward-compatible erased instrumentation aliases.  These names preserve the
-    iteration-1 API, where instrumentation observed only memory/state effects. *)
-Definition instr_exp : YExp -> Ctx -> ictreeW Ctx (nat * Ctx) := instr_exp_erased.
-Definition instr_stmt : YStmt -> Ctx -> ictreeW Ctx (unit * Ctx) := instr_stmt_erased.

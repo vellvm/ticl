@@ -386,25 +386,21 @@ Proof.
       exact (pool_step_branchfree 2 sh slot_of_actor who ts1 sigma1 logs ts2 sigma2
         Hstep H). }
   split; [apply Hbf|].
-  destruct (pool_simulation_reachable 2 sh slot_of_actor (turn 1) (allocator_pool 1)
-    state_agrees (allocator_inv 1 capacity) (allocator_simulation 1 capacity)
+  destruct (pool_simulation_reachable (allocator_simulation 1 capacity)
     (source_pool0 1) (page_heap 1 capacity hemp,c) (initial_state capacity c)
     (initial_state_inv capacity c) (conj (heq_refl _) eq_refl)
     (pool_equ_guard _ _ (source_pool0_initial capacity c)) ts sigma Hreach)
     as (s & Hinv & Hagree & Hpool).
   rewrite <- (slot_of_actor_of_slot i).
   split.
-  - destruct (pool_simulation_worker_segment 2 sh slot_of_actor (turn 1)
-      (allocator_pool 1) state_agrees (allocator_inv 1 capacity)
+  - destruct (pool_simulation_worker_segment
       (allocator_simulation 1 capacity) ts s (actor_of_slot i) sigma
       Hinv Hagree Hpool) as (event & residual & sigma' & Hseg).
     exists (event_obs event), residual, sigma'; exact Hseg.
-  - destruct (pool_simulation_no_terminal_prefix 2 sh slot_of_actor (turn 1)
-      (allocator_pool 1) state_agrees (allocator_inv 1 capacity)
+  - destruct (pool_simulation_no_terminal_prefix
       (allocator_simulation 1 capacity) ts s (actor_of_slot i) sigma
       Hinv Hagree Hpool) as (Hr & Hf & Hb & Hstuck).
-    destruct (pool_simulation_no_fault_or_divergence 2 sh slot_of_actor (turn 1)
-      (allocator_pool 1) state_agrees (allocator_inv 1 capacity)
+    destruct (pool_simulation_no_fault_or_divergence
       (allocator_simulation 1 capacity) ts s (actor_of_slot i) sigma
       Hinv Hagree Hpool) as (_ & Hspin & _).
     repeat split; assumption.
@@ -532,8 +528,7 @@ Proof.
   intro Hvalid.
   assert (Hmodel : allocator_valid capacity c (allocator_execution capacity c (selected se)))
     by apply execution_of_choices_valid.
-  destruct (source_execution_complete 2 sh slot_of_actor (turn 1) (allocator_pool 1)
-    state_agrees (allocator_inv 1 capacity) (allocator_simulation 1 capacity)
+  destruct (source_execution_complete (allocator_simulation 1 capacity)
     (source_pool0 1) (page_heap 1 capacity hemp,c) (initial_state capacity c) se (allocator_execution capacity c (selected se))
     (initial_state_inv capacity c) (conj (heq_refl _) eq_refl)
     (pool_equ_guard _ _ (source_pool0_initial capacity c)) Hvalid Hmodel
@@ -545,20 +540,16 @@ Proof.
   - apply raw_remote_pending_alignment; exact (Hpool (slot_of_actor Remote1)).
 Qed.
 
-Definition source_has_event (kind block : nat)
-  (se : Execution (pool sE 3 * SSig) Actor (list (indexed (nat * nat)))) (k : nat) : Prop :=
-  exists idx, List.In (stamp (kind,block) idx) (emitted se k).
-
 Theorem source_remote_free_lockfree capacity c se :
   allocator_source_valid capacity c se ->
   infinitely (selected_source_pending se) ->
-  infinitely (fun k => exists block, source_has_event tag_retire block se k).
+  infinitely (fun k =>
+    exists block idx, List.In (stamp (tag_retire,block) idx) (emitted se k)).
 Proof.
   intros Hvalid Hpending.
   set (e := allocator_execution capacity c (selected se)).
   assert (Hmodel : allocator_valid capacity c e) by apply execution_of_choices_valid.
-  pose proof (source_execution_complete 2 sh slot_of_actor (turn 1) (allocator_pool 1)
-    state_agrees (allocator_inv 1 capacity) (allocator_simulation 1 capacity)
+  pose proof (source_execution_complete (allocator_simulation 1 capacity)
     (source_pool0 1) (page_heap 1 capacity hemp,c) (initial_state capacity c) se e
     (initial_state_inv capacity c) (conj (heq_refl _) eq_refl)
     (pool_equ_guard _ _ (source_pool0_initial capacity c)) Hvalid Hmodel
@@ -684,18 +675,20 @@ Lemma execution_owner_rank capacity c e k :
     allocator_view 1 capacity (states e k) L R D /\
     owner_rank capacity (owner_state (states e k)) R D <= owner_round_bound capacity.
 Proof.
-  intro Hv; induction k as [|k IH].
-  - destruct (execution_inv (turn 1) (allocator_inv 1 capacity)
-      (fun s => s = initial_state capacity c) e (allocator_initial_inv capacity c)
-      (turn_preserves_inv 1 capacity) 0 Hv) as (L & R & D & Hview).
+  intro Hv.
+  apply (execution_inv (turn 1)
+    (fun s => exists L R D, allocator_view 1 capacity s L R D /\
+       owner_rank capacity (owner_state s) R D <= owner_round_bound capacity)
+    (fun s => s = initial_state capacity c) e).
+  - intros s ->.
+    destruct (initial_state_inv capacity c) as (L & R & D & Hview).
     exists L, R, D; split; [exact Hview|].
-    rewrite (proj1 Hv); cbn [initial_state owner_state owner_rank].
-    unfold owner_round_bound; lia.
-  - destruct IH as (L & R & D & Hview & Hrank).
-    destruct (owner_lists_step_bounded capacity (selected e k) (states e k)
-      (states e (S k)) (emitted e k) L R D Hview Hrank
-      (execution_step (turn 1) (fun s => s = initial_state capacity c) e k Hv)) as (L' & R' & D' & Hview' & Hrank' & _).
-    now exists L', R', D'.
+    cbn [initial_state owner_state owner_rank]; unfold owner_round_bound; lia.
+  - intros a s s' o (L & R & D & Hview & Hrank) Hturn.
+    destruct (owner_lists_step_bounded capacity a s s' o L R D Hview Hrank Hturn)
+      as (L' & R' & D' & Hview' & Hrank' & _).
+    exists L', R', D'; split; [exact Hview'|exact Hrank'].
+  - exact Hv.
 Qed.
 
 Definition round_completion (e : (Execution AState Actor (option (indexed (nat * nat))))) k :=
@@ -766,15 +759,10 @@ Theorem owner_round_selection_bound capacity c e lo len :
     count_if (fun k => owner_selected (selected e k)) lo (S j - lo) <= 3 * capacity + 5.
 Proof.
   intros Hv Hcount.
-  destruct (finite_first (round_completion e) (round_completion_dec e) lo len)
-    as [Hnone|(j & Hj & Hdone & Hfirst)].
-  - pose proof (no_round_completion_owner_bound capacity c e lo len Hv Hnone); lia.
-  - exists j; split; [exact Hj|]; split; [exact Hdone|].
-    pose proof (no_round_completion_owner_bound capacity c e lo (j-lo) Hv
-      ltac:(intros i Hi; apply Hfirst; lia)) as Hbefore.
-    replace (S j-lo) with ((j-lo)+1) by lia.
-    rewrite count_if_add, count_if_succ, count_if_zero.
-    cbv beta; destruct (owner_selected (selected e (lo + (j-lo)))); lia.
+  apply (count_if_first (fun k => owner_selected (selected e k))
+    (round_completion e) (round_completion_dec e) lo len (3 * capacity + 5));
+    [|exact Hcount].
+  intros m Hnone; exact (no_round_completion_owner_bound capacity c e lo m Hv Hnone).
 Qed.
 
 Inductive reclaim_credit (capacity block : nat) (pc : owner_pc) (R D : list nat) : nat -> Prop :=
@@ -970,31 +958,17 @@ Theorem retired_reclaimed_owner_selection_bound capacity c e k block idx len :
     count_if (fun k => owner_selected (selected e k)) (S k) (j-k) <= 6 * capacity + 10.
 Proof.
   intros Hv Hret Hcount.
-  destruct (finite_first (fun j => block_event tag_reclaim block (emitted e j))
-    (fun j => block_event_dec tag_reclaim block (emitted e j)) (S k) len)
-    as [Hnone|(j & Hj & [idx' Hreclaim] & Hfirst)].
-  - pose proof (no_reclaim_owner_bound capacity c e k block idx len Hv Hret Hnone); lia.
-  - exists j, idx'; split; [lia|]; split; [lia|]; split.
-    + exact (execution_event_order (turn 1)
-      (fun s => s = initial_state capacity c) acount indexed_index (turn_counter 1) e k j _ _ Hv ltac:(lia) Hret Hreclaim).
-    + split; [exact Hreclaim|].
-      pose proof (no_reclaim_owner_bound capacity c e k block idx (j-S k) Hv Hret
-        ltac:(intros q Hq; apply Hfirst; lia)) as Hbefore.
-      replace (j-k) with ((j-S k)+1) by lia.
-      rewrite count_if_add, count_if_succ, count_if_zero.
-      cbv beta; destruct (owner_selected (selected e (S k + (j-S k)))); lia.
-Qed.
-
-Lemma infinitely_owner_count (e : Execution AState Actor (option (indexed (nat * nat)))) :
-  infinitely (fun k => selected e k = Owner) ->
-  forall lo n, exists len, n <= count_if (fun k => owner_selected (selected e k)) lo len.
-Proof.
-  intros Hinf lo n.
-  apply infinitely_count_if.
-  intro start.
-  destruct (Hinf start) as (k & Hk & Howner).
-  exists k; split; [exact Hk|].
-  apply owner_selected_spec; exact Howner.
+  destruct (count_if_first (fun k => owner_selected (selected e k))
+    (fun j => block_event tag_reclaim block (emitted e j))
+    (fun j => block_event_dec tag_reclaim block (emitted e j))
+    (S k) len (6 * capacity + 10)
+    (fun m Hnone => no_reclaim_owner_bound capacity c e k block idx m Hv Hret Hnone)
+    Hcount) as (j & Hj & [idx' Hreclaim] & Hbound).
+  exists j, idx'; split; [lia|]; split; [lia|]; split.
+  - exact (execution_event_order (turn 1)
+      (fun s => s = initial_state capacity c) acount indexed_index (turn_counter 1)
+      e k j _ _ Hv ltac:(lia) Hret Hreclaim).
+  - split; [exact Hreclaim|exact Hbound].
 Qed.
 
 Theorem retired_eventually_reclaimed capacity c e :
@@ -1006,7 +980,11 @@ Theorem retired_eventually_reclaimed capacity c e :
       emitted e j = Some (stamp (tag_reclaim,block) idx').
 Proof.
   intros Hv Howner k block idx Hret.
-  destruct (infinitely_owner_count e Howner (S k) (6*capacity+10)) as [len Hlen].
+  assert (Hcharged : infinitely (fun j => owner_selected (selected e j) = true)).
+  { intro start; destruct (Howner start) as (m & Hm & Hsel).
+    exists m; split; [exact Hm|apply owner_selected_spec; exact Hsel]. }
+  destruct (infinitely_count_if (fun j => owner_selected (selected e j))
+    Hcharged (6*capacity+10) (S k)) as [len Hlen].
   destruct (retired_reclaimed_owner_selection_bound capacity c e k block idx len
     Hv Hret Hlen) as (j & idx' & Hkj & _ & Hidx & Hevent & _).
   now exists j, idx'.
@@ -1067,8 +1045,7 @@ Proof.
   intros Hvalid Howner k block idx Hretire.
   set (e := allocator_execution capacity c (selected se)).
   assert (Hmodel : allocator_valid capacity c e) by apply execution_of_choices_valid.
-  pose proof (source_execution_complete 2 sh slot_of_actor (turn 1) (allocator_pool 1)
-    state_agrees (allocator_inv 1 capacity) (allocator_simulation 1 capacity)
+  pose proof (source_execution_complete (allocator_simulation 1 capacity)
     (source_pool0 1) (page_heap 1 capacity hemp,c) (initial_state capacity c) se e
     (initial_state_inv capacity c) (conj (heq_refl _) eq_refl)
     (pool_equ_guard _ _ (source_pool0_initial capacity c)) Hvalid Hmodel

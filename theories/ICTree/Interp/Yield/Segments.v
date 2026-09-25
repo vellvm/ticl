@@ -114,11 +114,6 @@ Section ThreadSegments.
     ThreadSegment t sigma xs residual sigma'.
   Proof. intro H; eapply ThreadSegment_guard_inv_equ; [exact H|reflexivity]. Qed.
 
-  Lemma ThreadSegment_guard_iff t sigma xs residual sigma' :
-    ThreadSegment (Guard t) sigma xs residual sigma' <->
-    ThreadSegment t sigma xs residual sigma'.
-  Proof. split; [apply ThreadSegment_guard_inv|apply segment_guard]. Qed.
-
   Lemma ThreadSegment_user_inv_equ t sigma xs residual sigma' :
     ThreadSegment t sigma xs residual sigma' ->
     forall (e : E) (k : encode e -> thread E),
@@ -321,16 +316,6 @@ End ThreadSegments.
 Arguments ThreadSegment {E W Sigma HE} handler R.
 Arguments segment_to {E W Sigma HE} handler R.
 
-(** A branch node can never be a yield up to finite guard removal. *)
-Lemma guard_equ_br_yield_absurd {E} {HE : Encode E} n
-  (k : Fin.t (S n) -> thread E) (ky : unit -> thread E) :
-  ~ guard_equ (Br n k) (Vis (inl Yield) ky).
-Proof.
-  intro Eq; apply guard_equ_sbisim in Eq.
-  eapply (@sbisim_vis_br_inv (yieldE + (forkE + E)) _ unit n (inl Yield) ky k);
-    symmetry; exact Eq.
-Qed.
-
 (** Weakening the response relation weakens the segment.  This is how an exact
     segment becomes a bisimulation-mode segment; [equ_sbisim] supplies the
     premise for the two instances actually used. *)
@@ -351,19 +336,6 @@ Proof.
   - apply segment_guard; exact IH.
   - eapply segment_user; [apply Hmono; exact Eh|exact IH].
   - eapply segment_equ; eassumption.
-Qed.
-
-Lemma segment_to_mono {E W Sigma} {HE : Encode E}
-  (handler : E ~> stateT Sigma (ictreeW W))
-  (R R' : forall X : Type, ictreeW W X -> ictreeW W X -> Prop)
-  (Hmono : forall X t u, R X t u -> R' X t u) :
-  forall t sigma logs target sigma',
-    segment_to handler R t sigma logs target sigma' ->
-    segment_to handler R' t sigma logs target sigma'.
-Proof.
-  intros t sigma logs target sigma' (residual & Hseg & Htail).
-  exists residual; split; [|exact Htail].
-  eapply ThreadSegment_mono; eauto.
 Qed.
 
 (** ** Scheduling laws.
@@ -488,34 +460,6 @@ Section FocusedCongruence.
     rewrite Vector.replace_replace_eq; reflexivity.
   Qed.
 
-  Lemma guard_equ_focused_nd n (ts : pool E (S n)) (i : Fin.t (S n)) t u sigma :
-    guard_equ t u ->
-    interp_schedule_nd handler (S n) (ts @ i := t) (Some i) sigma ~
-    interp_schedule_nd handler (S n) (ts @ i := u) (Some i) sigma.
-  Proof.
-    intro H; induction H as [t u [Eq|Eg]|t|t u H IH|t u v H1 IH1 H2 IH2].
-    - apply segment_nd_replace_equ; exact Eq.
-    - etransitivity; [apply segment_nd_replace_equ; exact Eg|].
-      apply segment_nd_focused_guard.
-    - reflexivity.
-    - symmetry; exact IH.
-    - etransitivity; [exact IH1|exact IH2].
-  Qed.
-
-  Lemma guard_equ_focused_rr n (ts : pool E (S n)) (i : Fin.t (S n)) t u m sigma :
-    guard_equ t u ->
-    interp_schedule_rr handler (S n) (ts @ i := t) (Some i) m sigma ~
-    interp_schedule_rr handler (S n) (ts @ i := u) (Some i) m sigma.
-  Proof.
-    intro H; induction H as [t u [Eq|Eg]|t|t u H IH|t u v H1 IH1 H2 IH2].
-    - apply segment_rr_replace_equ; exact Eq.
-    - etransitivity; [apply segment_rr_replace_equ; exact Eg|].
-      apply segment_rr_focused_guard.
-    - reflexivity.
-    - symmetry; exact IH.
-    - etransitivity; [exact IH1|exact IH2].
-  Qed.
-
   Lemma segment_nd_focused_user n (ts : pool E (S n)) (i : Fin.t (S n))
     (e : E) (k : encode e -> thread E) sigma :
     interp_schedule_nd handler (S n)
@@ -630,62 +574,88 @@ Section SegmentInterpretation.
     (HR : forall X (t u : ictreeW W X), R X t u -> t ~ u).
 
   Lemma segment_interp_nd n (ts : pool E (S n)) (i : Fin.t (S n))
-    t sigma xs residual sigma' :
-    ThreadSegment handler R t sigma xs residual sigma' ->
-    interp_schedule_nd handler (S n) (ts @ i := t) (Some i) sigma ~
+    sigma xs residual sigma' :
+    ThreadSegment handler R (ts $ i) sigma xs residual sigma' ->
+    interp_schedule_nd handler (S n) ts (Some i) sigma ~
     emit_list xs (interp_schedule_nd handler (S n) (ts @ i := residual) None sigma').
   Proof.
-    intro H; revert n ts i.
-    induction H as
-      [k sigma
-      |t sigma xs residual sigma' H IH
-      |e k sigma result sigma1 before after residual sigma' Eh H IH
-      |t u sigma xs u' residual sigma' Etu H IH Eout]; intros n ts i.
-    - cbn [emit_list].
-      erewrite interp_schedule_nd_yield
-        by (rewrite Vector.nth_replace_eq; reflexivity).
-      rewrite Vector.replace_replace_eq; reflexivity.
-    - etransitivity; [apply segment_nd_focused_guard|apply IH].
-    - etransitivity; [apply segment_nd_focused_user|].
-      transitivity (emit_list before (Ret (result,sigma1)) >>=
-        fun '(x,sigma0) =>
-          interp_schedule_nd handler (S n) (ts @ i := k x) (Some i) sigma0).
-      + apply sbisim_clo_bind_eq; [apply HR; exact Eh|intro r; reflexivity].
-      + rewrite emit_list_ret_bind, emit_list_app.
-        apply emit_list_sbisim; apply IH.
-    - etransitivity; [apply segment_nd_replace_equ; exact Etu|].
-      etransitivity; [apply IH|].
-      apply emit_list_sbisim, segment_nd_replace_equ; exact Eout.
+    intro Hseg.
+    assert (Hgen : forall t s0 ys r0 s1,
+      ThreadSegment handler R t s0 ys r0 s1 ->
+      forall p (us : pool E (S p)) (j : Fin.t (S p)),
+        interp_schedule_nd handler (S p) (us @ j := t) (Some j) s0 ~
+        emit_list ys (interp_schedule_nd handler (S p) (us @ j := r0) None s1)).
+    {
+      intros t s0 ys r0 s1 H; induction H as
+        [k sigma0
+        |t0 sigma0 xs0 residual0 sigma0' H IH
+        |e k sigma0 result sigma1 before after residual0 sigma0' Eh H IH
+        |t0 u sigma0 xs0 u' residual0 sigma0' Etu H IH Eout]; intros p us j.
+      - cbn [emit_list].
+        erewrite interp_schedule_nd_yield
+          by (rewrite Vector.nth_replace_eq; reflexivity).
+        rewrite Vector.replace_replace_eq; reflexivity.
+      - etransitivity; [apply segment_nd_focused_guard|apply IH].
+      - etransitivity; [apply segment_nd_focused_user|].
+        transitivity (emit_list before (Ret (result,sigma1)) >>=
+          fun '(x,sigma2) =>
+            interp_schedule_nd handler (S p) (us @ j := k x) (Some j) sigma2).
+        + apply sbisim_clo_bind_eq; [apply HR; exact Eh|intro r; reflexivity].
+        + rewrite emit_list_ret_bind, emit_list_app.
+          apply emit_list_sbisim; apply IH.
+      - etransitivity; [apply segment_nd_replace_equ; exact Etu|].
+        etransitivity; [apply IH|].
+        apply emit_list_sbisim, segment_nd_replace_equ; exact Eout.
+    }
+    transitivity
+      (interp_schedule_nd handler (S n) (ts @ i := (ts $ i)) (Some i) sigma).
+    - symmetry; apply equ_sbisim;
+        exact (interp_schedule_nd_equ handler (S n) (ts @ i := (ts $ i)) ts
+          (Some i) sigma (pool_replace_current ts i)).
+    - apply Hgen; exact Hseg.
   Qed.
 
   Lemma segment_interp_rr n (ts : pool E (S n)) (i : Fin.t (S n))
-    t m sigma xs residual sigma' :
-    ThreadSegment handler R t sigma xs residual sigma' ->
-    interp_schedule_rr handler (S n) (ts @ i := t) (Some i) m sigma ~
+    m sigma xs residual sigma' :
+    ThreadSegment handler R (ts $ i) sigma xs residual sigma' ->
+    interp_schedule_rr handler (S n) ts (Some i) m sigma ~
     emit_list xs
       (interp_schedule_rr handler (S n) (ts @ i := residual) None m sigma').
   Proof.
-    intro H; revert n ts i m.
-    induction H as
-      [k sigma
-      |t sigma xs residual sigma' H IH
-      |e k sigma result sigma1 before after residual sigma' Eh H IH
-      |t u sigma xs u' residual sigma' Etu H IH Eout]; intros n ts i m.
-    - cbn [emit_list].
-      erewrite interp_schedule_rr_yield
-        by (rewrite Vector.nth_replace_eq; reflexivity).
-      rewrite Vector.replace_replace_eq; reflexivity.
-    - etransitivity; [apply segment_rr_focused_guard|apply IH].
-    - etransitivity; [apply segment_rr_focused_user|].
-      transitivity (emit_list before (Ret (result,sigma1)) >>=
-        fun '(x,sigma0) =>
-          interp_schedule_rr handler (S n) (ts @ i := k x) (Some i) m sigma0).
-      + apply sbisim_clo_bind_eq; [apply HR; exact Eh|intro r; reflexivity].
-      + rewrite emit_list_ret_bind, emit_list_app.
-        apply emit_list_sbisim; apply IH.
-    - etransitivity; [apply segment_rr_replace_equ; exact Etu|].
-      etransitivity; [apply IH|].
-      apply emit_list_sbisim, segment_rr_replace_equ; exact Eout.
+    intro Hseg.
+    assert (Hgen : forall t s0 ys r0 s1,
+      ThreadSegment handler R t s0 ys r0 s1 ->
+      forall p (us : pool E (S p)) (j : Fin.t (S p)) c,
+        interp_schedule_rr handler (S p) (us @ j := t) (Some j) c s0 ~
+        emit_list ys (interp_schedule_rr handler (S p) (us @ j := r0) None c s1)).
+    {
+      intros t s0 ys r0 s1 H; induction H as
+        [k sigma0
+        |t0 sigma0 xs0 residual0 sigma0' H IH
+        |e k sigma0 result sigma1 before after residual0 sigma0' Eh H IH
+        |t0 u sigma0 xs0 u' residual0 sigma0' Etu H IH Eout]; intros p us j c.
+      - cbn [emit_list].
+        erewrite interp_schedule_rr_yield
+          by (rewrite Vector.nth_replace_eq; reflexivity).
+        rewrite Vector.replace_replace_eq; reflexivity.
+      - etransitivity; [apply segment_rr_focused_guard|apply IH].
+      - etransitivity; [apply segment_rr_focused_user|].
+        transitivity (emit_list before (Ret (result,sigma1)) >>=
+          fun '(x,sigma2) =>
+            interp_schedule_rr handler (S p) (us @ j := k x) (Some j) c sigma2).
+        + apply sbisim_clo_bind_eq; [apply HR; exact Eh|intro r; reflexivity].
+        + rewrite emit_list_ret_bind, emit_list_app.
+          apply emit_list_sbisim; apply IH.
+      - etransitivity; [apply segment_rr_replace_equ; exact Etu|].
+        etransitivity; [apply IH|].
+        apply emit_list_sbisim, segment_rr_replace_equ; exact Eout.
+    }
+    transitivity
+      (interp_schedule_rr handler (S n) (ts @ i := (ts $ i)) (Some i) m sigma).
+    - symmetry; apply equ_sbisim;
+        exact (interp_schedule_rr_equ handler (S n) (ts @ i := (ts $ i)) ts
+          (Some i) m sigma (pool_replace_current ts i)).
+    - apply Hgen; exact Hseg.
   Qed.
 
   Theorem segment_scheduler_steps {n} (ts : pool E (S n)) sigma i
@@ -701,16 +671,11 @@ Section SegmentInterpretation.
     assert (Efocused : interp_schedule_nd handler (S n) ts (Some i) sigma ~
       emit_list logs (interp_schedule_nd handler (S n) ts' None sigma')).
     {
-      transitivity
-        (interp_schedule_nd handler (S n) (ts @ i := (ts $ i)) (Some i) sigma).
-      - rewrite (interp_schedule_nd_equ handler (S n) _ _ (Some i) sigma
-          (pool_replace_current ts i)); reflexivity.
-      - transitivity (emit_list logs
-          (interp_schedule_nd handler (S n) (ts @ i := residual) None sigma')).
-        + eapply segment_interp_nd; exact Hseg.
-        + apply emit_list_sbisim.
-          rewrite <- (interp_schedule_nd_equ handler (S n) _ _ None sigma' Epool);
-            reflexivity.
+      etransitivity;
+        [exact (segment_interp_nd n ts i sigma logs residual sigma' Hseg)|].
+      apply emit_list_sbisim.
+      rewrite <- (interp_schedule_nd_equ handler (S n) _ _ None sigma' Epool);
+        reflexivity.
     }
     assert (Hbranch : trans tau
       (Br n (fun j => interp_schedule_nd handler (S n) ts (Some j) sigma))

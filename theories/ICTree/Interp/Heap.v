@@ -356,18 +356,6 @@ Section HeapInterp.
     rewrite bind_stuck_equ; reflexivity.
   Qed.
 
-  Lemma interp_heap_free {X} a h (aux : Sigma)
-    (k : unit -> ictree (heapE + G) X) :
-    interp_state (h_sum heap_handler other) (heap_free a >>= k) (h,aux) ~
-      interp_state (h_sum heap_handler other) (k tt) (hfree a h,aux).
-  Proof.
-    unfold heap_free, ICtree.trigger, resum, resum_ret, ReSum_inl, ReSumRet_inl;
-      rewrite bind_vis; setoid_rewrite bind_ret_l.
-    rewrite interp_state_vis; cbn [h_sum].
-    rewrite (heap_handler_free (F:=F) a h aux), bind_ret_l.
-    apply sb_guard.
-  Qed.
-
   Lemma interp_heap_alloc_zero h (aux : Sigma) :
     interp_state (h_sum heap_handler other) (heap_alloc (E:=heapE + G) 0) (h,aux)
       ≅ (stuck : ictree F (nat * (Heap * Sigma))).

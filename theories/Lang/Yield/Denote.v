@@ -10,16 +10,15 @@ From TICL Require Import
 Import ICtree ICTreeNotations.
 Local Open Scope ictree_scope.
 
-Definition Ctx := alist string nat.
-Definition Mem := stateE Ctx.
+Definition Mem := stateE Ctx.Ctx.
 
 (** Raw Yield denotations can yield, fork, and access memory. *)
 Definition YEff := yieldE + (forkE + Mem).
 
 Definition ytrigger (e : YEff) : ictree YEff (encode e) :=
   @ICtree.trigger YEff YEff _ _ ReSum_refl ReSumRet_refl e.
-Definition yget : ictree YEff Ctx := ytrigger (inr (inr Get)).
-Definition yput (m : Ctx) : ictree YEff unit :=
+Definition yget : ictree YEff Ctx.Ctx := ytrigger (inr (inr Get)).
+Definition yput (m : Ctx.Ctx) : ictree YEff unit :=
   ytrigger (inr (inr (Put m))).
 Definition yyield : ictree YEff unit := ytrigger (inl Yield).
 Definition yfork : ictree YEff bool := ytrigger (inr (inl Fork)).
@@ -168,42 +167,6 @@ Lemma denote_stmt_flow_yif test then_branch else_branch :
        denote_stmt_flow then_branch
      else
        denote_stmt_flow else_branch).
-Proof. reflexivity. Qed.
-
-Lemma denote_stmt_flow_ywhile test body :
-  denote_stmt_flow (YWhile test body) =
-    ICtree.iter
-      (fun _ =>
-         condition_value <- denote_exp test;;
-         if YieldSyntax.is_true condition_value then
-           flow <- denote_stmt_flow body;;
-           match flow with
-           | Fallthrough => Ret (inl tt)
-           | HaltThread => Ret (inr HaltThread)
-           end
-         else
-           Ret (inr Fallthrough)) tt.
-Proof. reflexivity. Qed.
-
-Lemma denote_stmt_flow_yfork body :
-  denote_stmt_flow (YFork body) =
-    (in_child <- yfork;;
-     if in_child then
-       _ <- denote_stmt_flow body;;
-       Ret HaltThread
-     else
-       Ret Fallthrough).
-Proof. reflexivity. Qed.
-
-Lemma denote_stmt_yfork body :
-  denote_stmt (YFork body) =
-    (_ <- (in_child <- yfork;;
-           if in_child then
-             _ <- denote_stmt_flow body;;
-             Ret HaltThread
-           else
-             Ret Fallthrough);;
-     Ret tt).
 Proof. reflexivity. Qed.
 
 Lemma denote_stmt_flow_yskip : denote_stmt_flow YSkip = Ret Fallthrough.

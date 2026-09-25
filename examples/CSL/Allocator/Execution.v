@@ -670,14 +670,11 @@ Proof.
     as (residual & Hseg & Htail).
   exists residual; split; [exact Htail|].
   etransitivity.
-  - symmetry; apply equ_sbisim, (interp_schedule_nd_equ sh), pool_replace_current.
-  - etransitivity.
-    + exact (segment_interp_nd sh csl_equ (fun X t u => equ_sbisim t u)
-        2 (allocator_pool base s) (slot_of_actor who)
-        ((allocator_pool base s) $ slot_of_actor who) (aheap s,acount s)
-        (event_obs event) residual (aheap t,acount t) Hseg).
-    + apply emit_list_sbisim, equ_sbisim, (interp_schedule_nd_equ sh).
-      exact (source_replace_turn base who s t event residual Hturn).
+  - exact (segment_interp_nd sh csl_equ (fun X t u => equ_sbisim t u)
+      2 (allocator_pool base s) (slot_of_actor who) (aheap s,acount s)
+      (event_obs event) residual (aheap t,acount t) Hseg).
+  - apply emit_list_sbisim, equ_sbisim, (interp_schedule_nd_equ sh).
+    exact (source_replace_turn base who s t event residual Hturn).
 Qed.
 
 Theorem turn_interp_rr base capacity who s t event cursor :
@@ -696,15 +693,11 @@ Proof.
     as (residual & Hseg & Htail).
   exists residual; split; [exact Htail|].
   etransitivity.
-  - symmetry; apply equ_sbisim, interp_schedule_rr_equ,
-      pool_replace_current.
-  - etransitivity.
-    + exact (segment_interp_rr sh csl_equ (fun X t u => equ_sbisim t u)
-        2 (allocator_pool base s) (slot_of_actor who)
-        ((allocator_pool base s) $ slot_of_actor who) cursor (aheap s,acount s)
-        (event_obs event) residual (aheap t,acount t) Hseg).
-    + apply emit_list_sbisim, equ_sbisim, interp_schedule_rr_equ.
-      exact (source_replace_turn base who s t event residual Hturn).
+  - exact (segment_interp_rr sh csl_equ (fun X t u => equ_sbisim t u)
+      2 (allocator_pool base s) (slot_of_actor who) cursor (aheap s,acount s)
+      (event_obs event) residual (aheap t,acount t) Hseg).
+  - apply emit_list_sbisim, equ_sbisim, interp_schedule_rr_equ.
+    exact (source_replace_turn base who s t event residual Hturn).
 Qed.
 
 (** At an arbitrary aligned pool and store the final handler state is only
@@ -722,18 +715,13 @@ Theorem selected_turn_interp_nd base capacity (ts : pool sE 3)
       (interp_schedule_nd sh 3 (ts @ slot_of_actor who := residual) None sigma').
 Proof.
   intros Hpool Hagree Hinv Hturn.
-  destruct (selected_turn_segment 2 sh slot_of_actor (turn base) (allocator_pool base)
-    state_agrees (allocator_inv base capacity) (allocator_simulation base capacity)
+  destruct (pool_simulation_turn_nd (allocator_simulation base capacity)
     ts s who t event sigma Hinv Hagree Hpool Hturn)
-    as (residual & sigma' & Hseg & Hstate & Hnext).
+    as (residual & sigma' & Hstate & Hnext & Hinterp).
   exists residual, sigma'; split; [exact Hstate|]; split.
   - pose proof (Hnext (slot_of_actor who)) as Htail.
     rewrite Vector.nth_replace_eq in Htail; exact Htail.
-  - etransitivity.
-    + symmetry; apply equ_sbisim, (interp_schedule_nd_equ sh), pool_replace_current.
-    + exact (segment_interp_nd sh csl_equ (fun X t u => equ_sbisim t u)
-        2 ts (slot_of_actor who) (ts $ slot_of_actor who) sigma
-        (event_obs event) residual sigma' Hseg).
+  - exact Hinterp.
 Qed.
 
 Theorem selected_turn_interp_rr base capacity (ts : pool sE 3)
@@ -749,18 +737,15 @@ Theorem selected_turn_interp_rr base capacity (ts : pool sE 3)
       (interp_schedule_rr sh 3 (ts @ slot_of_actor who := residual) None cursor sigma').
 Proof.
   intros Hpool Hagree Hinv Hturn.
-  destruct (selected_turn_segment 2 sh slot_of_actor (turn base) (allocator_pool base)
-    state_agrees (allocator_inv base capacity) (allocator_simulation base capacity)
+  destruct (selected_turn_segment (allocator_simulation base capacity)
     ts s who t event sigma Hinv Hagree Hpool Hturn)
     as (residual & sigma' & Hseg & Hstate & Hnext).
   exists residual, sigma'; split; [exact Hstate|]; split.
   - pose proof (Hnext (slot_of_actor who)) as Htail.
     rewrite Vector.nth_replace_eq in Htail; exact Htail.
-  - etransitivity.
-    + symmetry; apply equ_sbisim, interp_schedule_rr_equ, pool_replace_current.
-    + exact (segment_interp_rr sh csl_equ (fun X t u => equ_sbisim t u)
-        2 ts (slot_of_actor who) (ts $ slot_of_actor who) cursor sigma
-        (event_obs event) residual sigma' Hseg).
+  - exact (segment_interp_rr sh csl_equ (fun X t u => equ_sbisim t u)
+      2 ts (slot_of_actor who) cursor sigma
+      (event_obs event) residual sigma' Hseg).
 Qed.
 
 From Coinduction Require Import coinduction rel tactics.
@@ -788,9 +773,8 @@ Theorem run_rr_allocator_bisim capacity c :
        : ictreeW (indexed (nat * nat)) (unit * SSig)).
 Proof.
   rewrite run_rr_allocator_initialized.
-  exact (pool_simulation_rr_bisim 2 sh actor_of_slot slot_of_actor
-    slot_of_actor_of_slot (turn 1) (allocator_pool 1) state_agrees
-    (allocator_inv 1 capacity) (allocator_simulation 1 capacity)
+  exact (pool_simulation_rr_bisim actor_of_slot slot_of_actor_of_slot
+    (allocator_simulation 1 capacity)
     (initial_state capacity c) (source_pool0 1) (page_heap 1 capacity hemp,c) 0
     (initial_state_inv capacity c) (conj (heq_refl _) eq_refl)
     (pool_equ_guard _ _ (source_pool0_initial capacity c))).
@@ -802,9 +786,8 @@ Theorem run_nd_allocator_bisim capacity c :
        : ictreeW (indexed (nat * nat)) (unit * SSig)).
 Proof.
   rewrite run_nd_allocator_initialized.
-  exact (pool_simulation_nd_bisim 2 sh actor_of_slot slot_of_actor
-    slot_of_actor_of_slot (turn 1) (allocator_pool 1) state_agrees
-    (allocator_inv 1 capacity) (allocator_simulation 1 capacity)
+  exact (pool_simulation_nd_bisim actor_of_slot slot_of_actor_of_slot
+    (allocator_simulation 1 capacity)
     (initial_state capacity c) (source_pool0 1) (page_heap 1 capacity hemp,c)
     (initial_state_inv capacity c) (conj (heq_refl _) eq_refl)
     (pool_equ_guard _ _ (source_pool0_initial capacity c))).

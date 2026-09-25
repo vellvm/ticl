@@ -104,21 +104,6 @@ Section RunTurns.
     intros Hleft Hright; rewrite run_turns_append, Hleft, Hright; reflexivity.
   Qed.
 
-  Lemma run_turns_append_inv left right s last ws :
-    run_turns (left ++ right) s = Some (last,ws) ->
-    exists middle first second,
-      run_turns left s = Some (middle,first) /\
-      run_turns right middle = Some (last,second) /\
-      ws = first ++ second.
-  Proof.
-    rewrite run_turns_append; intro Hrun.
-    destruct (run_turns left s) as [[middle first]|] eqn:Hleft; [|discriminate].
-    destruct (run_turns right middle) as [[last' second]|] eqn:Hright;
-      [|discriminate].
-    inversion Hrun; subst.
-    exists middle, first, second; repeat split; assumption || reflexivity.
-  Qed.
-
   (** An invariant preserved by one transition is preserved by a whole run. *)
   Lemma run_turns_preserves_inv (Inv : St -> Prop)
     (preserves : forall a s s' o, Inv s -> step a s = Some (s',o) -> Inv s') :
@@ -134,21 +119,6 @@ Section RunTurns.
       eapply IH; [eapply preserves; eauto|exact Hrest].
   Qed.
 
-  (** A total, invariant-preserving transition never faults on any script. *)
-  Lemma run_turns_total (Inv : St -> Prop)
-    (total : forall a s, Inv s -> exists r, step a s = Some r)
-    (preserves : forall a s s' o, Inv s -> step a s = Some (s',o) -> Inv s') :
-    forall script s, Inv s -> exists last ws, run_turns script s = Some (last,ws).
-  Proof.
-    induction script as [|who rest IH]; intros s Hinv.
-    - exists s, []; reflexivity.
-    - cbn [run_turns].
-      destruct (total who s Hinv) as ([next output] & Hstep).
-      rewrite Hstep.
-      destruct (IH next (preserves who s next output Hinv Hstep))
-        as (last & tail & Hrest).
-      rewrite Hrest; exists last, (logs output ++ tail); reflexivity.
-  Qed.
 End RunTurns.
 
 Arguments run_turns {St Act Out W} step logs script s.
@@ -172,14 +142,6 @@ Section RunTurnsProper.
     unfold RelProd, RelCompFun in Hpq.
     destruct Hpq as [Hnext Hobs]; cbn in Hnext, Hobs; subst o'.
     exists t'; split; [reflexivity|exact Hnext].
-  Qed.
-
-  Lemma step_none_compatible a s t :
-    R s t -> (step a s = None <-> step a t = None).
-  Proof.
-    intro Hst; pose proof (Hstep a a eq_refl s t Hst) as H.
-    destruct (step a s); destruct (step a t); inversion H;
-      split; intro Hnone; congruence.
   Qed.
 
   Lemma run_turns_proper script :
@@ -219,14 +181,6 @@ Section RunTurnsProper.
     exists last'; split; [reflexivity|exact Hlast].
   Qed.
 
-  Corollary run_turns_none_compatible script s t :
-    R s t ->
-    (run_turns step logs script s = None <-> run_turns step logs script t = None).
-  Proof.
-    intro Hst; pose proof (run_turns_proper script s t Hst) as H.
-    destruct (run_turns step logs script s); destruct (run_turns step logs script t);
-      inversion H; split; intro Hnone; congruence.
-  Qed.
 End RunTurnsProper.
 
 (** ** Constructing an infinite execution from a choice sequence.
@@ -286,23 +240,6 @@ Section OfChoices.
     selected (execution_of_choices s0 H0 picks) k = picks k.
   Proof. reflexivity. Qed.
 
-  (** A strict prefix of the choice sequence determines a prefix of states. *)
-  Lemma execution_of_choices_prefix s0 H0 picks picks' k :
-    (forall j, j < k -> picks j = picks' j) ->
-    states (execution_of_choices s0 H0 picks) k =
-    states (execution_of_choices s0 H0 picks') k.
-  Proof.
-    pose proof (execution_of_choices_valid s0 H0 picks) as [Hi Hs].
-    pose proof (execution_of_choices_valid s0 H0 picks') as [Hi' Hs'].
-    induction k as [|k IH]; intro Hagree.
-    - reflexivity.
-    - specialize (Hs k); specialize (Hs' k).
-      change (selected (execution_of_choices s0 H0 picks) k) with (picks k) in Hs.
-      change (selected (execution_of_choices s0 H0 picks') k) with (picks' k) in Hs'.
-      rewrite (IH ltac:(intros j Hj; apply Hagree; lia)) in Hs.
-      rewrite (Hagree k ltac:(lia)) in Hs.
-      rewrite Hs in Hs'; now inversion Hs'.
-  Qed.
 End OfChoices.
 
 Arguments next_valid {St Act Out} step Inv total preserves a s Hinv.
@@ -331,11 +268,6 @@ Section ExecutionFacts.
     - eapply preserves; [exact IH|apply Hstep].
   Qed.
 End ExecutionFacts.
-
-(** The flattened observation window of a half-open interval. *)
-Definition execution_log_window {St Act Out W}
-  (logs : Out -> list W) (e : Execution St Act Out) (lo len : nat) : list W :=
-  List.flat_map (fun k => logs (emitted e k)) (List.seq lo len).
 
 Section ExecutionRun.
   Context {St Act Out W : Type}
@@ -390,6 +322,49 @@ Section ExecutionWindow.
     eapply step_some_compatible; [exact Hstep|exact Hs|].
     eapply execution_step; exact Hvalid.
   Qed.
+
+  (** A window whose script is fixed pointwise: the endpoint state after
+      replaying it, and the state and output at any position inside it. *)
+  Lemma execution_script_state (e : Execution St Act Out) lo script s last ws :
+    valid e -> R (states e lo) s ->
+    List.map (selected e) (List.seq lo (List.length script)) = script ->
+    run_turns step logs script s = Some (last,ws) ->
+    R (states e (lo + List.length script)) last.
+  Proof.
+    intros Hvalid Hs Hscript Hrun.
+    destruct (execution_window_state e lo (List.length script) s Hvalid Hs)
+      as (actual & Hactual & Hstate).
+    rewrite Hscript, Hrun in Hactual.
+    assert (Elast : actual = last) by congruence; subst actual; exact Hstate.
+  Qed.
+
+  Lemma execution_script_emitted (e : Execution St Act Out) lo script i d
+    s middle ws next out :
+    valid e -> R (states e lo) s ->
+    List.map (selected e) (List.seq lo (List.length script)) = script ->
+    i < List.length script ->
+    run_turns step logs (List.firstn i script) s = Some (middle,ws) ->
+    step (List.nth i script d) middle = Some (next,out) ->
+    R (states e (lo + i)) middle /\ emitted e (lo + i) = out.
+  Proof.
+    intros Hvalid Hs Hscript Hi Hrun Hturn.
+    assert (Hpre : List.map (selected e) (List.seq lo i) = List.firstn i script).
+    { rewrite <- (map_seq_firstn (selected e) lo (List.length script) i
+        ltac:(lia)); rewrite Hscript; reflexivity. }
+    assert (Hsel : selected e (lo + i) = List.nth i script d).
+    { rewrite <- Hscript.
+      rewrite (List.nth_indep _ d (selected e lo))
+        by (rewrite List.length_map, List.length_seq; exact Hi).
+      rewrite List.map_nth, (List.seq_nth lo lo Hi); reflexivity. }
+    destruct (execution_window_state e lo i s Hvalid Hs)
+      as (actual & Hactual & Hstate).
+    rewrite Hpre, Hrun in Hactual.
+    assert (Emiddle : actual = middle) by congruence; subst actual.
+    split; [exact Hstate|].
+    destruct (execution_turn_observation e (lo + i) middle Hvalid Hstate)
+      as (next' & Hturn' & _).
+    rewrite Hsel, Hturn in Hturn'; congruence.
+  Qed.
 End ExecutionWindow.
 
 (** ** Counters and observation indices.
@@ -443,49 +418,11 @@ Section ExecutionCounter.
   Qed.
 End ExecutionCounter.
 
-(** The finite-run counter law, from the per-step increment. *)
-Section RunCounter.
-  Context {St Act Out W : Type}
-    (step : Act -> St -> option (St * Out))
-    (logs : Out -> list W)
-    (counter : St -> nat)
-    (Hcounter : forall a s s' o, step a s = Some (s',o) ->
-      counter s' = counter s + length (logs o)).
-
-  Lemma run_turns_counter script s last ws :
-    run_turns step logs script s = Some (last,ws) ->
-    counter last = counter s + length ws.
-  Proof.
-    revert s last ws; induction script as [|who rest IH]; intros s last ws Hrun.
-    - cbn [run_turns] in Hrun; inversion Hrun; subst; cbn; lia.
-    - cbn [run_turns] in Hrun.
-      destruct (step who s) as [[next output]|] eqn:Hstep; [|discriminate].
-      destruct (run_turns step logs rest next) as [[last' tail]|] eqn:Hrest;
-        [|discriminate].
-      inversion Hrun; subst; clear Hrun.
-      pose proof (IH next _ _ Hrest) as Hsuffix.
-      pose proof (Hcounter who s next output Hstep) as Hone.
-      rewrite length_app; lia.
-  Qed.
-End RunCounter.
-
 (** ** Reachability, through the Stdlib closure. *)
 Definition reachable {St Act Out}
   (step : Act -> St -> Out -> St -> Prop) (initial : St -> Prop) (s : St) : Prop :=
   exists s0, initial s0 /\
     clos_refl_trans_1n St (fun x y => exists a o, step a x o y) s0 s.
-
-Lemma execution_reachable {St Act Out}
-  (step : Act -> St -> Out -> St -> Prop) (initial : St -> Prop)
-  (e : Execution St Act Out) k :
-  execution_valid step initial e -> reachable step initial (states e k).
-Proof.
-  intros [Hinit Hstep]; exists (states e 0); split; [exact Hinit|].
-  apply clos_rt_rt1n.
-  induction k as [|k IH]; [apply rt_refl|].
-  eapply rt_trans; [exact IH|].
-  apply rt_step; exists (selected e k), (emitted e k); apply Hstep.
-Qed.
 
 Lemma reachable_inv {St Act Out}
   (step : Act -> St -> Out -> St -> Prop) (initial : St -> Prop)

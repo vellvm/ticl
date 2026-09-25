@@ -24,9 +24,6 @@ Section PoolSBisim.
   Definition pool_sbisim {n : nat} (v1 v2 : pool E n) : Prop :=
     forall i, (v1 $ i) ~ (v2 $ i).
 
-  Lemma pool_sbisim_refl {n} (v : pool E n) : pool_sbisim v v.
-  Proof. intro i; reflexivity. Qed.
-
   Lemma pool_sbisim_sym {n} (v1 v2 : pool E n) :
     pool_sbisim v1 v2 -> pool_sbisim v2 v1.
   Proof. intros Hpool i; symmetry; apply Hpool. Qed.
@@ -106,14 +103,6 @@ Section SchedulerTransitions.
       (inl Yield) _ tt
       (Br n (fun i => schedule (S n) v (Some i)))).
     reflexivity.
-  Qed.
-
-  Lemma trans_schedule_no_focus_choose n (v : pool E (S n)) (i : Fin.t (S n)) :
-    trans tau
-      (Br n (fun i => schedule (S n) v (Some i)))
-      (schedule (S n) v (Some i)).
-  Proof.
-    apply trans_br with (x := i). reflexivity.
   Qed.
 
   Lemma trans_schedule_focused_yield n (v : pool E (S n)) (i : Fin.t (S n)) k :
@@ -242,92 +231,6 @@ Section SchedulerTransitions.
     apply trans_vis_inv in TR as (x & Heq & Hl).
     destruct x.
     split; auto.
-  Qed.
-
-  Lemma trans_schedule_focused_inv n (v : pool E (S n)) (i : Fin.t (S n)) l t' :
-    trans l (schedule (S n) v (Some i)) t' ->
-    (** focused [Ret]: collapse the [Guard], step the residual pool *)
-    (observe (v $ i) = RetF tt /\
-       trans l (schedule n ((v -- i)) None) t')
-    \/
-    (** focused [Guard]: collapse, step the replaced-slot residual *)
-    (exists g, observe (v $ i) = GuardF g /\
-       trans l (schedule (S n) ((v @ i := g)) (Some i)) t')
-    \/
-    (** focused [Br b k]: [tau] to one of the branches *)
-    (exists b k (j : Fin.t (S b)), observe (v $ i) = BrF b k /\
-       l = tau /\
-       t' ≅ schedule (S n) ((v @ i := (k j))) (Some i))
-    \/
-    (** focused [Yield]: visible [Yield], [Br] back over the residual pool *)
-    (exists k, observe (v $ i) = VisF (inl Yield) k /\
-       l = obs (inl Yield : yieldE + (spawnE + E)) tt /\
-       t' ≅ Br n (fun j =>
-              schedule (S n) ((v @ i := (k tt))) (Some j)))
-    \/
-    (** focused [Fork]: visible [Spawn], cons the child, focus it *)
-    (exists k, observe (v $ i) = VisF (inr (inl Fork)) k /\
-       l = obs (inr (inl Spawn) : yieldE + (spawnE + E)) tt /\
-       t' ≅ schedule (S (S n))
-              (((k true) :: ((v @ i := (k false))))%vector)
-              (Some (Fin.FS i)))
-    \/
-    (** focused user event [e]: visible [e], step the focused thread *)
-    (exists e k x, observe (v $ i) = VisF (inr (inr e)) k /\
-       l = obs (inr (inr e) : yieldE + (spawnE + E)) x /\
-       t' ≅ schedule (S n) ((v @ i := (k x))) (Some i)).
-  Proof.
-    intro TR.
-    destruct (observe (v $ i)) as [r | b k | g | e k] eqn:Hobs.
-    - (* RetF *)
-      destruct r.
-      left.
-      split; auto.
-      rewrite (trans_schedule_focused_ret _ v i Hobs) in TR.
-      now apply trans_guard_inv in TR.
-    - (* BrF b k *)
-      do 2 right; left.
-      assert (Hsch := schedule_focused_br _ v i b k Hobs).
-      rewrite (ictree_eta (schedule (S n) v (Some i))) in TR.
-      rewrite Hsch in TR.
-      apply trans_br_inv in TR as (j & Heq & Hl).
-      exists b, k, j; auto.
-    - (* GuardF g *)
-      right; left.
-      exists g.
-      split; auto.
-      rewrite (trans_schedule_focused_guard _ v i g Hobs) in TR.
-      now apply trans_guard_inv in TR.
-    - (* VisF e k *)
-      destruct e as [yld | [frk | usr]].
-      + (* Yield *)
-        destruct yld.
-        do 3 right; left.
-        exists k.
-        split; auto.
-        rewrite (ictree_eta (schedule (S n) v (Some i))) in TR.
-        rewrite (schedule_focused_yield _ v i k Hobs) in TR.
-        apply trans_guard_inv in TR.
-        rewrite schedule_no_focus_equ in TR.
-        apply trans_vis_inv in TR as (x & Heq & Hl).
-        destruct x.
-        split; auto.
-      + (* Fork *)
-        destruct frk.
-        do 4 right; left.
-        exists k.
-        split; auto.
-        rewrite (ictree_eta (schedule (S n) v (Some i))) in TR.
-        rewrite (schedule_focused_fork _ v i k Hobs) in TR.
-        apply trans_vis_inv in TR as (x & Heq & Hl).
-        destruct x.
-        split; auto.
-      + (* user event *)
-        do 5 right.
-        rewrite (ictree_eta (schedule (S n) v (Some i))) in TR.
-        rewrite (schedule_focused_user_event _ v i usr k Hobs) in TR.
-        apply trans_vis_inv in TR as (x & Heq & Hl).
-        exists usr, k, x; auto.
   Qed.
 
   (** ** [schedule] respects [equ]-equality of pools, in every focus. *)
@@ -937,14 +840,6 @@ Section PoolGuardEqu.
   Lemma pool_equ_guard {n} (ts us : pool E n) :
     pool_equ ts us -> pool_guard_equ ts us.
   Proof. intros H i; apply guard_equ_equ, H. Qed.
-
-  Lemma pool_guard_replace {n} (ts us : pool E n) (i : Fin.t n) t u :
-    pool_guard_equ ts us -> guard_equ t u ->
-    pool_guard_equ (ts @ i := t) (us @ i := u).
-  Proof.
-    intros Hpool Htu.
-    exact (vector_replace_pointwise guard_equ ts us i t u (fun j _ => Hpool j) Htu).
-  Qed.
 
   Lemma pool_replace_current {n} (ts : pool E n) (i : Fin.t n) :
     pool_equ (ts @ i := (ts $ i)) ts.
