@@ -10,3 +10,5 @@ _build
 .vok
 .vo
 main.html
+.omp
+graphify-out
