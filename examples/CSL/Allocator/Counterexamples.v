@@ -17,7 +17,7 @@
 From Stdlib Require Import List Lia Arith.PeanoNat.
 From examples Require Import CSL.Allocator.Layout CSL.Allocator.Program
   CSL.Allocator.Model CSL.Allocator.Execution CSL.Allocator.Liveness.
-From TICL Require Import Lang.CSL ICTree.Core ICTree.Equ ICTree.SBisim
+From TICL Require Import Lang.CSL.Mod ICTree.Core ICTree.Equ ICTree.SBisim
   ICTree.Trans ICTree.Trace ICTree.Interp.Yield.Execution.
 From TICL Require Import Utils.Relations Utils.Lists Utils.Execution.
 
@@ -338,7 +338,8 @@ Theorem fair_starvation_exists : exists e,
   infinitely (fun k => block_event tag_retire 6 (emitted e k)) /\
   infinitely (fun k => block_event tag_reclaim 6 (emitted e k)) /\
   infinitely (fun k => block_event tag_alloc 6 (emitted e k)) /\
-  realizes (fun j => turn_labels (emitted e j)) 0 (run_nd (allocator_program 2) hemp 0).
+  realizes (fun j => turn_labels (emitted e j)) 0
+    (run_nd (allocator_program 2) managed_empty 0).
 Proof.
   exists starvation_execution.
   split; [exact starvation_execution_valid|].
@@ -359,7 +360,7 @@ Theorem starvation_chained_cycle_actual_source : exists last labels residual,
     Some (last,starve_prefix_logs 0 ++ starve_cycle_logs 6) /\
   label_logs labels = starve_prefix_logs 0 ++ starve_cycle_logs 6 /\
   label_taus labels = 32 /\
-  finite_steps (run_nd (allocator_program 2) hemp 0) labels residual /\
+  finite_steps (run_nd (allocator_program 2) managed_empty 0) labels residual /\
   residual ~ (model_nd 2 actor_of_slot (turn 1) last
                 : ictreeW (indexed (nat * nat)) (unit * SSig)).
 Proof.
@@ -595,7 +596,7 @@ Theorem stalled_prefix_source : exists last labels residual,
   state_equiv last (stalled_boundary 4) /\
   label_logs labels = stalled_prefix_logs 0 /\
   label_taus labels = 13 /\
-  finite_steps (run_nd (allocator_program 2) hemp 0) labels residual /\
+  finite_steps (run_nd (allocator_program 2) managed_empty 0) labels residual /\
   residual ~ (model_nd 2 actor_of_slot (turn 1) last
                 : ictreeW (indexed (nat * nat)) (unit * SSig)).
 Proof.
@@ -629,7 +630,8 @@ Theorem owner_stall_prevents_reclamation : exists e,
   infinitely (fun k => selected e k = Remote1) /\
   emitted e 8 = Some (stamp (tag_retire,6) 2) /\
   (forall k, ~ block_event tag_reclaim 6 (emitted e k)) /\
-  realizes (fun j => turn_labels (emitted e j)) 0 (run_nd (allocator_program 2) hemp 0).
+  realizes (fun j => turn_labels (emitted e j)) 0
+    (run_nd (allocator_program 2) managed_empty 0).
 Proof.
   exists owner_stall_execution; split; [exact owner_stall_execution_valid|].
   split; [exact stalled_no_owner|].

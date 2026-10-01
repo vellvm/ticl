@@ -1,9 +1,9 @@
 From Stdlib Require Import List Lia Arith.PeanoNat Fin Sorting.Permutation.
 From TICL Require Import Utils.Execution.
 From TICL Require Import ICTree.Interp.Yield.Execution.
-From TICL Require Import Lang.CSL ICTree.Core ICTree.Equ ICTree.SBisim
+From TICL Require Import Lang.CSL.Mod ICTree.Core ICTree.Equ ICTree.SBisim
   ICTree.Events.Writer ICTree.Interp.Refine.
-From TICL Require Import Lang.CSL.Queue.Representation.
+From examples Require Import CSL.Queue.Representation.
 From examples Require Import CSL.Allocator.Layout.
 
 Import ICtree ICTreeNotations ListNotations.
@@ -233,7 +233,7 @@ From Stdlib Require Import List Lia Arith.PeanoNat Fin
   Classes.RelationClasses Classes.RelationPairs Program.Equality.
 From ExtLib Require Import Data.Option.
 From Coinduction Require Import coinduction rel tactics.
-From TICL Require Import Lang.CSL ICTree.Core ICTree.Equ ICTree.SBisim
+From TICL Require Import Lang.CSL.Mod ICTree.Core ICTree.Equ ICTree.SBisim
   ICTree.Events.Writer ICTree.Interp.Refine.
 
 Import ICtree ICTreeNotations ListNotations.
@@ -334,8 +334,8 @@ Proof.
 Qed.
 
 From Stdlib Require Import List Lia Arith.PeanoNat Sorting.Permutation.
-From TICL Require Import Lang.CSL.
-From TICL Require Import Lang.CSL.Queue.Representation.
+From TICL Require Import Lang.CSL.Mod.
+From examples Require Import CSL.Queue.Representation.
 From examples Require Import CSL.Allocator.Layout.
 
 Import ListNotations.

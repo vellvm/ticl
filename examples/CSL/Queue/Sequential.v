@@ -52,9 +52,9 @@ From TICL Require Import
   ICTree.Logic.Iter
   ICTree.Logic.State
   Logic.Core
-  Lang.CSL.Heap.
+  ICTree.Interp.CSL.Mod.
 
-From TICL Require Import Lang.CSL.Queue.Representation Lang.CSL.Queue.Operations.
+From examples Require Import CSL.Queue.Representation CSL.Queue.Operations.
 
 From Coinduction Require Import coinduction.
 
@@ -83,15 +83,6 @@ Definition qE : Type := (heapE + writerE nat)%type.
 Definition emit (v: nat) : ictree qE unit :=
   @ICtree.trigger (writerE nat) qE _ _ ReSum_inr ReSumRet_inr (Log v).
 
-(** The interpretation state: the OWNED heap and the PRIVATE occurrence
-    counter.  The counter is not part of the heap and no heap operation reads
-    it; it exists to index the observations. *)
-Notation Sig := (Heap * nat)%type.
-
-(** ** The safe handler *)
-Definition h_qE: qE ~> stateT Sig (ictreeW (indexed nat)) :=
-  h_sum heap_handler h_indexed.
-
 (** ** The rotating queue program.
 
     One iteration: read the head pointer, read and EMIT the head payload, read
@@ -104,8 +95,13 @@ Definition rot_body (hdr: nat) : ictree qE (unit + unit) :=
 Definition rotate (hdr: nat) : ictree qE unit :=
   ICtree.iter (fun _: unit => rot_body hdr) tt.
 
-Definition run (hdr: nat) (h: Heap) (c: nat) : ictreeW (indexed nat) (unit * Sig) :=
-  interp_state h_qE (rotate hdr) (h, c).
+(** [run] interprets the rotation with the one CSL handler [sh] at the unary
+    payload [nat].  Its state is the shared CSL state [SSig]: the managed
+    memory [(h,allocs)] and the PRIVATE occurrence counter.  The rotation never
+    allocates or frees, so [allocs] is carried through unchanged; no heap
+    operation reads the counter, which only indexes the observations. *)
+Definition run (hdr: nat) (memory: ManagedHeap) (c: nat) : ictreeW (indexed nat) (unit * SSig) :=
+  interp_state (sh (A:=nat)) (rotate hdr) (memory, c).
 
 (** ** The body correspondence.
 
@@ -125,13 +121,13 @@ Definition run (hdr: nat) (h: Heap) (c: nat) : ictreeW (indexed nat) (unit * Sig
     - **the observation.**  The single event is [stamp v c] where [v] is the
       payload READ OUT OF the head node's cell and [c] is the occurrence
       counter before the pop. *)
-Theorem rot_body_spec: forall hdr a ns v vs h c,
+Theorem rot_body_spec: forall hdr a ns v vs h allocs c,
     qrep hdr (a :: ns) (v :: vs) h ->
-    interp_state h_qE (rot_body hdr) (h, c)
+    interp_state (sh (A:=nat)) (rot_body hdr) ((h, allocs), c)
     ~ (log (stamp v c) ;;
-       Ret (@inl unit unit tt, (rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, S c))).
+       Ret (@inl unit unit tt, ((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, allocs), S c))).
 Proof.
-  intros hdr a ns v vs h c Hq; unfold rot_body.
+  intros hdr a ns v vs h allocs c Hq; unfold rot_body.
   etransitivity.
   - eapply (queue_turn_spec h_indexed emit stamp).
     + intros; apply (interp_indexed_emit heap_handler).

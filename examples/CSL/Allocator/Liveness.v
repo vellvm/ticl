@@ -1,7 +1,7 @@
 From Stdlib Require Import List Lia Arith.PeanoNat.
 From TICL Require Import ICTree.Interp.Yield.Execution.
 From TICL Require Import Utils.Execution.
-From TICL Require Import Lang.CSL ICTree.Core ICTree.Equ ICTree.SBisim
+From TICL Require Import Lang.CSL.Mod ICTree.Core ICTree.Equ ICTree.SBisim
   ICTree.Trans ICTree.Events.Writer ICTree.Events.Yield ICTree.Logic.Trace Utils.Relations.
 From examples Require Import CSL.Allocator.Layout CSL.Allocator.Program
   CSL.Allocator.Model CSL.Allocator.Execution.
@@ -44,8 +44,8 @@ Proof.
 Qed.
 
 From Stdlib Require Import List Lia Arith.PeanoNat.
-From TICL Require Import Lang.CSL.
-From TICL Require Import Lang.CSL.Queue.Representation.
+From TICL Require Import Lang.CSL.Mod.
+From examples Require Import CSL.Queue.Representation.
 From examples Require Import CSL.Allocator.Layout CSL.Allocator.Model.
 
 Import ListNotations.
@@ -335,7 +335,7 @@ Proof.
 Qed.
 
 From Stdlib Require Import List Lia Arith.PeanoNat Fin Vector Program.Equality.
-From TICL Require Import Lang.CSL ICTree.Core ICTree.Equ ICTree.SBisim
+From TICL Require Import Lang.CSL.Mod ICTree.Core ICTree.Equ ICTree.SBisim
   ICTree.Trans ICTree.Events.Writer ICTree.Events.Yield
   ICTree.Interp.Yield.Mod ICTree.Interp.Yield.SBisim ICTree.Interp.Refine
   Utils.Vectors.
@@ -366,7 +366,8 @@ Qed.
     an infinite schedule is supplied: every physical slot remains selectable. *)
 Theorem every_reachable_source_slot_yields capacity c ts sigma (i : Fin.t 3) :
   reachable (pool_step 2 sh slot_of_actor)
-    (fun p => pool_equ (fst p) (source_pool0 1) /\ snd p = (page_heap 1 capacity hemp,c))
+    (fun p => pool_equ (fst p) (source_pool0 1) /\
+      snd p = ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),c))
     (ts,sigma) ->
   BranchFree (ts $ i) /\
   (exists logs residual sigma', (ThreadSegment sh csl_sb) (ts $ i) sigma logs residual sigma') /\
@@ -387,7 +388,8 @@ Proof.
         Hstep H). }
   split; [apply Hbf|].
   destruct (pool_simulation_reachable (allocator_simulation 1 capacity)
-    (source_pool0 1) (page_heap 1 capacity hemp,c) (initial_state capacity c)
+    (source_pool0 1) ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),c)
+    (initial_state capacity c)
     (initial_state_inv capacity c) (conj (heq_refl _) eq_refl)
     (pool_equ_guard _ _ (source_pool0_initial capacity c)) ts sigma Hreach)
     as (s & Hinv & Hagree & Hpool).
@@ -413,7 +415,7 @@ Qed.
 Theorem valid_execution_realizes_source capacity c e :
   allocator_valid capacity c e ->
   realizes (fun j => turn_labels (emitted e j)) 0
-    (run_nd (allocator_program capacity) hemp c).
+    (run_nd (allocator_program capacity) managed_empty c).
 Proof.
   intro Hvalid.
   apply (valid_execution_realizes_model 2 actor_of_slot (turn 1) slot_of_actor
@@ -429,7 +431,7 @@ Theorem run_turns_realizes_source capacity c script last logs :
     option_map snd (run_turns (turn 1) turn_labels script (initial_state capacity c)) =
       Some labels /\
     label_logs labels = logs /\ label_taus labels = List.length script /\
-    finite_steps (run_nd (allocator_program capacity) hemp c) labels residual /\
+    finite_steps (run_nd (allocator_program capacity) managed_empty c) labels residual /\
     residual ~ (model_nd 2 actor_of_slot (turn 1) last
                   : ictreeW (indexed (nat * nat)) (unit * SSig)).
 Proof.
@@ -529,7 +531,8 @@ Proof.
   assert (Hmodel : allocator_valid capacity c (allocator_execution capacity c (selected se)))
     by apply execution_of_choices_valid.
   destruct (source_execution_complete (allocator_simulation 1 capacity)
-    (source_pool0 1) (page_heap 1 capacity hemp,c) (initial_state capacity c) se (allocator_execution capacity c (selected se))
+    (source_pool0 1) ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),c)
+    (initial_state capacity c) se (allocator_execution capacity c (selected se))
     (initial_state_inv capacity c) (conj (heq_refl _) eq_refl)
     (pool_equ_guard _ _ (source_pool0_initial capacity c)) Hvalid Hmodel
     (execution_of_choices_selected _ _ _ _ _ _ (selected se)) k)
@@ -550,7 +553,8 @@ Proof.
   set (e := allocator_execution capacity c (selected se)).
   assert (Hmodel : allocator_valid capacity c e) by apply execution_of_choices_valid.
   pose proof (source_execution_complete (allocator_simulation 1 capacity)
-    (source_pool0 1) (page_heap 1 capacity hemp,c) (initial_state capacity c) se e
+    (source_pool0 1) ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),c)
+    (initial_state capacity c) se e
     (initial_state_inv capacity c) (conj (heq_refl _) eq_refl)
     (pool_equ_guard _ _ (source_pool0_initial capacity c)) Hvalid Hmodel
     (execution_of_choices_selected _ _ _ _ _ _ (selected se))) as Halign.
@@ -566,8 +570,8 @@ Proof.
 Qed.
 
 From Stdlib Require Import List Lia Arith.PeanoNat Sorting.Permutation.
-From TICL Require Import Lang.CSL.
-From TICL Require Import Lang.CSL.Queue.Representation.
+From TICL Require Import Lang.CSL.Mod.
+From examples Require Import CSL.Queue.Representation.
 From examples Require Import CSL.Allocator.Layout CSL.Allocator.Model
   CSL.Allocator.Execution.
 Import ListNotations.
@@ -1046,7 +1050,8 @@ Proof.
   set (e := allocator_execution capacity c (selected se)).
   assert (Hmodel : allocator_valid capacity c e) by apply execution_of_choices_valid.
   pose proof (source_execution_complete (allocator_simulation 1 capacity)
-    (source_pool0 1) (page_heap 1 capacity hemp,c) (initial_state capacity c) se e
+    (source_pool0 1) ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),c)
+    (initial_state capacity c) se e
     (initial_state_inv capacity c) (conj (heq_refl _) eq_refl)
     (pool_equ_guard _ _ (source_pool0_initial capacity c)) Hvalid Hmodel
     (execution_of_choices_selected _ _ _ _ _ _ (selected se))) as Halign.
@@ -1066,7 +1071,7 @@ Qed.
 
 From Stdlib Require Import List Lia Arith.PeanoNat.
 From Coinduction Require Import coinduction rel tactics.
-From TICL Require Import Lang.CSL ICTree.Core ICTree.Equ ICTree.SBisim
+From TICL Require Import Lang.CSL.Mod ICTree.Core ICTree.Equ ICTree.SBisim
   ICTree.Events.Writer ICTree.Eq.Bind ICTree.Logic.AF ICTree.Logic.AG
   ICTree.Logic.AX ICTree.Logic.Bind ICTree.Logic.Iter ICTree.Logic.State
   ICTree.Logic.Trace ICTree.Logic.Yield Logic.Core.
@@ -1161,7 +1166,7 @@ Proof. intros n _; unfold demo_cycle_logs; discriminate. Qed.
 (** The actual source is the 57-turn prefix followed by the repeating cycle,
     each cycle a genuine 42-turn round-robin run from the actual state. *)
 Theorem run_rr_allocator_demo_bisim c :
-  run_rr (allocator_program 2) hemp c ~
+  run_rr (allocator_program 2) managed_empty c ~
   emit_list (demo_prefix c)
     (emit_batches demo_cycle_logs (fun n => n+7) (c+9)
        : ictreeW (indexed (nat * nat)) (unit * SSig)).
@@ -1184,7 +1189,7 @@ Qed.
     predicates, but this proof must not claim recurrence of arbitrary tags. *)
 Theorem allocator_demo_agaf_fresh c kind kb :
   List.In kind [tag_alloc;tag_retire;tag_reclaim] ->
-  <( {run_rr (allocator_program 2) hemp c}, Pure
+  <( {run_rr (allocator_program 2) managed_empty c}, Pure
       |= AG (AF visW {fun o => (fst (indexed_value o)) = kind /\ kb <= indexed_index o}) )>.
 Proof.
   intro Hkind.
@@ -1268,7 +1273,7 @@ Theorem aba_actual_source_no_loss : exists last labels residual,
   allocator_inv 1 2 last /\
   aheap last (remote_head 1) = Some 8 /\ linked (fun a next => aheap last a = Some next) [8;6] 0 /\
   label_logs labels = aba_logs /\ label_taus labels = 23 /\
-  finite_steps (run_nd (allocator_program 2) hemp 0) labels residual /\
+  finite_steps (run_nd (allocator_program 2) managed_empty 0) labels residual /\
   residual ~ (model_nd 2 actor_of_slot (turn 1) last
                 : ictreeW (indexed (nat * nat)) (unit * SSig)).
 Proof.

@@ -1,5 +1,6 @@
 From Stdlib Require Import List Lia Arith.PeanoNat.
-From TICL Require Import Events.HeapModel Lang.CSL.Queue.Representation.
+From TICL Require Import Events.HeapModel.
+From examples Require Import CSL.Queue.Representation.
 
 Import ListNotations.
 Local Open Scope list_scope.

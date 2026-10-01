@@ -28,20 +28,20 @@ Local Typeclasses Transparent equ.
 
 Section HeapNoStep.
   Context {F G : Type} {HF : Encode F} {HG : Encode G} {Sigma : Type}
-    (other : G ~> stateT (Heap * Sigma) (ictree F)).
+    (other : G ~> stateT (ManagedHeap * Sigma) (ictree F)).
 
   (** An out-of-footprint read cannot step, regardless of its continuation. *)
-  Lemma interp_heap_rd_nostep {X} : forall a h (aux : Sigma)
+  Lemma interp_heap_rd_nostep {X} : forall a h allocs (aux : Sigma)
     (k : nat -> ictree (heapE + G) X) w,
     h a = None ->
     ~ can_step
-        (interp_state (h_sum heap_handler other) (x <- heap_read a;; k x) (h,aux)) w.
+        (interp_state (h_sum heap_handler other) (x <- heap_read a;; k x) ((h,allocs),aux)) w.
   Proof.
-    intros a h aux k w H.
+    intros a h allocs aux k w H.
     unfold heap_read, ICtree.trigger, resum, ReSum_inl, resum_ret, ReSumRet_inl.
     rewrite bind_vis; setoid_rewrite bind_ret_l.
     rewrite interp_state_vis; cbn [h_sum].
-    rewrite (heap_handler_rd_none (F:=F) a h aux H).
+    rewrite (heap_handler_rd_none (F:=F) a h allocs aux H).
     intro Hs; apply can_step_bind in Hs as [(t' & w' & TR & _) | (y & w' & TR & _)];
       revert TR; apply ktrans_stuck.
   Qed.

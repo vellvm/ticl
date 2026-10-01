@@ -23,7 +23,7 @@
       predicate is independent of the allocator used to obtain those cells.
 
     - The tail pointer is constrained only when the queue is non-empty.  That
-      is what makes the intermediate ownership split of [Rotate.v] uniform: at
+      is what makes the intermediate ownership split ([rot_detach_split]) uniform: at
       the instant the head node is detached, the remaining queue is a genuine
       [qrep] even when it has become empty and the tail pointer is stale.  *)
 
@@ -40,7 +40,7 @@ Import ListNotations.
 
 (** ** The resource model *)
 
-From TICL Require Export Lang.CSL.Heap Utils.Lists.
+From TICL Require Export ICTree.Interp.CSL.Mod Utils.Lists.
 
 (** ** Footprints and well-formedness
 
@@ -651,10 +651,10 @@ Proof.
     assert (Hz: zof hdr ns = zz) by (rewrite Hns; apply zof_snoc).
     assert (Hvne: vs <> []).
     { intro C; rewrite C in Hch; apply chain_len in Hch;
-      rewrite Hns, app_length in Hch; cbn in Hch; lia. }
+      rewrite Hns, length_app in Hch; cbn in Hch; lia. }
     destruct (exists_last Hvne) as (vs0 & vz & Hvs).
     assert (Hlen: length ns0 = length vs0).
-    { apply chain_len in Hch; rewrite Hns, Hvs, !app_length in Hch; cbn in Hch; lia. }
+    { apply chain_len in Hch; rewrite Hns, Hvs, !length_app in Hch; cbn in Hch; lia. }
     rewrite Hns, Hvs in Hch.
     apply chain_split in Hch as (Hch0 & Hchz); [| exact Hlen].
     cbn [List.hd] in Hch0; apply chain_cons in Hchz as (Hzv & Hszv & _).

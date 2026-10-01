@@ -24,8 +24,8 @@ From TICL Require Import
   ICTree.Logic.State
   Logic.Core.
 
-From TICL Require Export Lang.CSL.Heap.
-From TICL Require Import Lang.CSL.Queue.Representation Lang.CSL.Queue.Operations.
+From TICL Require Export ICTree.Interp.CSL.Mod.
+From examples Require Import CSL.Queue.Representation CSL.Queue.Operations.
 
 Import ICtree ICTreeNotations TiclNotations ListNotations.
 Local Open Scope ictree_scope.
@@ -49,13 +49,13 @@ Definition turn (q hdr: nat) : ictree sE unit := turnk q hdr (Ret tt).
 
     Instantiate [Operations.queue_turn_spec] with tagged observations. The
     arbitrary tail reuses the same heap operation proof as sequential rotation. *)
-Theorem turnk_spec {X}: forall q hdr a ns pv vs h c (kt: ictree sE X),
+Theorem turnk_spec {X}: forall q hdr a ns pv vs h allocs c (kt: ictree sE X),
     qrep hdr (a :: ns) (pv :: vs) h ->
-    interp_state sh (turnk q hdr kt) (h, c)
+    interp_state sh (turnk q hdr kt) ((h, allocs), c)
     ~ (log (stamp (q,pv) c) ;;
-       interp_state sh kt (rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, S c)).
+       interp_state sh kt ((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, allocs), S c)).
 Proof.
-  intros q hdr a ns pv vs h c kt Hq; unfold turnk.
+  intros q hdr a ns pv vs h allocs c kt Hq; unfold turnk.
   eapply (queue_turn_spec h_indexed (semit q) (fun value index => stamp (q,value) index)).
   - intros; unfold semit; apply (interp_indexed_emit heap_handler).
 
@@ -78,27 +78,29 @@ Definition sbody (u v: nat) (n: nat) : ictree sE (nat + unit) :=
 
 Definition sched (u v n: nat) : ictree sE unit := ICtree.iter (sbody u v) n.
 
-Definition srun (u v n: nat) (h: Heap) (c: nat) : ictreeW (indexed (nat * nat)) (unit * SSig) :=
-  interp_state sh (sched u v n) (h, c).
+Definition srun (u v n: nat) (memory: ManagedHeap) (c: nat)
+  : ictreeW (indexed (nat * nat)) (unit * SSig) :=
+  interp_state sh (sched u v n) (memory, c).
 
 (** One scheduler turn, for EITHER phase, in one statement.  [hdrof]/[tagof]
     are what let the phase case analysis happen once, in the temporal proof,
     rather than twice in the language layer. *)
-Theorem sbody_spec: forall u v n a ns pv vs h c,
+Theorem sbody_spec: forall u v n a ns pv vs h allocs c,
     qrep (hdrof u v n) (a :: ns) (pv :: vs) h ->
-    interp_state sh (sbody u v n) (h, c)
+    interp_state sh (sbody u v n) ((h, allocs), c)
     ~ (log (stamp ((tagof n),pv) c) ;;
        Ret (@inl nat unit (S n),
-            (rot_heap (hdrof u v n) a (List.hd 0 ns) (zof (hdrof u v n) ns) h, S c))).
+            ((rot_heap (hdrof u v n) a (List.hd 0 ns) (zof (hdrof u v n) ns) h, allocs),
+             S c))).
 Proof.
-  intros u v n a ns pv vs h c Hq.
+  intros u v n a ns pv vs h allocs c Hq.
   unfold sbody, hdrof, tagof in *.
   destruct (Nat.even n).
-  - rewrite (turnk_spec 1 u a ns pv vs h c
+  - rewrite (turnk_spec 1 u a ns pv vs h allocs c
                (Ret (@inl nat unit (S n)): ictree sE (nat + unit)) Hq).
     apply sbisim_clo_bind_eq; [reflexivity | intros []].
     rewrite interp_state_ret; reflexivity.
-  - rewrite (turnk_spec 2 v a ns pv vs h c
+  - rewrite (turnk_spec 2 v a ns pv vs h allocs c
                (Ret (@inl nat unit (S n)): ictree sE (nat + unit)) Hq).
     apply sbisim_clo_bind_eq; [reflexivity | intros []].
     rewrite interp_state_ret; reflexivity.
@@ -144,10 +146,10 @@ Proof.
   apply queue_turn_equ; symmetry; apply bind_ret_l.
 Qed.
 
-Lemma srun_turn u v n h c :
-  srun u v n h c ~
-  (interp_state sh (turn (tagof n) (hdrof u v n)) (h,c) >>=
-    fun '(_, (h',c')) => srun u v (S n) h' c').
+Lemma srun_turn u v n memory c :
+  srun u v n memory c ~
+  (interp_state sh (turn (tagof n) (hdrof u v n)) (memory,c) >>=
+    fun '(_, (memory',c')) => srun u v (S n) memory' c').
 Proof.
   unfold srun, sched.
   rewrite interp_state_unfold_iter.

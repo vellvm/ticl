@@ -34,8 +34,8 @@ From Stdlib Require Import
   Lia
   Arith.PeanoNat.
 
-From TICL Require Import Lang.CSL.Queue.Representation Lang.CSL.Queue.Trace
-  Lang.CSL.Queue.Layout Lang.CSL.Queue.Frame.
+From examples Require Import CSL.Queue.Representation CSL.Queue.Trace
+  CSL.Queue.Layout CSL.Queue.Frame.
 
 Import ListNotations.
 Local Open Scope list_scope.

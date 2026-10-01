@@ -1,6 +1,7 @@
 From Stdlib Require Import List Arith.PeanoNat.
+From examples Require Import CSL.Queue.Representation.
 From TICL Require Import
-  Lang.CSL.Queue.Representation ICTree.Core ICTree.Equ ICTree.SBisim
+  ICTree.Core ICTree.Equ ICTree.SBisim
   ICTree.Events.Heap ICTree.Events.Writer ICTree.Interp.State.Mod.
 
 Import ICtree ICTreeNotations ListNotations.
@@ -45,18 +46,18 @@ Qed.
 Lemma queue_turn_spec {E W : Type} {HE : Encode E} {X}
   (other : E ~> stateT SSig (ictreeW W))
   (emit_value : nat -> ictree (heapE + E) unit) (observe_value : nat -> nat -> W) :
-  (forall value h c (tail : ictree (heapE + E) X),
-    interp_state (h_sum heap_handler other) (emit_value value;; tail) (h,c) ~
+  (forall value h allocs c (tail : ictree (heapE + E) X),
+    interp_state (h_sum heap_handler other) (emit_value value;; tail) ((h,allocs),c) ~
       (log (observe_value value c);;
-       interp_state (h_sum heap_handler other) tail (h,S c))) ->
-  forall hdr a ns value values h c (tail : ictree (heapE + E) X),
+       interp_state (h_sum heap_handler other) tail ((h,allocs),S c))) ->
+  forall hdr a ns value values h allocs c (tail : ictree (heapE + E) X),
     qrep hdr (a :: ns) (value :: values) h ->
-    interp_state (h_sum heap_handler other) (queue_turn emit_value hdr tail) (h,c) ~
+    interp_state (h_sum heap_handler other) (queue_turn emit_value hdr tail) ((h,allocs),c) ~
       (log (observe_value value c);;
        interp_state (h_sum heap_handler other) tail
-         (rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h,S c)).
+         ((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h,allocs),S c)).
 Proof.
-  intros Emit hdr a ns value values h c tail Hq.
+  intros Emit hdr a ns value values h allocs c tail Hq.
   pose proof Hq as (Hwf & Hhd & Htl & Hch & Hdom).
   cbn in Hhd, Htl.
   apply chain_cons in Hch as (Ha & Hsa & Hch).
@@ -68,22 +69,22 @@ Proof.
   assert (Hread_hdr : upd h (S hdr) (List.hd 0 ns) hdr = Some (last (a :: ns) 0))
     by (rewrite upd_neq by congruence; exact Htl).
   unfold queue_turn.
-  etransitivity; [apply (interp_heap_rd other (S hdr) h c a _ Hhd)|].
-  etransitivity; [apply (interp_heap_rd other a h c value _ Ha)|].
+  etransitivity; [apply (interp_heap_rd other (S hdr) h allocs c a _ Hhd)|].
+  etransitivity; [apply (interp_heap_rd other a h allocs c value _ Ha)|].
   etransitivity; [apply Emit|].
   apply sbisim_clo_bind_eq; [reflexivity | intros []].
-  etransitivity; [apply (interp_heap_rd other (S a) h (S c) (List.hd 0 ns) _ Hsa)|].
+  etransitivity; [apply (interp_heap_rd other (S a) h allocs (S c) (List.hd 0 ns) _ Hsa)|].
   etransitivity;
-    [apply (interp_heap_wr_present other (S hdr) h (S c) (List.hd 0 ns) _ Hshdrdom)|].
-  etransitivity; [apply (interp_heap_rd other hdr (upd h (S hdr) (List.hd 0 ns)) (S c)
+    [apply (interp_heap_wr_present other (S hdr) h allocs (S c) (List.hd 0 ns) _ Hshdrdom)|].
+  etransitivity; [apply (interp_heap_rd other hdr (upd h (S hdr) (List.hd 0 ns)) allocs (S c)
     (last (a :: ns) 0) _ Hread_hdr)|].
   cbn beta iota.
   rewrite (zof_compute hdr a ns Hwf).
-  etransitivity; [apply (interp_heap_wr_present other (S (zof hdr ns)) _ (S c) a _
+  etransitivity; [apply (interp_heap_wr_present other (S (zof hdr ns)) _ allocs (S c) a _
     (upd_mono _ _ _ _ Hzdom))|].
-  etransitivity; [apply (interp_heap_wr_present other (S a) _ (S c) 0 _
+  etransitivity; [apply (interp_heap_wr_present other (S a) _ allocs (S c) 0 _
     (upd_mono _ _ _ _ (upd_mono _ _ _ _ Hsadom)))|].
-  etransitivity; [apply (interp_heap_wr_present other hdr _ (S c) a _
+  etransitivity; [apply (interp_heap_wr_present other hdr _ allocs (S c) a _
     (upd_mono _ _ _ _ (upd_mono _ _ _ _ (upd_mono _ _ _ _ Hhdrdom))))|].
   reflexivity.
 Qed.

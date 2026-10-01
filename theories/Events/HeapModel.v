@@ -8,9 +8,11 @@
 
     This module owns the *pure* heap: its PCM instance, its points-to and
     framing laws, the single update primitive [upd], the finite-block algebra
-    used by allocation, and the stride-two node geometry shared by the queue
-    and the allocator.  It is deliberately distinct from [ICTree.Events.Heap],
-    which only builds [heapE] triggers.
+    used by allocation, the allocation table recording live malloc extents
+    (with whole-block release and its well-formedness/framing laws), and the
+    stride-two node geometry shared by the queue and the allocator.  It is
+    deliberately distinct from [ICTree.Events.Heap], which only builds
+    [heapE] triggers.
 
     Heap equality stays POINTWISE ([heq]).  Nothing here converts it to
     function equality or assumes extensionality. *)
@@ -443,6 +445,229 @@ Proof.
         -- replace (base + S offset)%nat with (S base + offset)%nat by lia; apply F; lia.
       * intros F offset O.
         replace (S base + offset)%nat with (base + S offset)%nat by lia; apply F; lia.
+Qed.
+
+(** ** Allocation provenance
+
+    A managed heap pairs the data heap with an allocation table that records
+    each live malloc block by its base and positive length.  The table reuses
+    the natural-keyed partial-map representation of [Heap]; its values are
+    block lengths, not memory contents.  [ProductPCM] gives the pair its
+    componentwise equivalence and separation algebra, so the allocation token
+    is owned together with the cells it describes. *)
+
+Definition AllocationTable : Type := Heap.
+Definition ManagedHeap : Type := (Heap * AllocationTable)%type.
+Definition managed_empty : ManagedHeap := (hemp, hemp).
+
+Definition hfree_block (base size : nat) (h : Heap) : Heap :=
+  fun x => if andb (Nat.leb base x) (Nat.ltb x (base + size))
+           then None else h x.
+
+Definition managed_alloc (memory : ManagedHeap) (base size : nat) : ManagedHeap :=
+  (hunion (hblock base size) (fst memory), upd (snd memory) base size).
+
+Definition managed_free (memory : ManagedHeap) (base : nat) : option ManagedHeap :=
+  if Nat.eqb base 0 then Some memory else
+  match snd memory base with
+  | Some (S n) => Some (hfree_block base (S n) (fst memory),
+                         hfree base (snd memory))
+  | _ => None
+  end.
+
+Definition managed_wf (memory : ManagedHeap) : Prop :=
+  (forall base size, snd memory base = Some size ->
+     0 < base /\ 0 < size /\
+     (forall x, base <= x /\ x < base + size -> fst memory x <> None)) /\
+  (forall b1 n1 b2 n2,
+     snd memory b1 = Some n1 -> snd memory b2 = Some n2 -> b1 <> b2 ->
+     b1 + n1 <= b2 \/ b2 + n2 <= b1).
+
+Definition block_owned (base size : nat) : assn ManagedHeap :=
+  fun memory => 0 < base /\ 0 < size /\
+    heq (snd memory) (hsingle base size) /\
+    (forall x, fst memory x <> None <-> base <= x /\ x < base + size).
+
+Lemma hfree_block_in base size (h : Heap) x :
+  base <= x /\ x < base + size -> hfree_block base size h x = None.
+Proof.
+  intro H; unfold hfree_block.
+  destruct (Nat.leb_spec0 base x); destruct (Nat.ltb_spec0 x (base + size));
+    cbn; try reflexivity; lia.
+Qed.
+
+Lemma hfree_block_out base size (h : Heap) x :
+  x < base \/ base + size <= x -> hfree_block base size h x = h x.
+Proof.
+  intro H; unfold hfree_block.
+  destruct (Nat.leb_spec0 base x); destruct (Nat.ltb_spec0 x (base + size));
+    cbn; try reflexivity; lia.
+Qed.
+
+Lemma hfree_block_finite base size (h : Heap) :
+  heap_finite h -> heap_finite (hfree_block base size h).
+Proof.
+  intros [B HB]; exists B; intros x X; unfold hfree_block.
+  destruct (andb _ _); [reflexivity | now apply HB].
+Qed.
+
+Lemma managed_wf_empty : managed_wf managed_empty.
+Proof. split; cbn; intros; discriminate. Qed.
+
+Lemma managed_wf_preallocated (h : Heap) : managed_wf (h,hemp).
+Proof. split; cbn; intros; discriminate. Qed.
+
+Lemma managed_write_preserves_wf (h : Heap) (allocs : AllocationTable) a v :
+  managed_wf (h,allocs) -> managed_wf (upd h a v,allocs).
+Proof.
+  intros [W D]; split; [| exact D]; cbn [fst snd] in *.
+  intros base size Hs; destruct (W base size Hs) as (Hb & Hn & C).
+  split; [exact Hb | split; [exact Hn |]].
+  intros x Hx; apply upd_mono, C, Hx.
+Qed.
+
+(** Two intervals, one free and one allocated in the same heap, cannot
+    overlap.  Both must be nonempty for the overlap witness to exist. *)
+Lemma block_free_allocated_disjoint (h : Heap) base size b n :
+  0 < size -> 0 < n -> block_free h base size ->
+  (forall x, b <= x /\ x < b + n -> h x <> None) ->
+  base + size <= b \/ b + n <= base.
+Proof.
+  intros Hs Hn F C.
+  destruct (Nat.le_gt_cases (base + size) b) as [L | L]; [now left |].
+  destruct (Nat.le_gt_cases (b + n) base) as [R | R]; [now right |].
+  exfalso; apply (C (Nat.max base b)); [lia |].
+  replace (Nat.max base b) with (base + (Nat.max base b - base)) by lia.
+  apply F; lia.
+Qed.
+
+Lemma managed_alloc_preserves_wf (memory : ManagedHeap) base size :
+  managed_wf memory -> 0 < base -> 0 < size ->
+  block_free (fst memory) base size ->
+  managed_wf (managed_alloc memory base size).
+Proof.
+  destruct memory as [h allocs]; intros [W D] Hb Hs F.
+  unfold managed_alloc, managed_wf in *; cbn [fst snd] in *.
+  assert (Old : forall b n, b <> base -> upd allocs base size b = Some n ->
+                  allocs b = Some n /\ 0 < b /\ 0 < n /\
+                  (forall x, b <= x /\ x < b + n -> h x <> None)).
+  { intros b n Hne Hl; rewrite upd_neq in Hl by exact Hne.
+    destruct (W b n Hl) as (? & ? & ?); auto. }
+  assert (Apart : forall b n, b <> base -> upd allocs base size b = Some n ->
+                    base + size <= b \/ b + n <= base).
+  { intros b n Hne Hl; destruct (Old b n Hne Hl) as (_ & _ & Hn & C).
+    eapply block_free_allocated_disjoint; eauto. }
+  split.
+  - intros b n Hl; destruct (Nat.eq_dec b base) as [-> | Hne].
+    + rewrite upd_eq in Hl; injection Hl as <-.
+      split; [exact Hb | split; [exact Hs |]].
+      intros x Hx; unfold hunion.
+      replace x with (base + (x - base)) by lia.
+      rewrite hblock_in by lia; discriminate.
+    + destruct (Old b n Hne Hl) as (_ & Hb' & Hn & C).
+      split; [exact Hb' | split; [exact Hn |]].
+      intros x Hx; unfold hunion; destruct (hblock base size x); [discriminate | now apply C].
+  - intros b1 n1 b2 n2 H1 H2 Hne.
+    destruct (Nat.eq_dec b1 base) as [-> | N1];
+      destruct (Nat.eq_dec b2 base) as [-> | N2].
+    + contradiction.
+    + rewrite upd_eq in H1; injection H1 as <-.
+      destruct (Apart b2 n2 N2 H2); lia.
+    + rewrite upd_eq in H2; injection H2 as <-.
+      destruct (Apart b1 n1 N1 H1); lia.
+    + rewrite upd_neq in H1 by exact N1; rewrite upd_neq in H2 by exact N2.
+      exact (D b1 n1 b2 n2 H1 H2 Hne).
+Qed.
+
+Lemma managed_free_preserves_wf (memory memory' : ManagedHeap) base :
+  managed_wf memory -> managed_free memory base = Some memory' ->
+  managed_wf memory'.
+Proof.
+  destruct memory as [h allocs]; intros [W D] Hf; unfold managed_free in Hf.
+  cbn [fst snd] in *.
+  destruct (Nat.eqb_spec base 0) as [_ | Hb0].
+  { injection Hf as <-; split; assumption. }
+  destruct (allocs base) as [[| n] |] eqn:Eb; try discriminate.
+  injection Hf as <-.
+  assert (Old : forall b s, hfree base allocs b = Some s -> b <> base /\ allocs b = Some s).
+  { intros b s Hl; unfold hfree in Hl.
+    destruct (Nat.eq_dec base b) as [_ | Hne]; [discriminate | auto]. }
+  unfold managed_wf; cbn [fst snd]; split.
+  - intros b s Hl; destruct (Old b s Hl) as [Hne Hl'].
+    destruct (W b s Hl') as (Hb & Hs & C).
+    split; [exact Hb | split; [exact Hs |]].
+    intros x Hx; destruct (D b s base (S n) Hl' Eb Hne).
+    + rewrite hfree_block_out by lia; now apply C.
+    + rewrite hfree_block_out by lia; now apply C.
+  - intros b1 n1 b2 n2 H1 H2 Hne.
+    destruct (Old b1 n1 H1) as [_ H1']; destruct (Old b2 n2 H2) as [_ H2'].
+    exact (D b1 n1 b2 n2 H1' H2' Hne).
+Qed.
+
+Lemma block_owned_proper base size :
+  @AProper ManagedHeap _ (block_owned base size).
+Proof.
+  intros [h a] [h' a'] [Hh Ha] (Hb & Hs & Ht & Hd).
+  unfold block_owned in *; cbn [fst snd] in *.
+  split; [exact Hb | split; [exact Hs | split]].
+  - eapply heq_trans; [apply heq_sym, Ha | exact Ht].
+  - intro x; rewrite <- (Hh x); apply Hd.
+Qed.
+
+Lemma managed_alloc_sep (memory : ManagedHeap) base size (P : assn ManagedHeap) :
+  0 < base -> 0 < size -> block_free (fst memory) base size ->
+  snd memory base = None -> P memory ->
+  asep (block_owned base size) P (managed_alloc memory base size).
+Proof.
+  destruct memory as [h allocs]; intros Hb Hs F Hn HP; cbn in F, Hn.
+  exists (hblock base size, hsingle base size), (h, allocs).
+  split; [| split; [| split; [| exact HP]]]; cbn.
+  - split; [apply block_free_disjoint, F |].
+    intro x; unfold hsingle; destruct (Nat.eq_dec base x) as [-> | _]; auto.
+  - split; [apply heq_refl |].
+    intro x; unfold upd, hunion, hsingle.
+    destruct (Nat.eqb_spec x base) as [E | Hne];
+      destruct (Nat.eq_dec base x); subst; congruence.
+  - split; [exact Hb | split; [exact Hs | split; [apply heq_refl |]]].
+    intro x; cbn [fst]; unfold hblock.
+    destruct (Nat.leb_spec0 base x); destruct (Nat.ltb_spec0 x (base + size));
+      cbn; split; intro H;
+      first [ (intro C; discriminate) | lia
+            | (exfalso; apply H; reflexivity) | (exfalso; lia) ].
+Qed.
+
+Lemma managed_free_frame (owned frame : ManagedHeap) base size :
+  pdef owned frame -> block_owned base size owned ->
+  exists freed, managed_free (pop owned frame) base = Some freed /\ peq freed frame.
+Proof.
+  destruct owned as [ho ao], frame as [hf af].
+  intros [Dh Da] (Hb & Hs & Ha & Hd); cbn in *.
+  destruct size as [| n]; [lia |].
+  assert (Ab : hunion ao af base = Some (S n)).
+  { unfold hunion; rewrite (Ha base); unfold hsingle.
+    destruct (Nat.eq_dec base base); [reflexivity | contradiction]. }
+  unfold managed_free; cbn [fst snd].
+  destruct (Nat.eqb_spec base 0) as [E | _]; [lia |].
+  rewrite Ab; eexists; split; [reflexivity |].
+  cbn; split; intro x.
+  - destruct (Nat.le_gt_cases base x) as [L | L];
+      [destruct (Nat.lt_ge_cases x (base + S n)) as [R | R] |].
+    + rewrite hfree_block_in by lia.
+      destruct (ho x) as [v |] eqn:Ex.
+      * symmetry; eapply hdisj_none; eauto.
+      * exfalso; apply (proj2 (Hd x)); [lia | exact Ex].
+    + rewrite hfree_block_out by lia; apply hunion_none.
+      destruct (ho x) eqn:Ex; [| reflexivity].
+      exfalso; destruct (proj1 (Hd x)); [congruence | lia].
+    + rewrite hfree_block_out by lia; apply hunion_none.
+      destruct (ho x) eqn:Ex; [| reflexivity].
+      exfalso; destruct (proj1 (Hd x)); [congruence | lia].
+  - unfold hfree; destruct (Nat.eq_dec base x) as [<- | Hne].
+    + symmetry; eapply hdisj_none; [exact Da |].
+      rewrite (Ha base); unfold hsingle.
+      destruct (Nat.eq_dec base base); [reflexivity | contradiction].
+    + apply hunion_none; rewrite (Ha x); unfold hsingle.
+      destruct (Nat.eq_dec base x); [contradiction | reflexivity].
 Qed.
 
 (** ** Stride-two node geometry.

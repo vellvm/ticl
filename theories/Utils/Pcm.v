@@ -208,6 +208,32 @@ Arguments atrue {A _}.
 Notation "P ⋆ Q" := (asep P Q) (at level 55, right associativity): pcm_scope.
 Notation "P -⋆ Q" := (awand P Q) (at level 60, right associativity): pcm_scope.
 
+(** ** Componentwise products.
+
+    Equivalence, definedness, and composition are all componentwise, and the
+    unit is the pair of units.  Every law is inherited from the components;
+    nothing here needs cancellativity. *)
+#[global] Instance ProductPCM {A B : Type} {PA : PCM A} {PB : PCM B} : PCM (A * B).
+Proof.
+  refine {| peq := fun x y => @peq A PA (fst x) (fst y) /\ @peq B PB (snd x) (snd y);
+            pdef := fun x y => @pdef A PA (fst x) (fst y) /\ @pdef B PB (snd x) (snd y);
+            pop := fun x y => (@pop A PA (fst x) (fst y), @pop B PB (snd x) (snd y));
+            pemp := (@pemp A PA, @pemp B PB) |}; cbn.
+  - intros a; split; apply peq_refl.
+  - intros a b [H1 H2]; split; apply peq_sym; assumption.
+  - intros a b c [H1 H2] [H3 H4]; split; eapply peq_trans; eassumption.
+  - intros a a' b b' [H1 H2] [H3 H4] [H5 H6]; split; eapply pdef_resp; eassumption.
+  - intros a a' b b' [H1 H2] [H3 H4]; split; apply pop_resp; assumption.
+  - intros a b [H1 H2]; split; apply pdef_comm; assumption.
+  - intros a b [H1 H2]; split; apply pop_comm; assumption.
+  - intros a; split; apply pdef_emp.
+  - intros a; split; apply pop_emp.
+  - intros a b c [H1 H2] [H3 H4]; split; eapply pdef_assocL; eassumption.
+  - intros a b c [H1 H2] [H3 H4]; split; eapply pdef_assocR; eassumption.
+  - intros a b c [H1 H2] [H3 H4] [H5 H6]; split; apply pdef_assocI; assumption.
+  - intros a b c [H1 H2] [H3 H4]; split; apply pop_assoc; assumption.
+Defined.
+
 (** ** A PCM in which cancellativity fails.
 
     Carrier [bool], composition [orb], always defined, unit [false].  Every PCM
