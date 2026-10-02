@@ -759,3 +759,56 @@ Section ExactRoundRobinPrefix.
           replace_pool_equ; [apply pool_equ_refl|exact Eout].
   Qed.
 End ExactRoundRobinPrefix.
+
+
+(** ** Closed turns.
+
+    A focused first-yield segment that returns its slot to the SAME thread
+    (up to finitely many leading guards) leaves the same pool behind:
+    the focused interpreted pool is its logs followed by the unfocused pool
+    at the final state. *)
+Section SegmentPoolLoop.
+  Context {E W Sigma : Type} {HE : Encode E}
+    (handler : E ~> stateT Sigma (ictreeW W)).
+
+  Notation Rexact := (fun X (t u : ictreeW W X) => t ≅ u).
+  Notation Rsb := (fun X (t u : ictreeW W X) => t ~ u).
+
+  Local Lemma closed_pool_guard_equ {n} (ts : pool E n) i residual :
+    guard_equ residual (ts $ i) -> pool_guard_equ (ts @ i := residual) ts.
+  Proof.
+    intros Htail j; destruct (Fin.eq_dec j i) as [->|Hne].
+    - rewrite Vector.nth_replace_eq; exact Htail.
+    - rewrite Vector.nth_replace_neq by congruence; reflexivity.
+  Qed.
+
+  Lemma segment_pool_nd_loop n (ts : pool E (S n)) (i : Fin.t (S n))
+    sigma logs sigma' :
+    segment_to handler Rexact (ts $ i) sigma logs (ts $ i) sigma' ->
+    interp_schedule_nd handler (S n) ts (Some i) sigma ~
+    emit_list logs (interp_schedule_nd handler (S n) ts None sigma').
+  Proof.
+    intros (residual & Hseg & Htail).
+    etransitivity.
+    - apply (segment_interp_nd handler Rsb (fun Y t u (H : t ~ u) => H)).
+      exact (ThreadSegment_mono handler Rexact Rsb (fun Y t u => equ_sbisim t u)
+        _ _ _ _ _ Hseg).
+    - apply emit_list_sbisim, interp_schedule_nd_guard_equ.
+      apply closed_pool_guard_equ, Htail.
+  Qed.
+
+  Lemma segment_pool_rr_loop n (ts : pool E (S n)) (i : Fin.t (S n))
+    m sigma logs sigma' :
+    segment_to handler Rexact (ts $ i) sigma logs (ts $ i) sigma' ->
+    interp_schedule_rr handler (S n) ts (Some i) m sigma ~
+    emit_list logs (interp_schedule_rr handler (S n) ts None m sigma').
+  Proof.
+    intros (residual & Hseg & Htail).
+    etransitivity.
+    - apply (segment_interp_rr handler Rsb (fun Y t u (H : t ~ u) => H)).
+      exact (ThreadSegment_mono handler Rexact Rsb (fun Y t u => equ_sbisim t u)
+        _ _ _ _ _ Hseg).
+    - apply emit_list_sbisim, interp_schedule_rr_guard_equ.
+      apply closed_pool_guard_equ, Htail.
+  Qed.
+End SegmentPoolLoop.

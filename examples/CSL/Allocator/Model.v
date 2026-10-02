@@ -25,14 +25,14 @@ Record AState := {
 (** One selected source segment, ending at its first yield.  The helpers
     below only assemble this example's result; missing checked cells fault. *)
 Definition turn (base : nat) (who : Actor) (s : AState)
-  : option (AState * option (indexed (nat * nat))) :=
+  : option (AState * option (CSLObs (nat * nat))) :=
   let finish (h : Heap) (op : owner_pc) (r0 r1 : remote_pc)
       (event : option (nat * nat)) :=
     Some ({| aheap := h;
              acount := match event with None => acount s | Some _ => S (acount s) end;
              owner_state := op; remote0_state := r0; remote1_state := r1 |},
           match event with None => None
-          | Some (tag,block) => Some (stamp (tag,block) (acount s)) end) in
+          | Some (tag,block) => Some (inr (stamp (tag,block) (acount s))) end) in
   let own pc h event := finish h pc (remote0_state s) (remote1_state s) event in
   let remote (client : bool) :=
     let pc := if client then remote1_state s else remote0_state s in
@@ -216,7 +216,7 @@ Lemma turn_counter base who s t event :
   turn base who s = Some (t,event) ->
   match event with
   | None => acount t = acount s
-  | Some o => acount t = S (acount s) /\ indexed_index o = acount s
+  | Some o => acount t = S (acount s) /\ csl_index o = acount s
   end.
 Proof.
   destruct s as [h c op r0 r1]; destruct who;
@@ -520,7 +520,7 @@ Local Ltac ai_reduce_turn :=
 Definition owner_after_offer (client : bool) := if client then ORead else OOffer true.
 
 Inductive ownership_transition :
-  Actor -> owner_pc -> owner_pc -> option (indexed (nat * nat)) ->
+  Actor -> owner_pc -> owner_pc -> option (CSLObs (nat * nat)) ->
   list nat -> list nat -> list nat -> list nat -> list nat -> list nat -> Prop :=
 | ownership_read L R :
     ownership_transition Owner ORead (OCAS (List.hd 0 R)) None L R [] L R []
@@ -532,21 +532,21 @@ Inductive ownership_transition :
 | ownership_drain_empty L R :
     ownership_transition Owner ODrain (OOffer false) None L R [] L R []
 | ownership_drain L R b D idx :
-    ownership_transition Owner ODrain ODrain (Some (stamp (tag_reclaim,b) idx))
+    ownership_transition Owner ODrain ODrain (Some (inr (stamp (tag_reclaim,b) idx)))
       L R (b :: D) (b :: L) R D
 | ownership_offer_empty client L R :
     ownership_transition Owner (OOffer client) (owner_after_offer client) None
       L R [] L R []
 | ownership_offer client L R b idx :
     ownership_transition Owner (OOffer client) (owner_after_offer client)
-      (Some (stamp (tag_alloc,b) idx)) (b :: L) R [] L R []
+      (Some (inr (stamp (tag_alloc,b) idx))) (b :: L) R [] L R []
 | ownership_remote who pc event L R D :
     who <> Owner ->
-    (event = None \/ exists b idx, event = Some (stamp (tag_retry,b) idx)) ->
+    (event = None \/ exists b idx, event = Some (inr (stamp (tag_retry,b) idx))) ->
     ownership_transition who pc pc event L R D L R D
 | ownership_publish who pc L R D b idx :
     who <> Owner ->
-    ownership_transition who pc pc (Some (stamp (tag_retire,b) idx))
+    ownership_transition who pc pc (Some (inr (stamp (tag_retire,b) idx)))
       L R D L (b :: R) D.
 
 (** Finish one branch: the computed result, its ownership view at the new
@@ -730,12 +730,12 @@ Proof. intros ->; apply initial_state_inv. Qed.
     Exactly two instantiations of [Utils.Execution]; no example-local
     execution record, constructor or replay proof remains. *)
 Definition allocator_valid (capacity c : nat)
-  (e : Execution AState Actor (option (indexed (nat * nat)))) : Prop :=
+  (e : Execution AState Actor (option (CSLObs (nat * nat)))) : Prop :=
   execution_valid (fun who s o s' => turn 1 who s = Some (s',o))
     (fun s => s = initial_state capacity c) e.
 
 Definition allocator_execution (capacity c : nat) (picks : nat -> Actor)
-  : Execution AState Actor (option (indexed (nat * nat))) :=
+  : Execution AState Actor (option (CSLObs (nat * nat))) :=
   execution_of_choices (turn 1) (allocator_inv 1 capacity)
     (fun who s Hs =>
        match turn_total 1 capacity who s Hs with

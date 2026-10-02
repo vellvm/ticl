@@ -158,7 +158,7 @@ Section Composition.
     exists nsf vsf nsg vsg df dg,
       qrep fh nsf vsf (fst (fst s)) /\ qrep gh nsg vsg (fst (fst s)) /\ Disj fh nsf gh nsg
       /\ find_index Nat.eqb nlf vsf = Some df /\ find_index Nat.eqb nlg vsg = Some dg
-      /\ m = (kb - snd s, (df, if fturn n then 0 else 1)).
+      /\ m = (kb - csl_counter s, (df, if fturn n then 0 else 1)).
 
   (** ** The inner eventuality: the focused queue pops its element again *)
 
@@ -166,28 +166,28 @@ Section Composition.
     Context (nlf nlg kb: nat) (P: (indexed (nat * nat)) -> Prop)
             (HP: forall j, Nat.le kb j -> P (stamp (fq,nlf) j)).
 
-    Lemma inner_af: forall n h allocs c w,
+    Lemma inner_af: forall n h allocs ctx c w,
         not_done w ->
         Iq nlf nlg h ->
-        <( {interp_state sh (sched u v n) ((h, allocs), c)}, w |= AF visW {P} )>.
+        <( {interp_state sh (sched u v n) ((h, allocs), (ctx, c))}, w |= AF visW {csl_indexed P} )>.
     Proof.
-      intros n h allocs c w Hd (nsf & vsf & nsg & vsg & df & dg & Hqf & Hqg & Hdj & Hff & Hfg).
+      intros n h allocs ctx c w Hd (nsf & vsf & nsg & vsg & df & dg & Hqf & Hqg & Hdj & Hff & Hfg).
       unfold sched.
       apply (aul_state_iter_ghost sh rank3 (Ig nlf nlg kb) (sbody u v) _ _
-               rank3_wf (kb - c, (df, if fturn n then 0 else 1)) n ((h, allocs), c) w Hd).
+               rank3_wf (kb - c, (df, if fturn n then 0 else 1)) n ((h, allocs), (ctx, c)) w Hd).
       - exists nsf, vsf, nsg, vsg, df, dg; cbn.
         split; [exact Hqf |]; split; [exact Hqg |]; split; [exact Hdj |];
           split; [exact Hff |]; split; [exact Hfg | reflexivity].
-      - clear n h allocs c w Hd nsf vsf nsg vsg df dg Hqf Hqg Hdj Hff Hfg.
+      - clear n h allocs ctx c w Hd nsf vsf nsg vsg df dg Hqf Hqg Hdj Hff Hfg.
         intros m n s w Hd
           (nsf & vsf & nsg & vsg & df & dg & Hqf & Hqg & Hdj & Hff & Hfg & Hm).
-        destruct s as ((h, allocs), c); cbn in Hqf, Hqg, Hm.
+        destruct s as ((h, allocs), (ctx, c)); cbn in Hqf, Hqg, Hm.
         destruct (fturn n) eqn:Eph.
         + (* --- the FOCUSED queue's turn --- *)
           destruct vsf as [| pv vsf']; [cbn in Hff; discriminate |].
           destruct nsf as [| a nsf'];
             [apply qrep_len in Hqf; cbn in Hqf; discriminate |].
-          pose proof (sbody_spec u v n a nsf' pv vsf' h allocs c) as Hspec.
+          pose proof (sbody_spec u v n a nsf' pv vsf' h allocs ctx c) as Hspec.
           rewrite (Hfh n Eph), (Hft n Eph) in Hspec.
           specialize (Hspec Hqf).
           destruct (step_focus nsf' vsf' nsg vsg a pv h Hqf Hqg Hdj)
@@ -197,14 +197,14 @@ Section Composition.
                      rank3 (kb - S c, (df', 1)) m ->
                      (exists g' i' s' w',
                          not_done w'
-                         /\ <[ {interp_state sh ((sbody u v) n) ((h, allocs), c)}, w
+                         /\ <[ {interp_state sh ((sbody u v) n) ((h, allocs), (ctx, c))}, w
                                |= ⊤ AU AX done= {(@inl nat unit i', s')} w' ]>
                          /\ Ig nlf nlg kb g' i' s'
                          /\ rank3 g' m)).
           { intros df' Hdf' Hlex.
             exists (kb - S c, (df', 1)), (S n),
-              ((rot_heap fh a (List.hd 0 nsf') (zof fh nsf') h, allocs), S c),
-              (Obs (Log (stamp (fq,pv) c)) tt).
+              ((rot_heap fh a (List.hd 0 nsf') (zof fh nsf') h, allocs), (ctx, S c)),
+              (Obs (Log (inr (stamp (fq,pv) c) : CSLObs (nat * nat))) tt).
             split; [constructor |].
             split.
             { rewrite Hspec; apply aur_log;
@@ -241,7 +241,7 @@ Section Composition.
           destruct vsg as [| pw vsg']; [cbn in Hfg; discriminate |].
           destruct nsg as [| b nsg'];
             [apply qrep_len in Hqg; cbn in Hqg; discriminate |].
-          pose proof (sbody_spec u v n b nsg' pw vsg' h allocs c) as Hspec.
+          pose proof (sbody_spec u v n b nsg' pw vsg' h allocs ctx c) as Hspec.
           rewrite (Hgh n Eph) in Hspec.
           specialize (Hspec Hqg).
           destruct (step_foreign nsf vsf nsg' vsg' b pw h Hqf Hnef Hqg Hdj)
@@ -250,8 +250,8 @@ Section Composition.
           rewrite rotl_cons in Hdg'.
           right.
           exists (kb - S c, (df, 0)), (S n),
-            ((rot_heap gh b (List.hd 0 nsg') (zof gh nsg') h, allocs), S c),
-            (Obs (Log (stamp ((tagof n),pw) c)) tt).
+            ((rot_heap gh b (List.hd 0 nsg') (zof gh nsg') h, allocs), (ctx, S c)),
+            (Obs (Log (inr (stamp ((tagof n),pw) c) : CSLObs (nat * nat))) tt).
           split; [constructor |].
           split.
           { rewrite Hspec; apply aur_log;
@@ -269,20 +269,20 @@ Section Composition.
     Qed.
 
     (** ** The recurrence theorem for the focused queue *)
-    Theorem sched_agaf: forall n h allocs c w,
+    Theorem sched_agaf: forall n h allocs ctx c w,
         not_done w ->
         Iq nlf nlg h ->
-        <( {interp_state sh (sched u v n) ((h, allocs), c)}, w |= AG (AF visW {P}) )>.
+        <( {interp_state sh (sched u v n) ((h, allocs), (ctx, c))}, w |= AG (AF visW {csl_indexed P}) )>.
     Proof.
-      intros n h allocs c w Hd HI.
+      intros n h allocs ctx c w Hd HI.
       unfold sched.
-      apply (ag_state_iter sh ((h, allocs), c)
-               (fun (_: nat) (s: SSig) (_: WorldW (indexed (nat * nat))) =>
+      apply (ag_state_iter sh ((h, allocs), (ctx, c))
+               (fun (_: nat) (s: SSig) (_: WorldW (CSLObs (nat * nat))) =>
                   Iq nlf nlg (fst (fst s)))
                n w); [assumption | exact HI |].
-      clear n h allocs c w Hd HI.
+      clear n h allocs ctx c w Hd HI.
       intros n s w Hd HI.
-      destruct s as ((h, allocs), c); cbn in HI.
+      destruct s as ((h, allocs), (ctx, c)); cbn in HI.
       split; [now apply inner_af |].
       destruct HI
         as (nsf & vsf & nsg & vsg & df & dg & Hqf & Hqg & Hdj & Hff & Hfg).
@@ -291,7 +291,7 @@ Section Composition.
         destruct vsf as [| pv vsf']; [cbn in Hff; discriminate |].
         destruct nsf as [| a nsf'];
           [apply qrep_len in Hqf; cbn in Hqf; discriminate |].
-        pose proof (sbody_spec u v n a nsf' pv vsf' h allocs c) as Hspec.
+        pose proof (sbody_spec u v n a nsf' pv vsf' h allocs ctx c) as Hspec.
         rewrite (Hfh n Eph), (Hft n Eph) in Hspec.
         specialize (Hspec Hqf).
         destruct (step_focus nsf' vsf' nsg vsg a pv h Hqf Hqg Hdj)
@@ -310,7 +310,7 @@ Section Composition.
         destruct vsg as [| pw vsg']; [cbn in Hfg; discriminate |].
         destruct nsg as [| b nsg'];
           [apply qrep_len in Hqg; cbn in Hqg; discriminate |].
-        pose proof (sbody_spec u v n b nsg' pw vsg' h allocs c) as Hspec.
+        pose proof (sbody_spec u v n b nsg' pw vsg' h allocs ctx c) as Hspec.
         rewrite (Hgh n Eph) in Hspec.
         specialize (Hspec Hqg).
         destruct (step_foreign nsf vsf nsg' vsg' b pw h Hqf Hnef Hqg Hdj)
@@ -340,40 +340,40 @@ End Composition.
 
 Theorem sched_agaf_q1_gen: forall u v nl1 nl2 kb (P: (indexed (nat * nat)) -> Prop),
     (forall j, Nat.le kb j -> P (stamp (1,nl1) j)) ->
-    forall n h allocs c ns1 vs1 ns2 vs2 d1 d2,
+    forall n h allocs ctx c ns1 vs1 ns2 vs2 d1 d2,
       qrep u ns1 vs1 h -> qrep v ns2 vs2 h -> Disj u ns1 v ns2 ->
       find_index Nat.eqb nl1 vs1 = Some d1 -> find_index Nat.eqb nl2 vs2 = Some d2 ->
-      <( {srun u v n (h, allocs) c}, Pure |= AG (AF visW {P}) )>.
+      <( {srun u v n ((h, allocs), (ctx, c))}, Pure |= AG (AF visW {csl_indexed P}) )>.
 Proof.
-  intros u v nl1 nl2 kb P HP n h allocs c ns1 vs1 ns2 vs2 d1 d2 Hq1 Hq2 Hdj Hf1 Hf2.
+  intros u v nl1 nl2 kb P HP n h allocs ctx c ns1 vs1 ns2 vs2 d1 d2 Hq1 Hq2 Hdj Hf1 Hf2.
   unfold srun.
   apply (sched_agaf u v 1 u v Nat.even
            (fun n H => hdrof_even u v n H)
            (fun n H => hdrof_odd u v n H)
            (fun n H => tagof_even n H)
-           even_flip nl1 nl2 kb P HP n h allocs c Pure);
+           even_flip nl1 nl2 kb P HP n h allocs ctx c Pure);
     [constructor |].
   exists ns1, vs1, ns2, vs2, d1, d2.
   split; [exact Hq1 |]; split; [exact Hq2 |]; split; [exact Hdj |];
     split; [exact Hf1 | exact Hf2].
 Qed.
 
-Theorem sched_agaf_q1: forall u v nl1 nl2 n h allocs c ns1 vs1 ns2 vs2 d1 d2,
+Theorem sched_agaf_q1: forall u v nl1 nl2 n h allocs ctx c ns1 vs1 ns2 vs2 d1 d2,
     qrep u ns1 vs1 h -> qrep v ns2 vs2 h -> Disj u ns1 v ns2 ->
     find_index Nat.eqb nl1 vs1 = Some d1 -> find_index Nat.eqb nl2 vs2 = Some d2 ->
-    <( {srun u v n (h, allocs) c}, Pure
-       |= AG (AF visW {(fun o => indexed_value o = (1,nl1))}) )>.
+    <( {srun u v n ((h, allocs), (ctx, c))}, Pure
+       |= AG (AF visW {csl_indexed (fun o => indexed_value o = (1,nl1))}) )>.
 Proof.
   intros.
   eapply (sched_agaf_q1_gen u v nl1 nl2 0 ((fun o => indexed_value o = (1,nl1))));
     [intros j _; split; reflexivity | eassumption .. ].
 Qed.
 
-Theorem sched_agaf_q1_fresh: forall u v nl1 nl2 k n h allocs c ns1 vs1 ns2 vs2 d1 d2,
+Theorem sched_agaf_q1_fresh: forall u v nl1 nl2 k n h allocs ctx c ns1 vs1 ns2 vs2 d1 d2,
     qrep u ns1 vs1 h -> qrep v ns2 vs2 h -> Disj u ns1 v ns2 ->
     find_index Nat.eqb nl1 vs1 = Some d1 -> find_index Nat.eqb nl2 vs2 = Some d2 ->
-    <( {srun u v n (h, allocs) c}, Pure
-       |= AG (AF visW {(indexed_after (fun x => x = (1,nl1)) k)}) )>.
+    <( {srun u v n ((h, allocs), (ctx, c))}, Pure
+       |= AG (AF visW {csl_indexed (indexed_after (fun x => x = (1,nl1)) k)}) )>.
 Proof.
   intros.
   eapply (sched_agaf_q1_gen u v nl1 nl2 k ((indexed_after (fun x => x = (1,nl1)) k)));
@@ -385,40 +385,40 @@ Qed.
 
 Theorem sched_agaf_q2_gen: forall u v nl1 nl2 kb (P: (indexed (nat * nat)) -> Prop),
     (forall j, Nat.le kb j -> P (stamp (2,nl2) j)) ->
-    forall n h allocs c ns1 vs1 ns2 vs2 d1 d2,
+    forall n h allocs ctx c ns1 vs1 ns2 vs2 d1 d2,
       qrep u ns1 vs1 h -> qrep v ns2 vs2 h -> Disj u ns1 v ns2 ->
       find_index Nat.eqb nl1 vs1 = Some d1 -> find_index Nat.eqb nl2 vs2 = Some d2 ->
-      <( {srun u v n (h, allocs) c}, Pure |= AG (AF visW {P}) )>.
+      <( {srun u v n ((h, allocs), (ctx, c))}, Pure |= AG (AF visW {csl_indexed P}) )>.
 Proof.
-  intros u v nl1 nl2 kb P HP n h allocs c ns1 vs1 ns2 vs2 d1 d2 Hq1 Hq2 Hdj Hf1 Hf2.
+  intros u v nl1 nl2 kb P HP n h allocs ctx c ns1 vs1 ns2 vs2 d1 d2 Hq1 Hq2 Hdj Hf1 Hf2.
   unfold srun.
   apply (sched_agaf u v 2 v u (fun n => negb (Nat.even n))
            (fun n H => hdrof_odd u v n (proj1 (negb_true_iff _) H))
            (fun n H => hdrof_even u v n (proj1 (negb_false_iff _) H))
            (fun n H => tagof_odd n (proj1 (negb_true_iff _) H))
-           (fun n => f_equal negb (even_flip n)) nl2 nl1 kb P HP n h allocs c Pure);
+           (fun n => f_equal negb (even_flip n)) nl2 nl1 kb P HP n h allocs ctx c Pure);
     [constructor |].
   exists ns2, vs2, ns1, vs1, d2, d1.
   split; [exact Hq2 |]; split; [exact Hq1 |];
     split; [now apply Disj_sym | split; [exact Hf2 | exact Hf1]].
 Qed.
 
-Theorem sched_agaf_q2: forall u v nl1 nl2 n h allocs c ns1 vs1 ns2 vs2 d1 d2,
+Theorem sched_agaf_q2: forall u v nl1 nl2 n h allocs ctx c ns1 vs1 ns2 vs2 d1 d2,
     qrep u ns1 vs1 h -> qrep v ns2 vs2 h -> Disj u ns1 v ns2 ->
     find_index Nat.eqb nl1 vs1 = Some d1 -> find_index Nat.eqb nl2 vs2 = Some d2 ->
-    <( {srun u v n (h, allocs) c}, Pure
-       |= AG (AF visW {(fun o => indexed_value o = (2,nl2))}) )>.
+    <( {srun u v n ((h, allocs), (ctx, c))}, Pure
+       |= AG (AF visW {csl_indexed (fun o => indexed_value o = (2,nl2))}) )>.
 Proof.
   intros.
   eapply (sched_agaf_q2_gen u v nl1 nl2 0 ((fun o => indexed_value o = (2,nl2))));
     [intros j _; split; reflexivity | eassumption .. ].
 Qed.
 
-Theorem sched_agaf_q2_fresh: forall u v nl1 nl2 k n h allocs c ns1 vs1 ns2 vs2 d1 d2,
+Theorem sched_agaf_q2_fresh: forall u v nl1 nl2 k n h allocs ctx c ns1 vs1 ns2 vs2 d1 d2,
     qrep u ns1 vs1 h -> qrep v ns2 vs2 h -> Disj u ns1 v ns2 ->
     find_index Nat.eqb nl1 vs1 = Some d1 -> find_index Nat.eqb nl2 vs2 = Some d2 ->
-    <( {srun u v n (h, allocs) c}, Pure
-       |= AG (AF visW {(indexed_after (fun x => x = (2,nl2)) k)}) )>.
+    <( {srun u v n ((h, allocs), (ctx, c))}, Pure
+       |= AG (AF visW {csl_indexed (indexed_after (fun x => x = (2,nl2)) k)}) )>.
 Proof.
   intros.
   eapply (sched_agaf_q2_gen u v nl1 nl2 k ((indexed_after (fun x => x = (2,nl2)) k)));

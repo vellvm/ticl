@@ -63,11 +63,11 @@ Definition use_after_free_cas : CProg unit :=
     Each step applies one source execution rule of [Lang.CSL.Mod] at the
     focused thread; concrete heap facts are discharged by computation. *)
 
-Lemma run_rr_focus p memory c :
-  run_rr p memory c ≅
+Lemma run_rr_focus p (s : SSig) :
+  run_rr p s ≅
   interp_schedule_rr sh 1
     (([Ret tt] : pool sE 1) @ Fin.F1 := (denote_flow p >>= fun _ => Ret tt))
-    (Some Fin.F1) 0 (memory,c).
+    (Some Fin.F1) 0 s.
 Proof. reflexivity. Qed.
 
 Ltac first_fit :=
@@ -123,9 +123,9 @@ Ltac rr_finish :=
     extent, and the observation stamps. *)
 Theorem lifecycle_scope :
   exists memory : ManagedHeap,
-    run_rr lifecycle managed_empty 0 ~
-      emit_list [stamp (80,1) 0; stamp (81,0) 1; stamp (82,11) 2]%list
-        (Ret (tt,(memory,3))) /\
+    run_rr lifecycle (managed_empty,((List.nil : Ctx.Ctx),0)) ~
+      emit_list [inr (stamp (80,1) 0); inr (stamp (81,0) 1); inr (stamp (82,11) 2)]%list
+        (Ret (tt,(memory,((List.nil : Ctx.Ctx),3)))) /\
     fst memory 1 = None /\ fst memory 2 = None /\ fst memory 3 = None /\
     fst memory 4 = Some 11 /\ fst memory 5 = Some 0 /\
     snd memory 1 = None /\ snd memory 4 = Some 2.
@@ -154,8 +154,8 @@ Qed.
     extent recorded and zero-initialized again. *)
 Theorem reuse_first_fit :
   exists memory : ManagedHeap,
-    run_rr reallocate managed_empty 0 ~
-      emit_list [stamp (83,1) 0]%list (Ret (tt,(memory,1))) /\
+    run_rr reallocate (managed_empty,((List.nil : Ctx.Ctx),0)) ~
+      emit_list [inr (stamp (83,1) 0)]%list (Ret (tt,(memory,((List.nil : Ctx.Ctx),1)))) /\
     snd memory 1 = Some 3 /\
     fst memory 1 = Some 0 /\ fst memory 2 = Some 0 /\ fst memory 3 = Some 0.
 Proof.
@@ -173,19 +173,19 @@ Proof.
 Qed.
 
 (** Freeing null leaves every component of the state unchanged. *)
-Theorem free_null_unchanged (memory : ManagedHeap) c :
-  run_rr (CFree 0) memory c ~ Ret (tt,(memory,c)).
+Theorem free_null_unchanged (memory : ManagedHeap) ctx c :
+  run_rr (CFree 0) (memory,(ctx,c)) ~ Ret (tt,(memory,(ctx,c))).
 Proof.
   rewrite run_rr_focus.
-  rewrite (interp_rr_free _ _ _ 0 _ _ memory memory c eq_refl).
+  rewrite (interp_rr_free _ _ _ 0 _ _ memory memory ctx c eq_refl).
   rr_finish.
 Qed.
 
 (** ** Faults *)
 
 Theorem invalid_interior_stuck :
-  run_rr invalid_interior managed_empty 0 ~
-    (stuck : ictreeW (indexed (nat * nat)) (unit * SSig)).
+  run_rr invalid_interior (managed_empty,((List.nil : Ctx.Ctx),0)) ~
+    (stuck : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
 Proof.
   rewrite run_rr_focus; unfold invalid_interior.
   rr_step; rr_alloc 1.
@@ -194,8 +194,8 @@ Proof.
 Qed.
 
 Theorem invalid_double_stuck :
-  run_rr invalid_double managed_empty 0 ~
-    (stuck : ictreeW (indexed (nat * nat)) (unit * SSig)).
+  run_rr invalid_double (managed_empty,((List.nil : Ctx.Ctx),0)) ~
+    (stuck : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
 Proof.
   rewrite run_rr_focus; unfold invalid_double.
   rr_step; rr_alloc 1.
@@ -205,8 +205,8 @@ Proof.
 Qed.
 
 Theorem use_after_free_read_stuck :
-  run_rr use_after_free_read managed_empty 0 ~
-    (stuck : ictreeW (indexed (nat * nat)) (unit * SSig)).
+  run_rr use_after_free_read (managed_empty,((List.nil : Ctx.Ctx),0)) ~
+    (stuck : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
 Proof.
   rewrite run_rr_focus; unfold use_after_free_read.
   rr_step; rr_alloc 1.
@@ -216,8 +216,8 @@ Proof.
 Qed.
 
 Theorem use_after_free_write_stuck :
-  run_rr use_after_free_write managed_empty 0 ~
-    (stuck : ictreeW (indexed (nat * nat)) (unit * SSig)).
+  run_rr use_after_free_write (managed_empty,((List.nil : Ctx.Ctx),0)) ~
+    (stuck : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
 Proof.
   rewrite run_rr_focus; unfold use_after_free_write.
   rr_step; rr_alloc 1.
@@ -227,8 +227,8 @@ Proof.
 Qed.
 
 Theorem use_after_free_cas_stuck :
-  run_rr use_after_free_cas managed_empty 0 ~
-    (stuck : ictreeW (indexed (nat * nat)) (unit * SSig)).
+  run_rr use_after_free_cas (managed_empty,((List.nil : Ctx.Ctx),0)) ~
+    (stuck : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
 Proof.
   rewrite run_rr_focus; unfold use_after_free_cas.
   rr_step; rr_alloc 1.

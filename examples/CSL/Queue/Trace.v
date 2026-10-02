@@ -41,17 +41,17 @@ Local Typeclasses Transparent sbisim.
     the rotated heap. This is [Sequential.rot_body_spec] lifted through the
     iteration; the [Guard] is discharged by [sb_guard], so no stuttering
     theory is needed. *)
-Lemma run_step: forall hdr a ns v vs h allocs c,
+Lemma run_step: forall hdr a ns v vs h allocs ctx c,
     qrep hdr (a :: ns) (v :: vs) h ->
-    run hdr (h, allocs) c
-    ~ (log (stamp v c) ;;
-       run hdr (rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, allocs) (S c)).
+    run hdr ((h, allocs), (ctx, c))
+    ~ (log (inr (stamp v c) : CSLObs nat) ;;
+       run hdr ((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, allocs), (ctx, S c))).
 Proof.
-  intros hdr a ns v vs h allocs c Hq.
+  intros hdr a ns v vs h allocs ctx c Hq.
   unfold run, rotate.
   rewrite interp_state_unfold_iter.
   cbv beta.
-  rewrite (rot_body_spec hdr a ns v vs h allocs c Hq).
+  rewrite (rot_body_spec hdr a ns v vs h allocs ctx c Hq).
   rewrite bind_bind.
   apply sbisim_clo_bind_eq; [reflexivity | intros []].
   rewrite bind_ret_l.
@@ -77,10 +77,10 @@ Fixpoint qstepN (hdr: nat) (n: nat) (ns: list nat) (h: Heap) : Heap :=
 (** The observation prefix of [n] rotations, with the continuation threaded so
     that no [bind]-associativity reasoning is needed. *)
 Fixpoint runN (hdr: nat) (n: nat) (ns vs: list nat) (h: Heap) (c: nat)
-              (k: ictreeW (indexed nat) (unit * SSig)) : ictreeW (indexed nat) (unit * SSig) :=
+              (k: ictreeW (CSLObs nat) (unit * SSig)) : ictreeW (CSLObs nat) (unit * SSig) :=
   match n with
   | 0 => k
-  | S m => log (stamp (hd 0 vs) c) ;;
+  | S m => log (inr (stamp (hd 0 vs) c) : CSLObs nat) ;;
            runN hdr m (rotl ns) (rotl vs) (qstep hdr ns h) (S c) k
   end.
 
@@ -108,17 +108,17 @@ Qed.
 
 (** [n] rotations of the run are [n] logged pops followed by the run from the
     [n]-times-rotated heap. *)
-Theorem run_stepN: forall n hdr ns vs h allocs c,
+Theorem run_stepN: forall n hdr ns vs h allocs ctx c,
     qrep hdr ns vs h -> ns <> [] ->
-    run hdr (h, allocs) c
-    ~ runN hdr n ns vs h c (run hdr (qstepN hdr n ns h, allocs) (c + n)).
+    run hdr ((h, allocs), (ctx, c))
+    ~ runN hdr n ns vs h c (run hdr ((qstepN hdr n ns h, allocs), (ctx, (c + n)%nat))).
 Proof.
-  induction n as [| n IH]; intros hdr ns vs h allocs c Hq Hne.
+  induction n as [| n IH]; intros hdr ns vs h allocs ctx c Hq Hne.
   - cbn [runN qstepN]; rewrite Nat.add_0_r; reflexivity.
   - destruct ns as [| a ns']; [contradiction |].
     destruct vs as [| v vs']; [apply qrep_len in Hq; cbn in Hq; discriminate |].
     cbn [runN qstepN qstep hd].
-    rewrite (run_step hdr a ns' v vs' h allocs c Hq).
+    rewrite (run_step hdr a ns' v vs' h allocs ctx c Hq).
     apply sbisim_clo_bind_eq; [reflexivity | intros []].
     rewrite <- Nat.add_succ_comm.
     apply (IH hdr (rotl (a :: ns')) (rotl (v :: vs'))).

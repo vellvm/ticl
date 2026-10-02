@@ -1,4 +1,5 @@
-From Stdlib Require Import Fin Vector Program.Equality.
+From Stdlib Require Import Fin Vector Program.Equality Arith.PeanoNat.
+From Coinduction Require Import coinduction lattice tactics.
 From TICL Require Import
   ICTree.Core
   ICTree.Trans
@@ -855,3 +856,598 @@ Section PoolGuardEqu.
     intros Eq H i; eapply guard_equ_trans; [apply guard_equ_equ, Eq|apply H].
   Qed.
 End PoolGuardEqu.
+
+Local Typeclasses Transparent equ.
+
+
+(** * Alignment up to finitely many leading guards.
+
+    [galigned t u] relates two trees whose every node agrees, except that
+    each side may carry finitely many extra guards before a node.  A pure
+    guard round consumes at least one guard on BOTH sides, so silent
+    divergence is only ever aligned with silent divergence.  The relation is
+    preserved by the erasure and state interpreters, by round-robin
+    refinement, and by the scheduler on guard-equivalent pools, and it
+    implies strong bisimulation. *)
+
+Fixpoint guards {E} {HE : Encode E} {X} (n : nat) (t : ictree E X) : ictree E X :=
+  match n with 0 => t | S n => Guard (guards n t) end.
+
+Section Guards.
+  Context {E : Type} {HE : Encode E} {X : Type}.
+
+  Lemma guards_equ n (t u : ictree E X) : t ≅ u -> guards n t ≅ guards n u.
+  Proof. intro H; induction n; cbn [guards]; [exact H|apply guard_equ_node; exact IHn]. Qed.
+
+  Lemma guards_add n m (t : ictree E X) : guards (n + m)%nat t = guards n (guards m t).
+  Proof. induction n; cbn [guards Nat.add]; [reflexivity|now rewrite IHn]. Qed.
+
+  Lemma guards_guard n (t : ictree E X) : guards n (Guard t) = guards (S n) t.
+  Proof. induction n; cbn [guards]; [reflexivity|now rewrite IHn]. Qed.
+
+  Lemma guards_trans n l (t u : ictree E X) : trans l t u -> trans l (guards n t) u.
+  Proof. intro H; induction n; cbn [guards]; [exact H|now apply trans_guard]. Qed.
+
+  (** Guard prefixes are cancellative. *)
+  Lemma guards_cancel : forall b c (x y : ictree E X),
+    guards b x ≅ guards c y ->
+    (exists d, x ≅ guards d y /\ c = (b + d)%nat) \/ (exists d, y ≅ guards d x /\ b = (c + d)%nat).
+  Proof.
+    induction b as [|b IH]; intros c x y H.
+    - left; exists c; split; [exact H|reflexivity].
+    - destruct c as [|c].
+      + right; exists (S b); split; [symmetry; exact H|reflexivity].
+      + cbn [guards] in H; apply equ_guard_invE in H.
+        destruct (IH c x y H) as [(d & Hd & ->)|(d & Hd & ->)];
+          [left|right]; exists d; split; auto.
+  Qed.
+
+  (** [guard_equ] is exactly "the same tree after finitely many guards". *)
+  Lemma guard_equ_guards (t u : ictree E X) :
+    guard_equ t u -> exists a b x, t ≅ guards a x /\ u ≅ guards b x.
+  Proof.
+    intro H; induction H as [t u [Eq|Eg]|t|t u H IH|t u v H1 IH1 H2 IH2].
+    - exists 0, 0, u; split; [exact Eq|reflexivity].
+    - exists 1, 0, u; split; [exact Eg|reflexivity].
+    - exists 0, 0, t; split; reflexivity.
+    - destruct IH as (a & b & x & Ht & Hu); exists b, a, x; split; assumption.
+    - destruct IH1 as (a & b & x & Ht & Hu), IH2 as (c & d & y & Hu' & Hv).
+      assert (Hxy : guards b x ≅ guards c y) by (rewrite <- Hu, <- Hu'; reflexivity).
+      destruct (guards_cancel b c x y Hxy) as [(e & Hx & ->)|(e & Hy & ->)].
+      + exists (a + e)%nat, d, y; split; [|exact Hv].
+        rewrite Ht, (guards_equ a _ _ Hx), guards_add; reflexivity.
+      + exists a, (d + e)%nat, x; split; [exact Ht|].
+        rewrite Hv, (guards_equ d _ _ Hy), guards_add; reflexivity.
+  Qed.
+End Guards.
+
+CoInductive galigned {E} {HE : Encode E} {X} : ictree E X -> ictree E X -> Prop :=
+| galign_guard t u n m t' u' :
+    t ≅ guards (S n) t' -> u ≅ guards (S m) u' ->
+    galigned t' u' -> galigned t u
+| galign_ret t u n m r :
+    t ≅ guards n (Ret r) -> u ≅ guards m (Ret r) -> galigned t u
+| galign_br t u n m c (k k' : fin' c -> ictree E X) :
+    t ≅ guards n (Br c k) -> u ≅ guards m (Br c k') ->
+    (forall i, galigned (k i) (k' i)) -> galigned t u
+| galign_vis t u n m (e : E) (k k' : encode e -> ictree E X) :
+    t ≅ guards n (Vis e k) -> u ≅ guards m (Vis e k') ->
+    (forall x, galigned (k x) (k' x)) -> galigned t u.
+
+Section GuardAlignment.
+  Context {E : Type} {HE : Encode E} {X : Type}.
+
+  Lemma galigned_equ (t u a b : ictree E X) :
+    t ≅ a -> u ≅ b -> galigned t u -> galigned a b.
+  Proof.
+    intros Et Eu H; destruct H as
+      [t u n m t' u' El Er H|t u n m r El Er|t u n m c k k' El Er H
+      |t u n m e k k' El Er H].
+    - eapply galign_guard; [rewrite <- Et; exact El|rewrite <- Eu; exact Er|exact H].
+    - eapply galign_ret; [rewrite <- Et; exact El|rewrite <- Eu; exact Er].
+    - eapply galign_br; [rewrite <- Et; exact El|rewrite <- Eu; exact Er|exact H].
+    - eapply galign_vis; [rewrite <- Et; exact El|rewrite <- Eu; exact Er|exact H].
+  Qed.
+
+  Lemma galigned_sym : forall t u : ictree E X, galigned t u -> galigned u t.
+  Proof.
+    cofix IH; intros t u H; destruct H as
+      [t u n m t' u' El Er H|t u n m r El Er|t u n m c k k' El Er H
+      |t u n m e k k' El Er H].
+    - eapply galign_guard; [exact Er|exact El|apply IH; exact H].
+    - eapply galign_ret; [exact Er|exact El].
+    - eapply galign_br; [exact Er|exact El|intro i; apply IH, H].
+    - eapply galign_vis; [exact Er|exact El|intro x; apply IH, H].
+  Qed.
+
+  Lemma galigned_stuck : galigned (stuck : ictree E X) stuck.
+  Proof.
+    cofix IH.
+    apply (galign_guard stuck stuck 0 0 stuck stuck);
+      [exact unfold_stuck|exact unfold_stuck|exact IH].
+  Qed.
+
+  Lemma galigned_refl : forall t : ictree E X, galigned t t.
+  Proof.
+    cofix IH; intro t.
+    destruct (observe t) as [r|c k|g|e k] eqn:Ht.
+    - pose proof (observe_eq_equ t (Ret r) Ht) as Et.
+      apply (galign_ret _ _ 0 0 r); exact Et.
+    - pose proof (observe_eq_equ t (Br c k) Ht) as Et.
+      apply (galign_br _ _ 0 0 c k k); [exact Et|exact Et|intro i; apply IH].
+    - pose proof (observe_eq_equ t (Guard g) Ht) as Et.
+      apply (galign_guard _ _ 0 0 g g); [exact Et|exact Et|apply IH].
+    - pose proof (observe_eq_equ t (Vis e k) Ht) as Et.
+      apply (galign_vis _ _ 0 0 e k k); [exact Et|exact Et|intro x; apply IH].
+  Qed.
+
+  Local Ltac head_absurd H := step in H; cbn in H; inversion H.
+
+  Lemma galigned_match l T U :
+    @trans_ E HE X l T U ->
+    forall u, galigned (go T) u ->
+    exists u', trans l u u' /\ galigned (go U) u'.
+  Proof.
+    intro TR; induction TR as
+      [l inner target TR IH
+      |c pick k result Eresult
+      |e k answer result Eresult
+      |result value Eresult]; intros u A.
+    - inversion A as
+        [left right n m tl tr El Er Hnext|left right n m r El Er
+        |left right n m c k k' El Er Hnext|left right n m e k k' El Er Hnext];
+        subst; clear A.
+      + cbn [guards] in El; apply equ_guard_invE in El; destruct n as [|n].
+        * cbn [guards] in El.
+          assert (Ai : galigned (go (observe inner)) tr).
+          { eapply galigned_equ; [|reflexivity|exact Hnext].
+            transitivity inner; [symmetry; exact El|apply ictree_eta]. }
+          destruct (IH tr Ai) as (next & Tnext & Anext).
+          exists next; split; [rewrite Er; now apply guards_trans|exact Anext].
+        * apply IH; eapply galigned_equ; [apply ictree_eta|reflexivity|].
+          eapply galign_guard; eassumption.
+      + destruct n as [|n]; [head_absurd El|].
+        cbn [guards] in El; apply equ_guard_invE in El.
+        apply IH; eapply galigned_equ; [apply ictree_eta|reflexivity|].
+        eapply galign_ret; eassumption.
+      + destruct n as [|n]; [head_absurd El|].
+        cbn [guards] in El; apply equ_guard_invE in El.
+        apply IH; eapply galigned_equ; [apply ictree_eta|reflexivity|].
+        eapply galign_br; eassumption.
+      + destruct n as [|n]; [head_absurd El|].
+        cbn [guards] in El; apply equ_guard_invE in El.
+        apply IH; eapply galigned_equ; [apply ictree_eta|reflexivity|].
+        eapply galign_vis; eassumption.
+    - inversion A as
+        [left right n m tl tr El Er Hnext|left right n m r El Er
+        |left right n m c' kk kk' El Er Hnext|left right n m e kk kk' El Er Hnext];
+        subst; clear A.
+      + head_absurd El.
+      + destruct n; head_absurd El.
+      + destruct n as [|n]; [|head_absurd El].
+        cbn [guards] in El.
+        pose proof (equ_br_invT El) as Ec; subst c'.
+        pose proof (equ_br_invE El pick) as Ek.
+        exists (kk' pick); split.
+        * rewrite Er; apply guards_trans; eapply trans_br; reflexivity.
+        * eapply galigned_equ; [|reflexivity|exact (Hnext pick)].
+          transitivity (k pick); [symmetry; exact Ek|].
+          transitivity result; [exact Eresult|apply ictree_eta].
+      + destruct n; head_absurd El.
+    - inversion A as
+        [left right n m tl tr El Er Hnext|left right n m r El Er
+        |left right n m c kk kk' El Er Hnext|left right n m e' kk kk' El Er Hnext];
+        subst; clear A.
+      + head_absurd El.
+      + destruct n; head_absurd El.
+      + destruct n; head_absurd El.
+      + destruct n as [|n]; [|head_absurd El].
+        cbn [guards] in El.
+        pose proof (equ_vis_invT El) as [_ Ee]; subst e'.
+        pose proof (equ_vis_invE El answer) as Ek.
+        exists (kk' answer); split.
+        * rewrite Er; apply guards_trans; apply trans_vis.
+        * eapply galigned_equ; [|reflexivity|exact (Hnext answer)].
+          transitivity (k answer); [symmetry; exact Ek|].
+          transitivity result; [exact Eresult|apply ictree_eta].
+    - inversion A as
+        [left right n m tl tr El Er Hnext|left right n m r El Er
+        |left right n m c kk kk' El Er Hnext|left right n m e kk kk' El Er Hnext];
+        subst; clear A.
+      + head_absurd El.
+      + destruct n as [|n]; [|head_absurd El].
+        cbn [guards] in El; apply equ_ret_inv in El; subst r.
+        exists stuck; split.
+        * rewrite Er; apply guards_trans, trans_ret.
+        * eapply galigned_equ; [|reflexivity|exact galigned_stuck].
+          transitivity result; [exact Eresult|apply ictree_eta].
+      + destruct n; head_absurd El.
+      + destruct n; head_absurd El.
+  Qed.
+
+  Lemma galigned_trans (t u next : ictree E X) l :
+    galigned t u -> trans l t next ->
+    exists other, trans l u other /\ galigned next other.
+  Proof.
+    intros A TR.
+    assert (Ae : galigned (go (observe t)) u).
+    { eapply galigned_equ; [apply ictree_eta|reflexivity|exact A]. }
+    destruct (galigned_match l (observe t) (observe next) TR u Ae)
+      as (other & To & Ao).
+    exists other; split; [exact To|].
+    eapply galigned_equ; [symmetry; apply ictree_eta|reflexivity|exact Ao].
+  Qed.
+
+  Lemma galigned_sbisim : forall t u : ictree E X, galigned t u -> t ~ u.
+  Proof.
+    unfold sbisim; apply_coinduction; fold_sbisim.
+    intros R IH t u A; split; intros l next TR.
+    - destruct (galigned_trans t u next l A TR) as (other & To & Ao).
+      exists l, other; split; [exact To|]; split; [now apply IH|reflexivity].
+    - destruct (galigned_trans u t next l (galigned_sym t u A) TR)
+        as (other & To & Ao).
+      exists l, other; split; [exact To|]; split.
+      + apply IH, galigned_sym; exact Ao.
+      + reflexivity.
+  Qed.
+End GuardAlignment.
+
+(** ** A coinduction principle for guard alignment *)
+
+Inductive galignF {E} {HE : Encode E} {X} (R : ictree E X -> ictree E X -> Prop)
+  : ictree E X -> ictree E X -> Prop :=
+| galignF_guard t u n m t' u' :
+    t ≅ guards (S n) t' -> u ≅ guards (S m) u' -> R t' u' -> galignF R t u
+| galignF_ret t u n m r :
+    t ≅ guards n (Ret r) -> u ≅ guards m (Ret r) -> galignF R t u
+| galignF_br t u n m c (k k' : fin' c -> ictree E X) :
+    t ≅ guards n (Br c k) -> u ≅ guards m (Br c k') ->
+    (forall i, R (k i) (k' i)) -> galignF R t u
+| galignF_vis t u n m (e : E) (k k' : encode e -> ictree E X) :
+    t ≅ guards n (Vis e k) -> u ≅ guards m (Vis e k') ->
+    (forall x, R (k x) (k' x)) -> galignF R t u.
+
+Lemma galigned_coind {E} {HE : Encode E} {X} (R : ictree E X -> ictree E X -> Prop) :
+  (forall t u, R t u -> galignF R t u) -> forall t u, R t u -> galigned t u.
+Proof.
+  intro Hstep; cofix CIH; intros t u H.
+  destruct (Hstep t u H) as
+    [t u n m t' u' El Er H'|t u n m r El Er|t u n m c k k' El Er H'
+    |t u n m e k k' El Er H'].
+  - exact (galign_guard t u n m t' u' El Er (CIH t' u' H')).
+  - exact (galign_ret t u n m r El Er).
+  - exact (galign_br t u n m c k k' El Er (fun i => CIH (k i) (k' i) (H' i))).
+  - exact (galign_vis t u n m e k k' El Er (fun x => CIH (k x) (k' x) (H' x))).
+Qed.
+
+#[global] Instance guards_proper {E} {HE : Encode E} {X} n :
+  Proper (equ eq ==> equ eq) (@guards E HE X n).
+Proof. intros t u H; apply guards_equ, H. Qed.
+
+Lemma guards_shift {E} {HE : Encode E} {X} n a (t : ictree E X) :
+  guards n (guards (S a) t) = guards (S (n + a)) t.
+Proof. rewrite <- guards_add, Nat.add_succ_r; reflexivity. Qed.
+
+
+(** ** Interpretation preserves guard alignment *)
+Section InterpAlign.
+  Context {E F : Type} {HE : Encode E} {HF : Encode F} (h : E ~> ictree F) {X : Type}.
+
+  Lemma interp_guards n (t : ictree E X) : interp h (guards n t) ≅ guards n (interp h t).
+  Proof.
+    induction n; cbn [guards]; [reflexivity|].
+    rewrite interp_guard_node; apply guard_equ_node; exact IHn.
+  Qed.
+
+  Inductive interp_rel : ictree F X -> ictree F X -> Prop :=
+  | interp_rel_tree n m (t u : ictree E X) T U :
+      galigned t u -> T ≅ guards n (interp h t) -> U ≅ guards m (interp h u) ->
+      interp_rel T U
+  | interp_rel_bind n m (A : Type) (a : ictree F A) (k k' : A -> ictree E X) T U :
+      (forall x, galigned (k x) (k' x)) ->
+      T ≅ guards n (a >>= fun x => Guard (interp h (k x))) ->
+      U ≅ guards m (a >>= fun x => Guard (interp h (k' x))) -> interp_rel T U.
+
+  Lemma interp_rel_bind_step n m A (a : ictree F A) (k k' : A -> ictree E X) T U :
+    (forall x, galigned (k x) (k' x)) ->
+    T ≅ guards n (a >>= fun x => Guard (interp h (k x))) ->
+    U ≅ guards m (a >>= fun x => Guard (interp h (k' x))) -> galignF interp_rel T U.
+  Proof.
+    intros Hk ET EU.
+    destruct (observe a) as [x|c kk|g|e kk] eqn:Ha.
+    - pose proof (observe_eq_equ a (Ret x) Ha) as Ea.
+      apply (galignF_guard _ T U n m (interp h (k x)) (interp h (k' x))).
+      + rewrite ET, Ea, bind_ret_l, guards_guard; reflexivity.
+      + rewrite EU, Ea, bind_ret_l, guards_guard; reflexivity.
+      + apply (interp_rel_tree 0 0 (k x) (k' x)); [apply Hk|reflexivity|reflexivity].
+    - pose proof (observe_eq_equ a (Br c kk) Ha) as Ea.
+      apply (galignF_br _ T U n m c (fun i => kk i >>= fun x => Guard (interp h (k x)))
+                                     (fun i => kk i >>= fun x => Guard (interp h (k' x)))).
+      + rewrite ET, Ea, bind_br; reflexivity.
+      + rewrite EU, Ea, bind_br; reflexivity.
+      + intro i; apply (interp_rel_bind 0 0 A (kk i) k k'); [exact Hk|reflexivity|reflexivity].
+    - pose proof (observe_eq_equ a (Guard g) Ha) as Ea.
+      apply (galignF_guard _ T U n m (g >>= fun x => Guard (interp h (k x)))
+                                     (g >>= fun x => Guard (interp h (k' x)))).
+      + rewrite ET, Ea, bind_guard, guards_guard; reflexivity.
+      + rewrite EU, Ea, bind_guard, guards_guard; reflexivity.
+      + apply (interp_rel_bind 0 0 A g k k'); [exact Hk|reflexivity|reflexivity].
+    - pose proof (observe_eq_equ a (Vis e kk) Ha) as Ea.
+      apply (galignF_vis _ T U n m e (fun y => kk y >>= fun x => Guard (interp h (k x)))
+                                     (fun y => kk y >>= fun x => Guard (interp h (k' x)))).
+      + rewrite ET, Ea, bind_vis; reflexivity.
+      + rewrite EU, Ea, bind_vis; reflexivity.
+      + intro y; apply (interp_rel_bind 0 0 A (kk y) k k'); [exact Hk|reflexivity|reflexivity].
+  Qed.
+
+  Lemma interp_rel_step T U : interp_rel T U -> galignF interp_rel T U.
+  Proof.
+    intros [n m t u T' U' A ET EU|n m B a k k' T' U' Hk ET EU].
+    - destruct A as [t u a b t' u' Et Eu A|t u a b r Et Eu
+        |t u a b c kk kk' Et Eu Hk|t u a b e kk kk' Et Eu Hk].
+      + apply (galignF_guard _ T' U' (n + a) (m + b) (interp h t') (interp h u')).
+        * rewrite ET, Et, interp_guards, guards_shift; reflexivity.
+        * rewrite EU, Eu, interp_guards, guards_shift; reflexivity.
+        * apply (interp_rel_tree 0 0 t' u'); [exact A|reflexivity|reflexivity].
+      + apply (galignF_ret _ T' U' (n + a) (m + b) r).
+        * rewrite ET, Et, interp_guards, interp_ret_node, <- guards_add; reflexivity.
+        * rewrite EU, Eu, interp_guards, interp_ret_node, <- guards_add; reflexivity.
+      + apply (galignF_br _ T' U' (n + a) (m + b) c
+          (fun i => Guard (interp h (kk i))) (fun i => Guard (interp h (kk' i)))).
+        * rewrite ET, Et, interp_guards, interp_br_node, <- guards_add; reflexivity.
+        * rewrite EU, Eu, interp_guards, interp_br_node, <- guards_add; reflexivity.
+        * intro i; apply (interp_rel_tree 1 1 (kk i) (kk' i)); [apply Hk|reflexivity|reflexivity].
+      + apply (interp_rel_bind_step (n + a) (m + b) _ (h e) kk kk' T' U' Hk).
+        * rewrite ET, Et, interp_guards, interp_vis_node, <- guards_add; reflexivity.
+        * rewrite EU, Eu, interp_guards, interp_vis_node, <- guards_add; reflexivity.
+    - exact (interp_rel_bind_step n m B a k k' T' U' Hk ET EU).
+  Qed.
+
+  Lemma interp_galigned (t u : ictree E X) :
+    galigned t u -> galigned (interp h t) (interp h u).
+  Proof.
+    intro H; apply (galigned_coind interp_rel interp_rel_step).
+    apply (interp_rel_tree 0 0 t u); [exact H|reflexivity|reflexivity].
+  Qed.
+End InterpAlign.
+
+(** ** State interpretation preserves guard alignment *)
+Section InterpStateAlign.
+  Context {E F S : Type} {HE : Encode E} {HF : Encode F}
+    (h : E ~> stateT S (ictree F)) {X : Type}.
+
+  Lemma interp_state_guards n (t : ictree E X) s :
+    interp_state h (guards n t) s ≅ guards n (interp_state h t s).
+  Proof.
+    induction n; cbn [guards]; [reflexivity|].
+    rewrite interp_state_tau; apply guard_equ_node; exact IHn.
+  Qed.
+
+  Inductive istate_rel : ictree F (X * S) -> ictree F (X * S) -> Prop :=
+  | istate_rel_tree n m (t u : ictree E X) s T U :
+      galigned t u -> T ≅ guards n (interp_state h t s) ->
+      U ≅ guards m (interp_state h u s) -> istate_rel T U
+  | istate_rel_bind n m (A : Type) (a : ictree F (A * S)) (k k' : A -> ictree E X) T U :
+      (forall x, galigned (k x) (k' x)) ->
+      T ≅ guards n (a >>= fun '(x, s') => Guard (interp_state h (k x) s')) ->
+      U ≅ guards m (a >>= fun '(x, s') => Guard (interp_state h (k' x) s')) ->
+      istate_rel T U.
+
+  Lemma istate_rel_bind_step n m A (a : ictree F (A * S)) (k k' : A -> ictree E X) T U :
+    (forall x, galigned (k x) (k' x)) ->
+    T ≅ guards n (a >>= fun '(x, s') => Guard (interp_state h (k x) s')) ->
+    U ≅ guards m (a >>= fun '(x, s') => Guard (interp_state h (k' x) s')) ->
+    galignF istate_rel T U.
+  Proof.
+    intros Hk ET EU.
+    destruct (observe a) as [[x s']|c kk|g|e kk] eqn:Ha.
+    - pose proof (observe_eq_equ a (Ret (x, s')) Ha) as Ea.
+      apply (galignF_guard _ T U n m (interp_state h (k x) s') (interp_state h (k' x) s')).
+      + rewrite ET, Ea, bind_ret_l; cbv beta iota; rewrite guards_guard; reflexivity.
+      + rewrite EU, Ea, bind_ret_l; cbv beta iota; rewrite guards_guard; reflexivity.
+      + apply (istate_rel_tree 0 0 (k x) (k' x) s'); [apply Hk|reflexivity|reflexivity].
+    - pose proof (observe_eq_equ a (Br c kk) Ha) as Ea.
+      apply (galignF_br _ T U n m c
+        (fun i => kk i >>= fun '(x, s') => Guard (interp_state h (k x) s'))
+        (fun i => kk i >>= fun '(x, s') => Guard (interp_state h (k' x) s'))).
+      + rewrite ET, Ea, bind_br; reflexivity.
+      + rewrite EU, Ea, bind_br; reflexivity.
+      + intro i; apply (istate_rel_bind 0 0 A (kk i) k k'); [exact Hk|reflexivity|reflexivity].
+    - pose proof (observe_eq_equ a (Guard g) Ha) as Ea.
+      apply (galignF_guard _ T U n m
+        (g >>= fun '(x, s') => Guard (interp_state h (k x) s'))
+        (g >>= fun '(x, s') => Guard (interp_state h (k' x) s'))).
+      + rewrite ET, Ea, bind_guard, guards_guard; reflexivity.
+      + rewrite EU, Ea, bind_guard, guards_guard; reflexivity.
+      + apply (istate_rel_bind 0 0 A g k k'); [exact Hk|reflexivity|reflexivity].
+    - pose proof (observe_eq_equ a (Vis e kk) Ha) as Ea.
+      apply (galignF_vis _ T U n m e
+        (fun y => kk y >>= fun '(x, s') => Guard (interp_state h (k x) s'))
+        (fun y => kk y >>= fun '(x, s') => Guard (interp_state h (k' x) s'))).
+      + rewrite ET, Ea, bind_vis; reflexivity.
+      + rewrite EU, Ea, bind_vis; reflexivity.
+      + intro y; apply (istate_rel_bind 0 0 A (kk y) k k'); [exact Hk|reflexivity|reflexivity].
+  Qed.
+
+  Lemma istate_rel_step T U : istate_rel T U -> galignF istate_rel T U.
+  Proof.
+    intros [n m t u s T' U' A ET EU|n m B a k k' T' U' Hk ET EU].
+    - destruct A as [t u a b t' u' Et Eu A|t u a b r Et Eu
+        |t u a b c kk kk' Et Eu Hk|t u a b e kk kk' Et Eu Hk].
+      + apply (galignF_guard _ T' U' (n + a) (m + b)
+          (interp_state h t' s) (interp_state h u' s)).
+        * rewrite ET, Et, interp_state_guards, guards_shift; reflexivity.
+        * rewrite EU, Eu, interp_state_guards, guards_shift; reflexivity.
+        * apply (istate_rel_tree 0 0 t' u' s); [exact A|reflexivity|reflexivity].
+      + apply (galignF_ret _ T' U' (n + a) (m + b) (r, s)).
+        * rewrite ET, Et, interp_state_guards, interp_state_ret, <- guards_add; reflexivity.
+        * rewrite EU, Eu, interp_state_guards, interp_state_ret, <- guards_add; reflexivity.
+      + apply (galignF_br _ T' U' (n + a) (m + b) c
+          (fun i => Guard (interp_state h (kk i) s))
+          (fun i => Guard (interp_state h (kk' i) s))).
+        * rewrite ET, Et, interp_state_guards, interp_state_br, <- guards_add; reflexivity.
+        * rewrite EU, Eu, interp_state_guards, interp_state_br, <- guards_add; reflexivity.
+        * intro i; apply (istate_rel_tree 1 1 (kk i) (kk' i) s);
+            [apply Hk|reflexivity|reflexivity].
+      + apply (istate_rel_bind_step (n + a) (m + b) _ (runStateT (h e) s) kk kk' T' U' Hk).
+        * rewrite ET, Et, interp_state_guards, interp_state_vis, <- guards_add; reflexivity.
+        * rewrite EU, Eu, interp_state_guards, interp_state_vis, <- guards_add; reflexivity.
+    - exact (istate_rel_bind_step n m B a k k' T' U' Hk ET EU).
+  Qed.
+
+  Lemma interp_state_galigned (t u : ictree E X) s :
+    galigned t u -> galigned (interp_state h t s) (interp_state h u s).
+  Proof.
+    intro H; apply (galigned_coind istate_rel istate_rel_step).
+    apply (istate_rel_tree 0 0 t u s); [exact H|reflexivity|reflexivity].
+  Qed.
+End InterpStateAlign.
+
+(** ** The scheduler maps guard-equivalent pools to aligned trees *)
+Section ScheduleAlign.
+  Context {E : Type} {HE : Encode E}.
+
+  Lemma schedule_focus_guards : forall a N (ts : pool E (S N)) i (x : thread E),
+    (ts $ i) ≅ guards a x ->
+    schedule (S N) ts (Some i) ≅ guards a (schedule (S N) (ts @ i := x) (Some i)).
+  Proof.
+    induction a as [|a IH]; intros N ts i x Hx; cbn [guards] in *.
+    - apply schedule_pool_proper.
+      intro j; destruct (Fin.eq_dec j i) as [->|Hne].
+      + rewrite Vector.nth_replace_eq; exact Hx.
+      + rewrite Vector.nth_replace_neq by congruence; reflexivity.
+    - transitivity (schedule (S N) (ts @ i := Guard (guards a x)) (Some i)).
+      { apply schedule_pool_proper.
+        intro j; destruct (Fin.eq_dec j i) as [->|Hne].
+        + rewrite Vector.nth_replace_eq; exact Hx.
+        + rewrite Vector.nth_replace_neq by congruence; reflexivity. }
+      rewrite (observe_eq_equ _ (Guard (schedule (S N)
+        ((ts @ i := Guard (guards a x)) @ i := guards a x) (Some i)))
+        (schedule_focused_guard N (ts @ i := Guard (guards a x)) i (guards a x)
+          ltac:(rewrite Vector.nth_replace_eq; reflexivity))).
+      rewrite Vector.replace_replace_eq.
+      apply guard_equ_node.
+      rewrite (IH N (ts @ i := guards a x) i x)
+        by (rewrite Vector.nth_replace_eq; reflexivity).
+      rewrite Vector.replace_replace_eq; reflexivity.
+  Qed.
+
+  Lemma observe_equ_go {F} {HF : Encode F} {X} (t : ictree F X) ot :
+    observe t = ot -> t ≅ go ot.
+  Proof. intro H; apply observe_eq_equ; exact H. Qed.
+
+  Lemma pool_guard_equ_replace {N} (ts us : pool E N) i x :
+    pool_guard_equ ts us -> pool_guard_equ (ts @ i := x) (us @ i := x).
+  Proof.
+    unfold pool_guard_equ; intros H; apply vector_replace_pointwise; [intros j _; apply H|reflexivity].
+  Qed.
+
+  Lemma pool_guard_equ_remove {N} (ts us : pool E (S N)) i :
+    pool_guard_equ ts us -> pool_guard_equ (ts -- i) (us -- i).
+  Proof. unfold pool_guard_equ; intros H; apply vector_remove_pointwise; intros j _; apply H. Qed.
+
+  Lemma pool_guard_equ_cons {N} x (ts us : pool E N) :
+    pool_guard_equ ts us -> pool_guard_equ (x :: ts) (x :: us).
+  Proof. unfold pool_guard_equ; intros H; apply vector_cons_pointwise; [reflexivity|exact H]. Qed.
+
+  Inductive sched_rel : completed E -> completed E -> Prop :=
+  | sched_rel_at n m N (ts us : pool E N) f T U :
+      pool_guard_equ ts us ->
+      T ≅ guards n (schedule N ts f) -> U ≅ guards m (schedule N us f) ->
+      sched_rel T U
+  | sched_rel_pick n m N (ts us : pool E (S N)) T U :
+      pool_guard_equ ts us ->
+      T ≅ guards n (Br N (fun i => schedule (S N) ts (Some i))) ->
+      U ≅ guards m (Br N (fun i => schedule (S N) us (Some i))) ->
+      sched_rel T U.
+
+  Lemma sched_rel_step T U : sched_rel T U -> galignF sched_rel T U.
+  Proof.
+    intros [n m N ts us f T' U' Hp ET EU|n m N ts us T' U' Hp ET EU].
+    2: { apply (galignF_br _ T' U' n m N
+           (fun i => schedule (S N) ts (Some i)) (fun i => schedule (S N) us (Some i)));
+           [exact ET|exact EU|].
+         intro i; apply (sched_rel_at 0 0 (S N) ts us (Some i)); [exact Hp|reflexivity|reflexivity]. }
+    destruct f as [i|].
+    2: { destruct N as [|N].
+         - apply (galignF_ret _ T' U' n m tt).
+           + rewrite ET, (observe_eq_equ _ (Ret tt) (schedule_empty_none ts)); reflexivity.
+           + rewrite EU, (observe_eq_equ _ (Ret tt) (schedule_empty_none us)); reflexivity.
+         - apply (galignF_vis _ T' U' n m (inl Yield)
+             (fun _ => Br N (fun i => schedule (S N) ts (Some i)))
+             (fun _ => Br N (fun i => schedule (S N) us (Some i)))).
+           + rewrite ET, (observe_equ_go _ _ (schedule_no_focus_nonempty N ts)); reflexivity.
+           + rewrite EU, (observe_equ_go _ _ (schedule_no_focus_nonempty N us)); reflexivity.
+           + intros _; apply (sched_rel_pick 0 0 N ts us); [exact Hp|reflexivity|reflexivity]. }
+    destruct N as [|N]; [inversion i|].
+    destruct (guard_equ_guards _ _ (Hp i)) as (a & b & x & Ea & Eb).
+    pose proof (pool_guard_equ_replace ts us i x Hp) as Hp'.
+    set (ts' := ts @ i := x) in *; set (us' := us @ i := x) in *.
+    assert (ET' : T' ≅ guards (n + a) (schedule (S N) ts' (Some i)))
+      by (rewrite ET, (schedule_focus_guards a N ts i x Ea), <- guards_add; reflexivity).
+    assert (EU' : U' ≅ guards (m + b) (schedule (S N) us' (Some i)))
+      by (rewrite EU, (schedule_focus_guards b N us i x Eb), <- guards_add; reflexivity).
+    assert (Hts : observe (ts' $ i) = observe x) by (unfold ts'; now rewrite Vector.nth_replace_eq).
+    assert (Hus : observe (us' $ i) = observe x) by (unfold us'; now rewrite Vector.nth_replace_eq).
+    clearbody ts' us'; clear ET EU.
+    destruct (observe x) as [[]|c k|y|e k] eqn:Hx.
+    - apply (galignF_guard _ T' U' (n + a) (m + b)
+        (schedule N (ts' -- i) None) (schedule N (us' -- i) None)).
+      + rewrite ET', (observe_equ_go _ _ (schedule_focused_ret N ts' i Hts)); rewrite <- guards_guard; reflexivity.
+      + rewrite EU', (observe_equ_go _ _ (schedule_focused_ret N us' i Hus)); rewrite <- guards_guard; reflexivity.
+      + apply (sched_rel_at 0 0 N (ts' -- i) (us' -- i) None);
+          [apply pool_guard_equ_remove, Hp'|reflexivity|reflexivity].
+    - apply (galignF_br _ T' U' (n + a) (m + b) c
+        (fun j => schedule (S N) (ts' @ i := k j) (Some i))
+        (fun j => schedule (S N) (us' @ i := k j) (Some i))).
+      + rewrite ET', (observe_equ_go _ _ (schedule_focused_br N ts' i c k Hts)); reflexivity.
+      + rewrite EU', (observe_equ_go _ _ (schedule_focused_br N us' i c k Hus)); reflexivity.
+      + intro j; eapply (sched_rel_at 0 0 (S N) _ _ (Some i));
+          [|cbn [guards]; reflexivity|cbn [guards]; reflexivity]; apply pool_guard_equ_replace, Hp'.
+    - apply (galignF_guard _ T' U' (n + a) (m + b)
+        (schedule (S N) (ts' @ i := y) (Some i)) (schedule (S N) (us' @ i := y) (Some i))).
+      + rewrite ET', (observe_equ_go _ _ (schedule_focused_guard N ts' i y Hts)); rewrite <- guards_guard; reflexivity.
+      + rewrite EU', (observe_equ_go _ _ (schedule_focused_guard N us' i y Hus)); rewrite <- guards_guard; reflexivity.
+      + eapply (sched_rel_at 0 0 (S N) _ _ (Some i));
+          [|cbn [guards]; reflexivity|cbn [guards]; reflexivity]; apply pool_guard_equ_replace, Hp'.
+    - destruct e as [[]|[[]|e']].
+      + apply (galignF_guard _ T' U' (n + a) (m + b)
+          (schedule (S N) (ts' @ i := k tt) None) (schedule (S N) (us' @ i := k tt) None)).
+        * rewrite ET', (observe_equ_go _ _ (schedule_focused_yield N ts' i k Hts)); rewrite <- guards_guard; reflexivity.
+        * rewrite EU', (observe_equ_go _ _ (schedule_focused_yield N us' i k Hus)); rewrite <- guards_guard; reflexivity.
+        * eapply (sched_rel_at 0 0 (S N) _ _ None);
+            [|cbn [guards]; reflexivity|cbn [guards]; reflexivity];
+            apply pool_guard_equ_replace, Hp'.
+      + apply (galignF_vis _ T' U' (n + a) (m + b) (inr (inl Spawn))
+          (fun _ => schedule (S (S N)) (k true :: (ts' @ i := k false)) (Some (Fin.FS i)))
+          (fun _ => schedule (S (S N)) (k true :: (us' @ i := k false)) (Some (Fin.FS i)))).
+        * rewrite ET', (observe_equ_go _ _ (schedule_focused_fork N ts' i k Hts)); reflexivity.
+        * rewrite EU', (observe_equ_go _ _ (schedule_focused_fork N us' i k Hus)); reflexivity.
+        * intros _; eapply (sched_rel_at 0 0 (S (S N)) _ _ (Some (Fin.FS i)));
+            [|cbn [guards]; reflexivity|cbn [guards]; reflexivity]; apply pool_guard_equ_cons, pool_guard_equ_replace, Hp'.
+      + apply (galignF_vis _ T' U' (n + a) (m + b) (inr (inr e'))
+          (fun z => schedule (S N) (ts' @ i := k z) (Some i))
+          (fun z => schedule (S N) (us' @ i := k z) (Some i))).
+        * rewrite ET', (observe_equ_go _ _ (schedule_focused_user_event N ts' i e' k Hts)); reflexivity.
+        * rewrite EU', (observe_equ_go _ _ (schedule_focused_user_event N us' i e' k Hus)); reflexivity.
+        * intro z; eapply (sched_rel_at 0 0 (S N) _ _ (Some i));
+            [|cbn [guards]; reflexivity|cbn [guards]; reflexivity]; apply pool_guard_equ_replace, Hp'.
+  Qed.
+
+  Lemma schedule_galigned N (ts us : pool E N) f :
+    pool_guard_equ ts us -> galigned (schedule N ts f) (schedule N us f).
+  Proof.
+    intro H; apply (galigned_coind sched_rel sched_rel_step).
+    apply (sched_rel_at 0 0 N ts us f); [exact H|reflexivity|reflexivity].
+  Qed.
+
+  (** The erased scheduled view of guard-equivalent pools is aligned. *)
+  Lemma erased_schedule_galigned N (ts us : pool E N) f :
+    pool_guard_equ ts us ->
+    galigned (interp_yield (interp_spawn (schedule N ts f)))
+             (interp_yield (interp_spawn (schedule N us f))).
+  Proof.
+    intro H; unfold interp_yield, interp_spawn.
+    apply interp_galigned, interp_galigned, schedule_galigned, H.
+  Qed.
+End ScheduleAlign.

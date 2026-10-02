@@ -18,9 +18,9 @@ Local Open Scope nat_scope.
 (** One observation's tag, one actor's pending remote phase, and owner
     selection: each predicate is stated on the actual turn data, so an idle
     turn, an owner turn, and a polling remote are all explicit cases. *)
-Definition event_is (tag : nat) (event : option (indexed (nat * nat))) : bool :=
-  match event with None => false
-  | Some o => Nat.eqb (fst (indexed_value o)) tag end.
+Definition event_is (tag : nat) (event : option (CSLObs (nat * nat))) : bool :=
+  match event with None | Some (inl _) => false
+  | Some (inr o) => Nat.eqb (fst (indexed_value o)) tag end.
 Definition remote_pending (who : Actor) (s : AState) : bool :=
   match who with
   | Owner => false
@@ -34,9 +34,10 @@ Lemma owner_selected_spec who : owner_selected who = true <-> who = Owner.
 Proof. destruct who; cbn [owner_selected]; split; intro H; congruence. Qed.
 Lemma event_is_spec tag event :
   event_is tag event = true <->
-  exists block idx, event = Some (stamp (tag,block) idx).
+  exists block idx, event = Some (inr (stamp (tag,block) idx)).
 Proof.
-  unfold event_is; destruct event as [[[kind block] idx]|]; cbn.
+  unfold event_is; destruct event as [[ctx|[[kind block] idx]]|]; cbn.
+  - split; [discriminate|intros (b & i & H); discriminate].
   - rewrite Nat.eqb_eq; split.
     + intro H; subst kind; now exists block, idx.
     + intros (b & i & H); inversion H; reflexivity.
@@ -364,10 +365,10 @@ Qed.
 
 (** Finite raw-source reachability has no model premise.  It is useful before
     an infinite schedule is supplied: every physical slot remains selectable. *)
-Theorem every_reachable_source_slot_yields capacity c ts sigma (i : Fin.t 3) :
+Theorem every_reachable_source_slot_yields capacity ctx c ts sigma (i : Fin.t 3) :
   reachable (pool_step 2 sh slot_of_actor)
     (fun p => pool_equ (fst p) (source_pool0 1) /\
-      snd p = ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),c))
+      snd p = ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c)))
     (ts,sigma) ->
   BranchFree (ts $ i) /\
   (exists logs residual sigma', (ThreadSegment sh csl_sb) (ts $ i) sigma logs residual sigma') /\
@@ -388,7 +389,7 @@ Proof.
         Hstep H). }
   split; [apply Hbf|].
   destruct (pool_simulation_reachable (allocator_simulation 1 capacity)
-    (source_pool0 1) ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),c)
+    (source_pool0 1) ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c))
     (initial_state capacity c)
     (initial_state_inv capacity c) (conj (heq_refl _) eq_refl)
     (pool_equ_guard _ _ (source_pool0_initial capacity c)) ts sigma Hreach)
@@ -412,10 +413,10 @@ Qed.
     allocator's per-turn chunking; the model application is the library's
     [valid_execution_realizes_model] at [step := turn 1].  No allocator-local
     cofixpoint remains. *)
-Theorem valid_execution_realizes_source capacity c e :
+Theorem valid_execution_realizes_source capacity ctx c e :
   allocator_valid capacity c e ->
   realizes (fun j => turn_labels (emitted e j)) 0
-    (run_nd (allocator_program capacity) managed_empty c).
+    (run_nd (allocator_program capacity) (managed_empty,(ctx,c))).
 Proof.
   intro Hvalid.
   apply (valid_execution_realizes_model 2 actor_of_slot (turn 1) slot_of_actor
@@ -425,22 +426,22 @@ Qed.
 
 (** Labels retain their interleaving: exactly one scheduling tau per actual
     turn, followed by its zero or one source observation. *)
-Theorem run_turns_realizes_source capacity c script last logs :
+Theorem run_turns_realizes_source capacity ctx c script last logs :
   run_turns (turn 1) event_obs script (initial_state capacity c) = Some (last,logs) ->
   exists labels residual,
     option_map snd (run_turns (turn 1) turn_labels script (initial_state capacity c)) =
       Some labels /\
     label_logs labels = logs /\ label_taus labels = List.length script /\
-    finite_steps (run_nd (allocator_program capacity) managed_empty c) labels residual /\
+    finite_steps (run_nd (allocator_program capacity) (managed_empty,(ctx,c))) labels residual /\
     residual ~ (model_nd 2 actor_of_slot (turn 1) last
-                  : ictreeW (indexed (nat * nat)) (unit * SSig)).
+                  : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
 Proof.
   intro Hrun.
   destruct (model_run_turns_labels (X := (unit * SSig)%type)
     2 actor_of_slot (turn 1) slot_of_actor actor_of_slot_of_actor
     script (initial_state capacity c) last logs Hrun)
     as (labels & model & Hlabels & Hlogs & Htaus & Hsteps & Emodel).
-  pose proof (run_nd_allocator_bisim capacity c) as Esource; symmetry in Esource.
+  pose proof (run_nd_allocator_bisim capacity ctx c) as Esource; symmetry in Esource.
   destruct (finite_steps_sbisim _ _ _ Hsteps _ Esource)
     as (residual & Hsource & Eresidual).
   exists labels, residual; split; [rewrite Hlabels; reflexivity|].
@@ -454,7 +455,7 @@ Qed.
 Definition raw_remote_pending base client (t : thread sE) : Prop :=
   exists pc, pc <> RPoll /\ guard_equ t (remote_residual base client pc).
 Definition selected_source_pending
-  (se : Execution (pool sE 3 * SSig) Actor (list (indexed (nat * nat)))) k : Prop :=
+  (se : Execution (pool sE 3 * SSig) Actor (list (CSLObs (nat * nat)))) k : Prop :=
   match selected se k with
   | Owner => False
   | Remote0 => raw_remote_pending 1 false (fst (states se k) $ slot_of_actor Remote0)
@@ -521,8 +522,8 @@ Qed.
 
 (** On a valid raw execution the raw pending predicate is exactly the model's
     pending-remote predicate at the model execution of the same selections. *)
-Lemma selected_source_pending_alignment capacity c se k :
-  allocator_source_valid capacity c se ->
+Lemma selected_source_pending_alignment capacity ctx c se k :
+  allocator_source_valid capacity ctx c se ->
   (selected_source_pending se k <->
     remote_pending (selected se k)
       (states (allocator_execution capacity c (selected se)) k) = true).
@@ -531,7 +532,7 @@ Proof.
   assert (Hmodel : allocator_valid capacity c (allocator_execution capacity c (selected se)))
     by apply execution_of_choices_valid.
   destruct (source_execution_complete (allocator_simulation 1 capacity)
-    (source_pool0 1) ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),c)
+    (source_pool0 1) ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c))
     (initial_state capacity c) se (allocator_execution capacity c (selected se))
     (initial_state_inv capacity c) (conj (heq_refl _) eq_refl)
     (pool_equ_guard _ _ (source_pool0_initial capacity c)) Hvalid Hmodel
@@ -543,24 +544,24 @@ Proof.
   - apply raw_remote_pending_alignment; exact (Hpool (slot_of_actor Remote1)).
 Qed.
 
-Theorem source_remote_free_lockfree capacity c se :
-  allocator_source_valid capacity c se ->
+Theorem source_remote_free_lockfree capacity ctx c se :
+  allocator_source_valid capacity ctx c se ->
   infinitely (selected_source_pending se) ->
   infinitely (fun k =>
-    exists block idx, List.In (stamp (tag_retire,block) idx) (emitted se k)).
+    exists block idx, List.In (inr (stamp (tag_retire,block) idx)) (emitted se k)).
 Proof.
   intros Hvalid Hpending.
   set (e := allocator_execution capacity c (selected se)).
   assert (Hmodel : allocator_valid capacity c e) by apply execution_of_choices_valid.
   pose proof (source_execution_complete (allocator_simulation 1 capacity)
-    (source_pool0 1) ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),c)
+    (source_pool0 1) ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c))
     (initial_state capacity c) se e
     (initial_state_inv capacity c) (conj (heq_refl _) eq_refl)
     (pool_equ_guard _ _ (source_pool0_initial capacity c)) Hvalid Hmodel
     (execution_of_choices_selected _ _ _ _ _ _ (selected se))) as Halign.
   assert (Hpend : infinitely (fun k => remote_pending (selected e k) (states e k) = true)).
   { intro n; destruct (Hpending n) as (k & Hnk & Hk); exists k; split; [exact Hnk|].
-    exact (proj1 (selected_source_pending_alignment capacity c se k Hvalid) Hk). }
+    exact (proj1 (selected_source_pending_alignment capacity ctx c se k Hvalid) Hk). }
   pose proof (remote_free_lockfree capacity c e Hmodel Hpend) as Hlive.
   intro n; destruct (Hlive n) as (k & Hnk & Hevent).
   apply event_is_spec in Hevent as (block & idx & Hevent).
@@ -620,8 +621,8 @@ Definition owner_rank (capacity : nat) (pc : owner_pc) (R D : list nat) : nat :=
   | OOffer true => 1
   end.
 Definition owner_round_bound capacity := 3 * capacity + 5.
-Definition block_event (tag block : nat) (event : option (indexed (nat * nat))) : Prop :=
-  exists idx, event = Some (stamp (tag,block) idx).
+Definition block_event (tag block : nat) (event : option (CSLObs (nat * nat))) : Prop :=
+  exists idx, event = Some (inr (stamp (tag,block) idx)).
 
 Lemma ownership_rank_step capacity who pc pc' event L R D L' R' D' :
   ownership_transition who pc pc' event L R D L' R' D' ->
@@ -695,7 +696,7 @@ Proof.
   - exact Hv.
 Qed.
 
-Definition round_completion (e : (Execution AState Actor (option (indexed (nat * nat))))) k :=
+Definition round_completion (e : (Execution AState Actor (option (CSLObs (nat * nat))))) k :=
   owner_boundary (selected e k) (owner_state (states e k)) = true.
 
 (** The owner round budget is [credit_interval] at the existentially-bounded
@@ -871,7 +872,7 @@ Proof.
 Qed.
 
 Lemma execution_retired_credit capacity c e k block idx :
-  allocator_valid capacity c e -> emitted e k = Some (stamp (tag_retire,block) idx) ->
+  allocator_valid capacity c e -> emitted e k = Some (inr (stamp (tag_retire,block) idx)) ->
   exists L R D credit,
     allocator_view 1 capacity (states e (S k)) L R D /\
     reclaim_credit capacity block (owner_state (states e (S k))) R D credit /\
@@ -930,7 +931,8 @@ Qed.
 Definition block_event_dec tag block event :
   sumbool (block_event tag block event) (not (block_event tag block event)).
 Proof.
-  destruct event as [[[kind b] idx]|].
+  destruct event as [[ctx|[[kind b] idx]]|].
+  - right; intros [i H]; discriminate.
   - destruct (Nat.eq_dec kind tag) as [->|Hkind];
       destruct (Nat.eq_dec b block) as [->|Hb].
     + left; exists idx; reflexivity.
@@ -941,7 +943,7 @@ Proof.
 Defined.
 
 Theorem no_reclaim_owner_bound capacity c e k block idx len :
-  allocator_valid capacity c e -> emitted e k = Some (stamp (tag_retire,block) idx) ->
+  allocator_valid capacity c e -> emitted e k = Some (inr (stamp (tag_retire,block) idx)) ->
   (forall j, S k <= j < S k + len -> ~ block_event tag_reclaim block (emitted e j)) ->
   count_if (fun k => owner_selected (selected e k)) (S k) len < 6 * capacity + 10.
 Proof.
@@ -955,10 +957,10 @@ Proof.
 Qed.
 
 Theorem retired_reclaimed_owner_selection_bound capacity c e k block idx len :
-  allocator_valid capacity c e -> emitted e k = Some (stamp (tag_retire,block) idx) ->
+  allocator_valid capacity c e -> emitted e k = Some (inr (stamp (tag_retire,block) idx)) ->
   6 * capacity + 10 <= count_if (fun k => owner_selected (selected e k)) (S k) len ->
   exists j idx', k < j /\ j < S k + len /\ idx < idx' /\
-    emitted e j = Some (stamp (tag_reclaim,block) idx') /\
+    emitted e j = Some (inr (stamp (tag_reclaim,block) idx')) /\
     count_if (fun k => owner_selected (selected e k)) (S k) (j-k) <= 6 * capacity + 10.
 Proof.
   intros Hv Hret Hcount.
@@ -970,7 +972,7 @@ Proof.
     Hcount) as (j & Hj & [idx' Hreclaim] & Hbound).
   exists j, idx'; split; [lia|]; split; [lia|]; split.
   - exact (execution_event_order (turn 1)
-      (fun s => s = initial_state capacity c) acount indexed_index (turn_counter 1)
+      (fun s => s = initial_state capacity c) acount csl_index (turn_counter 1)
       e k j _ _ Hv ltac:(lia) Hret Hreclaim).
   - split; [exact Hreclaim|exact Hbound].
 Qed.
@@ -979,9 +981,9 @@ Theorem retired_eventually_reclaimed capacity c e :
   allocator_valid capacity c e ->
   infinitely (fun k => selected e k = Owner) ->
   forall k block idx,
-    emitted e k = Some (stamp (tag_retire,block) idx) ->
+    emitted e k = Some (inr (stamp (tag_retire,block) idx)) ->
     exists j idx', k < j /\ idx < idx' /\
-      emitted e j = Some (stamp (tag_reclaim,block) idx').
+      emitted e j = Some (inr (stamp (tag_reclaim,block) idx')).
 Proof.
   intros Hv Howner k block idx Hret.
   assert (Hcharged : infinitely (fun j => owner_selected (selected e j) = true)).
@@ -996,9 +998,9 @@ Qed.
 
 Theorem retired_not_reallocated_before_reclaim capacity c e k block idx j :
   allocator_valid capacity c e ->
-  emitted e k = Some (stamp (tag_retire,block) idx) -> k < j ->
-  (forall q idx', k < q < j -> emitted e q <> Some (stamp (tag_reclaim,block) idx')) ->
-  forall idx', emitted e j <> Some (stamp (tag_alloc,block) idx').
+  emitted e k = Some (inr (stamp (tag_retire,block) idx)) -> k < j ->
+  (forall q idx', k < q < j -> emitted e q <> Some (inr (stamp (tag_reclaim,block) idx'))) ->
+  forall idx', emitted e j <> Some (inr (stamp (tag_alloc,block) idx')).
 Proof.
   intros Hv Hret Hkj Hnone idx' Halloc.
   destruct (execution_retired_credit capacity c e k block idx Hv Hret)
@@ -1018,10 +1020,10 @@ Qed.
 
 Theorem retired_reallocation_requires_reclaim capacity c e k j block idx alloc_idx :
   allocator_valid capacity c e -> k < j ->
-  emitted e k = Some (stamp (tag_retire,block) idx) ->
-  emitted e j = Some (stamp (tag_alloc,block) alloc_idx) ->
+  emitted e k = Some (inr (stamp (tag_retire,block) idx)) ->
+  emitted e j = Some (inr (stamp (tag_alloc,block) alloc_idx)) ->
   exists q reclaim_idx, k < q /\ q < j /\ idx < reclaim_idx /\
-    reclaim_idx < alloc_idx /\ emitted e q = Some (stamp (tag_reclaim,block) reclaim_idx).
+    reclaim_idx < alloc_idx /\ emitted e q = Some (inr (stamp (tag_reclaim,block) reclaim_idx)).
 Proof.
   intros Hv Hkj Hret Halloc.
   destruct (finite_first (fun q => block_event tag_reclaim block (emitted e q))
@@ -1032,31 +1034,31 @@ Proof.
     intros q qi Hq Hreclaim; apply (Hnone q ltac:(lia)); now exists qi.
   - exists q, qi; split; [lia|]; split; [lia|]; split.
     + exact (execution_event_order (turn 1)
-      (fun s => s = initial_state capacity c) acount indexed_index (turn_counter 1) e k q _ _ Hv ltac:(lia) Hret Hreclaim).
+      (fun s => s = initial_state capacity c) acount csl_index (turn_counter 1) e k q _ _ Hv ltac:(lia) Hret Hreclaim).
     + split; [|exact Hreclaim].
       exact (execution_event_order (turn 1)
-      (fun s => s = initial_state capacity c) acount indexed_index (turn_counter 1) e q j _ _ Hv ltac:(lia) Hreclaim Halloc).
+      (fun s => s = initial_state capacity c) acount csl_index (turn_counter 1) e q j _ _ Hv ltac:(lia) Hreclaim Halloc).
 Qed.
 
-Theorem source_retired_eventually_reclaimed capacity c se :
-  allocator_source_valid capacity c se ->
+Theorem source_retired_eventually_reclaimed capacity ctx c se :
+  allocator_source_valid capacity ctx c se ->
   infinitely (fun k => selected se k = Owner) ->
   forall k block idx,
-    List.In (stamp (tag_retire,block) idx) (emitted se k) ->
+    List.In (inr (stamp (tag_retire,block) idx)) (emitted se k) ->
     exists j idx', k < j /\ idx < idx' /\
-      List.In (stamp (tag_reclaim,block) idx') (emitted se j).
+      List.In (inr (stamp (tag_reclaim,block) idx')) (emitted se j).
 Proof.
   intros Hvalid Howner k block idx Hretire.
   set (e := allocator_execution capacity c (selected se)).
   assert (Hmodel : allocator_valid capacity c e) by apply execution_of_choices_valid.
   pose proof (source_execution_complete (allocator_simulation 1 capacity)
-    (source_pool0 1) ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),c)
+    (source_pool0 1) ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c))
     (initial_state capacity c) se e
     (initial_state_inv capacity c) (conj (heq_refl _) eq_refl)
     (pool_equ_guard _ _ (source_pool0_initial capacity c)) Hvalid Hmodel
     (execution_of_choices_selected _ _ _ _ _ _ (selected se))) as Halign.
   assert (Howner' : infinitely (fun j => selected e j = Owner)) by exact Howner.
-  assert (Eretire : emitted e k = Some (stamp (tag_retire,block) idx)).
+  assert (Eretire : emitted e k = Some (inr (stamp (tag_retire,block) idx))).
   {
     destruct (Halign k) as (_ & _ & _ & Hlogs); rewrite Hlogs in Hretire.
     destruct (emitted e k) as [o|] eqn:E; cbn [event_obs] in Hretire;
@@ -1094,18 +1096,18 @@ Section AllocatorRecurrence.
 
 (** These lists use left numerals so that symbolic counters compute without
     inspecting the counter.  [n+c] is, of course, the prescribed [c+n]. *)
-Let demo_prefix (c : nat) : list (indexed (nat * nat)) :=
-  [stamp (tag_alloc,6) c; stamp (tag_alloc,8) (1+c);
-   stamp (tag_retire,6) (2+c); stamp (tag_retry,8) (3+c);
-   stamp (tag_retire,8) (4+c); stamp (tag_reclaim,8) (5+c);
-   stamp (tag_reclaim,6) (6+c); stamp (tag_alloc,6) (7+c);
-   stamp (tag_alloc,8) (8+c)].
+Let demo_prefix (c : nat) : list (CSLObs (nat * nat)) :=
+  [inr (stamp (tag_alloc,6) c); inr (stamp (tag_alloc,8) (1+c));
+   inr (stamp (tag_retire,6) (2+c)); inr (stamp (tag_retry,8) (3+c));
+   inr (stamp (tag_retire,8) (4+c)); inr (stamp (tag_reclaim,8) (5+c));
+   inr (stamp (tag_reclaim,6) (6+c)); inr (stamp (tag_alloc,6) (7+c));
+   inr (stamp (tag_alloc,8) (8+c))].
 
-Let demo_cycle_logs (c : nat) : list (indexed (nat * nat)) :=
-  [stamp (tag_retire,6) c; stamp (tag_retry,8) (1+c);
-   stamp (tag_retire,8) (2+c); stamp (tag_reclaim,8) (3+c);
-   stamp (tag_reclaim,6) (4+c); stamp (tag_alloc,6) (5+c);
-   stamp (tag_alloc,8) (6+c)].
+Let demo_cycle_logs (c : nat) : list (CSLObs (nat * nat)) :=
+  [inr (stamp (tag_retire,6) c); inr (stamp (tag_retry,8) (1+c));
+   inr (stamp (tag_retire,8) (2+c)); inr (stamp (tag_reclaim,8) (3+c));
+   inr (stamp (tag_reclaim,6) (4+c)); inr (stamp (tag_alloc,6) (5+c));
+   inr (stamp (tag_alloc,8) (6+c))].
 
 (** Only a pointwise representative; no execution ever resets its heap to it. *)
 Let demo_boundary_heap : Heap := fun x =>
@@ -1149,7 +1151,7 @@ Qed.
 
 Local Lemma demo_cycle_fresh_member c kind :
   List.In kind [tag_alloc;tag_retire;tag_reclaim] ->
-  exists o, List.In o (demo_cycle_logs c) /\ (fst (indexed_value o)) = kind /\ c <= indexed_index o.
+  exists o, List.In (inr o) (demo_cycle_logs c) /\ (fst (indexed_value o)) = kind /\ c <= indexed_index o.
 Proof.
   intros [<-|[<-|[<-|[]]]].
   - exists (stamp (tag_alloc,6) (5+c)); cbn [demo_cycle_logs List.In indexed_value indexed_index fst];
@@ -1165,11 +1167,11 @@ Proof. intros n _; unfold demo_cycle_logs; discriminate. Qed.
 
 (** The actual source is the 57-turn prefix followed by the repeating cycle,
     each cycle a genuine 42-turn round-robin run from the actual state. *)
-Theorem run_rr_allocator_demo_bisim c :
-  run_rr (allocator_program 2) managed_empty c ~
+Theorem run_rr_allocator_demo_bisim ctx c :
+  run_rr (allocator_program 2) (managed_empty,(ctx,c)) ~
   emit_list (demo_prefix c)
     (emit_batches demo_cycle_logs (fun n => n+7) (c+9)
-       : ictreeW (indexed (nat * nat)) (unit * SSig)).
+       : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
 Proof.
   rewrite run_rr_allocator_bisim.
   destruct (demo_prefix_run c) as (last & Hrun & Hlast).
@@ -1187,19 +1189,19 @@ Qed.
     [P o := fst (indexed_value o) = kind /\ kb <= indexed_index o].  The
     concrete tag premise is retained: the generic rule accepts arbitrary
     predicates, but this proof must not claim recurrence of arbitrary tags. *)
-Theorem allocator_demo_agaf_fresh c kind kb :
+Theorem allocator_demo_agaf_fresh ctx c kind kb :
   List.In kind [tag_alloc;tag_retire;tag_reclaim] ->
-  <( {run_rr (allocator_program 2) managed_empty c}, Pure
-      |= AG (AF visW {fun o => (fst (indexed_value o)) = kind /\ kb <= indexed_index o}) )>.
+  <( {run_rr (allocator_program 2) (managed_empty,(ctx,c))}, Pure
+      |= AG (AF visW {csl_indexed (fun o => (fst (indexed_value o)) = kind /\ kb <= indexed_index o)}) )>.
 Proof.
   intro Hkind.
   assert (Hprogress : forall n : nat, True ->
     (exists o, List.In o (demo_cycle_logs n) /\
-       ((fst (indexed_value o)) = kind /\ kb <= indexed_index o))
+       csl_indexed (fun o => (fst (indexed_value o)) = kind /\ kb <= indexed_index o) o)
     \/ kb - (n+7) < kb - n).
   { intros n _; destruct (Nat.le_gt_cases kb n) as [Hle|Hlt].
     - left; destruct (demo_cycle_fresh_member n kind Hkind) as (o & Hin & Htag & Hidx).
-      exists o; split; [exact Hin |]; split; [exact Htag | lia].
+      exists (inr o); split; [exact Hin |]; cbn; split; [exact Htag | lia].
     - right; lia. }
   rewrite run_rr_allocator_bisim.
   destruct (demo_prefix_run c) as (last & Hrun & Hlast).
@@ -1210,7 +1212,7 @@ Proof.
   apply (model_rr_agaf 2 actor_of_slot (turn 1) state_equiv (turn_proper 1)
     demo_boundary demo_cycle_logs (fun n => n+7) (fun _ => True) 0 42 eq_refl
     (fun _ _ => I) demo_cycle_logs_nonempty (fun n _ => demo_cycle_run n)
-    (fun n => kb - n) (fun o => (fst (indexed_value o)) = kind /\ kb <= indexed_index o)
+    (fun n => kb - n) (csl_indexed (fun o => (fst (indexed_value o)) = kind /\ kb <= indexed_index o))
     Hprogress (c+9)); [exact I|].
   apply after_logs_not_done; constructor.
 Qed.
@@ -1230,9 +1232,9 @@ Let aba_before_reuse :=
 Let aba_before_commit :=
   aba_before_reuse ++ List.repeat Owner 6 ++ List.repeat Remote0 4.
 Let aba_script := aba_before_commit ++ [Remote1].
-Let aba_logs : list (indexed (nat * nat)) :=
-  [stamp (0,6) 0; stamp (0,8) 1; stamp (1,6) 2; stamp (2,6) 3;
-   stamp (0,6) 4; stamp (1,6) 5; stamp (1,8) 6].
+Let aba_logs : list (CSLObs (nat * nat)) :=
+  [inr (stamp (0,6) 0); inr (stamp (0,8) 1); inr (stamp (1,6) 2); inr (stamp (2,6) 3);
+   inr (stamp (0,6) 4); inr (stamp (1,6) 5); inr (stamp (1,8) 6)].
 
 Theorem aba_snapshot_survives_reuse :
   option_map (fun result => (owner_state (fst result), remote0_state (fst result),
@@ -1273,12 +1275,12 @@ Theorem aba_actual_source_no_loss : exists last labels residual,
   allocator_inv 1 2 last /\
   aheap last (remote_head 1) = Some 8 /\ linked (fun a next => aheap last a = Some next) [8;6] 0 /\
   label_logs labels = aba_logs /\ label_taus labels = 23 /\
-  finite_steps (run_nd (allocator_program 2) managed_empty 0) labels residual /\
+  finite_steps (run_nd (allocator_program 2) (managed_empty,((List.nil : Ctx.Ctx),0))) labels residual /\
   residual ~ (model_nd 2 actor_of_slot (turn 1) last
-                : ictreeW (indexed (nat * nat)) (unit * SSig)).
+                : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
 Proof.
   destruct aba_run_no_loss as (last & Hrun & Hinv & Hhead & Hchain & Hnd & Hp).
-  destruct (run_turns_realizes_source 2 0 aba_script last aba_logs Hrun)
+  destruct (run_turns_realizes_source 2 (List.nil : Ctx.Ctx) 0 aba_script last aba_logs Hrun)
     as (labels & residual & Hlabels & Hlogs & Htaus & Hsteps & Htail).
   exists last, labels, residual; repeat first [assumption | split].
 Qed.

@@ -351,7 +351,7 @@ Proof. step; now cbn. Qed.
 
 Lemma resumICtree_ret {E1 E2 : Type} `{ReSumRet E1 E2}
            {R} (r : R) :
-  resumICtree (Ret r) ≅ Ret r.
+  @resumICtree E1 E2 _ _ _ _ R (Ret r) ≅ Ret r.
 Proof. step. cbn. constructor. reflexivity. Qed.
 
 Lemma resumICtree_br  {E1 E2 : Type} `{ReSumRet E1 E2}

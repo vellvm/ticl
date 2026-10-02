@@ -1,4 +1,5 @@
 From Stdlib Require Import Fin Vector.
+From Coinduction Require Import coinduction lattice tactics.
 From TICL Require Import
   ICTree.Core ICTree.Equ ICTree.SBisim ICTree.Events.Yield
   ICTree.Interp.Refine ICTree.Interp.Yield.Mod ICTree.Interp.Yield.SBisim
@@ -124,6 +125,28 @@ Section RoundRobinInterpretation.
       interp_state_tau, sb_guard; reflexivity.
   Qed.
 
+  (** A focused slot that is [stuck] makes the whole interpreted pool
+      raw-equivalent to [stuck]; no other slot ever runs. *)
+  Lemma interp_schedule_rr_stuck
+    (handler : E ~> stateT Σ (ictree F)) n (ts : pool E (S n))
+    (i : Fin.t (S n)) m σ :
+    (ts $ i) ≅ stuck ->
+    interp_schedule_rr handler (S n) ts (Some i) m σ ≅ stuck.
+  Proof.
+    intro Hstuck.
+    rewrite (interp_schedule_rr_equ handler (S n) ts (ts @ i := stuck) (Some i) m σ)
+      by (intro j; destruct (Fin.eq_dec j i) as [->|Hne];
+          [rewrite Vector.nth_replace_eq; exact Hstuck
+          |rewrite Vector.nth_replace_neq by congruence; reflexivity]).
+    apply equ_guard_stuck.
+    unfold interp_schedule_rr at 1.
+    rewrite unfold_run_round_robin.
+    rewrite (schedule_focused_guard n (ts @ i := stuck) i stuck)
+      by (rewrite Vector.nth_replace_eq; reflexivity).
+    rewrite Vector.replace_replace_eq.
+    rewrite interp_erase_guard, interp_state_tau; reflexivity.
+  Qed.
+
   (** Keep one scheduler continuation fixed while interpreting a raw user event. *)
   Lemma interp_schedule_rr_user_bind
     (handler : E ~> stateT Σ (ictree F)) n (ts : pool E (S n))
@@ -150,3 +173,75 @@ Section RoundRobinInterpretation.
 End RoundRobinInterpretation.
 
 Arguments interp_schedule_rr {E F HE HF Σ} handler n ts focus cursor σ.
+
+(** ** Round-robin refinement preserves guard alignment *)
+Section RoundRobinAlign.
+  Context {E : Type} {HE : Encode E} {X : Type}.
+  Local Typeclasses Transparent equ.
+
+  Lemma run_round_robin_guards n (t : ictree E X) c :
+    run_round_robin (guards n t) c ≅ guards n (run_round_robin t c).
+  Proof.
+    induction n; cbn [guards]; [reflexivity|].
+    rewrite unfold_run_round_robin; cbn [observe _observe].
+    apply guard_equ_node; exact IHn.
+  Qed.
+
+  Inductive rr_rel : ictree E X -> ictree E X -> Prop :=
+  | rr_rel_at n m (t u : ictree E X) c T U :
+      galigned t u -> T ≅ guards n (run_round_robin t c) ->
+      U ≅ guards m (run_round_robin u c) -> rr_rel T U.
+
+  Lemma rr_rel_step T U : rr_rel T U -> galignF rr_rel T U.
+  Proof.
+    intros [n m t u c T' U' A ET EU].
+    destruct A as [t u a b t' u' Et Eu A|t u a b r Et Eu
+      |t u a b k kk kk' Et Eu Hk|t u a b e kk kk' Et Eu Hk].
+    - apply (galignF_guard _ T' U' (n + a) (m + b)
+        (run_round_robin t' c) (run_round_robin u' c)).
+      + rewrite ET, Et, run_round_robin_guards, guards_shift; reflexivity.
+      + rewrite EU, Eu, run_round_robin_guards, guards_shift; reflexivity.
+      + apply (rr_rel_at 0 0 t' u' c); [exact A|reflexivity|reflexivity].
+    - apply (galignF_ret _ T' U' (n + a) (m + b) r).
+      + rewrite ET, Et, run_round_robin_guards, <- guards_add,
+          unfold_run_round_robin; reflexivity.
+      + rewrite EU, Eu, run_round_robin_guards, <- guards_add,
+          unfold_run_round_robin; reflexivity.
+    - apply (galignF_guard _ T' U' (n + a) (m + b)
+        (run_round_robin (kk (rr_pick k c)) (S c))
+        (run_round_robin (kk' (rr_pick k c)) (S c))).
+      + rewrite ET, Et, run_round_robin_guards, <- guards_add,
+          unfold_run_round_robin; cbn [observe _observe].
+        rewrite <- guards_guard; reflexivity.
+      + rewrite EU, Eu, run_round_robin_guards, <- guards_add,
+          unfold_run_round_robin; cbn [observe _observe].
+        rewrite <- guards_guard; reflexivity.
+      + apply (rr_rel_at 0 0 (kk (rr_pick k c)) (kk' (rr_pick k c)) (S c)); [apply Hk|reflexivity|reflexivity].
+    - apply (galignF_vis _ T' U' (n + a) (m + b) e
+        (fun x => run_round_robin (kk x) c) (fun x => run_round_robin (kk' x) c)).
+      + rewrite ET, Et, run_round_robin_guards, <- guards_add,
+          unfold_run_round_robin; reflexivity.
+      + rewrite EU, Eu, run_round_robin_guards, <- guards_add,
+          unfold_run_round_robin; reflexivity.
+      + intro x; apply (rr_rel_at 0 0 (kk x) (kk' x) c); [apply Hk|reflexivity|reflexivity].
+  Qed.
+
+  Lemma run_round_robin_galigned (t u : ictree E X) c :
+    galigned t u -> galigned (run_round_robin t c) (run_round_robin u c).
+  Proof.
+    intro H; apply (galigned_coind rr_rel rr_rel_step).
+    apply (rr_rel_at 0 0 t u c); [exact H|reflexivity|reflexivity].
+  Qed.
+End RoundRobinAlign.
+
+(** Guard-equivalent pools are bisimilar under round-robin scheduling, for
+    every focus, cursor and state. *)
+Lemma interp_schedule_rr_guard_equ {E F : Type} {HE : Encode E} {HF : Encode F} {Σ : Type}
+  (handler : E ~> stateT Σ (ictree F)) n (ts us : pool E n) focus m σ :
+  pool_guard_equ ts us ->
+  interp_schedule_rr handler n ts focus m σ ~ interp_schedule_rr handler n us focus m σ.
+Proof.
+  intro H; unfold interp_schedule_rr, interp_yield, interp_spawn.
+  apply galigned_sbisim, interp_state_galigned, interp_galigned, interp_galigned,
+    run_round_robin_galigned, schedule_galigned, H.
+Qed.

@@ -303,6 +303,58 @@ Proof.
   reflexivity.
 Qed.
 
+(** ** Thread erasure under an arbitrary state handler.
+
+    The same algebra as [instr_thread], for any handler [h]: a standalone
+    raw thread erases [Fork] to the parent branch and erases cooperative
+    [Yield], then interprets its residual user events with [h]. *)
+Section ThreadStateInterp.
+  Context {E F S : Type} {HE : Encode E} {HF : Encode F}
+    (h : E ~> stateT S (ictree F)).
+
+  Lemma interp_state_thread_ret {X} (x : X) (s : S) :
+    interp_state h (interp_thread (Ret x : ictree (yieldE + (forkE + E)) X)) s ≅ Ret (x, s).
+  Proof.
+    unfold interp_thread, interp_yield.
+    rewrite interp_ret_node, interp_ret_node.
+    apply interp_state_ret.
+  Qed.
+
+  Lemma interp_state_thread_bind {A B}
+      (t : ictree (yieldE + (forkE + E)) A)
+      (k : A -> ictree (yieldE + (forkE + E)) B) (s : S) :
+    interp_state h (interp_thread (t >>= k)) s
+      ≅ (interp_state h (interp_thread t) s >>= fun '(x, s') =>
+           interp_state h (interp_thread (k x)) s').
+  Proof.
+    unfold interp_thread, interp_yield.
+    rewrite !interp_bind_hetero.
+    apply interp_state_bind.
+  Qed.
+
+  Lemma interp_state_thread_yield {X}
+      (k : unit -> ictree (yieldE + (forkE + E)) X) (s : S) :
+    interp_state h (interp_thread (Vis (inl Yield) k)) s
+      ~ interp_state h (interp_thread (k tt)) s.
+  Proof.
+    rewrite interp_thread_yield_node.
+    rewrite interp_state_tau, sb_guard, interp_state_tau, sb_guard.
+    reflexivity.
+  Qed.
+
+  Lemma interp_state_thread_user {X} (e : E)
+      (k : encode e -> ictree (yieldE + (forkE + E)) X) (s : S) :
+    interp_state h (interp_thread (Vis (inr (inr e)) k)) s
+      ~ (runStateT (h e) s >>= fun '(x, s') =>
+           interp_state h (interp_thread (k x)) s').
+  Proof.
+    rewrite interp_thread_user_node, interp_state_vis.
+    apply sbisim_clo_bind_eq; [reflexivity | intros [x s']].
+    rewrite sb_guard, interp_state_tau, sb_guard, interp_state_tau, sb_guard.
+    reflexivity.
+  Qed.
+End ThreadStateInterp.
+
 (** ** Instrumentation algebra for raw threads. *)
 
 #[global] Instance instr_thread_equ {Σ X} :
@@ -315,32 +367,19 @@ Qed.
 
 Lemma instr_thread_ret {Σ X} (x : X) (σ : Σ) :
   instr_thread (Ret x) σ ≅ Ret (x, σ).
-Proof.
-  unfold instr_thread, interp_thread, interp_yield, instr_stateE.
-  rewrite interp_ret_node, interp_ret_node.
-  apply interp_state_ret.
-Qed.
+Proof. exact (interp_state_thread_ret h_stateW x σ). Qed.
 
 Lemma instr_thread_bind {Σ A B}
     (t : ictree (yieldE + (forkE + stateE Σ)) A)
     (k : A -> ictree (yieldE + (forkE + stateE Σ)) B) (σ : Σ) :
   instr_thread (t >>= k) σ
     ≅ (instr_thread t σ >>= fun '(x, σ') => instr_thread (k x) σ').
-Proof.
-  unfold instr_thread, interp_thread, interp_yield, instr_stateE.
-  rewrite !interp_bind_hetero.
-  apply interp_state_bind.
-Qed.
+Proof. exact (interp_state_thread_bind h_stateW t k σ). Qed.
 
 Lemma instr_thread_yield {Σ X}
     (k : unit -> ictree (yieldE + (forkE + stateE Σ)) X) (σ : Σ) :
   instr_thread (Vis (inl Yield) k) σ ~ instr_thread (k tt) σ.
-Proof.
-  unfold instr_thread, instr_stateE.
-  rewrite interp_thread_yield_node.
-  rewrite interp_state_tau, sb_guard, interp_state_tau, sb_guard.
-  reflexivity.
-Qed.
+Proof. exact (interp_state_thread_yield h_stateW k σ). Qed.
 
 Lemma instr_thread_get {Σ X}
     (k : Σ -> ictree (yieldE + (forkE + stateE Σ)) X) (σ : Σ) :

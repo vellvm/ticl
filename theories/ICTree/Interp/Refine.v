@@ -117,6 +117,16 @@ Section BranchFreeLaws.
     (forall x, BranchFree (k x)) -> BranchFree (Vis e k).
   Proof. intro Hk; apply branchfree_unfold; now constructor. Qed.
 
+  (** [stuck] is an infinite chain of guards: divergent, but branch-free. *)
+  Lemma bf_stuck {A} : BranchFree (stuck : ictree E A).
+  Proof.
+    enough (H : forall u : unit, BranchFree (stuck : ictree E A)) by exact (H tt).
+    change (forall u : unit, gfp fbranchfree (stuck : ictree E A)).
+    apply_coinduction; intros R IH u.
+    change (branchfreeF (coinduction.t fbranchfree R) (observe (stuck : ictree E A))).
+    cbn; constructor; apply (IH tt).
+  Qed.
+
   Lemma branchfree_equ_impl {A} : forall (t u : ictree E A),
     t ≅ u -> BranchFree t -> BranchFree u.
   Proof.

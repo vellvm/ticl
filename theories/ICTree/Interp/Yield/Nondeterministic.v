@@ -150,6 +150,30 @@ Section NondeterministicInterpretation.
       interp_state_tau, sb_guard; reflexivity.
   Qed.
 
+  (** A focused slot that is [stuck] makes the whole interpreted pool
+      raw-equivalent to [stuck]; no other slot ever runs. *)
+  Lemma interp_schedule_nd_stuck
+    (handler : E ~> stateT Sigma (ictree F)) n (ts : pool E (S n))
+    (i : Fin.t (S n)) sigma :
+    (ts $ i) ≅ stuck ->
+    interp_schedule_nd handler (S n) ts (Some i) sigma ≅ stuck.
+  Proof.
+    intro Hstuck.
+    rewrite (interp_schedule_nd_equ handler (S n) ts (ts @ i := stuck) (Some i) sigma)
+      by (intro j; destruct (Fin.eq_dec j i) as [->|Hne];
+          [rewrite Vector.nth_replace_eq; exact Hstuck
+          |rewrite Vector.nth_replace_neq by congruence; reflexivity]).
+    apply equ_guard_stuck.
+    unfold interp_schedule_nd at 1.
+    assert (Hnode : schedule (S n) (ts @ i := stuck) (Some i) ≅
+      Guard (schedule (S n) ((ts @ i := stuck) @ i := stuck) (Some i))).
+    { rewrite (ictree_eta (schedule (S n) (ts @ i := stuck) (Some i))),
+        (schedule_focused_guard n (ts @ i := stuck) i stuck)
+        by (rewrite Vector.nth_replace_eq; reflexivity); reflexivity. }
+    rewrite Vector.replace_replace_eq in Hnode.
+    rewrite Hnode, interp_erase_guard, interp_state_tau; reflexivity.
+  Qed.
+
   (** Keep one scheduler continuation fixed while interpreting a raw user event. *)
   Lemma interp_schedule_nd_user_bind
     (handler : E ~> stateT Sigma (ictree F)) n (ts : pool E (S n))
@@ -171,6 +195,18 @@ Section NondeterministicInterpretation.
     rewrite interp_state_trigger_bind.
     apply sbisim_clo_bind_eq; [reflexivity | intros [x sigma']].
     rewrite Vector.replace_replace_eq; reflexivity.
+  Qed.
+
+  (** Guard-equivalent pools are bisimilar under nondeterministic
+      scheduling, for every focus and state. *)
+  Lemma interp_schedule_nd_guard_equ
+    (handler : E ~> stateT Sigma (ictree F)) n (ts us : pool E n) focus sigma :
+    pool_guard_equ ts us ->
+    interp_schedule_nd handler n ts focus sigma ~
+    interp_schedule_nd handler n us focus sigma.
+  Proof.
+    intro H; unfold interp_schedule_nd.
+    apply galigned_sbisim, interp_state_galigned, erased_schedule_galigned, H.
   Qed.
 End NondeterministicInterpretation.
 

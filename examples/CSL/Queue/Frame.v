@@ -215,55 +215,55 @@ Qed.
     Apply [Recurrence.v] with framed representation premises. The shared
     [aul_state_iter_ghost] rule and queue invariants are reused unchanged. *)
 
-Theorem rotate_agaf_pop_framed: forall hdr nlv ns vs d h f allocs c,
+Theorem rotate_agaf_pop_framed: forall hdr nlv ns vs d h f allocs ctx c,
     qrepX hdr ns vs h ->
     hdisj h f ->
     f 0 = None ->
     find_index Nat.eqb nlv vs = Some d ->
-    <( {run hdr (hunion h f, allocs) c}, Pure
-       |= AG (AF visW {(fun o => indexed_value o = nlv)}) )>.
+    <( {run hdr ((hunion h f, allocs), (ctx, c))}, Pure
+       |= AG (AF visW {csl_indexed (fun o => indexed_value o = nlv)}) )>.
 Proof.
-  intros hdr nlv ns vs d h f allocs c Hx Hd Hf Hfind.
+  intros hdr nlv ns vs d h f allocs ctx c Hx Hd Hf Hfind.
   eapply rotate_agaf_pop_heap; [eapply qrepX_frame; eassumption | exact Hfind].
 Qed.
 
-Theorem rotate_agaf_pop_fresh_framed: forall hdr nlv ns vs d h f allocs c k,
+Theorem rotate_agaf_pop_fresh_framed: forall hdr nlv ns vs d h f allocs ctx c k,
     qrepX hdr ns vs h ->
     hdisj h f ->
     f 0 = None ->
     find_index Nat.eqb nlv vs = Some d ->
-    <( {run hdr (hunion h f, allocs) c}, Pure
-       |= AG (AF visW {(indexed_after (fun x => x = nlv) k)}) )>.
+    <( {run hdr ((hunion h f, allocs), (ctx, c))}, Pure
+       |= AG (AF visW {csl_indexed (indexed_after (fun x => x = nlv) k)}) )>.
 Proof.
-  intros hdr nlv ns vs d h f allocs c k Hx Hd Hf Hfind.
+  intros hdr nlv ns vs d h f allocs ctx c k Hx Hd Hf Hfind.
   eapply rotate_agaf_pop_fresh; [eapply qrepX_frame; eassumption | exact Hfind].
 Qed.
 
 (** The control that separates "the payload is somewhere in the global heap"
     from "the payload is popped": an element absent from the OWNED queue is
     never observed, no matter what the frame stores. *)
-Theorem absent_never_observed_framed: forall hdr ns vs nlv h f allocs c,
+Theorem absent_never_observed_framed: forall hdr ns vs nlv h f allocs ctx c,
     qrepX hdr ns vs h ->
     hdisj h f ->
     f 0 = None ->
     ns <> [] ->
     ~ In nlv vs ->
-    <( {run hdr (hunion h f, allocs) c}, Pure |= AG (now {obs_sat (fun x => x <> nlv)}) )>.
+    <( {run hdr ((hunion h f, allocs), (ctx, c))}, Pure |= AG (now {obs_sat (fun x => x <> nlv)}) )>.
 Proof.
-  intros hdr ns vs nlv h f allocs c Hx Hd Hf Hne Hnin.
+  intros hdr ns vs nlv h f allocs ctx c Hx Hd Hf Hne Hnin.
   eapply absent_never_observed;
     [eapply qrepX_frame; eassumption | exact Hne | exact Hnin].
 Qed.
 
 (** The stuck control transports too: an empty owned queue is stuck even when
     the frame is a large populated heap. *)
-Theorem empty_queue_no_ag_framed: forall hdr vs h f allocs c w phi,
+Theorem empty_queue_no_ag_framed: forall hdr vs h f allocs ctx c w phi,
     qrepX hdr [] vs h ->
     hdisj h f ->
     f 0 = None ->
-    ~ <( {run hdr (hunion h f, allocs) c}, w |= AG phi )>.
+    ~ <( {run hdr ((hunion h f, allocs), (ctx, c))}, w |= AG phi )>.
 Proof.
-  intros hdr vs h f allocs c w phi Hx Hd Hf.
+  intros hdr vs h f allocs ctx c w phi Hx Hd Hf.
   eapply empty_queue_no_ag; eapply qrepX_frame; eassumption.
 Qed.
 

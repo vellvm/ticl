@@ -15,7 +15,7 @@ From TICL Require Import
   ICTree.Interp.State.Mod
   ICTree.Events.State
   ICTree.Events.Writer
-  Lang.Maps
+  Utils.Maps
   Lang.StImp.
 
 From ExtLib Require Import

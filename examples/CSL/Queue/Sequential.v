@@ -76,12 +76,12 @@ Local Typeclasses Transparent sbisim.
 
 (** ** Events *)
 
-Definition qE : Type := (heapE + writerE nat)%type.
+Definition qE : Type := (heapE + (stateE Ctx.Ctx + writerE nat))%type.
 
 (** Memory commands use the shared heap triggers; payload emission is the
     example-specific instruction in the right summand. *)
 Definition emit (v: nat) : ictree qE unit :=
-  @ICtree.trigger (writerE nat) qE _ _ ReSum_inr ReSumRet_inr (Log v).
+  @ICtree.trigger qE qE _ _ ReSum_refl ReSumRet_refl (inr (inr (Log v))).
 
 (** ** The rotating queue program.
 
@@ -97,11 +97,12 @@ Definition rotate (hdr: nat) : ictree qE unit :=
 
 (** [run] interprets the rotation with the one CSL handler [sh] at the unary
     payload [nat].  Its state is the shared CSL state [SSig]: the managed
-    memory [(h,allocs)] and the PRIVATE occurrence counter.  The rotation never
+    memory [(h,allocs)], the (unused) variable context, and the PRIVATE
+    occurrence counter.  The rotation never
     allocates or frees, so [allocs] is carried through unchanged; no heap
     operation reads the counter, which only indexes the observations. *)
-Definition run (hdr: nat) (memory: ManagedHeap) (c: nat) : ictreeW (indexed nat) (unit * SSig) :=
-  interp_state (sh (A:=nat)) (rotate hdr) (memory, c).
+Definition run (hdr: nat) (s: SSig) : ictreeW (CSLObs nat) (unit * SSig) :=
+  interp_state (sh (A:=nat)) (rotate hdr) s.
 
 (** ** The body correspondence.
 
@@ -121,16 +122,18 @@ Definition run (hdr: nat) (memory: ManagedHeap) (c: nat) : ictreeW (indexed nat)
     - **the observation.**  The single event is [stamp v c] where [v] is the
       payload READ OUT OF the head node's cell and [c] is the occurrence
       counter before the pop. *)
-Theorem rot_body_spec: forall hdr a ns v vs h allocs c,
+Theorem rot_body_spec: forall hdr a ns v vs h allocs ctx c,
     qrep hdr (a :: ns) (v :: vs) h ->
-    interp_state (sh (A:=nat)) (rot_body hdr) ((h, allocs), c)
-    ~ (log (stamp v c) ;;
-       Ret (@inl unit unit tt, ((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, allocs), S c))).
+    interp_state (sh (A:=nat)) (rot_body hdr) ((h, allocs), (ctx, c))
+    ~ (log (inr (stamp v c) : CSLObs nat) ;;
+       Ret (@inl unit unit tt,
+         ((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, allocs), (ctx, S c)))).
 Proof.
-  intros hdr a ns v vs h allocs c Hq; unfold rot_body.
+  intros hdr a ns v vs h allocs ctx c Hq; unfold rot_body.
   etransitivity.
-  - eapply (queue_turn_spec h_indexed emit stamp).
-    + intros; apply (interp_indexed_emit heap_handler).
+  - eapply (queue_turn_spec (h_sum csl_context_handler (csl_emit_handler (A:=nat)))
+      emit (fun v c => inr (stamp v c))).
+    + intros; apply interp_csl_emit.
     + exact Hq.
   - apply sbisim_clo_bind_eq; [reflexivity | intros []].
     apply equ_sbisim, interp_state_ret.

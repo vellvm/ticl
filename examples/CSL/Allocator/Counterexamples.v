@@ -34,13 +34,13 @@ Let starvation_cycle : list Actor :=
 Let starvation_prefix : list Actor :=
   [Owner; Owner; Owner; Owner; Owner; Remote1] ++ starvation_cycle.
 
-Let starve_prefix_logs (c : nat) : list (indexed (nat * nat)) :=
-  [stamp (tag_alloc,6) c; stamp (tag_alloc,8) (1+c);
-   stamp (tag_retire,6) (2+c); stamp (tag_retry,8) (3+c);
-   stamp (tag_reclaim,6) (4+c); stamp (tag_alloc,6) (5+c)].
-Let starve_cycle_logs (c : nat) : list (indexed (nat * nat)) :=
-  [stamp (tag_retire,6) c; stamp (tag_retry,8) (1+c);
-   stamp (tag_reclaim,6) (2+c); stamp (tag_alloc,6) (3+c)].
+Let starve_prefix_logs (c : nat) : list (CSLObs (nat * nat)) :=
+  [inr (stamp (tag_alloc,6) c); inr (stamp (tag_alloc,8) (1+c));
+   inr (stamp (tag_retire,6) (2+c)); inr (stamp (tag_retry,8) (3+c));
+   inr (stamp (tag_reclaim,6) (4+c)); inr (stamp (tag_alloc,6) (5+c))].
+Let starve_cycle_logs (c : nat) : list (CSLObs (nat * nat)) :=
+  [inr (stamp (tag_retire,6) c); inr (stamp (tag_retry,8) (1+c));
+   inr (stamp (tag_reclaim,6) (2+c)); inr (stamp (tag_alloc,6) (3+c))].
 
 (** A pointwise representative only: the infinite witness always retains
     the actual heap returned by its preceding turn. *)
@@ -56,22 +56,22 @@ Let starve_boundary (c : nat) : AState :=
      remote1_state := RRead 8 |}.
 
 (** The observation of each individual turn, including every silent turn. *)
-Let starve_prefix_event (c i : nat) : option (indexed (nat * nat)) :=
+Let starve_prefix_event (c i : nat) : option (CSLObs (nat * nat)) :=
   match i with
-  | 3 => Some (stamp (tag_alloc,6) c)
-  | 4 => Some (stamp (tag_alloc,8) (1+c))
-  | 11 => Some (stamp (tag_retire,6) (2+c))
-  | 12 => Some (stamp (tag_retry,8) (3+c))
-  | 15 => Some (stamp (tag_reclaim,6) (4+c))
-  | 17 => Some (stamp (tag_alloc,6) (5+c))
+  | 3 => Some (inr (stamp (tag_alloc,6) c))
+  | 4 => Some (inr (stamp (tag_alloc,8) (1+c)))
+  | 11 => Some (inr (stamp (tag_retire,6) (2+c)))
+  | 12 => Some (inr (stamp (tag_retry,8) (3+c)))
+  | 15 => Some (inr (stamp (tag_reclaim,6) (4+c)))
+  | 17 => Some (inr (stamp (tag_alloc,6) (5+c)))
   | _ => None
   end.
-Let starve_cycle_event (c i : nat) : option (indexed (nat * nat)) :=
+Let starve_cycle_event (c i : nat) : option (CSLObs (nat * nat)) :=
   match i with
-  | 5 => Some (stamp (tag_retire,6) c)
-  | 6 => Some (stamp (tag_retry,8) (1+c))
-  | 9 => Some (stamp (tag_reclaim,6) (2+c))
-  | 11 => Some (stamp (tag_alloc,6) (3+c))
+  | 5 => Some (inr (stamp (tag_retire,6) c))
+  | 6 => Some (inr (stamp (tag_retry,8) (1+c)))
+  | 9 => Some (inr (stamp (tag_reclaim,6) (2+c)))
+  | 11 => Some (inr (stamp (tag_alloc,6) (3+c)))
   | _ => None
   end.
 
@@ -149,7 +149,7 @@ Qed.
     whose existential witnesses must not range over its closure. *)
 Let starvation_choices : nat -> Actor :=
   periodic_choices starvation_prefix Remote1 (List.tl starvation_cycle).
-Let starvation_execution : Execution AState Actor (option (indexed (nat * nat))) :=
+Let starvation_execution : Execution AState Actor (option (CSLObs (nat * nat))) :=
   allocator_execution 2 0 starvation_choices.
 
 Local Lemma starvation_execution_valid : allocator_valid 2 0 starvation_execution.
@@ -280,14 +280,14 @@ Proof.
 Qed.
 
 Local Lemma starve_prefix_never_retire8 c i idx : i < 19 ->
-  starve_prefix_event c i <> Some (stamp (tag_retire,8) idx).
+  starve_prefix_event c i <> Some (inr (stamp (tag_retire,8) idx)).
 Proof.
   intro Hi.
   do 19 (destruct i as [|i]; [vm_compute; discriminate|]).
   lia.
 Qed.
 Local Lemma starve_cycle_never_retire8 c i idx : i < 13 ->
-  starve_cycle_event c i <> Some (stamp (tag_retire,8) idx).
+  starve_cycle_event c i <> Some (inr (stamp (tag_retire,8) idx)).
 Proof.
   intro Hi.
   do 13 (destruct i as [|i]; [vm_compute; discriminate|]).
@@ -339,7 +339,7 @@ Theorem fair_starvation_exists : exists e,
   infinitely (fun k => block_event tag_reclaim 6 (emitted e k)) /\
   infinitely (fun k => block_event tag_alloc 6 (emitted e k)) /\
   realizes (fun j => turn_labels (emitted e j)) 0
-    (run_nd (allocator_program 2) managed_empty 0).
+    (run_nd (allocator_program 2) (managed_empty,((List.nil : Ctx.Ctx),0))).
 Proof.
   exists starvation_execution.
   split; [exact starvation_execution_valid|].
@@ -360,9 +360,9 @@ Theorem starvation_chained_cycle_actual_source : exists last labels residual,
     Some (last,starve_prefix_logs 0 ++ starve_cycle_logs 6) /\
   label_logs labels = starve_prefix_logs 0 ++ starve_cycle_logs 6 /\
   label_taus labels = 32 /\
-  finite_steps (run_nd (allocator_program 2) managed_empty 0) labels residual /\
+  finite_steps (run_nd (allocator_program 2) (managed_empty,((List.nil : Ctx.Ctx),0))) labels residual /\
   residual ~ (model_nd 2 actor_of_slot (turn 1) last
-                : ictreeW (indexed (nat * nat)) (unit * SSig)).
+                : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
 Proof.
   destruct (starve_prefix_run 0) as (first & Hprefix & Hfirst).
   destruct (starve_cycle_run_actual 6 first Hfirst) as (last & Hcycle & Hlast).
@@ -370,7 +370,7 @@ Proof.
     starvation_prefix starvation_cycle
     (initial_state 2 0) first last (starve_prefix_logs 0) (starve_cycle_logs 6)
     Hprefix Hcycle) as Hrun.
-  destruct (run_turns_realizes_source 2 0 (starvation_prefix ++ starvation_cycle)
+  destruct (run_turns_realizes_source 2 (List.nil : Ctx.Ctx) 0 (starvation_prefix ++ starvation_cycle)
     last (starve_prefix_logs 0 ++ starve_cycle_logs 6) Hrun)
     as (labels & residual & Hlabels & Hlogs & Htaus & Hsteps & Htail).
   exists last, labels, residual; repeat first [assumption | split].
@@ -386,15 +386,15 @@ Let owner_stall_cycle : list Actor := [Remote0; Remote1].
 Let owner_stall_choices : nat -> Actor :=
   periodic_choices owner_stall_prefix Remote0 [Remote1].
 
-Let stalled_prefix_logs (c : nat) : list (indexed (nat * nat)) :=
-  [stamp (tag_alloc,6) c; stamp (tag_alloc,8) (1+c);
-   stamp (tag_retire,6) (2+c); stamp (tag_retire,8) (3+c)].
+Let stalled_prefix_logs (c : nat) : list (CSLObs (nat * nat)) :=
+  [inr (stamp (tag_alloc,6) c); inr (stamp (tag_alloc,8) (1+c));
+   inr (stamp (tag_retire,6) (2+c)); inr (stamp (tag_retire,8) (3+c))].
 
-Let stalled_prefix_observations : list (option (indexed (nat * nat))) :=
-  [None; None; None; Some (stamp (tag_alloc,6) 0);
-   Some (stamp (tag_alloc,8) 1); None; None; None;
-   Some (stamp (tag_retire,6) 2); None; None; None;
-   Some (stamp (tag_retire,8) 3)].
+Let stalled_prefix_observations : list (option (CSLObs (nat * nat))) :=
+  [None; None; None; Some (inr (stamp (tag_alloc,6) 0));
+   Some (inr (stamp (tag_alloc,8) 1)); None; None; None;
+   Some (inr (stamp (tag_retire,6) 2)); None; None; None;
+   Some (inr (stamp (tag_retire,8) 3))].
 
 (** This is only a pointwise representative of the returned heap.  The
     execution always runs the actual preceding turn. *)
@@ -445,7 +445,7 @@ Qed.
 
 (** The infinite execution follows the periodic script from the actual
     initial state; bound after the finite calculations above. *)
-Let owner_stall_execution : Execution AState Actor (option (indexed (nat * nat))) :=
+Let owner_stall_execution : Execution AState Actor (option (CSLObs (nat * nat))) :=
   allocator_execution 2 0 owner_stall_choices.
 
 Local Lemma owner_stall_execution_valid : allocator_valid 2 0 owner_stall_execution.
@@ -495,7 +495,7 @@ Proof.
 Qed.
 
 Local Lemma stalled_retire6 :
-  emitted owner_stall_execution 8 = Some (stamp (tag_retire,6) 2).
+  emitted owner_stall_execution 8 = Some (inr (stamp (tag_retire,6) 2)).
 Proof. exact (stalled_prefix_observation 8 ltac:(lia)). Qed.
 
 Local Lemma stalled_tail_choices n :
@@ -596,12 +596,12 @@ Theorem stalled_prefix_source : exists last labels residual,
   state_equiv last (stalled_boundary 4) /\
   label_logs labels = stalled_prefix_logs 0 /\
   label_taus labels = 13 /\
-  finite_steps (run_nd (allocator_program 2) managed_empty 0) labels residual /\
+  finite_steps (run_nd (allocator_program 2) (managed_empty,((List.nil : Ctx.Ctx),0))) labels residual /\
   residual ~ (model_nd 2 actor_of_slot (turn 1) last
-                : ictreeW (indexed (nat * nat)) (unit * SSig)).
+                : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
 Proof.
   destruct (stalled_prefix_run 0) as (last & Hrun & Hstate).
-  destruct (run_turns_realizes_source 2 0 owner_stall_prefix last
+  destruct (run_turns_realizes_source 2 (List.nil : Ctx.Ctx) 0 owner_stall_prefix last
     (stalled_prefix_logs 0) Hrun)
     as (labels & residual & Hlabels & Hlogs & Htaus & Hsteps & Hresidual).
   exists last, labels, residual; split; [exact Hrun|].
@@ -613,7 +613,7 @@ Qed.
 
 (** Every silent polling choice still consumes one real scheduler tau. *)
 Theorem stalled_tail_source_tau n
-  (t : ictreeW (indexed (nat * nat)) (unit * SSig)) :
+  (t : ictreeW (CSLObs (nat * nat)) (unit * SSig)) :
   realizes (fun j => turn_labels (emitted owner_stall_execution j)) (13+n) t ->
   exists next, finite_steps t [tau] next /\
     realizes (fun j => turn_labels (emitted owner_stall_execution j)) (S (13+n)) next.
@@ -628,10 +628,10 @@ Theorem owner_stall_prevents_reclamation : exists e,
   (forall k, 5 <= k -> selected e k <> Owner) /\
   infinitely (fun k => selected e k = Remote0) /\
   infinitely (fun k => selected e k = Remote1) /\
-  emitted e 8 = Some (stamp (tag_retire,6) 2) /\
+  emitted e 8 = Some (inr (stamp (tag_retire,6) 2)) /\
   (forall k, ~ block_event tag_reclaim 6 (emitted e k)) /\
   realizes (fun j => turn_labels (emitted e j)) 0
-    (run_nd (allocator_program 2) managed_empty 0).
+    (run_nd (allocator_program 2) (managed_empty,((List.nil : Ctx.Ctx),0))).
 Proof.
   exists owner_stall_execution; split; [exact owner_stall_execution_valid|].
   split; [exact stalled_no_owner|].
