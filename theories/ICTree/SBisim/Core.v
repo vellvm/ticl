@@ -77,15 +77,7 @@ Section StrongBisim.
   #[global] Instance weq_sbisim : 
       Proper (weq ==> weq) sbisim.
   Proof.
-    intros. split.
-    - intro. unfold sbisim.
-      epose proof (gfp_weq (sb x) (sb y)). lapply H1.
-      + intro. red in H2. cbn in H2. rewrite <- H2. unfold sbisim in H0. apply H0.
-      + now rewrite H.
-    - intro. unfold sbisim.
-      epose proof (gfp_weq (sb x) (sb y)). lapply H1.
-      + intro. red in H2. cbn in H2. rewrite H2. unfold sbisim in H0. apply H0.
-      + now rewrite H.
+    intros L L' HL; unfold sbisim; apply gfp_weq; apply weq_sb; exact HL.
   Qed.
 
 End StrongBisim.

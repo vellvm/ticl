@@ -136,8 +136,7 @@ From Coinduction Require Import coinduction.
   Proof with eauto with ticl.
     intros.
     rewrite interp_state_bind.
-    eapply anr_bind_r... 
-    intros [y σ_] w_ (Hinv & HR); inv Hinv; subst...
+    eapply anr_bind_r_eq...
   Qed.
 
   (** Convenience bind lemma for [interp_state] and prefix [AN], does not require the [R] postcondition if [t] is deterministic. *)
@@ -235,8 +234,7 @@ From Coinduction Require Import coinduction.
   Proof with eauto with ticl.
     intros.
     rewrite interp_state_bind.
-    eapply aul_bind_r...
-    intros [y σ''] * [Heq ->]; inv Heq...
+    eapply aul_bind_r_eq...
   Qed.
   
   (** Bind lemma for [interp_state] and suffix [AU] *)
@@ -259,8 +257,7 @@ From Coinduction Require Import coinduction.
   Proof with eauto with ticl.
     intros.
     rewrite interp_state_bind.
-    eapply aur_bind_r...
-    intros [y σ''] * [Heq ->]; inv Heq...
+    eapply aur_bind_r_eq...
   Qed.
   
   (** Bind lemma for [interp_state] and suffix [EU] *)
@@ -283,8 +280,7 @@ From Coinduction Require Import coinduction.
   Proof with eauto with ticl.
     intros.
     rewrite interp_state_bind.
-    eapply eul_bind_r... 
-    intros [y σ''] * [Heq ->]; inv Heq... 
+    eapply eul_bind_r_eq...
   Qed.
   
   (** Bind lemma for [interp_state] and prefix [EU] *)
@@ -307,8 +303,7 @@ From Coinduction Require Import coinduction.
   Proof with eauto with ticl.
     intros.
     rewrite interp_state_bind.
-    eapply eur_bind_r... 
-    intros [y σ''] * [Heq ->]; inv Heq... 
+    eapply eur_bind_r_eq...
   Qed.
 
   (** Bind lemma for [interp_state] and [AG], unfolds the [AG] to an [AU] on [t] and an [AG] on the continuation [k r]. 

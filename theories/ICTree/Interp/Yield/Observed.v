@@ -420,9 +420,6 @@ Section ObservedScheduler.
     apply sb_guard.
   Qed.
 
-  Local Notation completed' := (completed E).
-  Local Notation stR R := (lattice.body (coinduction.t (sb eq)) R).
-
   Local Definition erased_schedule (n : nat) (v : pool E n)
       (focus : option (Fin.t n)) : completed E :=
     forget_scheduler_offers (schedule_with_offers n v focus).
@@ -533,865 +530,105 @@ Section ObservedScheduler.
     reflexivity.
   Qed.
 
-  Local Lemma guard_residual_from_equ (actual target residual : completed') :
-    observe actual = GuardF residual ->
-    actual ≅ Guard target ->
-    residual ≅ target.
+  Local Lemma erased_offer_prefix_guards :
+    forall m r (embed : LiveSlot r -> LiveSlot m) (v : pool E m),
+      forget_scheduler_offers (schedule_with_offers_offer_prefix m r embed v) ≅
+      guards r (forget_scheduler_offers (schedule_with_offers_offer_prefix m 0
+        (fun i : LiveSlot 0 => match i with end) v)).
   Proof.
-    intros Hobs Heq.
-    apply equ_guard_invE.
-    transitivity actual.
-    - rewrite (ictree_eta actual). rewrite Hobs. reflexivity.
-    - exact Heq.
+    intros m r; revert m; induction r as [|r IH]; intros m embed v;
+    [ destruct m; unfold forget_scheduler_offers; rewrite !unfold_interp; cbn; reflexivity
+    | cbn [guards]; unfold forget_scheduler_offers at 1; rewrite unfold_interp;
+      cbn; rewrite bind_ret_l; apply guard_equ_node; apply IH ].
   Qed.
 
-  Local Ltac contradiction_from_shape_equ actual Hobs Heq :=
-    exfalso;
-    rewrite (ictree_eta actual) in Heq;
-    rewrite <- Hobs in Heq;
-    step in Heq; inversion Heq.
-
-  Local Lemma erased_schedule_match_left_empty
-      (R : rel completed' completed')
-      (Hch : forall m (w : pool E m) f,
-        stR R (erased_schedule m w f) (schedule m w f))
-      l actual t' (v : pool E 0) :
-    actual ≅ erased_schedule 0 v None ->
-    trans l actual t' ->
-    exists u', trans l (schedule 0 v None) u' /\ stR R t' u'.
+  Local Lemma erased_no_focus_guards :
+    forall n (v : pool E (S n)),
+      erased_schedule (S n) v None ≅
+      guards (S (S n)) (Vis (inl Yield) (fun _ : unit =>
+        Guard (Br n (fun i => Guard (erased_schedule (S n) v (Some i)))))).
   Proof.
-    intros Hactual TRactual.
-    assert (Hproj : actual ~ Ret tt).
-    { rewrite Hactual.
-      unfold erased_schedule.
-      apply forget_scheduler_offers_empty_no_focus_projection. }
-    destruct (sbisim_trans actual _ t' l eq Hproj TRactual) as
-      [l' [mid [Hmid [Hl' Hsb]]]]. subst l'.
-    apply trans_ret_inv in Hmid as [Hmid ->].
-    exists stuck. split.
-    - rewrite (trans_schedule_empty_ret v). apply trans_ret.
-    - rewrite Hsb. rewrite Hmid. reflexivity.
+    intros n v; unfold erased_schedule at 1;
+    transitivity (Guard (forget_scheduler_offers
+     (schedule_with_offers_offer_prefix (S n) (S n) (fun i => i) v)));
+    [ apply forget_scheduler_offers_no_focus_nonempty_unfold |
+    apply guard_equ_node;
+    transitivity (guards (S n) (forget_scheduler_offers
+     (schedule_with_offers_offer_prefix (S n) 0 (fun i : LiveSlot 0 => match i with end) v)));
+    [ apply erased_offer_prefix_guards | apply (guards_equ (S n)); unfold forget_scheduler_offers;
+    rewrite unfold_interp; cbn;
+    unfold ICtree.trigger, resum, ReSum_refl, resum_ret, ReSumRet_refl;
+    rewrite bind_vis; setoid_rewrite bind_ret_l;
+    apply vis_equ_node; intros []; apply guard_equ_node;
+    rewrite unfold_interp; cbn; reflexivity ] ].
   Qed.
 
-  Local Lemma erased_schedule_match_left_no_focus
-      (R : rel completed' completed')
-      (Hch : forall m (w : pool E m) f,
-        stR R (erased_schedule m w f) (schedule m w f))
-      l actual t' n (v : pool E (S n)) :
-    actual ≅ erased_schedule (S n) v None ->
-    trans l actual t' ->
-    exists u', trans l (schedule (S n) v None) u' /\ stR R t' u'.
+  Local Lemma erased_offers_galigned :
+    forall n (v : pool E n) focus a b,
+      galigned (guards a (erased_schedule n v focus))
+               (guards b (schedule n v focus)).
   Proof.
-    intros Hactual TRactual.
-    assert (Hproj : actual ~
-      Vis (inl Yield : yieldE + (spawnE + E))
-        (fun _ : unit => Br n (fun i =>
-           erased_schedule (S n) v (Some i)))).
-    { rewrite Hactual.
-      unfold erased_schedule.
-      apply forget_scheduler_offers_no_focus_projection_to_focused. }
-    destruct (sbisim_trans actual _ t' l eq Hproj TRactual) as
-      [l' [mid [Hmid [Hl' Hsb]]]]. subst l'.
-    apply trans_vis_inv in Hmid as [x [Hmid Hlabel]].
-    subst l. destruct x.
-    exists (Br n (fun i => schedule (S n) v (Some i))). split.
-    - apply trans_schedule_no_focus_nonempty.
-    - rewrite Hsb. rewrite Hmid.
-      apply (coinduction.bt_t (sb eq)).
-      apply step_sb_br_id; [reflexivity | intro j].
-      apply Hch.
-  Qed.
-
-  Local Lemma erased_schedule_match_left_br
-      (R : rel completed' completed')
-      (Hch : forall m (w : pool E m) f,
-        stR R (erased_schedule m w f) (schedule m w f))
-      l actual t' n (v : pool E (S n)) (i : Fin.t (S n)) b k :
-    observe (v $ i) = BrF b k ->
-    actual ≅ erased_schedule (S n) v (Some i) ->
-    trans l actual t' ->
-    exists u', trans l (schedule (S n) v (Some i)) u' /\ stR R t' u'.
-  Proof.
-    intros Hvi Hactual TRactual.
-    assert (Hproj : actual ~
-      Br b (fun j => erased_schedule (S n)
-        ((v @ i := (k j))) (Some i))).
-    { rewrite Hactual.
-      apply forget_scheduler_offers_focused_br_projection.
-      exact Hvi. }
-    destruct (sbisim_trans actual _ t' l eq Hproj TRactual) as
-      [l' [mid [Hmid [Hl' Hsb]]]]. subst l'.
-    apply trans_br_inv in Hmid as [j [Hmid Hlabel]].
-    subst l.
-    exists (schedule (S n) ((v @ i := (k j))) (Some i)).
-    split.
-    - apply trans_schedule_focused_br. exact Hvi.
-    - rewrite Hsb. rewrite Hmid. apply Hch.
-  Qed.
-
-  Local Lemma erased_schedule_match_left_fork
-      (R : rel completed' completed')
-      (Hch : forall m (w : pool E m) f,
-        stR R (erased_schedule m w f) (schedule m w f))
-      l actual t' n (v : pool E (S n)) (i : Fin.t (S n)) k :
-    observe (v $ i) = VisF (inr (inl Fork)) k ->
-    actual ≅ erased_schedule (S n) v (Some i) ->
-    trans l actual t' ->
-    exists u', trans l (schedule (S n) v (Some i)) u' /\ stR R t' u'.
-  Proof.
-    intros Hvi Hactual TRactual.
-    assert (Hproj : actual ~
-      Vis (inr (inl Spawn) : yieldE + (spawnE + E))
-        (fun _ => erased_schedule (S (S n))
-          (((k true) :: ((v @ i := (k false))))%vector)
-          (Some (Fin.FS i)))).
-    { rewrite Hactual.
-      apply forget_scheduler_offers_focused_fork_projection.
-      exact Hvi. }
-    destruct (sbisim_trans actual _ t' l eq Hproj TRactual) as
-      [l' [mid [Hmid [Hl' Hsb]]]]. subst l'.
-    apply trans_vis_inv in Hmid as [x [Hmid Hlabel]].
-    subst l. destruct x.
-    exists (schedule (S (S n))
-      (((k true) :: ((v @ i := (k false))))%vector)
-      (Some (Fin.FS i))). split.
-    - apply trans_schedule_focused_fork. exact Hvi.
-    - rewrite Hsb. rewrite Hmid. apply Hch.
-  Qed.
-
-  Local Lemma erased_schedule_match_left_user
-      (R : rel completed' completed')
-      (Hch : forall m (w : pool E m) f,
-        stR R (erased_schedule m w f) (schedule m w f))
-      l actual t' n (v : pool E (S n)) (i : Fin.t (S n)) e k :
-    observe (v $ i) = VisF (inr (inr e)) k ->
-    actual ≅ erased_schedule (S n) v (Some i) ->
-    trans l actual t' ->
-    exists u', trans l (schedule (S n) v (Some i)) u' /\ stR R t' u'.
-  Proof.
-    intros Hvi Hactual TRactual.
-    assert (Hproj : actual ~
-      Vis (inr (inr e) : yieldE + (spawnE + E))
-        (fun x => erased_schedule (S n)
-          ((v @ i := (k x))) (Some i))).
-    { rewrite Hactual.
-      apply forget_scheduler_offers_focused_user_event_projection.
-      exact Hvi. }
-    destruct (sbisim_trans actual _ t' l eq Hproj TRactual) as
-      [l' [mid [Hmid [Hl' Hsb]]]]. subst l'.
-    apply trans_vis_inv in Hmid as [x [Hmid Hlabel]].
-    subst l.
-    exists (schedule (S n) ((v @ i := (k x))) (Some i)).
-    split.
-    - apply trans_schedule_focused_user_event. exact Hvi.
-    - rewrite Hsb. rewrite Hmid. apply Hch.
-  Qed.
-
-  Local Lemma schedule_focused_br_equ n
-      (v : pool E (S n)) (i : Fin.t (S n)) b k :
-    observe (v $ i) = BrF b k ->
-    schedule (S n) v (Some i) ≅
-    Br b (fun j => schedule (S n) ((v @ i := (k j))) (Some i)).
-  Proof.
-    intro Hbr.
-    rewrite (ictree_eta (schedule (S n) v (Some i))).
-    rewrite (schedule_focused_br n v i b k Hbr).
-    reflexivity.
-  Qed.
-
-  Local Lemma schedule_focused_fork_equ n
-      (v : pool E (S n)) (i : Fin.t (S n)) k :
-    observe (v $ i) = VisF (inr (inl Fork)) k ->
-    schedule (S n) v (Some i) ≅
-    Vis (inr (inl Spawn) : yieldE + (spawnE + E))
-      (fun _ => schedule (S (S n))
-        (((k true) :: ((v @ i := (k false))))%vector)
-        (Some (Fin.FS i))).
-  Proof.
-    intro Hfork.
-    rewrite (ictree_eta (schedule (S n) v (Some i))).
-    rewrite (schedule_focused_fork n v i k Hfork).
-    reflexivity.
-  Qed.
-
-  Local Lemma schedule_focused_user_event_equ n
-      (v : pool E (S n)) (i : Fin.t (S n)) e k :
-    observe (v $ i) = VisF (inr (inr e)) k ->
-    schedule (S n) v (Some i) ≅
-    Vis (inr (inr e) : yieldE + (spawnE + E))
-      (fun x => schedule (S n) ((v @ i := (k x))) (Some i)).
-  Proof.
-    intro Huser.
-    rewrite (ictree_eta (schedule (S n) v (Some i))).
-    rewrite (schedule_focused_user_event n v i e k Huser).
-    reflexivity.
-  Qed.
-
-  Local Lemma erased_schedule_match_right_empty
-      (R : rel completed' completed')
-      (Hch : forall m (w : pool E m) f,
-        stR R (erased_schedule m w f) (schedule m w f))
-      l actual t' (v : pool E 0) :
-    actual ≅ schedule 0 v None ->
-    trans l actual t' ->
-    exists u', trans l (erased_schedule 0 v None) u' /\ stR R u' t'.
-  Proof.
-    intros Hactual TRactual.
-    assert (Hret : actual ~ Ret tt).
-    { rewrite Hactual. rewrite (trans_schedule_empty_ret v). reflexivity. }
-    destruct (sbisim_trans actual _ t' l eq Hret TRactual) as
-      [l' [mid [Hmid [Hl' Hsb_mid]]]]. subst l'.
-    assert (Hproj : Ret tt ~ erased_schedule 0 v None).
-    { symmetry.
-      unfold erased_schedule.
-      apply forget_scheduler_offers_empty_no_focus_projection. }
-    destruct (sbisim_trans (Ret tt) _ mid l eq Hproj Hmid) as
-      [l'' [u' [Htru [Hl'' Hsb_u]]]]. subst l''.
-    exists u'. split.
-    - exact Htru.
-    - rewrite Hsb_mid. rewrite <- Hsb_u. reflexivity.
-  Qed.
-
-  Local Lemma erased_schedule_match_right_no_focus
-      (R : rel completed' completed')
-      (Hch : forall m (w : pool E m) f,
-        stR R (erased_schedule m w f) (schedule m w f))
-      l actual t' n (v : pool E (S n)) :
-    actual ≅ schedule (S n) v None ->
-    trans l actual t' ->
-    exists u', trans l (erased_schedule (S n) v None) u' /\ stR R u' t'.
-  Proof.
-    intros Hactual TRactual.
-    set (sres := Br n (fun i => schedule (S n) v (Some i))).
-    set (lres := Br n (fun i => erased_schedule (S n) v (Some i))).
-    assert (Hshape : actual ~
-      Vis (inl Yield : yieldE + (spawnE + E)) (fun _ : unit => sres)).
-    { rewrite Hactual. rewrite (schedule_no_focus_equ n v). reflexivity. }
-    destruct (sbisim_trans actual _ t' l eq Hshape TRactual) as
-      [l' [mid [Hmid [Hl' Hsb_mid]]]]. subst l'.
-    apply trans_vis_inv in Hmid as [x [Hmid Hlabel]].
-    subst l. destruct x.
-    assert (Hstep_lres : trans (obs (inl Yield : yieldE + (spawnE + E)) tt)
-      (Vis (inl Yield : yieldE + (spawnE + E)) (fun _ : unit => lres))
-      lres).
-    { apply trans_vis. }
-    assert (Hproj :
-      Vis (inl Yield : yieldE + (spawnE + E)) (fun _ : unit => lres) ~
-      erased_schedule (S n) v None).
-    { symmetry.
-      unfold erased_schedule.
-      apply forget_scheduler_offers_no_focus_projection_to_focused. }
-    destruct (sbisim_trans _ _ lres
-      (obs (inl Yield : yieldE + (spawnE + E)) tt) eq Hproj
-      Hstep_lres) as [l'' [u' [Htru [Hl'' Hsb_u]]]].
-    subst l''.
-    exists u'. split.
-    - exact Htru.
-    - rewrite Hsb_mid. rewrite Hmid. rewrite <- Hsb_u.
-      apply (coinduction.bt_t (sb eq)).
-      apply step_sb_br_id; [reflexivity | intro j].
-      apply Hch.
-  Qed.
-
-  Local Lemma erased_schedule_match_right_br
-      (R : rel completed' completed')
-      (Hch : forall m (w : pool E m) f,
-        stR R (erased_schedule m w f) (schedule m w f))
-      l actual t' n (v : pool E (S n)) (i : Fin.t (S n)) b k :
-    observe (v $ i) = BrF b k ->
-    actual ≅ schedule (S n) v (Some i) ->
-    trans l actual t' ->
-    exists u', trans l (erased_schedule (S n) v (Some i)) u' /\ stR R u' t'.
-  Proof.
-    intros Hvi Hactual TRactual.
-    set (sres := fun j =>
-      schedule (S n) ((v @ i := (k j))) (Some i)).
-    set (lres := fun j =>
-      erased_schedule (S n) ((v @ i := (k j))) (Some i)).
-    assert (Hshape : actual ~ Br b sres).
-    { rewrite Hactual. rewrite (schedule_focused_br_equ n v i b k Hvi).
-      reflexivity. }
-    destruct (sbisim_trans actual _ t' l eq Hshape TRactual) as
-      [l' [mid [Hmid [Hl' Hsb_mid]]]]. subst l'.
-    apply trans_br_inv in Hmid as [j [Hmid Hlabel]].
-    subst l.
-    assert (Hstep_lres : trans tau (Br b lres) (lres j)).
-    { apply trans_br with (x := j). reflexivity. }
-    assert (Hproj : Br b lres ~ erased_schedule (S n) v (Some i)).
-    { symmetry.
-      apply forget_scheduler_offers_focused_br_projection. exact Hvi. }
-    destruct (sbisim_trans _ _ (lres j) tau eq Hproj Hstep_lres)
-      as [l'' [u' [Htru [Hl'' Hsb_u]]]]. subst l''.
-    exists u'. split.
-    - exact Htru.
-    - rewrite Hsb_mid. rewrite Hmid. rewrite <- Hsb_u. apply Hch.
-  Qed.
-
-  Local Lemma erased_schedule_match_right_fork
-      (R : rel completed' completed')
-      (Hch : forall m (w : pool E m) f,
-        stR R (erased_schedule m w f) (schedule m w f))
-      l actual t' n (v : pool E (S n)) (i : Fin.t (S n)) k :
-    observe (v $ i) = VisF (inr (inl Fork)) k ->
-    actual ≅ schedule (S n) v (Some i) ->
-    trans l actual t' ->
-    exists u', trans l (erased_schedule (S n) v (Some i)) u' /\ stR R u' t'.
-  Proof.
-    intros Hvi Hactual TRactual.
-    set (sres := schedule (S (S n))
-      (((k true) :: ((v @ i := (k false))))%vector)
-      (Some (Fin.FS i))).
-    set (lres := erased_schedule (S (S n))
-      (((k true) :: ((v @ i := (k false))))%vector)
-      (Some (Fin.FS i))).
-    assert (Hshape : actual ~
-      Vis (inr (inl Spawn) : yieldE + (spawnE + E))
-        (fun _ : unit => sres)).
-    { rewrite Hactual. rewrite (schedule_focused_fork_equ n v i k Hvi).
-      reflexivity. }
-    destruct (sbisim_trans actual _ t' l eq Hshape TRactual) as
-      [l' [mid [Hmid [Hl' Hsb_mid]]]]. subst l'.
-    apply trans_vis_inv in Hmid as [x [Hmid Hlabel]].
-    subst l. destruct x.
-    assert (Hstep_lres : trans
-      (obs (inr (inl Spawn) : yieldE + (spawnE + E)) tt)
-      (Vis (inr (inl Spawn) : yieldE + (spawnE + E))
-        (fun _ : unit => lres)) lres).
-    { apply trans_vis. }
-    assert (Hproj :
-      Vis (inr (inl Spawn) : yieldE + (spawnE + E))
-        (fun _ : unit => lres) ~
-      erased_schedule (S n) v (Some i)).
-    { symmetry.
-      apply forget_scheduler_offers_focused_fork_projection. exact Hvi. }
-    destruct (sbisim_trans _ _ lres
-      (obs (inr (inl Spawn) : yieldE + (spawnE + E)) tt) eq Hproj
-      Hstep_lres) as [l'' [u' [Htru [Hl'' Hsb_u]]]].
-    subst l''.
-    exists u'. split.
-    - exact Htru.
-    - rewrite Hsb_mid. rewrite Hmid. rewrite <- Hsb_u. apply Hch.
-  Qed.
-
-  Local Lemma erased_schedule_match_right_user
-      (R : rel completed' completed')
-      (Hch : forall m (w : pool E m) f,
-        stR R (erased_schedule m w f) (schedule m w f))
-      l actual t' n (v : pool E (S n)) (i : Fin.t (S n)) e k :
-    observe (v $ i) = VisF (inr (inr e)) k ->
-    actual ≅ schedule (S n) v (Some i) ->
-    trans l actual t' ->
-    exists u', trans l (erased_schedule (S n) v (Some i)) u' /\ stR R u' t'.
-  Proof.
-    intros Hvi Hactual TRactual.
-    set (sres := fun x =>
-      schedule (S n) ((v @ i := (k x))) (Some i)).
-    set (lres := fun x =>
-      erased_schedule (S n) ((v @ i := (k x))) (Some i)).
-    assert (Hshape : actual ~
-      Vis (inr (inr e) : yieldE + (spawnE + E)) sres).
-    { rewrite Hactual.
-      rewrite (schedule_focused_user_event_equ n v i e k Hvi).
-      reflexivity. }
-    destruct (sbisim_trans actual _ t' l eq Hshape TRactual) as
-      [l' [mid [Hmid [Hl' Hsb_mid]]]]. subst l'.
-    apply trans_vis_inv in Hmid as [x [Hmid Hlabel]].
-    subst l.
-    assert (Hstep_lres : trans
-      (obs (inr (inr e) : yieldE + (spawnE + E)) x)
-      (Vis (inr (inr e) : yieldE + (spawnE + E)) lres) (lres x)).
-    { apply trans_vis. }
-    assert (Hproj : Vis (inr (inr e) : yieldE + (spawnE + E)) lres ~
-      erased_schedule (S n) v (Some i)).
-    { symmetry.
-      apply forget_scheduler_offers_focused_user_event_projection. exact Hvi. }
-    destruct (sbisim_trans _ _ (lres x)
-      (obs (inr (inr e) : yieldE + (spawnE + E)) x) eq Hproj
-      Hstep_lres) as [l'' [u' [Htru [Hl'' Hsb_u]]]].
-    subst l''.
-    exists u'. split.
-    - exact Htru.
-    - rewrite Hsb_mid. rewrite Hmid. rewrite <- Hsb_u. apply Hch.
-  Qed.
-
-  Local Lemma erased_schedule_match_left (R : rel completed' completed')
-      (Hch : forall m (w : pool E m) f,
-        stR R (erased_schedule m w f) (schedule m w f)) :
-    forall l os ot', trans_ l os ot' ->
-    forall actual n (v : pool E n) focus t',
-      os = observe actual ->
-      ot' = observe t' ->
-      actual ≅ erased_schedule n v focus ->
-      exists u', trans l (schedule n v focus) u' /\ stR R t' u'.
-  Proof.
-    intros l os ot' TR.
-    induction TR; intros actual nn v focus t' Hos Hot Hactual.
-    - destruct focus as [i |].
-      + destruct nn as [| n']; [inversion i |].
-        destruct (observe (v $ i)) as [r | b k | g | e k] eqn:Hvi.
-        * destruct r.
-          assert (Hguard : actual ≅
-            Guard (erased_schedule n' ((v -- i)) None)).
-          { transitivity (erased_schedule (S n') v (Some i)).
-            - exact Hactual.
-            - apply erased_focused_ret_equ. exact Hvi. }
-          assert (Ht : t ≅ erased_schedule n' ((v -- i)) None).
-          { eapply guard_residual_from_equ.
-            - symmetry. exact Hos.
-            - exact Hguard. }
-          destruct (IHTR t n' ((v -- i)) None t'
-            eq_refl Hot Ht) as [u' [Htru Hres]].
-          exists u'. split.
-          -- rewrite (trans_schedule_focused_ret n' v i Hvi).
-             apply trans_guard. exact Htru.
-          -- exact Hres.
-        * assert (Hproj : actual ~
-            Br b (fun j => erased_schedule (S n')
-              ((v @ i := (k j))) (Some i))).
-          { rewrite Hactual.
-            apply forget_scheduler_offers_focused_br_projection.
-            exact Hvi. }
-          assert (TRactual : trans l actual t').
-          { unfold trans. rewrite <- Hos, <- Hot. constructor. exact TR. }
-          destruct (sbisim_trans actual _ t' l eq Hproj TRactual) as
-            [l' [mid [Hmid [Hl' Hsb]]]]. subst l'.
-          apply trans_br_inv in Hmid as [j [Hmid ->]].
-          exists (schedule (S n') ((v @ i := (k j))) (Some i)).
-          split.
-          -- apply trans_schedule_focused_br. exact Hvi.
-          -- rewrite Hsb. rewrite Hmid. apply Hch.
-        * assert (Hguard : actual ≅
-            Guard (erased_schedule (S n') ((v @ i := g)) (Some i))).
-          { transitivity (erased_schedule (S n') v (Some i)).
-            - exact Hactual.
-            - apply erased_focused_guard_equ. exact Hvi. }
-          assert (Ht : t ≅
-            erased_schedule (S n') ((v @ i := g)) (Some i)).
-          { eapply guard_residual_from_equ.
-            - symmetry. exact Hos.
-            - exact Hguard. }
-          destruct (IHTR t (S n') ((v @ i := g)) (Some i) t'
-            eq_refl Hot Ht) as [u' [Htru Hres]].
-          exists u'. split.
-          -- rewrite (trans_schedule_focused_guard n' v i g Hvi).
-             apply trans_guard. exact Htru.
-          -- exact Hres.
-        * destruct e as [yld | [frk | usr]].
-          -- destruct yld.
-             assert (Hguard : actual ≅
-               Guard (erased_schedule (S n')
-                 ((v @ i := (k tt))) None)).
-             { transitivity (erased_schedule (S n') v (Some i)).
-               - exact Hactual.
-               - apply erased_focused_yield_equ. exact Hvi. }
-             assert (Ht : t ≅ erased_schedule (S n')
-               ((v @ i := (k tt))) None).
-             { eapply guard_residual_from_equ.
-               - symmetry. exact Hos.
-               - exact Hguard. }
-             destruct (IHTR t (S n') ((v @ i := (k tt))) None t'
-               eq_refl Hot Ht) as [u' [Htru Hres]].
-             exists u'. split.
-             ++ rewrite (schedule_focused_yield_equ n' v i k Hvi).
-                apply trans_guard. exact Htru.
-             ++ exact Hres.
-          -- destruct frk.
-             assert (Hproj : actual ~
-               Vis (inr (inl Spawn) : yieldE + (spawnE + E))
-                 (fun _ => erased_schedule (S (S n'))
-                   (((k true) :: ((v @ i := (k false))))%vector)
-                   (Some (Fin.FS i)))).
-             { rewrite Hactual.
-               apply forget_scheduler_offers_focused_fork_projection.
-               exact Hvi. }
-             assert (TRactual : trans l actual t').
-             { unfold trans. rewrite <- Hos, <- Hot. constructor. exact TR. }
-             destruct (sbisim_trans actual _ t' l eq Hproj TRactual) as
-               [l' [mid [Hmid [Hl' Hsb]]]]. subst l'.
-             apply trans_vis_inv in Hmid as [x [Hmid ->]].
-             destruct x.
-             exists (schedule (S (S n'))
-               (((k true) :: ((v @ i := (k false))))%vector)
-               (Some (Fin.FS i))). split.
-             ++ apply trans_schedule_focused_fork. exact Hvi.
-             ++ rewrite Hsb. rewrite Hmid. apply Hch.
-          -- assert (Hproj : actual ~
-               Vis (inr (inr usr) : yieldE + (spawnE + E))
-                 (fun x => erased_schedule (S n')
-                   ((v @ i := (k x))) (Some i))).
-             { rewrite Hactual.
-               apply forget_scheduler_offers_focused_user_event_projection.
-               exact Hvi. }
-             assert (TRactual : trans l actual t').
-             { unfold trans. rewrite <- Hos, <- Hot. constructor. exact TR. }
-             destruct (sbisim_trans actual _ t' l eq Hproj TRactual) as
-               [l' [mid [Hmid [Hl' Hsb]]]]. subst l'.
-             apply trans_vis_inv in Hmid as [x [Hmid ->]].
-             exists (schedule (S n') ((v @ i := (k x))) (Some i)).
-             split.
-             ++ apply trans_schedule_focused_user_event. exact Hvi.
-             ++ rewrite Hsb. rewrite Hmid. apply Hch.
-      + destruct nn as [| n'].
-        * assert (Hproj : actual ~ Ret tt).
-          { rewrite Hactual.
-            unfold erased_schedule.
-            apply forget_scheduler_offers_empty_no_focus_projection. }
-          assert (TRactual : trans l actual t').
-          { unfold trans. rewrite <- Hos, <- Hot. constructor. exact TR. }
-          destruct (sbisim_trans actual _ t' l eq Hproj TRactual) as
-            [l' [mid [Hmid [Hl' Hsb]]]]. subst l'.
-          apply trans_ret_inv in Hmid as [Hmid ->].
-          exists stuck. split.
-          -- rewrite (trans_schedule_empty_ret v). apply trans_ret.
-          -- rewrite Hsb. rewrite Hmid. reflexivity.
-        * assert (Hproj : actual ~
-            Vis (inl Yield : yieldE + (spawnE + E))
-              (fun _ : unit => Br n' (fun i =>
-                 erased_schedule (S n') v (Some i)))).
-          { rewrite Hactual.
-            unfold erased_schedule.
-            apply forget_scheduler_offers_no_focus_projection_to_focused. }
-          assert (TRactual : trans l actual t').
-          { unfold trans. rewrite <- Hos, <- Hot. constructor. exact TR. }
-          destruct (sbisim_trans actual _ t' l eq Hproj TRactual) as
-            [l' [mid [Hmid [Hl' Hsb]]]]. subst l'.
-          apply trans_vis_inv in Hmid as [x [Hmid ->]].
-          destruct x.
-          exists (Br n' (fun i => schedule (S n') v (Some i))). split.
-          -- apply trans_schedule_no_focus_nonempty.
-          -- rewrite Hsb. rewrite Hmid.
-             apply (coinduction.bt_t (sb eq)).
-             apply step_sb_br_id; [reflexivity | intro j].
-             apply Hch.
-    - assert (TRactual : trans tau actual t').
-      { unfold trans. rewrite <- Hos, <- Hot.
-        eapply Steptau. exact H0. }
-      destruct focus as [i |].
-      + destruct nn as [| n']; [inversion i |].
-        destruct (observe (v $ i)) as [r | b k0 | g | e k0] eqn:Hvi.
-        * destruct r.
-          assert (Hguard : actual ≅
-            Guard (erased_schedule n' ((v -- i)) None)).
-          { transitivity (erased_schedule (S n') v (Some i)).
-            - exact Hactual.
-            - apply erased_focused_ret_equ. exact Hvi. }
-          contradiction_from_shape_equ actual Hos Hguard.
-        * eapply erased_schedule_match_left_br; eauto.
-        * assert (Hguard : actual ≅
-            Guard (erased_schedule (S n') ((v @ i := g)) (Some i))).
-          { transitivity (erased_schedule (S n') v (Some i)).
-            - exact Hactual.
-            - apply erased_focused_guard_equ. exact Hvi. }
-          contradiction_from_shape_equ actual Hos Hguard.
-        * destruct e as [yld | [frk | usr]].
-          -- destruct yld.
-             assert (Hguard : actual ≅
-               Guard (erased_schedule (S n')
-                 ((v @ i := (k0 tt))) None)).
-             { transitivity (erased_schedule (S n') v (Some i)).
-               - exact Hactual.
-               - apply erased_focused_yield_equ. exact Hvi. }
-             contradiction_from_shape_equ actual Hos Hguard.
-          -- destruct frk.
-             assert (Hvis : actual ≅
-               Vis (inr (inl Spawn) : yieldE + (spawnE + E))
-                 (fun _ => Guard (erased_schedule (S (S n'))
-                   (((k0 true) :: ((v @ i := (k0 false))))%vector)
-                   (Some (Fin.FS i))))).
-             { transitivity (erased_schedule (S n') v (Some i)).
-               - exact Hactual.
-               - apply erased_focused_fork_equ. exact Hvi. }
-             contradiction_from_shape_equ actual Hos Hvis.
-          -- assert (Hvis : actual ≅
-               Vis (inr (inr usr) : yieldE + (spawnE + E))
-                 (fun x => Guard (erased_schedule (S n')
-                   ((v @ i := (k0 x))) (Some i)))).
-             { transitivity (erased_schedule (S n') v (Some i)).
-               - exact Hactual.
-               - apply erased_focused_user_event_equ. exact Hvi. }
-             contradiction_from_shape_equ actual Hos Hvis.
-      + destruct nn as [| n'].
-        * eapply erased_schedule_match_left_empty; eauto.
-        * eapply erased_schedule_match_left_no_focus; eauto.
-    - assert (TRactual : trans (obs e x) actual t').
-      { unfold trans. rewrite <- Hos, <- Hot.
-        eapply Stepobs. exact H0. }
-      destruct focus as [i |].
-      + destruct nn as [| n']; [inversion i |].
-        destruct (observe (v $ i)) as [r | b k0 | g | e0 k0] eqn:Hvi.
-        * destruct r.
-          assert (Hguard : actual ≅
-            Guard (erased_schedule n' ((v -- i)) None)).
-          { transitivity (erased_schedule (S n') v (Some i)).
-            - exact Hactual.
-            - apply erased_focused_ret_equ. exact Hvi. }
-          contradiction_from_shape_equ actual Hos Hguard.
-        * assert (Hbr : actual ≅
-            Br b (fun j => Guard (erased_schedule (S n')
-              ((v @ i := (k0 j))) (Some i)))).
-          { transitivity (erased_schedule (S n') v (Some i)).
-            - exact Hactual.
-            - apply erased_focused_br_equ. exact Hvi. }
-          contradiction_from_shape_equ actual Hos Hbr.
-        * assert (Hguard : actual ≅
-            Guard (erased_schedule (S n') ((v @ i := g)) (Some i))).
-          { transitivity (erased_schedule (S n') v (Some i)).
-            - exact Hactual.
-            - apply erased_focused_guard_equ. exact Hvi. }
-          contradiction_from_shape_equ actual Hos Hguard.
-        * destruct e0 as [yld | [frk | usr]].
-          -- destruct yld.
-             assert (Hguard : actual ≅
-               Guard (erased_schedule (S n')
-                 ((v @ i := (k0 tt))) None)).
-             { transitivity (erased_schedule (S n') v (Some i)).
-               - exact Hactual.
-               - apply erased_focused_yield_equ. exact Hvi. }
-             contradiction_from_shape_equ actual Hos Hguard.
-          -- destruct frk.
-             eapply erased_schedule_match_left_fork; eauto.
-          -- eapply erased_schedule_match_left_user; eauto.
-      + destruct nn as [| n'].
-        * eapply erased_schedule_match_left_empty; eauto.
-        * eapply erased_schedule_match_left_no_focus; eauto.
-    - assert (TRactual : trans (val r) actual t').
-      { unfold trans. rewrite <- Hos, <- Hot.
-        eapply Stepval. exact H0. }
-      destruct focus as [i |].
-      + destruct nn as [| n']; [inversion i |].
-        destruct (observe (v $ i)) as [r0 | b k0 | g | e k0] eqn:Hvi.
-        * destruct r0.
-          assert (Hguard : actual ≅
-            Guard (erased_schedule n' ((v -- i)) None)).
-          { transitivity (erased_schedule (S n') v (Some i)).
-            - exact Hactual.
-            - apply erased_focused_ret_equ. exact Hvi. }
-          contradiction_from_shape_equ actual Hos Hguard.
-        * assert (Hbr : actual ≅
-            Br b (fun j => Guard (erased_schedule (S n')
-              ((v @ i := (k0 j))) (Some i)))).
-          { transitivity (erased_schedule (S n') v (Some i)).
-            - exact Hactual.
-            - apply erased_focused_br_equ. exact Hvi. }
-          contradiction_from_shape_equ actual Hos Hbr.
-        * assert (Hguard : actual ≅
-            Guard (erased_schedule (S n') ((v @ i := g)) (Some i))).
-          { transitivity (erased_schedule (S n') v (Some i)).
-            - exact Hactual.
-            - apply erased_focused_guard_equ. exact Hvi. }
-          contradiction_from_shape_equ actual Hos Hguard.
-        * destruct e as [yld | [frk | usr]].
-          -- destruct yld.
-             assert (Hguard : actual ≅
-               Guard (erased_schedule (S n')
-                 ((v @ i := (k0 tt))) None)).
-             { transitivity (erased_schedule (S n') v (Some i)).
-               - exact Hactual.
-               - apply erased_focused_yield_equ. exact Hvi. }
-             contradiction_from_shape_equ actual Hos Hguard.
-          -- destruct frk.
-             assert (Hvis : actual ≅
-               Vis (inr (inl Spawn) : yieldE + (spawnE + E))
-                 (fun _ => Guard (erased_schedule (S (S n'))
-                   (((k0 true) :: ((v @ i := (k0 false))))%vector)
-                   (Some (Fin.FS i))))).
-             { transitivity (erased_schedule (S n') v (Some i)).
-               - exact Hactual.
-               - apply erased_focused_fork_equ. exact Hvi. }
-             contradiction_from_shape_equ actual Hos Hvis.
-          -- assert (Hvis : actual ≅
-               Vis (inr (inr usr) : yieldE + (spawnE + E))
-                 (fun x => Guard (erased_schedule (S n')
-                   ((v @ i := (k0 x))) (Some i)))).
-             { transitivity (erased_schedule (S n') v (Some i)).
-               - exact Hactual.
-               - apply erased_focused_user_event_equ. exact Hvi. }
-             contradiction_from_shape_equ actual Hos Hvis.
-      + destruct nn as [| n'].
-        * eapply erased_schedule_match_left_empty; eauto.
-        * eapply erased_schedule_match_left_no_focus; eauto.
-  Qed.
-
-  Local Lemma erased_schedule_match_right (R : rel completed' completed')
-      (Hch : forall m (w : pool E m) f,
-        stR R (erased_schedule m w f) (schedule m w f)) :
-    forall l os ot', trans_ l os ot' ->
-    forall actual n (v : pool E n) focus t',
-      os = observe actual ->
-      ot' = observe t' ->
-      actual ≅ schedule n v focus ->
-      exists u', trans l (erased_schedule n v focus) u' /\ stR R u' t'.
-  Proof.
-    intros l os ot' TR.
-    induction TR; intros actual nn v focus t' Hos Hot Hactual.
-    - assert (TRactual : trans l actual t').
-      { unfold trans. rewrite <- Hos, <- Hot. constructor. exact TR. }
-      destruct focus as [i |].
-      + destruct nn as [| n']; [inversion i |].
-        destruct (observe (v $ i)) as [r | b k | g | e k] eqn:Hvi.
-        * destruct r.
-          assert (Hguard : actual ≅
-            Guard (schedule n' ((v -- i)) None)).
-          { transitivity (schedule (S n') v (Some i)).
-            - exact Hactual.
-            - apply trans_schedule_focused_ret. exact Hvi. }
-          assert (Ht : t ≅ schedule n' ((v -- i)) None).
-          { eapply guard_residual_from_equ.
-            - symmetry. exact Hos.
-            - exact Hguard. }
-          destruct (IHTR t n' ((v -- i)) None t'
-            eq_refl Hot Ht) as [u' [Htru Hres]].
-          exists u'. split.
-          -- rewrite (erased_focused_ret_equ n' v i Hvi).
-             apply trans_guard. exact Htru.
-          -- exact Hres.
-        * eapply erased_schedule_match_right_br; eauto.
-        * assert (Hguard : actual ≅
-            Guard (schedule (S n') ((v @ i := g)) (Some i))).
-          { transitivity (schedule (S n') v (Some i)).
-            - exact Hactual.
-            - apply trans_schedule_focused_guard. exact Hvi. }
-          assert (Ht : t ≅
-            schedule (S n') ((v @ i := g)) (Some i)).
-          { eapply guard_residual_from_equ.
-            - symmetry. exact Hos.
-            - exact Hguard. }
-          destruct (IHTR t (S n') ((v @ i := g)) (Some i) t'
-            eq_refl Hot Ht) as [u' [Htru Hres]].
-          exists u'. split.
-          -- rewrite (erased_focused_guard_equ n' v i g Hvi).
-             apply trans_guard. exact Htru.
-          -- exact Hres.
-        * destruct e as [yld | [frk | usr]].
-          -- destruct yld.
-             assert (Hguard : actual ≅
-               Guard (schedule (S n')
-                 ((v @ i := (k tt))) None)).
-             { transitivity (schedule (S n') v (Some i)).
-               - exact Hactual.
-               - apply schedule_focused_yield_equ. exact Hvi. }
-             assert (Ht : t ≅ schedule (S n')
-               ((v @ i := (k tt))) None).
-             { eapply guard_residual_from_equ.
-               - symmetry. exact Hos.
-               - exact Hguard. }
-             destruct (IHTR t (S n') ((v @ i := (k tt))) None t'
-               eq_refl Hot Ht) as [u' [Htru Hres]].
-             exists u'. split.
-             ++ rewrite (erased_focused_yield_equ n' v i k Hvi).
-                apply trans_guard. exact Htru.
-             ++ exact Hres.
-          -- destruct frk.
-             eapply erased_schedule_match_right_fork; eauto.
-          -- eapply erased_schedule_match_right_user; eauto.
-      + destruct nn as [| n'].
-        * eapply erased_schedule_match_right_empty; eauto.
-        * eapply erased_schedule_match_right_no_focus; eauto.
-    - assert (TRactual : trans tau actual t').
-      { unfold trans. rewrite <- Hos, <- Hot.
-        eapply Steptau. exact H0. }
-      destruct focus as [i |].
-      + destruct nn as [| n']; [inversion i |].
-        destruct (observe (v $ i)) as [r | b k0 | g | e k0] eqn:Hvi.
-        * destruct r.
-          assert (Hguard : actual ≅
-            Guard (schedule n' ((v -- i)) None)).
-          { transitivity (schedule (S n') v (Some i)).
-            - exact Hactual.
-            - apply trans_schedule_focused_ret. exact Hvi. }
-          contradiction_from_shape_equ actual Hos Hguard.
-        * eapply erased_schedule_match_right_br; eauto.
-        * assert (Hguard : actual ≅
-            Guard (schedule (S n') ((v @ i := g)) (Some i))).
-          { transitivity (schedule (S n') v (Some i)).
-            - exact Hactual.
-            - apply trans_schedule_focused_guard. exact Hvi. }
-          contradiction_from_shape_equ actual Hos Hguard.
-        * destruct e as [yld | [frk | usr]].
-          -- destruct yld.
-             assert (Hguard : actual ≅
-               Guard (schedule (S n')
-                 ((v @ i := (k0 tt))) None)).
-             { transitivity (schedule (S n') v (Some i)).
-               - exact Hactual.
-               - apply schedule_focused_yield_equ. exact Hvi. }
-             contradiction_from_shape_equ actual Hos Hguard.
-          -- destruct frk.
-             eapply erased_schedule_match_right_fork; eauto.
-          -- eapply erased_schedule_match_right_user; eauto.
-      + destruct nn as [| n'].
-        * eapply erased_schedule_match_right_empty; eauto.
-        * eapply erased_schedule_match_right_no_focus; eauto.
-    - assert (TRactual : trans (obs e x) actual t').
-      { unfold trans. rewrite <- Hos, <- Hot.
-        eapply Stepobs. exact H0. }
-      destruct focus as [i |].
-      + destruct nn as [| n']; [inversion i |].
-        destruct (observe (v $ i)) as [r | b k0 | g | e0 k0] eqn:Hvi.
-        * destruct r.
-          assert (Hguard : actual ≅
-            Guard (schedule n' ((v -- i)) None)).
-          { transitivity (schedule (S n') v (Some i)).
-            - exact Hactual.
-            - apply trans_schedule_focused_ret. exact Hvi. }
-          contradiction_from_shape_equ actual Hos Hguard.
-        * eapply erased_schedule_match_right_br; eauto.
-        * assert (Hguard : actual ≅
-            Guard (schedule (S n') ((v @ i := g)) (Some i))).
-          { transitivity (schedule (S n') v (Some i)).
-            - exact Hactual.
-            - apply trans_schedule_focused_guard. exact Hvi. }
-          contradiction_from_shape_equ actual Hos Hguard.
-        * destruct e0 as [yld | [frk | usr]].
-          -- destruct yld.
-             assert (Hguard : actual ≅
-               Guard (schedule (S n')
-                 ((v @ i := (k0 tt))) None)).
-             { transitivity (schedule (S n') v (Some i)).
-               - exact Hactual.
-               - apply schedule_focused_yield_equ. exact Hvi. }
-             contradiction_from_shape_equ actual Hos Hguard.
-          -- destruct frk.
-             eapply erased_schedule_match_right_fork; eauto.
-          -- eapply erased_schedule_match_right_user; eauto.
-      + destruct nn as [| n'].
-        * eapply erased_schedule_match_right_empty; eauto.
-        * eapply erased_schedule_match_right_no_focus; eauto.
-    - assert (TRactual : trans (val r) actual t').
-      { unfold trans. rewrite <- Hos, <- Hot.
-        eapply Stepval. exact H0. }
-      destruct focus as [i |].
-      + destruct nn as [| n']; [inversion i |].
-        destruct (observe (v $ i)) as [r0 | b k0 | g | e k0] eqn:Hvi.
-        * destruct r0.
-          assert (Hguard : actual ≅
-            Guard (schedule n' ((v -- i)) None)).
-          { transitivity (schedule (S n') v (Some i)).
-            - exact Hactual.
-            - apply trans_schedule_focused_ret. exact Hvi. }
-          contradiction_from_shape_equ actual Hos Hguard.
-        * eapply erased_schedule_match_right_br; eauto.
-        * assert (Hguard : actual ≅
-            Guard (schedule (S n') ((v @ i := g)) (Some i))).
-          { transitivity (schedule (S n') v (Some i)).
-            - exact Hactual.
-            - apply trans_schedule_focused_guard. exact Hvi. }
-          contradiction_from_shape_equ actual Hos Hguard.
-        * destruct e as [yld | [frk | usr]].
-          -- destruct yld.
-             assert (Hguard : actual ≅
-               Guard (schedule (S n')
-                 ((v @ i := (k0 tt))) None)).
-             { transitivity (schedule (S n') v (Some i)).
-               - exact Hactual.
-               - apply schedule_focused_yield_equ. exact Hvi. }
-             contradiction_from_shape_equ actual Hos Hguard.
-          -- destruct frk.
-             eapply erased_schedule_match_right_fork; eauto.
-          -- eapply erased_schedule_match_right_user; eauto.
-      + destruct nn as [| n'].
-        * eapply erased_schedule_match_right_empty; eauto.
-        * eapply erased_schedule_match_right_no_focus; eauto.
+    cofix CH; intros n v focus a b;
+    destruct focus as [i|];
+    [ destruct n as [|n]; [inversion i |
+      destruct (observe (v $ i)) as [r|c k|g|e k] eqn:Hvi;
+      [ destruct r;
+        eapply galign_guard with (n:=a) (m:=b)
+          (t':=erased_schedule n (v -- i) None)
+          (u':=schedule n (v -- i) None);
+        [ rewrite <- guards_guard; apply (guards_equ a); apply erased_focused_ret_equ; exact Hvi
+        | rewrite <- guards_guard; apply (guards_equ b); apply trans_schedule_focused_ret; exact Hvi
+        | exact (CH _ _ _ 0 0) ]
+      | eapply galign_br with (n:=a) (m:=b) (c:=c)
+          (k:=fun j => Guard (erased_schedule (S n) (v @ i := k j) (Some i)))
+          (k':=fun j => schedule (S n) (v @ i := k j) (Some i));
+        [ apply (guards_equ a); apply erased_focused_br_equ; exact Hvi
+        | apply (guards_equ b); rewrite (ictree_eta (schedule (S n) v (Some i)));
+          rewrite (schedule_focused_br n v i c k Hvi); reflexivity
+        | intro j; exact (CH _ _ _ 1 0) ]
+      | eapply galign_guard with (n:=a) (m:=b)
+          (t':=erased_schedule (S n) (v @ i := g) (Some i))
+          (u':=schedule (S n) (v @ i := g) (Some i));
+        [ rewrite <- guards_guard; apply (guards_equ a); apply erased_focused_guard_equ; exact Hvi
+        | rewrite <- guards_guard; apply (guards_equ b); apply trans_schedule_focused_guard; exact Hvi
+        | exact (CH _ _ _ 0 0) ]
+      | destruct e as [yld|[frk|usr]];
+        [ destruct yld;
+          eapply galign_guard with (n:=a) (m:=b)
+            (t':=erased_schedule (S n) (v @ i := k tt) None)
+            (u':=schedule (S n) (v @ i := k tt) None);
+          [ rewrite <- guards_guard; apply (guards_equ a); apply erased_focused_yield_equ; exact Hvi
+          | rewrite <- guards_guard; apply (guards_equ b); apply schedule_focused_yield_equ; exact Hvi
+          | exact (CH _ _ _ 0 0) ]
+        | destruct frk;
+          eapply galign_vis with (n:=a) (m:=b) (e:=inr (inl Spawn))
+            (k:=fun _ => Guard (erased_schedule (S (S n)) ((k true :: (v @ i := k false))%vector) (Some (Fin.FS i))))
+            (k':=fun _ => schedule (S (S n)) ((k true :: (v @ i := k false))%vector) (Some (Fin.FS i)));
+          [ apply (guards_equ a); apply erased_focused_fork_equ; exact Hvi
+          | apply (guards_equ b); rewrite (ictree_eta (schedule (S n) v (Some i)));
+            rewrite (schedule_focused_fork n v i k Hvi); reflexivity
+          | intros []; exact (CH _ _ _ 1 0) ]
+        | eapply galign_vis with (n:=a) (m:=b) (e:=(inr (inr usr) : yieldE + (spawnE + E)))
+            (k:=fun x => Guard (erased_schedule (S n) (v @ i := k x) (Some i)))
+            (k':=fun x => schedule (S n) (v @ i := k x) (Some i));
+          [ apply (guards_equ a); apply erased_focused_user_event_equ; exact Hvi
+          | apply (guards_equ b); rewrite (ictree_eta (schedule (S n) v (Some i)));
+            rewrite (schedule_focused_user_event n v i usr k Hvi); reflexivity
+          | intro x; exact (CH _ _ _ 1 0) ] ] ] ]
+    | destruct n as [|n];
+      [ eapply galign_ret with (n:=a) (m:=b) (r:=tt);
+        [ apply (guards_equ a); unfold erased_schedule, forget_scheduler_offers;
+          rewrite unfold_interp; reflexivity
+        | apply (guards_equ b); apply trans_schedule_empty_ret ]
+      | eapply galign_vis with (n:=(a + S (S n))%nat) (m:=b) (e:=inl Yield)
+          (k:=fun _ : unit => Guard (Br n (fun i => Guard (erased_schedule (S n) v (Some i)))))
+          (k':=fun _ : unit => Br n (fun i => schedule (S n) v (Some i)));
+        [ rewrite guards_add; apply (guards_equ a); apply erased_no_focus_guards
+        | apply (guards_equ b); apply schedule_no_focus_equ
+        | intros []; eapply galign_br with (n:=1) (m:=0) (c:=n)
+            (k:=fun i => Guard (erased_schedule (S n) v (Some i)))
+            (k':=fun i => schedule (S n) v (Some i));
+          [ reflexivity | reflexivity | intro i; exact (CH _ _ _ 1 0) ] ] ] ].
   Qed.
 
   Theorem forget_scheduler_offers_preserves_schedule
@@ -1399,28 +636,8 @@ Section ObservedScheduler.
     forget_scheduler_offers (schedule_with_offers n v focus) ~
     schedule n v focus.
   Proof.
-    change (erased_schedule n v focus ~ schedule n v focus).
-    revert n v focus.
-    coinduction R CH.
-    intros n v focus.
-    assert (Hch : forall m (w : pool E m) f,
-      stR R (erased_schedule m w f) (schedule m w f)).
-    { intros m w f. apply CH. }
-    split.
-    - intros l t' TR.
-      destruct (erased_schedule_match_left R Hch _ _ _ TR
-        (erased_schedule n v focus) n v focus t'
-        eq_refl eq_refl ltac:(reflexivity)) as [u' [Htru Hres]].
-      exists l, u'. split; [exact Htru | split].
-      + exact Hres.
-      + reflexivity.
-    - intros l t' TR.
-      destruct (erased_schedule_match_right R Hch _ _ _ TR
-        (schedule n v focus) n v focus t'
-        eq_refl eq_refl ltac:(reflexivity)) as [u' [Htru Hres]].
-      exists l, u'. split; [exact Htru | split].
-      + unfold Basics.flip. exact Hres.
-      + reflexivity.
+    apply galigned_sbisim.
+    exact (erased_offers_galigned n v focus 0 0).
   Qed.
 
   Inductive offered_in_scheduler_prefix (n : nat) (i : LiveSlot n)

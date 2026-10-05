@@ -160,73 +160,17 @@ Local Open Scope ictree_scope.
 #[global] Instance equ_eq_equ_impl {E R} {HE: Encode E}:
   Proper (equ eq ==> equ eq ==> flip impl) (@equ E _ R R eq).
 Proof.
-  unfold Proper, respectful, flip, impl; cbn.
-  unfold equ; coinduction RR IH.  
   intros t t' EQt u u' EQu EQ.
-  step in EQt.
-  step in EQu.
-  step in EQ.
-  cbn*; cbn in *; inv EQt; rewrite <-H0 in EQ.
-  - inv EQ.
-    rewrite <-H2 in EQu.
-    inv EQu; auto.
-  - dependent destruction EQ.
-    rewrite <- x in EQu.
-    dependent destruction EQu.
-    rewrite <- x.
-    constructor.
-    intro x1; rewrite H1, H0, <- H.
-    reflexivity.
-  - dependent destruction EQ.
-    rewrite <- x in EQu.
-    dependent destruction EQu.
-    rewrite <- x.
-    constructor.
-    eapply IH; eauto.
-  - dependent destruction EQ.
-    cbn.
-    rewrite <- x in EQu.
-    dependent destruction EQu.
-    rewrite <- x.
-    constructor.
-    intro x1; rewrite H1, H0, <- H.
-    reflexivity.
+  transitivity t'; [exact EQt |].
+  transitivity u'; [exact EQ | symmetry; exact EQu].
 Qed.
 
 #[global] Instance equ_eq_equ_goal {E R} {HE: Encode E}:
   Proper (equ eq ==> equ eq ==> impl) (@equ E _ R R eq).
 Proof.
-  unfold Proper, respectful, flip, impl; cbn.
-  unfold equ; coinduction RR IH.  
   intros t t' EQt u u' EQu EQ.
-  step in EQt.
-  step in EQu.
-  step in EQ.
-  cbn*; cbn in *; inv EQt; rewrite <- H in EQ.
-  - inv EQ; auto.
-    rewrite <- H2 in EQu.
-    inv EQu; auto.
-  - dependent destruction EQ.
-    rewrite <- x in EQu.
-    dependent destruction EQu.
-    rewrite <- x.
-    constructor.
-    intro x1. rewrite <- H, <- H1, H0.
-    reflexivity.
-  - dependent destruction EQ.
-    cbn.
-    rewrite <- x in EQu.
-    dependent destruction EQu.
-    rewrite <- x.
-    constructor; eauto.
-  - dependent destruction EQ.
-    cbn.
-    rewrite <- x in EQu.
-    dependent destruction EQu.
-    rewrite <- x.
-    constructor.
-    intro x1; rewrite <- H, <- H1, <- H0.
-    reflexivity.
+  symmetry in EQt, EQu.
+  exact (@equ_eq_equ_impl E R HE t' t EQt u' u EQu EQ).
 Qed.
 
 (** Shallow [observing]: Lift relations through [observe]. *)
@@ -357,49 +301,25 @@ Proof. step. cbn. constructor. reflexivity. Qed.
 Lemma resumICtree_br  {E1 E2 : Type} `{ReSumRet E1 E2}
            {R} (n: nat) (k: fin' n -> ictree E1 R):
   resumICtree (Br n k) ≅ Br n (fun x => resumICtree (k x)).
-Proof.
-  step.
-  cbn.
-  constructor.
-  intros.
-  reflexivity.
-Qed.
+Proof. rewrite unfold_resumICtree; reflexivity. Qed.
 
 Lemma resumICtree_guard  {E1 E2 : Type} {R} `{ReSumRet E1 E2} (t: ictree E1 R):
   resumICtree (Guard t) ≅ Guard (resumICtree t).
-Proof.
-  step.
-  cbn.
-  constructor.
-  intros.
-  reflexivity.
-Qed.
+Proof. rewrite unfold_resumICtree; reflexivity. Qed.
 
 Lemma resumICtree_vis {E1 E2 : Type} `{ReSumRet E1 E2}
            {R} (e : E1) (k : encode e -> ictree E1 R) :
   resumICtree (Vis e k) ≅ Vis (resum e) (fun x => resumICtree (k (resum_ret e x))).
-Proof.
-  step.
-  cbn.
-  constructor.
-  intros.
-  reflexivity.
-Qed.
+Proof. rewrite unfold_resumICtree; reflexivity. Qed.
 
 (** Resum lemmas (void), no events *)
 Lemma resumICtree_ret' `{Encode E} {R} (r : R) :
   @resumICtree void E _ H _ _ _ (Ret r) ≅ Ret r.
-Proof. step. cbn. constructor. reflexivity. Qed.
+Proof. apply resumICtree_ret. Qed.
 
 Lemma resumICtree_br'  `{Encode E} {R} (t : ictree E R) (n: nat) (k: fin' n -> ictree void R):
   @resumICtree void E _ H _ _ _ (Br n k) ≅ Br n (fun x => resumICtree (k x)).
-Proof.
-  step.
-  cbn.
-  constructor.
-  intros.
-  reflexivity.
-Qed.
+Proof. apply resumICtree_br. Qed.
 
 Ltac resum :=
   match goal with
@@ -428,13 +348,7 @@ Ltac resum :=
 Lemma resumICtree_Vis {E1 E2 : Type} `{ReSumRet E1 E2}
            {R} (e : E1) (k : encode e -> ictree E1 R) :
   resumICtree (Vis e k) ≅ Vis (resum e) (fun x => resumICtree (k (resum_ret e x))).
-Proof.
-  step.
-  cbn.
-  constructor.
-  intros.
-  reflexivity.
-Qed.
+Proof. apply resumICtree_vis. Qed.
 
 (** Dependent inversion of [equ] and [equb] equations [ret] *)
 Lemma equ_ret_inv {E R} {HE: Encode E} {r1 r2 : R} :

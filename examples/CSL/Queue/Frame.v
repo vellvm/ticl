@@ -66,40 +66,6 @@ Definition qrepX (hdr: nat) (ns vs: list nat) (h: Heap) : Prop :=
 Lemma qrepX_qrep: forall hdr ns vs h, qrepX hdr ns vs h -> qrep hdr ns vs h.
 Proof. intros ? ? ? ? (H & _); exact H. Qed.
 
-(** *** The transport theorem on the PRECONDITION.
-
-    [f] is an arbitrary heap.  The two compatibility conditions are exactly
-    [hdisj h f] -- the frame owns no cell of the queue -- and [f 0 = None] --
-    the frame does not allocate the null address, which the language treats as
-    the end-of-list terminator.  Both are refuted by counterexample in
-    [Overlap.v]. *)
-Theorem qrepX_frame: forall hdr ns vs h f,
-    qrepX hdr ns vs h ->
-    hdisj h f ->
-    f 0 = None ->
-    qrep hdr ns vs (hunion h f).
-Proof.
-  intros hdr ns vs h f ((Hwf & Hhd & Htl & Hch & Hnull & Hfp) & Hex) Hdisj Hf0.
-  split; [exact Hwf | split; [| split; [| split]]].
-  - now apply hunion_some.
-  - unfold tailok in Htl |- *; destruct ns as [| a ns].
-    + now apply hunion_dom.
-    + now apply hunion_some.
-  - eapply chain_mono; [exact Hch |].
-    intros x Hx; apply hunion_eq; eapply chain_dom; eauto.
-  - split.
-    + rewrite hunion_none; assumption.
-    + intros x Hx; apply hunion_dom, Hfp, Hx.
-Qed.
-
-(** A precise queue owns nothing outside its footprint. *)
-Lemma qex_out: forall hdr ns h x,
-    qex hdr ns h -> ~ In x (qcells hdr ns) -> h x = None.
-Proof.
-  intros hdr ns h x Hex Hout; destruct (h x) eqn:E;
-    [exfalso; apply Hout, Hex; congruence | reflexivity].
-Qed.
-
 (** [qrep] only looks at the footprint and at the null cell, so it survives any
     change that leaves both alone.  This is what turns [qstepN_agree] (the
     rotating queue touches nothing outside ITS footprint) into "the unused
@@ -119,6 +85,33 @@ Proof.
       rewrite Hag by apply in_eq; exact Htl.
   - eapply chain_mono; [exact Hch | exact Hcells].
   - split; [exact H0 | intros x Hx; rewrite Hag by exact Hx; now apply Hfp].
+Qed.
+
+(** *** The transport theorem on the PRECONDITION.
+
+    [f] is an arbitrary heap.  The two compatibility conditions are exactly
+    [hdisj h f] -- the frame owns no cell of the queue -- and [f 0 = None] --
+    the frame does not allocate the null address, which the language treats as
+    the end-of-list terminator.  Both are refuted by counterexample in
+    [Overlap.v]. *)
+Theorem qrepX_frame: forall hdr ns vs h f,
+    qrepX hdr ns vs h ->
+    hdisj h f ->
+    f 0 = None ->
+    qrep hdr ns vs (hunion h f).
+Proof.
+  intros hdr ns vs h f [Hq _] _ Hf0.
+  eapply qrep_agree_fp; [exact Hq | |].
+  - intros x Hx; apply hunion_eq; eapply qrep_fp; eassumption.
+  - apply hunion_null; [eapply qrep_null; exact Hq | exact Hf0].
+Qed.
+
+(** A precise queue owns nothing outside its footprint. *)
+Lemma qex_out: forall hdr ns h x,
+    qex hdr ns h -> ~ In x (qcells hdr ns) -> h x = None.
+Proof.
+  intros hdr ns h x Hex Hout; destruct (h x) eqn:E;
+    [exfalso; apply Hout, Hex; congruence | reflexivity].
 Qed.
 
 (** ** The canonical decomposition, and its uniqueness *)
