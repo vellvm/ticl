@@ -21,6 +21,7 @@
 *.vo
 *.vok
 *.vos
+.coq-native
 .rocq-native
 .csdp.cache
 .lia.cache

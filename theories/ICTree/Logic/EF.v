@@ -16,7 +16,7 @@ From TICL Require Import
   ICTree.Logic.Trans
   ICTree.Logic.CanStep
   Logic.Core
-  Logic.EX.
+  ICTree.Logic.EX.
 
 Set Implicit Arguments.
 Generalizable All Variables.

@@ -564,20 +564,12 @@ Section TicllEquations.
   Lemma equivl_and_ag: forall p q,
       <( AG (p /\ q) )> ⩸ <( AG p /\ AG q )>.
   Proof with eauto.
-    split.
-    - unfold impl_ticll; intros; apply ticll_and; split.
-      + generalize dependent t.
-        generalize dependent w.
-        coinduction R CIH; intros.
-        apply equivl_ag_an, ticll_an in H as (Hp & Hs & Hg).
-        split2...
-        now apply ticll_and in Hp as (Hp & Hq).
-      + generalize dependent t.
-        generalize dependent w.
-        coinduction R CIH; intros.
-        apply equivl_ag_an, ticll_an in H as (Hp & Hs & Hg).
-        split2...
-        now apply ticll_and in Hp as (Hp & Hq).
+    intros p q; split.
+    - intros t w H; apply ticll_and; split.
+      + eapply impl_ticll_global; [reflexivity | | exact H].
+        intros t' w' Hpq; apply ticll_and in Hpq; exact (proj1 Hpq).
+      + eapply impl_ticll_global; [reflexivity | | exact H].
+        intros t' w' Hpq; apply ticll_and in Hpq; exact (proj2 Hpq).
     - unfold impl_ticll; intros; revert H; revert t w.
       coinduction R CIH; intros.
       destruct H as (Hp & Hq).
@@ -593,20 +585,12 @@ Section TicllEquations.
   *)
   Lemma impll_and_eg: forall p q,
       <( EG (p /\ q) )> ⋖ <( EG p /\ EG q )>.
-  Proof with eauto.
-    unfold impl_ticll; intros; apply ticll_and; split.
-    + generalize dependent t.
-      generalize dependent w.
-      coinduction R CIH; intros.
-      apply equivl_eg_en, ticll_en in H as (Hp & t' & w' & TR & Hg).
-      split...
-      now apply ticll_and in Hp as (Hp & Hq).
-    + generalize dependent t.
-      generalize dependent w.
-      coinduction R CIH; intros.
-      apply equivl_eg_en, ticll_en in H as (Hp & t' & w' & TR & Hg).
-      split...
-      now apply ticll_and in Hp as (Hp & Hq).
+  Proof.
+    intros p q t w H; apply ticll_and; split.
+    - eapply impl_ticll_global; [reflexivity | | exact H].
+      intros t' w' Hpq; apply ticll_and in Hpq; exact (proj1 Hpq).
+    - eapply impl_ticll_global; [reflexivity | | exact H].
+      intros t' w' Hpq; apply ticll_and in Hpq; exact (proj2 Hpq).
   Qed.
 
   (** [AG (p \/ q)] implies [AG p \/ AG q].
@@ -615,20 +599,12 @@ Section TicllEquations.
   *)
   Lemma impll_or_ag: forall p q,
       <( AG p \/ AG q )> ⋖ <( AG (p \/ q) )>.
-  Proof with eauto.
-    unfold impl_ticll; intros; apply ticll_or in H as [H|H]. 
-    + generalize dependent t.
-      generalize dependent w.
-      coinduction R CIH; intros.
-      apply equivl_ag_an, ticll_an in H as (Hp & Hs & Hg).
-      split2...
-      apply ticll_or; now left. 
-    + generalize dependent t.
-      generalize dependent w.
-      coinduction R CIH; intros.
-      apply equivl_ag_an, ticll_an in H as (Hp & Hs & Hg).
-      split2...
-      apply ticll_or; now right.
+  Proof.
+    intros p q t w H; apply ticll_or in H as [H | H].
+    - eapply impl_ticll_global; [reflexivity | | exact H].
+      intros t' w' Hp; apply ticll_or; left; exact Hp.
+    - eapply impl_ticll_global; [reflexivity | | exact H].
+      intros t' w' Hp; apply ticll_or; right; exact Hp.
   Qed.
 
   (** [EG (p \/ q)] implies [EG p \/ EG q].
@@ -637,20 +613,12 @@ Section TicllEquations.
   *)
   Lemma impll_or_eg: forall p q,
       <( EG p \/ EG q )> ⋖ <( EG (p \/ q) )>.
-  Proof with eauto.
-    unfold impl_ticll; intros; apply ticll_or in H as [H|H]. 
-    + generalize dependent t.
-      generalize dependent w.
-      coinduction R CIH; intros.
-      apply equivl_eg_en, ticll_en in H as (Hp & t' & w' & TR & Hg).
-      split...
-      apply ticll_or; now left.
-    + generalize dependent t.
-      generalize dependent w.
-      coinduction R CIH; intros.
-      apply equivl_eg_en, ticll_en in H as (Hp & t' & w' & TR & Hg).
-      split...
-      apply ticll_or; now right.
+  Proof.
+    intros p q t w H; apply ticll_or in H as [H | H].
+    - eapply impl_ticll_global; [reflexivity | | exact H].
+      intros t' w' Hp; apply ticll_or; left; exact Hp.
+    - eapply impl_ticll_global; [reflexivity | | exact H].
+      intros t' w' Hp; apply ticll_or; right; exact Hp.
   Qed.
 
 End TicllEquations.

@@ -27,67 +27,26 @@ Section RetLemmas.
       Proof is by induction on the formula. *)
   Theorem ticll_ret_equiv{X Y}: forall (x: X) (y: Y) (φ: ticll E) w,
       <( {Ret x}, w |= φ )> <-> <( {Ret y}, w |= φ )>.
-  Proof with auto with ticl.    
-    split; intros * H.
-    - assert (Hd: not_done w) by now apply ticll_not_done in H.
-      assert (Hs: can_step (Ret y) w) by now apply can_step_ret; auto.      
-      generalize dependent w; revert x y.
-      induction φ; intros.
-      + (* now *) cdestruct H; csplit...
-      + (* U *) destruct q.
-        * eapply aul_ret.
-          eapply aul_ret in H.
-          cdestruct H.
-          -- cleft; apply IHφ2 with x...
-          -- cright; now apply anl_ret in H.
-        * apply eul_ret.
-          apply eul_ret in H.
-          cdestruct H.
-          -- cleft; apply IHφ2 with x...
-          -- cright; now apply enl_ret in H.
-      + (* X *) destruct q.
-        * now apply anl_ret in H.
-        * now apply enl_ret in H.
-      + (* G *) destruct q.
-        * now apply ag_ret in H.
-        * now apply eg_ret in H.
-      + cdestruct H; csplit.
-        * apply IHφ1 with x...
-        * apply IHφ2 with x...
-      + cdestruct H.
-        * cleft.
-          apply IHφ1 with x...
-        * cright.
-          apply IHφ2 with x...
-    - assert (Hd: not_done w) by now apply ticll_not_done in H.
-      assert (Hs: can_step (Ret x) w) by now apply can_step_ret; auto.      
-      generalize dependent w; revert x y.
-      induction φ; intros.
-      + (* now *) cdestruct H; csplit...
-      + (* U *) destruct q.
-        * eapply aul_ret.
-          eapply aul_ret in H.
-          cdestruct H.
-          -- cleft; apply IHφ2 with y...
-          -- cright; now apply anl_ret in H.
-        * apply eul_ret.
-          apply eul_ret in H.
-          cdestruct H.
-          -- cleft; apply IHφ2 with y...
-          -- cright; now apply enl_ret in H.
-      + (* X *) destruct q.
-        * now apply anl_ret in H.
-        * now apply enl_ret in H.
-      + (* G *) destruct q.
-        * now apply ag_ret in H.
-        * now apply eg_ret in H.
-      + cdestruct H; csplit.
-        * apply IHφ1 with y...
-        * apply IHφ2 with y...
-      + cdestruct H.
-        * cleft.
-          apply IHφ1 with y...
-        * cright.
-          apply IHφ2 with y...
+  Proof with auto with ticl.
+    assert (ret_impl :
+      forall (A B : Type) (a : A) (b : B) (φ : ticll E) w,
+        <( {Ret a}, w |= φ )> -> <( {Ret b}, w |= φ )>) by
+      (intros A B a b φ w H;
+       assert (Hd : not_done w) by (now apply ticll_not_done in H);
+       assert (Hs : can_step (Ret b) w) by (now apply can_step_ret);
+       generalize dependent w; revert a b; induction φ; intros;
+       [ cdestruct H; csplit; auto with ticl
+       | destruct q;
+         [ eapply aul_ret; eapply aul_ret in H; cdestruct H;
+           [ cleft; apply IHφ2 with a; auto with ticl | cright; now apply anl_ret in H ]
+         | apply eul_ret; apply eul_ret in H; cdestruct H;
+           [ cleft; apply IHφ2 with a; auto with ticl | cright; now apply enl_ret in H ] ]
+       | destruct q; [now apply anl_ret in H | now apply enl_ret in H]
+       | destruct q; [now apply ag_ret in H | now apply eg_ret in H]
+       | cdestruct H; csplit; [apply IHφ1 with a; auto with ticl | apply IHφ2 with a; auto with ticl]
+       | cdestruct H; [cleft; apply IHφ1 with a; auto with ticl | cright; apply IHφ2 with a; auto with ticl] ]).
+    intros x y φ w; split; intro H.
+    - exact (ret_impl X Y x y φ w H).
+    - exact (ret_impl Y X y x φ w H).
   Qed.
 End RetLemmas.

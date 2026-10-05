@@ -514,11 +514,7 @@ Qed.
 Lemma trans_trigger : forall {Y} `{HE: Encode E} (e : E) x (k: encode e -> ictree E Y),
     trans (obs e x) (trigger e >>= k) (k x).
 Proof.
-  intros.
-  unfold ICtree.trigger.
-  rewrite unfold_bind; cbn.
-  setoid_rewrite bind_ret_l.
-  constructor; auto.
+  intros; rewrite bind_trigger; apply trans_vis.
 Qed.
 
 (** A trigger node can step to [k x], if [k x] can step to [u] and the label is [obs e x] *)
@@ -527,15 +523,7 @@ Lemma trans_trigger_inv : forall {Y} `{HE: Encode E} (e : E)
     trans l (trigger e >>= k) u ->
     exists x, u ≅ k x /\ l = obs e x.
 Proof.
-  intros * TR.
-  unfold trigger in TR.
-  apply trans_bind_inv in TR.
-  destruct TR as [(? & ? & TR & ?) |(? & TR & ?)].
-  - apply trans_vis_inv in TR.
-    destruct TR as (? & ? & ->); eexists; split; eauto.
-    rewrite H0, H1, bind_ret_l; reflexivity.
-  - apply trans_vis_inv in TR.
-    destruct TR as (? & ? & abs); inv abs.
+  intros * TR; rewrite bind_trigger in TR; now apply trans_vis_inv in TR.
 Qed.
 
 (** [wf_val] states that a [label] is well-formed:

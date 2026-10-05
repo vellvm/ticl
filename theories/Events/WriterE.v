@@ -22,3 +22,24 @@ End Writer.
 
 Arguments Log {S}.
 
+(** * Indexed observations.
+
+    Instrumentation that wants to distinguish *occurrences* of the same
+    payload logs the payload together with the count of observations that
+    preceded it.  The payload is arbitrary, so the same representation serves
+    a queue's popped value and a tagged allocator event. *)
+Record indexed (A : Type) := stamp {
+  indexed_value : A;
+  indexed_index : nat
+}.
+
+Arguments stamp {A} _ _.
+Arguments indexed_value {A} _.
+Arguments indexed_index {A} _.
+
+(** [P] holds of the payload AND the occurrence is not older than [lower].
+    A retained world therefore cannot satisfy a strictly later bound. *)
+Definition indexed_after {A} (P : A -> Prop) (lower : nat)
+  (o : indexed A) : Prop :=
+  P (indexed_value o) /\ lower <= indexed_index o.
+

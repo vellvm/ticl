@@ -10,3 +10,8 @@ _build
 .vok
 .vo
 main.html
+.omp
+graphify-out
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/

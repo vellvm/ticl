@@ -14,7 +14,7 @@ From TICL Require Import
   ICTree.Logic.AG
   ICTree.Logic.EX
   Logic.Core  
-  ICTree.Interp.State
+  ICTree.Interp.State.Mod
   ICTree.Events.State.
 
 
@@ -58,6 +58,8 @@ Section StateLemmas.
   Qed.
 
   (** Ret lemma for [interp_state] and suffix [AX] *)
+
+From Coinduction Require Import coinduction.
   Theorem axr_state_ret{X}: forall R (x: X) w,
       R (x, σ) w ->
       not_done w ->
@@ -134,8 +136,7 @@ Section StateLemmas.
   Proof with eauto with ticl.
     intros.
     rewrite interp_state_bind.
-    eapply anr_bind_r... 
-    intros [y σ_] w_ (Hinv & HR); inv Hinv; subst...
+    eapply anr_bind_r_eq...
   Qed.
 
   (** Convenience bind lemma for [interp_state] and prefix [AN], does not require the [R] postcondition if [t] is deterministic. *)
@@ -233,8 +234,7 @@ Section StateLemmas.
   Proof with eauto with ticl.
     intros.
     rewrite interp_state_bind.
-    eapply aul_bind_r...
-    intros [y σ''] * [Heq ->]; inv Heq...
+    eapply aul_bind_r_eq...
   Qed.
   
   (** Bind lemma for [interp_state] and suffix [AU] *)
@@ -257,8 +257,7 @@ Section StateLemmas.
   Proof with eauto with ticl.
     intros.
     rewrite interp_state_bind.
-    eapply aur_bind_r...
-    intros [y σ''] * [Heq ->]; inv Heq...
+    eapply aur_bind_r_eq...
   Qed.
   
   (** Bind lemma for [interp_state] and suffix [EU] *)
@@ -281,8 +280,7 @@ Section StateLemmas.
   Proof with eauto with ticl.
     intros.
     rewrite interp_state_bind.
-    eapply eul_bind_r... 
-    intros [y σ''] * [Heq ->]; inv Heq... 
+    eapply eul_bind_r_eq...
   Qed.
   
   (** Bind lemma for [interp_state] and prefix [EU] *)
@@ -305,8 +303,7 @@ Section StateLemmas.
   Proof with eauto with ticl.
     intros.
     rewrite interp_state_bind.
-    eapply eur_bind_r... 
-    intros [y σ''] * [Heq ->]; inv Heq... 
+    eapply eur_bind_r_eq...
   Qed.
 
   (** Bind lemma for [interp_state] and [AG], unfolds the [AG] to an [AU] on [t] and an [AG] on the continuation [k r]. 
@@ -999,6 +996,40 @@ Section StateLemmas.
     apply well_founded_ltof.
   Qed.  
 End StateLemmas.
+
+(** A state-iteration rule with a well-founded rank on ghost data.  The
+    invariant relates that data to the control and concrete state; neither
+    the concrete state nor the observation world must determine the rank.
+    The proof uses the structural one-iteration and bind laws. *)
+Theorem aul_state_iter_ghost {E Sg W} {HE: Encode E}
+  (hh: E ~> stateT Sg (ictreeW W)) {X I G}
+  (Rv: relation G) (Inv: G -> I -> Sg -> Prop)
+  (bd: I -> ictree E (I + X)) (phi psi: ticllW W):
+  well_founded Rv ->
+  forall (g: G) (i: I) (s: Sg) (w: WorldW W),
+    not_done w ->
+    Inv g i s ->
+    (forall g i s w,
+        not_done w ->
+        Inv g i s ->
+        <( {interp_state hh (bd i) s}, w |= phi AU psi )>
+        \/ (exists g' i' s' w',
+               not_done w'
+               /\ <[ {interp_state hh (bd i) s}, w
+                     |= phi AU AX done= {(inl i', s')} w' ]>
+               /\ Inv g' i' s'
+               /\ Rv g' g)) ->
+    <( {interp_state hh (ICtree.iter bd i) s}, w |= phi AU psi )>.
+Proof.
+  intros Hwf g.
+  induction g as [g IH] using (well_founded_induction Hwf).
+  intros i s w Hd Hinv Hbody.
+  destruct (Hbody g i s w Hd Hinv)
+    as [Hnow | (g' & i' & s' & w' & Hd' & Hstep & Hinv' & Hlt)].
+  - rewrite interp_state_unfold_iter; now apply ticll_bind_l.
+  - eapply aul_state_iter_next_eq; [exact Hstep | exact Hd' |].
+    eapply (IH g'); eauto.
+Qed.
 
 (** * Lemmas for [stateE] handler [h_stateW] *)
 Section StateELemmas.

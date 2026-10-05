@@ -15,7 +15,7 @@ From TICL Require Import
   ICTree.Logic.Bind
   ICTree.Logic.CanStep
   ICTree.Interp.Core
-  ICTree.Interp.State
+  ICTree.Interp.State.Mod
   ICTree.Events.State
   Lang.MeS.
 

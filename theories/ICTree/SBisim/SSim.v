@@ -59,15 +59,7 @@ Section StrongSim.
   #[global] Instance weq_ssim :
     Proper (weq ==> weq) ssim.
   Proof.
-    intros. split.
-    - intro. unfold ssim.
-      epose proof (gfp_weq (ss x) (ss y)). lapply H1.
-      + intro. red in H2. cbn in H2. rewrite <- H2. unfold ssim in H0. apply H0.
-      + now rewrite H.
-    - intro. unfold ssim.
-      epose proof (gfp_weq (ss x) (ss y)). lapply H1.
-      + intro. red in H2. cbn in H2. rewrite H2. apply H0.
-      + now rewrite H.
+    intros L L' HL; unfold ssim; apply gfp_weq; apply weq_ss; exact HL.
   Qed.
 
 End StrongSim.

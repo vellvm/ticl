@@ -58,29 +58,75 @@ Proof.
     rewrite ?bind_ret_l.
     reflexivity.
   - reflexivity.
+
+From Coinduction Require Import coinduction.
   - setoid_rewrite bind_ret_l.
     reflexivity.
 Qed.
 
-(** Interpretation preserves equality [equ] *)
-#[global] Instance interp_equ `{HE: Encode E} {X} {h: E ~> ictree E} :
-  Proper (equ eq ==> equ eq) (@interp E _ _ _ _ _ h X).
+(** Interpretation preserves equality [equ].  The handler is heterogeneous:
+    events of [E] are interpreted into trees over an arbitrary [F]. *)
+#[global] Instance interp_equ
+    {E F : Type} {HE : Encode E} {HF : Encode F} {X}
+    {h : E ~> ictree F} :
+  Proper (@equ E HE X X eq ==> @equ F HF X X eq)
+         (@interp E HE _ _ _ _ h X).
 Proof.
   unfold Proper, respectful.
-  coinduction R CH.
-  intros. setoid_rewrite unfold_iter.
-  step in H. inv H. 
+  change (forall x y : ictree E X,
+             @equ E HE X X eq x y ->
+             @equ F HF X X eq (interp h x) (interp h y)).
+  __coinduction_equ RR IH; intros * EQ1.
+  setoid_rewrite unfold_iter.
+  step in EQ1; inv EQ1.
   - setoid_rewrite bind_ret_l; reflexivity.
   - setoid_rewrite bind_bind; setoid_rewrite bind_ret_l.
-    upto_bind_equ. 
+    upto_bind_equ.
     constructor. intros.
-    apply CH. apply H2.
+    apply IH. apply H1.
   - setoid_rewrite bind_ret_l.
     constructor.
-    apply CH. apply H2.
+    apply IH. apply H1.
   - setoid_rewrite bind_bind.
     upto_bind_equ.
     setoid_rewrite bind_ret_l.
-    constructor. 
-    apply CH. apply H2.
+    constructor.
+    apply IH. apply H1.
+Qed.
+
+(** [interp] commutes with [bind], for a heterogeneous handler. *)
+Lemma interp_bind_hetero
+    {E F : Type} `{Encode E} `{Encode F} {A B}
+    (h : E ~> ictree F) (t : ictree E A) (k : A -> ictree E B) :
+  interp h (x <- t;; k x) ≅ (x <- interp h t;; interp h (k x)).
+Proof.
+  revert t.
+  __coinduction_equ RR IH; intros.
+  rewrite (ictree_eta t).
+  rewrite unfold_bind, unfold_interp.
+  destruct (observe t) eqn:Hobs; cbn.
+  - rewrite unfold_interp.
+    cbn.
+    rewrite bind_ret_l.
+    rewrite unfold_interp.
+    reflexivity.
+  - rewrite unfold_interp.
+    cbn.
+    rewrite bind_br.
+    setoid_rewrite bind_guard.
+    constructor; intro i.
+    step; econstructor; intros.
+    apply IH.
+  - rewrite (@unfold_interp _ _ _ _ _ h (Guard t0)).
+    cbn.
+    rewrite bind_guard.
+    constructor.
+    apply IH.
+  - rewrite unfold_interp.
+    cbn.
+    rewrite bind_bind.
+    upto_bind_equ.
+    rewrite bind_guard.
+    constructor.
+    apply IH.
 Qed.
