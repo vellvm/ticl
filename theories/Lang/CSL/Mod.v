@@ -894,12 +894,7 @@ Proof.
     (fun x : unit => (Ret x : ictree sE unit)) Present) as Hstate.
   rewrite bind_ret_r, interp_state_ret in Hstate.
   rewrite interp_rr_write.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [exact Hstate | intro result; reflexivity] |]
-  end.
+  csl_lift_handler_result Hstate.
   rewrite bind_ret_l; reflexivity.
 Qed.
 
@@ -917,12 +912,7 @@ Proof.
     (fun x : unit => (Ret x : ictree sE unit)) Present) as Hstate.
   rewrite bind_ret_r, interp_state_ret in Hstate.
   rewrite interp_nd_source_write.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [exact Hstate | intro result; reflexivity] |]
-  end.
+  csl_lift_handler_result Hstate.
   rewrite bind_ret_l; reflexivity.
 Qed.
 Lemma interp_rr_read_value n
@@ -938,12 +928,7 @@ Proof.
     (fun x : nat => (Ret x : ictree sE nat)) Lookup) as Hstate.
   rewrite bind_ret_r, interp_state_ret in Hstate.
   rewrite interp_rr_read.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [exact Hstate | intro result; reflexivity] |]
-  end.
+  csl_lift_handler_result Hstate.
   rewrite bind_ret_l; reflexivity.
 Qed.
 
@@ -960,12 +945,7 @@ Proof.
     (fun x : nat => (Ret x : ictree sE nat)) Lookup) as Hstate.
   rewrite bind_ret_r, interp_state_ret in Hstate.
   rewrite interp_nd_source_read.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [exact Hstate | intro result; reflexivity] |]
-  end.
+  csl_lift_handler_result Hstate.
   rewrite bind_ret_l; reflexivity.
 Qed.
 
@@ -989,12 +969,7 @@ Proof.
     eapply equ_clos_sbisim_goal;
       [apply interp_state_ret | reflexivity | reflexivity]. }
   rewrite interp_rr_emit.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [exact Hstate | intro result; reflexivity] |]
-  end.
+  csl_lift_handler_result Hstate.
   rewrite bind_bind.
   apply sbisim_clo_bind_eq; [reflexivity | intros []].
   rewrite bind_ret_l; reflexivity.
@@ -1018,23 +993,13 @@ Proof.
     pose proof ((interp_heap_cas_success (h_sum csl_context_handler (csl_emit_handler (A:=nat * nat)))) a expected desired h allocs (ctx,c)
       (fun x : bool => (Ret x : ictree sE bool)) Lookup) as Hstate.
     rewrite bind_ret_r, interp_state_ret in Hstate.
-    lazymatch goal with
-    | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-      etransitivity;
-      [apply sbisim_clo_bind_eq with (k2 := next);
-        [exact Hstate | intro result; reflexivity] |]
-    end.
+    csl_lift_handler_result Hstate.
     rewrite bind_ret_l; reflexivity.
   - apply Nat.eqb_neq in Cmp.
     pose proof ((interp_heap_cas_failure (h_sum csl_context_handler (csl_emit_handler (A:=nat * nat)))) a expected desired current h allocs (ctx,c)
       (fun x : bool => (Ret x : ictree sE bool)) Lookup Cmp) as Hstate.
     rewrite bind_ret_r, interp_state_ret in Hstate.
-    lazymatch goal with
-    | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-      etransitivity;
-      [apply sbisim_clo_bind_eq with (k2 := next);
-        [exact Hstate | intro result; reflexivity] |]
-    end.
+    csl_lift_handler_result Hstate.
     rewrite bind_ret_l; reflexivity.
 Qed.
 
@@ -1052,12 +1017,7 @@ Proof.
     (fun x : nat => (Ret x : ictree sE nat)) Pos Base Free First) as Hstate.
   rewrite bind_ret_r, interp_state_ret in Hstate.
   rewrite interp_rr_alloc.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [exact Hstate | intro result; reflexivity] |]
-  end.
+  csl_lift_handler_result Hstate.
   rewrite bind_ret_l; reflexivity.
 Qed.
 
@@ -1072,12 +1032,7 @@ Proof.
   pose proof ((interp_heap_rd_stuck (h_sum csl_context_handler (csl_emit_handler (A:=nat * nat))))
     a h allocs (ctx,c) Missing) as Hstate.
   rewrite interp_rr_read.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [eapply equ_clos_sbisim_goal; [exact Hstate | reflexivity | reflexivity] | intro result; reflexivity] |]
-  end.
+  csl_lift_handler_result Hstate.
   rewrite bind_stuck_equ; reflexivity.
 Qed.
 
@@ -1092,12 +1047,7 @@ Proof.
   pose proof ((interp_heap_wr_stuck (h_sum csl_context_handler (csl_emit_handler (A:=nat * nat))))
     a v h allocs (ctx,c) Missing) as Hstate.
   rewrite interp_rr_write.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [eapply equ_clos_sbisim_goal; [exact Hstate | reflexivity | reflexivity] | intro result; reflexivity] |]
-  end.
+  csl_lift_handler_result Hstate.
   rewrite bind_stuck_equ; reflexivity.
 Qed.
 
@@ -1113,11 +1063,7 @@ Proof.
     a expected desired h allocs (ctx,c) (fun b : bool => (Ret b : ictree sE bool)) Missing) as Hstate.
   rewrite bind_ret_r in Hstate.
   rewrite interp_rr_cas.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next); [exact Hstate | intro result; reflexivity] |]
-  end.
+  csl_lift_handler_result Hstate.
   rewrite bind_stuck_equ; reflexivity.
 Qed.
 
@@ -1140,12 +1086,7 @@ Proof.
     eapply equ_clos_sbisim_goal;
       [apply interp_state_ret | reflexivity | reflexivity]. }
   rewrite interp_nd_source_emit.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [exact Hstate | intro result; reflexivity] |]
-  end.
+  csl_lift_handler_result Hstate.
   rewrite bind_bind.
   apply sbisim_clo_bind_eq; [reflexivity | intros []].
   rewrite bind_ret_l; reflexivity.
@@ -1169,23 +1110,13 @@ Proof.
     pose proof ((interp_heap_cas_success (h_sum csl_context_handler (csl_emit_handler (A:=nat * nat)))) a expected desired h allocs (ctx,c)
       (fun x : bool => (Ret x : ictree sE bool)) Lookup) as Hstate.
     rewrite bind_ret_r, interp_state_ret in Hstate.
-    lazymatch goal with
-    | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-      etransitivity;
-      [apply sbisim_clo_bind_eq with (k2 := next);
-        [exact Hstate | intro result; reflexivity] |]
-    end.
+    csl_lift_handler_result Hstate.
     rewrite bind_ret_l; reflexivity.
   - apply Nat.eqb_neq in Cmp.
     pose proof ((interp_heap_cas_failure (h_sum csl_context_handler (csl_emit_handler (A:=nat * nat)))) a expected desired current h allocs (ctx,c)
       (fun x : bool => (Ret x : ictree sE bool)) Lookup Cmp) as Hstate.
     rewrite bind_ret_r, interp_state_ret in Hstate.
-    lazymatch goal with
-    | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-      etransitivity;
-      [apply sbisim_clo_bind_eq with (k2 := next);
-        [exact Hstate | intro result; reflexivity] |]
-    end.
+    csl_lift_handler_result Hstate.
     rewrite bind_ret_l; reflexivity.
 Qed.
 
@@ -1203,12 +1134,7 @@ Proof.
     (fun x : nat => (Ret x : ictree sE nat)) Pos Base Free First) as Hstate.
   rewrite bind_ret_r, interp_state_ret in Hstate.
   rewrite interp_nd_source_alloc.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [exact Hstate | intro result; reflexivity] |]
-  end.
+  csl_lift_handler_result Hstate.
   rewrite bind_ret_l; reflexivity.
 Qed.
 
@@ -1222,12 +1148,7 @@ Proof.
   intro Missing.
   pose proof ((interp_heap_rd_stuck (h_sum csl_context_handler (csl_emit_handler (A:=nat * nat)))) a h allocs (ctx,c) Missing) as Hstate.
   rewrite interp_nd_source_read.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [eapply equ_clos_sbisim_goal; [exact Hstate | reflexivity | reflexivity] | intro result; reflexivity] |]
-  end.
+  csl_lift_handler_result Hstate.
   rewrite bind_stuck_equ; reflexivity.
 Qed.
 
@@ -1242,12 +1163,7 @@ Proof.
   pose proof ((interp_heap_wr_stuck (h_sum csl_context_handler (csl_emit_handler (A:=nat * nat))))
     a v h allocs (ctx,c) Missing) as Hstate.
   rewrite interp_nd_source_write.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next);
-      [eapply equ_clos_sbisim_goal; [exact Hstate | reflexivity | reflexivity] | intro result; reflexivity] |]
-  end.
+  csl_lift_handler_result Hstate.
   rewrite bind_stuck_equ; reflexivity.
 Qed.
 
@@ -1263,11 +1179,7 @@ Proof.
     a expected desired h allocs (ctx,c) (fun b : bool => (Ret b : ictree sE bool)) Missing) as Hstate.
   rewrite bind_ret_r in Hstate.
   rewrite interp_nd_source_cas.
-  lazymatch goal with
-  | |- (interp_state sh _ _ >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2 := next); [exact Hstate | intro result; reflexivity] |]
-  end.
+  csl_lift_handler_result Hstate.
   rewrite bind_stuck_equ; reflexivity.
 Qed.
 

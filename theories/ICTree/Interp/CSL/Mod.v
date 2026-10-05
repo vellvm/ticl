@@ -154,6 +154,19 @@ Proof.
   step; cbn; constructor; reflexivity.
 Qed.
 
+(** Rewrite a handler result under a fixed bind continuation; [H] may be
+    either [equ] or [sbisim] evidence. *)
+Ltac csl_lift_handler_result H :=
+  lazymatch goal with
+  | |- (?t >>= ?next) ~ _ =>
+      etransitivity;
+      [apply sbisim_clo_bind_eq with (k2 := next);
+       [first [exact H |
+          eapply equ_clos_sbisim_goal;
+            [exact H | reflexivity | reflexivity]]
+       | intro result; reflexivity] |]
+  end.
+
 (** Interpretation-level emission: exactly one right-injected stamp. *)
 Lemma interp_csl_emit {A X} (a : A) memory ctx c
   (k : unit -> ictree (heapE + (stateE Ctx.Ctx + writerE A)) X) :
@@ -167,13 +180,7 @@ Proof.
   unfold ICtree.trigger, resum, resum_ret, ReSum_refl, ReSumRet_refl;
     rewrite bind_vis; setoid_rewrite bind_ret_l.
   rewrite interp_state_vis; cbn [sh h_sum].
-  lazymatch goal with |- (?t >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2:=next);
-      [eapply equ_clos_sbisim_goal;
-        [exact (csl_emit_handler_log a memory ctx c) | reflexivity | reflexivity]
-      | intro result; reflexivity] |]
-  end.
+  csl_lift_handler_result (csl_emit_handler_log a memory ctx c).
   rewrite bind_bind.
   apply sbisim_clo_bind_eq; [reflexivity | intros []].
   rewrite bind_ret_l; apply sb_guard.
@@ -229,22 +236,15 @@ Lemma interp_rr_heap_free n (ts : pool sE (S n)) (i : Fin.t (S n))
     (ts @ i := K tt) (Some i) m (memory',(ctx,c)).
 Proof.
   intro Free.
-  pose proof (interp_schedule_rr_equ sh (S n)
-    (ts @ i := (heap_free (E:=CEff) base >>= K))
-    (ts @ i := Vis (inr (inr (inl (HFree base)))) K)
-    (Some i) m (memory,(ctx,c))
-    (replace_pool_equ ts ts i _ _ (pool_equ_refl ts) (raw_heap_free_head base K))) as Hpool.
-  rewrite Hpool.
-  erewrite interp_schedule_rr_user with (e:=inl (HFree base)) (k:=K)
-    by (rewrite Vector.nth_replace_eq; reflexivity).
-  lazymatch goal with |- (?t >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2:=next);
-      [eapply equ_clos_sbisim_goal;
-        [exact (heap_handler_free base memory memory' (ctx,c) Free) | reflexivity | reflexivity]
-      | intro result; reflexivity] |]
-  end.
-  rewrite bind_ret_l, Vector.replace_replace_eq; reflexivity.
+  etransitivity.
+  - apply (interp_schedule_rr_user_bind sh n ts i _
+      (inl (HFree base)) K m (memory,(ctx,c))).
+    apply raw_heap_free_head.
+  - rewrite interp_state_trigger_bind.
+    csl_lift_handler_result (heap_handler_free
+      (F:=writerE (CSLObs (nat * nat)))
+      base memory memory' (ctx,c) Free).
+    rewrite bind_ret_l; reflexivity.
 Qed.
 
 Lemma interp_rr_heap_free_invalid n (ts : pool sE (S n)) (i : Fin.t (S n))
@@ -255,22 +255,15 @@ Lemma interp_rr_heap_free_invalid n (ts : pool sE (S n)) (i : Fin.t (S n))
   (stuck : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
 Proof.
   intro Invalid.
-  pose proof (interp_schedule_rr_equ sh (S n)
-    (ts @ i := (heap_free (E:=CEff) base >>= K))
-    (ts @ i := Vis (inr (inr (inl (HFree base)))) K)
-    (Some i) m (memory,(ctx,c))
-    (replace_pool_equ ts ts i _ _ (pool_equ_refl ts) (raw_heap_free_head base K))) as Hpool.
-  rewrite Hpool.
-  erewrite interp_schedule_rr_user with (e:=inl (HFree base)) (k:=K)
-    by (rewrite Vector.nth_replace_eq; reflexivity).
-  lazymatch goal with |- (?t >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2:=next);
-      [eapply equ_clos_sbisim_goal;
-        [exact (heap_handler_free_invalid base memory (ctx,c) Invalid) | reflexivity | reflexivity]
-      | intro result; reflexivity] |]
-  end.
-  rewrite bind_stuck_equ; reflexivity.
+  etransitivity.
+  - apply (interp_schedule_rr_user_bind sh n ts i _
+      (inl (HFree base)) K m (memory,(ctx,c))).
+    apply raw_heap_free_head.
+  - rewrite interp_state_trigger_bind.
+    csl_lift_handler_result (heap_handler_free_invalid
+      (F:=writerE (CSLObs (nat * nat)))
+      base memory (ctx,c) Invalid).
+    rewrite bind_stuck_equ; reflexivity.
 Qed.
 
 Lemma interp_nd_heap_free n (ts : pool sE (S n)) (i : Fin.t (S n))
@@ -282,22 +275,15 @@ Lemma interp_nd_heap_free n (ts : pool sE (S n)) (i : Fin.t (S n))
     (ts @ i := K tt) (Some i) (memory',(ctx,c)).
 Proof.
   intro Free.
-  pose proof ((interp_schedule_nd_equ sh) (S n)
-    (ts @ i := (heap_free (E:=CEff) base >>= K))
-    (ts @ i := Vis (inr (inr (inl (HFree base)))) K)
-    (Some i) (memory,(ctx,c))
-    (replace_pool_equ ts ts i _ _ (pool_equ_refl ts) (raw_heap_free_head base K))) as Hpool.
-  rewrite Hpool.
-  erewrite (interp_schedule_nd_user sh) with (e:=inl (HFree base)) (k:=K)
-    by (rewrite Vector.nth_replace_eq; reflexivity).
-  lazymatch goal with |- (?t >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2:=next);
-      [eapply equ_clos_sbisim_goal;
-        [exact (heap_handler_free base memory memory' (ctx,c) Free) | reflexivity | reflexivity]
-      | intro result; reflexivity] |]
-  end.
-  rewrite bind_ret_l, Vector.replace_replace_eq; reflexivity.
+  etransitivity.
+  - apply (interp_schedule_nd_user_bind sh n ts i _
+      (inl (HFree base)) K (memory,(ctx,c))).
+    apply raw_heap_free_head.
+  - rewrite interp_state_trigger_bind.
+    csl_lift_handler_result (heap_handler_free
+      (F:=writerE (CSLObs (nat * nat)))
+      base memory memory' (ctx,c) Free).
+    rewrite bind_ret_l; reflexivity.
 Qed.
 
 Lemma interp_nd_heap_free_invalid n (ts : pool sE (S n)) (i : Fin.t (S n))
@@ -308,22 +294,15 @@ Lemma interp_nd_heap_free_invalid n (ts : pool sE (S n)) (i : Fin.t (S n))
   (stuck : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
 Proof.
   intro Invalid.
-  pose proof ((interp_schedule_nd_equ sh) (S n)
-    (ts @ i := (heap_free (E:=CEff) base >>= K))
-    (ts @ i := Vis (inr (inr (inl (HFree base)))) K)
-    (Some i) (memory,(ctx,c))
-    (replace_pool_equ ts ts i _ _ (pool_equ_refl ts) (raw_heap_free_head base K))) as Hpool.
-  rewrite Hpool.
-  erewrite (interp_schedule_nd_user sh) with (e:=inl (HFree base)) (k:=K)
-    by (rewrite Vector.nth_replace_eq; reflexivity).
-  lazymatch goal with |- (?t >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2:=next);
-      [eapply equ_clos_sbisim_goal;
-        [exact (heap_handler_free_invalid base memory (ctx,c) Invalid) | reflexivity | reflexivity]
-      | intro result; reflexivity] |]
-  end.
-  rewrite bind_stuck_equ; reflexivity.
+  etransitivity.
+  - apply (interp_schedule_nd_user_bind sh n ts i _
+      (inl (HFree base)) K (memory,(ctx,c))).
+    apply raw_heap_free_head.
+  - rewrite interp_state_trigger_bind.
+    csl_lift_handler_result (heap_handler_free_invalid
+      (F:=writerE (CSLObs (nat * nat)))
+      base memory (ctx,c) Invalid).
+    rewrite bind_stuck_equ; reflexivity.
 Qed.
 
 (** ** Shared-context access through the scheduler
@@ -354,20 +333,14 @@ Lemma interp_nd_get_ctx n (ts : pool sE (S n)) (i : Fin.t (S n))
   interp_schedule_nd sh (S n) (ts @ i := K (csl_context s)) (Some i) s.
 Proof.
   destruct s as [memory [ctx c]].
-  rewrite ((interp_schedule_nd_equ sh) (S n) _
-    (ts @ i := Vis (inr (inr (inr (inl Get))) : CEff) K) (Some i) _
-    (replace_pool_equ ts ts i _ _ (pool_equ_refl ts) (raw_source_get_head K))).
-  erewrite (interp_schedule_nd_user sh) with (e:=inr (inl Get)) (k:=K)
-    by (rewrite Vector.nth_replace_eq; reflexivity).
-  lazymatch goal with |- (?t >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2:=next);
-      [eapply equ_clos_sbisim_goal;
-        [exact (csl_context_handler_get (A:=nat * nat) memory ctx c)
-        | reflexivity | reflexivity]
-      | intro result; reflexivity] |]
-  end.
-  rewrite bind_ret_l, Vector.replace_replace_eq; reflexivity.
+  etransitivity.
+  - apply (interp_schedule_nd_user_bind sh n ts i _
+      (inr (inl Get)) K (memory,(ctx,c))).
+    apply raw_source_get_head.
+  - rewrite interp_state_trigger_bind.
+    csl_lift_handler_result
+      (csl_context_handler_get (A:=nat * nat) memory ctx c).
+    rewrite bind_ret_l; reflexivity.
 Qed.
 
 Lemma interp_rr_get_ctx n (ts : pool sE (S n)) (i : Fin.t (S n))
@@ -376,20 +349,14 @@ Lemma interp_rr_get_ctx n (ts : pool sE (S n)) (i : Fin.t (S n))
   interp_schedule_rr sh (S n) (ts @ i := K (csl_context s)) (Some i) cursor s.
 Proof.
   destruct s as [memory [ctx c]].
-  rewrite (interp_schedule_rr_equ sh (S n) _
-    (ts @ i := Vis (inr (inr (inr (inl Get))) : CEff) K) (Some i) cursor _
-    (replace_pool_equ ts ts i _ _ (pool_equ_refl ts) (raw_source_get_head K))).
-  erewrite interp_schedule_rr_user with (e:=inr (inl Get)) (k:=K)
-    by (rewrite Vector.nth_replace_eq; reflexivity).
-  lazymatch goal with |- (?t >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2:=next);
-      [eapply equ_clos_sbisim_goal;
-        [exact (csl_context_handler_get (A:=nat * nat) memory ctx c)
-        | reflexivity | reflexivity]
-      | intro result; reflexivity] |]
-  end.
-  rewrite bind_ret_l, Vector.replace_replace_eq; reflexivity.
+  etransitivity.
+  - apply (interp_schedule_rr_user_bind sh n ts i _
+      (inr (inl Get)) K cursor (memory,(ctx,c))).
+    apply raw_source_get_head.
+  - rewrite interp_state_trigger_bind.
+    csl_lift_handler_result
+      (csl_context_handler_get (A:=nat * nat) memory ctx c).
+    rewrite bind_ret_l; reflexivity.
 Qed.
 
 Lemma interp_nd_put_ctx n (ts : pool sE (S n)) (i : Fin.t (S n))
@@ -400,22 +367,16 @@ Lemma interp_nd_put_ctx n (ts : pool sE (S n)) (i : Fin.t (S n))
      (csl_set_context s ctx')).
 Proof.
   destruct s as [memory [ctx c]].
-  rewrite ((interp_schedule_nd_equ sh) (S n) _
-    (ts @ i := Vis (inr (inr (inr (inl (Put ctx')))) : CEff) K) (Some i) _
-    (replace_pool_equ ts ts i _ _ (pool_equ_refl ts) (raw_source_put_head ctx' K))).
-  erewrite (interp_schedule_nd_user sh) with (e:=inr (inl (Put ctx'))) (k:=K)
-    by (rewrite Vector.nth_replace_eq; reflexivity).
-  lazymatch goal with |- (?t >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2:=next);
-      [eapply equ_clos_sbisim_goal;
-        [exact (csl_context_handler_put (A:=nat * nat) ctx' memory ctx c)
-        | reflexivity | reflexivity]
-      | intro result; reflexivity] |]
-  end.
-  rewrite bind_bind.
-  apply sbisim_clo_bind_eq; [reflexivity | intros []].
-  rewrite bind_ret_l, Vector.replace_replace_eq; reflexivity.
+  etransitivity.
+  - apply (interp_schedule_nd_user_bind sh n ts i _
+      (inr (inl (Put ctx'))) K (memory,(ctx,c))).
+    apply raw_source_put_head.
+  - rewrite interp_state_trigger_bind.
+    csl_lift_handler_result
+      (csl_context_handler_put (A:=nat * nat) ctx' memory ctx c).
+    rewrite bind_bind.
+    apply sbisim_clo_bind_eq; [reflexivity | intros []].
+    rewrite bind_ret_l; reflexivity.
 Qed.
 
 Lemma interp_rr_put_ctx n (ts : pool sE (S n)) (i : Fin.t (S n))
@@ -426,22 +387,16 @@ Lemma interp_rr_put_ctx n (ts : pool sE (S n)) (i : Fin.t (S n))
      (csl_set_context s ctx')).
 Proof.
   destruct s as [memory [ctx c]].
-  rewrite (interp_schedule_rr_equ sh (S n) _
-    (ts @ i := Vis (inr (inr (inr (inl (Put ctx')))) : CEff) K) (Some i) cursor _
-    (replace_pool_equ ts ts i _ _ (pool_equ_refl ts) (raw_source_put_head ctx' K))).
-  erewrite interp_schedule_rr_user with (e:=inr (inl (Put ctx'))) (k:=K)
-    by (rewrite Vector.nth_replace_eq; reflexivity).
-  lazymatch goal with |- (?t >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2:=next);
-      [eapply equ_clos_sbisim_goal;
-        [exact (csl_context_handler_put (A:=nat * nat) ctx' memory ctx c)
-        | reflexivity | reflexivity]
-      | intro result; reflexivity] |]
-  end.
-  rewrite bind_bind.
-  apply sbisim_clo_bind_eq; [reflexivity | intros []].
-  rewrite bind_ret_l, Vector.replace_replace_eq; reflexivity.
+  etransitivity.
+  - apply (interp_schedule_rr_user_bind sh n ts i _
+      (inr (inl (Put ctx'))) K cursor (memory,(ctx,c))).
+    apply raw_source_put_head.
+  - rewrite interp_state_trigger_bind.
+    csl_lift_handler_result
+      (csl_context_handler_put (A:=nat * nat) ctx' memory ctx c).
+    rewrite bind_bind.
+    apply sbisim_clo_bind_eq; [reflexivity | intros []].
+    rewrite bind_ret_l; reflexivity.
 Qed.
 
 Local Typeclasses Transparent equ sbisim.
@@ -459,14 +414,8 @@ Proof.
   destruct s as [memory [ctx c]].
   rewrite (raw_source_get_head K).
   rewrite (interp_state_thread_user sh (inr (inl Get))).
-  lazymatch goal with |- (?t >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2:=next);
-      [eapply equ_clos_sbisim_goal;
-        [exact (csl_context_handler_get (A:=nat * nat) memory ctx c)
-        | reflexivity | reflexivity]
-      | intro result; reflexivity] |]
-  end.
+  csl_lift_handler_result
+    (csl_context_handler_get (A:=nat * nat) memory ctx c).
   rewrite bind_ret_l; reflexivity.
 Qed.
 
@@ -478,14 +427,8 @@ Proof.
   destruct s as [memory [ctx c]].
   rewrite (raw_source_put_head ctx' K).
   rewrite (interp_state_thread_user sh (inr (inl (Put ctx')))).
-  lazymatch goal with |- (?t >>= ?next) ~ _ =>
-    etransitivity;
-    [apply sbisim_clo_bind_eq with (k2:=next);
-      [eapply equ_clos_sbisim_goal;
-        [exact (csl_context_handler_put (A:=nat * nat) ctx' memory ctx c)
-        | reflexivity | reflexivity]
-      | intro result; reflexivity] |]
-  end.
+  csl_lift_handler_result
+    (csl_context_handler_put (A:=nat * nat) ctx' memory ctx c).
   rewrite bind_bind.
   apply sbisim_clo_bind_eq; [reflexivity | intros []].
   rewrite bind_ret_l; reflexivity.

@@ -127,26 +127,10 @@ Section BasicLemmas.
          <( {Br n k}, w |= ψ )> /\
            forall (i: fin' n), <( {k i}, w |= ψ AU φ )>) <->
       <( {Br n k}, w |= ψ AU φ )>.
-  Proof with auto with ticl.
-    split; intros.
-    - destruct H as [Hφ | (Hψ & H)].
-      + now cleft.
-      + cright; csplit...
-        * apply ticll_not_done in Hψ.
-          now apply can_step_br.
-        * intros t' w' TR'.
-          apply ktrans_br in TR' as (? & -> & -> & ?).
-          apply H.
-    - cdestruct H.
-      + now left.
-      + right; split...
-        * now cdestruct H.
-        * cdestruct H...
-          intro i.
-          apply H.
-          apply ktrans_br.
-          exists i; split2...
-          now apply ticll_not_done in Hp.
+  Proof.
+    intros; symmetry.
+    rewrite equivl_au_an at 1.
+    now rewrite ticll_or, anl_br.
   Qed.
 
   (** Vis iff emma for prefix eventually [AU_L] *)
@@ -155,26 +139,10 @@ Section BasicLemmas.
          <( {Vis e k}, w |= ψ )> /\
            forall (v: encode e), <( {k v}, {Obs e v} |= ψ AU φ )>) <->
       <( {Vis e k}, w |= ψ AU φ )>.
-  Proof with auto with ticl.
-    split; intros.
-    - destruct H as [Hφ | (Hψ & H)].
-      + now cleft.
-      + cright; csplit...
-        * apply ticll_not_done in Hψ.
-          now apply can_step_vis.
-        * intros t' w' TR'.
-          apply ktrans_vis in TR' as (? & -> & <- & ?).
-          apply H.
-    - cdestruct H.
-      + now left.
-      + right; split...
-        * now cdestruct H.
-        * cdestruct H...
-          intro i.
-          apply H.
-          apply ktrans_vis.
-          exists i; split2...
-          now apply ticll_not_done in Hp.
+  Proof.
+    intros e k v0 w ψ φ; symmetry.
+    rewrite equivl_au_an at 1.
+    now rewrite ticll_or, (anl_vis e k v0).
   Qed.
 
   (** Helper version of [aul_vis] for [AF] = [T AU]*)
@@ -182,20 +150,10 @@ Section BasicLemmas.
       <( {Vis e k}, w |= φ )> \/
          (not_done w /\ forall (v: encode e), <( {k v}, {Obs e v} |= AF φ )>) <->
       <( {Vis e k}, w |= AF φ )>.
-  Proof with auto with ticl.
-    split; intros.
-    - destruct H.
-      + apply aul_vis...
-      + apply aul_vis...
-        destruct H as (Hd & H).
-        right; split.
-        * csplit; split...
-        * apply H.
-    - apply aul_vis in H...
-      destruct H.
-      + now left.
-      + destruct H; cdestruct H.
-        right...
+  Proof.
+    intros e k v0 w φ; symmetry.
+    rewrite equivl_au_an at 1.
+    rewrite ticll_or, (anl_vis e k v0), ticll_now; tauto.
   Qed.
 
   (** Branch iff lemma for prefix eventually [AU_R] *)
@@ -204,26 +162,10 @@ Section BasicLemmas.
          <( {Br n k}, w |= ψ )> /\
            forall (i: fin' n), <[ {k i}, w |= ψ AU φ ]>) <->
       <[ {Br n k}, w |= ψ AU φ ]>.
-  Proof with auto with ticl.
-    split; intros.
-    - destruct H as [Hφ | (Hψ & H)].
-      + now cleft.
-      + cright; csplit...
-        * apply ticll_not_done in Hψ.
-          now apply can_step_br.
-        * intros t' w' TR'.
-          apply ktrans_br in TR' as (? & -> & -> & ?).
-          apply H.
-    - cdestruct H.
-      + now left.
-      + right; split...
-        * now cdestruct H.
-        * cdestruct H...
-          intro i.
-          apply H.
-          apply ktrans_br.
-          exists i; split2...
-          now apply ticll_not_done in Hp.
+  Proof.
+    intros; symmetry.
+    rewrite equivr_au_an at 1.
+    now rewrite ticlr_or, anr_br.
   Qed.
 
   (** Vis iff lemma for prefix eventually [AU_R] *)
@@ -232,26 +174,10 @@ Section BasicLemmas.
          <( {Vis e k}, w |= ψ )> /\
            forall (v: encode e), <[ {k v}, {Obs e v} |= ψ AU φ ]>) <->
       <[ {Vis e k}, w |= ψ AU φ ]>.
-  Proof with auto with ticl.
-    split; intros.
-    - destruct H as [Hφ | (Hψ & H)].
-      + now cleft.
-      + cright; csplit...
-        * apply ticll_not_done in Hψ.
-          now apply can_step_vis.
-        * intros t' w' TR'.
-          apply ktrans_vis in TR' as (? & -> & <- & ?).
-          apply H.
-    - cdestruct H.
-      + now left.
-      + right; split...
-        * now cdestruct H.
-        * cdestruct H...
-          intro i.
-          apply H.
-          apply ktrans_vis.
-          exists i; split2...
-          now apply ticll_not_done in Hp.
+  Proof.
+    intros e k v0 w ψ φ; symmetry.
+    rewrite equivr_au_an at 1.
+    now rewrite ticlr_or, (anr_vis e k v0).
   Qed.
 
   (** Helper version of [aur_vis] for [AF] = [T AU]*)
@@ -259,20 +185,10 @@ Section BasicLemmas.
       <[ {Vis e k}, w |= φ ]> \/
          (not_done w /\ forall (v: encode e), <[ {k v}, {Obs e v} |= AF φ ]>) <->
       <[ {Vis e k}, w |= AF φ ]>.
-  Proof with auto with ticl.
-    split; intros.
-    - destruct H.
-      + apply aur_vis...
-      + apply aur_vis...
-        destruct H as (Hd & H).
-        right; split.
-        * csplit; split...
-        * apply H.
-    - apply aur_vis in H...
-      destruct H.
-      + now left.
-      + destruct H; cdestruct H.
-        right...
+  Proof.
+    intros e k v0 w φ; symmetry.
+    rewrite equivr_au_an at 1.
+    rewrite ticlr_or, (anr_vis e k v0), ticll_now; tauto.
   Qed.
 
   (** Not done lemma for prefix eventually [AU_R] *)

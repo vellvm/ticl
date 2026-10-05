@@ -371,6 +371,26 @@ Section BindLemmas.
           now apply aur_stuck, anr_stuck in Hau.
   Qed.
 
+  (** Bind lemma for a first step [AX] followed by suffix until [AU]. *)
+  Theorem axr_aur_bind_r {X Y} :
+    forall (t : ictree E Y) (k : Y -> ictree E X) w phi psi R,
+    <[ t, w |= AX (phi AU AX done R) ]> ->
+    (forall x w, R x w -> <[ {k x}, w |= phi AU psi ]>) ->
+    <[ {x <- t ;; k x}, w |= AX (phi AU psi) ]>.
+  Proof with eauto with ticl.
+    intros t k w phi psi R Ht Hk.
+    cdestruct Ht; csplit...
+    - destruct Hs as (t' & w' & Hstep).
+      eapply can_step_bind_l; [exact Hstep |].
+      eapply aur_not_done, Ht, Hstep.
+    - intros t' w' Hstep.
+      apply ktrans_bind_inv in Hstep as
+        [(u & Htu & Hd & ->) | (x & wr & Hret & Hr & Hstep)].
+      + eapply aur_bind_r; [eapply Ht; exact Htu | exact Hk].
+      + specialize (Ht _ _ Hret).
+        now apply aur_stuck, anr_stuck in Ht.
+  Qed.
+
   (** Helper version of [aur_bind_r] for deterministic [t], it allows us to
   replace the return value [r] with an existential quantifier, then simply compute it. 
   This does not require a postcondition [R]. *)

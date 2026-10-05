@@ -915,21 +915,10 @@ Module HeapImp.
       rewrite interp_state_bind.
       eapply anr_bind_r_eq...
       cbn; rewrite interp_state_bind.
-      cdestruct HR.
-      csplit...      
-      + destruct Hs as (t_ & w_ & TR).
-        eapply can_step_bind_l...
-        specialize (HR _ _ TR).
-        now apply aur_not_done in HR.
-      + intros t_ w_ TR...
-        apply ktrans_bind_inv in TR as [(? & TR & Hd_ & ->) | (([] & mem_) & ? & ? & ? & TR)].
-        * specialize (HR _ _ TR).
-          apply aur_bind_r with (R:=fun '(_, mem') (w' : WorldW Mem) => w' = Obs (Log mem') tt /\ R mem')...
-          intros [_ mem_] w'' (Hd'' & HR').
-          apply aur_state_ret...
-          exists tt; subst; intuition.
-        * specialize (HR _ _ H1).
-          now apply aur_stuck, anr_stuck in HR.
+      eapply axr_aur_bind_r; [exact HR |].
+      intros [_ mem_] w'' (Hd'' & HR').
+      apply aur_state_ret...
+      exists tt; subst; intuition.
   Qed.
   
 End HeapImp.

@@ -13,6 +13,7 @@ From TICL Require Import
   ICTree.SBisim
   ICTree.Logic.Trans
   ICTree.Logic.CanStep
+  ICTree.Logic.EX
   ICTree.Events.Writer
   Logic.Core
   Logic.Kripke
@@ -134,33 +135,8 @@ Section BasicLemmas.
       <[ t, w |= φ AN done ψ ]> <-> <( t, w |= φ )> /\ (exists (x: X), t ~ Ret x /\ ψ x w).
   Proof with auto with ticl.
     split; intros.
-    - cdestruct H; destruct Hs as (t' & w' & TR).
-      cbn in *.
-      assert(Hd: not_done w) by now apply ticll_not_done in Hp.
-      setoid_rewrite (ictree_eta t).
-      rewrite (ictree_eta t) in Hp.
-      remember (observe t) as T.
-      specialize (H _ _ TR).
-      rewrite (ictree_eta t') in H; [|exact (equ eq)].
-      remember (observe t') as T'.
-      clear HeqT t HeqT' t'.
-      dependent induction TR; intros.
-      + setoid_rewrite <- (ictree_eta t) in IHTR.
-        split.
-        * rewrite sb_guard in Hp |- *.
-          edestruct IHTR...
-        * rewrite sb_guard in Hp.
-          destruct (IHTR Hp H) as (_ & x & ? & ?)...
-          exists x; split...
-          now apply sb_guard_l.
-      + inv H1; inv H.
-      + inv H1.
-      + split...
-        exists x; intuition.
-        now cdestruct H0.
-      + split... 
-        exists x; intuition.
-        now cdestruct H0.
+    - apply enr_done.
+      now apply ticlr_an_en in H.
     - destruct H as (Hφ & x & Heq & H).
       rewrite Heq in Hφ |- *.
       rewrite ticlr_an; split2...

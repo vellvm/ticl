@@ -134,25 +134,11 @@ Section BasicLemmas.
          <( {Br n k}, w |= ψ )> /\
            exists (i: fin' n), <( {k i}, w |= ψ EU φ )>) <->
         <( {Br n k}, w |= ψ EU φ )>.
-  Proof with auto with ticl.
-    split; intros.
-    - destruct H as [Hφ | (Hψ & i & H)].
-      + now cleft. 
-      + cright; csplit...
-        apply ticll_not_done in Hψ.
-        exists (k i), w; split...
-        apply ktrans_br.
-        exists i...
-    - cdestruct H.
-      + now left.
-      + right; split...
-        * now cdestruct H.
-        * cdestruct H...
-          apply ktrans_br in TR as (i & ? & <- & ?).
-          rewrite H0 in H.
-          exists i.
-          apply H.
-  Qed.          
+  Proof.
+    intros; symmetry.
+    rewrite equivl_eu_en at 1.
+    now rewrite ticll_or, <- enl_br.
+  Qed.
 
   (** A nondeterministic choice satisfies suffix [φ EU ψ] if and only if it satisfies [ψ] or [φ EU ψ] for some [i]. *)
   Lemma eur_br: forall n (k: fin' n -> ictree E X) w φ ψ,
@@ -160,24 +146,10 @@ Section BasicLemmas.
          <( {Br n k}, w |= ψ )> /\
            exists (i: fin' n), <[ {k i}, w |= ψ EU φ ]>) <->
         <[ {Br n k}, w |= ψ EU φ ]>.
-  Proof with auto with ticl.
-    split; intros.
-    - destruct H as [Hφ | (Hψ & i & H)].
-      + now cleft. 
-      + cright; csplit...
-        apply ticll_not_done in Hψ.
-        exists (k i), w; split...
-        apply ktrans_br.
-        exists i...
-    - cdestruct H.
-      + now left.
-      + right; split...
-        * now cdestruct H.
-        * cdestruct H...
-          apply ktrans_br in TR as (i & ? & <- & ?).
-          rewrite H0 in H.
-          exists i.
-          apply H.
+  Proof.
+    intros; symmetry.
+    rewrite equivr_eu_en at 1.
+    now rewrite ticlr_or, <- enr_br.
   Qed.
 
   (** A visible event satisfies prefix [φ EU ψ] if and only if it satisfies [ψ] or [φ EU ψ] for some [v]. *)
@@ -186,24 +158,10 @@ Section BasicLemmas.
          <( {Vis e k}, w |= ψ )> /\
            exists (v: encode e), <( {k v}, {Obs e v} |= ψ EU φ )>) <->
         <( {Vis e k}, w |= ψ EU φ )>.
-  Proof with auto with ticl.
-    split; intros.
-    - destruct H as [Hφ | (Hψ & i & H)].
-      + now cleft. 
-      + cright; csplit...
-        apply ticll_not_done in Hψ.
-        exists (k i), (Obs e i); split...
-        apply ktrans_vis.
-        exists i...
-    - cdestruct H.
-      + now left.
-      + right; split...
-        * now cdestruct H.
-        * cdestruct H...
-          apply ktrans_vis in TR as (i & -> & ? & ?).
-          rewrite <- H0 in H.
-          exists i.
-          apply H.
+  Proof.
+    intros e k v0 w φ ψ; symmetry.
+    rewrite equivl_eu_en at 1.
+    now rewrite ticll_or, (enl_vis e k v0).
   Qed.
 
   (** A visible event satisfies suffix [φ EU ψ] if and only if it satisfies [ψ] or [φ EU ψ] for some [v]. *)
@@ -212,24 +170,10 @@ Section BasicLemmas.
          <( {Vis e k}, w |= ψ )> /\
            exists (v: encode e), <[ {k v}, {Obs e v} |= ψ EU φ ]>) <->
         <[ {Vis e k}, w |= ψ EU φ ]>.
-  Proof with auto with ticl.
-    split; intros.
-    - destruct H as [Hφ | (Hψ & i & H)].
-      + now cleft. 
-      + cright; csplit...
-        apply ticll_not_done in Hψ.
-        exists (k i), (Obs e i); split...
-        apply ktrans_vis.
-        exists i...
-    - cdestruct H.
-      + now left.
-      + right; split...
-        * now cdestruct H.
-        * cdestruct H...
-          apply ktrans_vis in TR as (i & -> & ? & ?).
-          rewrite <- H0 in H.
-          exists i.
-          apply H.
+  Proof.
+    intros e k v0 w φ ψ; symmetry.
+    rewrite equivr_eu_en at 1.
+    now rewrite ticlr_or, (enr_vis e k v0).
   Qed.
 
   Lemma eur_not_done: forall φ ψ (t: ictree E X) (w: World E),
