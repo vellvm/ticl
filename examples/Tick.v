@@ -1,85 +1,74 @@
 From TICL Require Import
-  ICTree.Core
+  CTree.Core
   Logic.Core
-  ICTree.Equ
-  ICTree.SBisim
-  ICTree.Logic.EX
-  ICTree.Logic.EF
-  ICTree.Logic.EG
-  ICTree.Logic.AX
-  ICTree.Logic.AF
-  ICTree.Logic.AG
-  ICTree.Logic.Trans
-  ICTree.Logic.Bind
-  ICTree.Logic.Iter
-  ICTree.Logic.CanStep.
+  CTree.Logic.EX
+  CTree.Logic.EF
+  CTree.Logic.EG
+  CTree.Logic.AX
+  CTree.Logic.AF
+  CTree.Logic.AG
+  CTree.Logic.Trans
+  CTree.Logic.Bind
+  CTree.Logic.Iter
+  CTree.Logic.CanStep.
 
-From Coinduction Require Import coinduction tactics.
+From Coinduction Require Import all.
 
 Generalizable All Variables.
 
-Import ICtree ICTreeNotations TiclNotations.
-Local Open Scope ictree_scope.
+Import CTree CTreeNotations TiclNotations.
+Local Open Scope ctree_scope.
 Local Open Scope ticl_scope.
 
-Variant tickE: Type :=
-  | Tick
-  | Tock.
+Variant tickE: Type -> Type :=
+  | Tick : tickE unit
+  | Tock : tickE unit.
 
-Global Instance encode_tickE: Encode tickE :=
-  fun e => match e with
-        | Tick | Tock => unit
-        end.
-
-Definition tick: ictree tickE unit :=
-  @ICtree.trigger tickE tickE _ _ (ReSum_refl) (ReSumRet_refl) Tick.
-
-Definition tock: ictree tickE unit :=
-  @ICtree.trigger tickE tickE _ _ (ReSum_refl) (ReSumRet_refl) Tock.
+Definition tick: ctree tickE B2 unit := CTree.trigger Tick.
+Definition tock: ctree tickE B2 unit := CTree.trigger Tock.
 
 Section TickTock.
   (** * Example 1: Non-det loop calling tick *)
-  Definition tocker: ictree tickE unit :=
-    forever unit
-      (fun _ =>
-         ICtree.br2
-           (ICtree.br2 tick tock)
-           tick)
+  (** The choices are observable scheduling choices, hence visible ([brS2]). *)
+  Definition tocker: ctree tickE B2 unit :=
+    CTree.iter
+      (fun _ : unit =>
+         CTree.map inl
+           (brS2
+              (brS2 tick tock)
+              tick))
       tt.
 
   (** * Specification *)
   (** There exists an infinite path that will allways [tock]. *)
   Example eg_tock:
-    <( tocker, {Obs Tock tt} |= EG vis {fun e _ => e = Tock} )>.
+    <( tocker, {Obs Tock tt} |= EG vis {fun _ e _ => existT _ _ e = existT _ _ Tock} )>.
   Proof with auto with ticl.
-    unfold tocker, forever.
+    unfold tocker.
     apply eg_iter with (R:=fun 'tt w => w = Obs Tock tt)...
     intros [] w ->.
     split.
     - csplit...
-    - unfold map, br2.
-      rewrite bind_br.
-      apply enr_br; split; [csplit; eauto with ticl|].
-      exists Fin.F1.
-      rewrite bind_br.
-      apply eur_br.
+    - unfold CTree.map, brS2.
+      rewrite bind_br; setoid_rewrite bind_step.
+      apply enr_brS; split; [csplit; eauto with ticl|].
+      exists true; cbn.
+      rewrite bind_br; setoid_rewrite bind_step.
+      apply eur_brS.
       right; split.
       + csplit...
-      + exists (Fin.FS Fin.F1).
-        unfold tock.
-        setoid_rewrite (@bind_trigger (unit + unit) tickE tickE _ _
-                          ReSum_refl ReSumRet_refl
-                          Tock _).
-        apply eur_vis...
+      + exists false; cbn.
+        unfold tock, CTree.trigger.
+        rewrite bind_vis.
+        apply eur_vis.
         right.
         split.
         * csplit...
         * exists tt.
+          rewrite bind_ret_l.
           apply eur_ret.
           cleft.
-          apply enr_done; split.
-          -- csplit...
-          -- eexists; intuition.
-             exists tt; intuition.
+          apply ret_ret; [constructor |].
+          exists tt; intuition.
   Qed.
 End TickTock.

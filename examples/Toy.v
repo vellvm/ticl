@@ -1,20 +1,17 @@
 From TICL Require Import
-  ICTree.Core
+  CTree.Core
   Logic.Core
-  ICTree.Equ
-  ICTree.SBisim
-  ICTree.Logic.Trans
+  CTree.Logic.Trans
   Logic.Kripke
-  ICTree.Interp.Core
-  ICTree.Logic.AF
-  ICTree.Logic.AX
-  ICTree.Logic.Bind
-  ICTree.Logic.Iter
-  ICTree.Logic.State
-  ICTree.Logic.CanStep
-  ICTree.Interp.State.Mod
-  ICTree.Events.State
-  ICTree.Events.Writer
+  CTree.Logic.AF
+  CTree.Logic.AX
+  CTree.Logic.Bind
+  CTree.Logic.Iter
+  CTree.Logic.State
+  CTree.Logic.CanStep
+  CTree.Interp.State.Mod
+  CTree.Events.State
+  CTree.Events.Writer
   Utils.Maps
   Lang.StImp.
 
@@ -28,9 +25,9 @@ From Stdlib Require Import
 
 Generalizable All Variables.
 
-Import ICtree ICTreeNotations TiclNotations.
+Import CTree CTreeNotations TiclNotations.
 Local Open Scope ticl_scope.
-Local Open Scope ictree_scope.
+Local Open Scope ctree_scope.
 Local Open Scope nat_scope.
 
 Module P25.
@@ -49,9 +46,10 @@ Module P25.
         done
     ]].
 
-  Lemma toy_spec: forall cval N,
+  (** StImp is deterministic: the branch signature [B] is arbitrary. *)
+  Lemma toy_spec {B: Type -> Type}: forall cval N,
       let init := add c cval empty in
-      <( {instr_prog toy init}, {Obs (Log init) tt} |= var c <= N \/ AF (var r >= N) )>.
+      <( {instr_prog (B:=B) toy init}, {Obs (Log init) tt} |= var c <= N \/ AF (var r >= N) )>.
   Proof with (eauto with ticl; try lia).
     intros.
     assert (Hcr: c<>r) by (intro Hcontra; inv Hcontra).
@@ -61,7 +59,7 @@ Module P25.
       eapply var_le with cval...
     - cright. (* cval > N *)
       eapply aul_cprog_seq.
-      + eapply aur_cprog_assgn...
+      + eapply aur_cprog_assgn_eq...
         * apply axr_cexp_const...
         * csplit...
       + eapply aul_cprog_while with (Ri:=fun ctx => assert1 c ctx (fun x => x <= cval)
@@ -90,7 +88,7 @@ Module P25.
                ** (* n = 0, c = 1 *)
                  left.
                  eapply aul_cprog_seq.
-                 --- eapply aur_cprog_assgn...
+                 --- eapply aur_cprog_assgn_eq...
                      +++ eapply axr_cexp_sub...
                      +++ csplit...
                  --- eapply aul_cprog_assgn.
@@ -101,7 +99,7 @@ Module P25.
                ** (* n = S n0, c > 1 *)
                  right.
                  eapply aur_cprog_seq.
-                 --- eapply aur_cprog_assgn...
+                 --- eapply aur_cprog_assgn_eq...
                      +++ eapply axr_cexp_sub...
                      +++ csplit...
                  --- eapply aur_cprog_assgn...
@@ -115,6 +113,5 @@ Module P25.
                          *** rewrite lookup_add_eq...
                              rewrite Hr...
   Qed.
- 
 
-End P25.        
+End P25.

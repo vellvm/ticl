@@ -17,74 +17,59 @@ Using your package manager, install `opam-2.3.0` or later. For example, on Ubunt
 sudo apt install opam
 ```
 
-Then, initialize `opam`:
+Then, initialize `opam` and create a switch:
 
 ```bash
 opam init
+opam switch create ticl 5.3.0
+eval $(opam env)
 ```
 
-Then proceed to install the `dune` build system:
+## Rocq and the Ticl dependencies
 
-```bash
-opam install dune
-```
-
-## Rocq
-
-Ticl depends on the Rocq proof assistant for proof verification.
-First, add the Rocq package switch to opam:
+Ticl depends on the Rocq proof assistant for proof verification and on a few
+opam packages. Add the Rocq opam repository:
 
 ```bash
 opam repo add rocq-released https://rocq-prover.org/opam/released
 ```
 
-Then, install the Rocq version 9.0.0. We have tested `Ticl` with that version and
-cannot guarantee future versions of Rocq will work without changes to the code.
+Then install Rocq 9.2 and the dependencies. We have tested `Ticl` with these
+exact versions and cannot guarantee future versions will work without changes
+to the code.
 
 ```bash
-opam pin add rocq-prover 9.0.0
+opam install dune.3.23.1 rocq-prover.9.2.0 rocq-equations.1.3.2+9.2 \
+  coq-ext-lib.0.13.2 rocq-coinduction.1.22 rocq-relation-algebra.1.9.1 \
+  coq-itree.5.2.1
 ```
 
-Then install the equations package for rocq:
+- `rocq-coinduction` (>= 1.22) provides the tower-based coinduction library
+  (`Chain`, `tower`, `coinduction R CIH`); the companion API is not used.
+- `coq-itree`, `rocq-relation-algebra` and `coq-ext-lib` are needed by the
+  `ctrees` library.
 
-## Ticl dependencies
+## The `ctrees` library (git submodule)
 
-Ticl depends on the `rocq-equations` package for dependent type pattern matching.
-Install it via opam:
-
-```bash
-opam install rocq-equations
-```
-
-Then proceed to download and install the `rocq-ext-lib` package, which
-provides many useful libraries for Rocq. For artifact evaluation, we provide
-the `rocq-ext-lib` package in the root of the artifact folder. Otherwise, download
-and install it from Github.
+Ticl's model of programs is the `ctree E B X` type of the `ctrees` library
+(https://github.com/vellvm/ctrees, branch `fix/universe-check`), vendored as a
+git submodule in `ctrees/` and built together with Ticl by dune. After cloning,
+fetch the submodule:
 
 ```bash
-cd rocq-ext-lib
-make install
-cd ..
-```
-
-Then install the coinduction library in Rocq. For artifact evaluation, we provide
-the `coinduction` package in the root of the artifact folder. Otherwise, download
-and install it from Github.
-
-```bash
-cd coinduction
-make install
-cd ..
+git clone --recurse-submodules https://github.com/vellvm/ticl
+# or, in an existing checkout:
+git submodule update --init
 ```
 
 ## Building and checking Ticl proofs and documentation
 
-To typecheck all proofs in TICL, from the root of the artifact folder, run:
+To typecheck all proofs in TICL (and the vendored `ctrees` theories), from
+the repository root, run:
 
 ```bash
-cd ticl
-make
-make doc
+dune build
+dune build @doc
 ```
 
 The last command also generates the documentation for Ticl in HTML format.

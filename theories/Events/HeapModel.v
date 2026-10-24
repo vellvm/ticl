@@ -11,7 +11,7 @@
     used by allocation, the allocation table recording live malloc extents
     (with whole-block release and its well-formedness/framing laws), and the
     stride-two node geometry shared by the queue and the allocator.  It is
-    deliberately distinct from [ICTree.Events.Heap], which only builds
+    deliberately distinct from [CTree.Events.Heap], which only builds
     [heapE] triggers.
 
     Heap equality stays POINTWISE ([heq]).  Nothing here converts it to

@@ -27,7 +27,7 @@
        yields the two representations and their footprint disjointness.
 
     Everything in this file is a statement about heaps.  No temporal formula
-    and no ICTree appears. *)
+    and no ctree appears. *)
 
 From Stdlib Require Import
   List

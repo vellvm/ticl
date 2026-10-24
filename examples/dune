@@ -2,7 +2,7 @@
 
 (rocq.theory
  (name examples)
- (theories TICL)
+ (theories TICL ExtLib Stdlib Equations Coinduction CTree ITree RelationAlgebra)
  (package rocq-ticl)
  (mode vo)
  (rocqdoc_flags :standard -utf8)

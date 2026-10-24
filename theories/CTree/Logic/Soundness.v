@@ -1,0 +1,601 @@
+From Stdlib Require Import
+  Basics
+  Classes.Morphisms.
+
+From TICL Require Import
+  Events.WriterE
+  CTree.Core
+  CTree.Interp.State.Mod
+  CTree.Logic.Trans
+  CTree.Logic.Bind
+  CTree.Logic.Iter
+  CTree.Logic.CanStep
+  Logic.Core
+  CTree.Logic.AX
+  CTree.Logic.AF
+  CTree.Logic.EX
+  CTree.Logic.EF
+  CTree.Logic.AG
+  CTree.Logic.EG
+  Logic.Kripke
+  Logic.Setoid.
+
+Set Implicit Arguments.
+Generalizable All Variables.
+
+Import CTreeNotations TiclNotations.
+Local Open Scope ticl_scope.
+Local Open Scope ctree_scope.
+
+(** * Syntactic entailment proof *)
+(** In this section we package the prefix lemmas for all operators [AN, AU, EN, EU, AG, EG]
+    into a single inductive relation [syntailsL] that we prove sound with respect to the
+    semantic entailment relation [|=]. Visible branching is [BrS c k]/[Step t]; hidden
+    branching [Br c k] has no syntactic rule (its lemmas have [ktrans]-level premises).
+*)
+Section SyntacticEntailment.
+  Context {E B: Type -> Type}.
+
+  Inductive syntailsL{X}: ctree E B X -> World E -> ticll E -> Prop :=
+  (* All formulas are invariant to [Guard] *)
+  | SynGuard: forall w φ t,
+      syntailsL t w φ ->
+      syntailsL (Guard t) w φ
+  (* Base predicate *)
+  | SynNow: forall w φ t,
+      φ w ->
+      not_done w ->
+      syntailsL t w <( now φ )>
+  (* Boolean *)
+  | SynAnd: forall t w φ ψ,
+      syntailsL t w φ ->
+      syntailsL t w ψ ->
+      syntailsL t w <( φ /\ ψ )>
+  | SynOrL: forall t w φ ψ,
+      syntailsL t w φ ->
+      syntailsL t w <( φ \/ ψ )>
+  | SynOrR: forall t w φ ψ,
+      syntailsL t w ψ ->
+      syntailsL t w <( φ \/ ψ )>
+  (* BindL *)
+  | SynBindL: forall {Y} (t: ctree E B Y) (k: Y -> ctree E B X) φ w,
+      syntailsL t w φ ->
+      syntailsL (x <- t ;; k x) w φ
+  (* φ AU ψ *)
+  | SynAuStuck: forall w φ ψ,
+      syntailsL Stuck w ψ ->
+      syntailsL Stuck w <( φ AU ψ )>
+  | SynAuRetL: forall w φ ψ r,
+      syntailsL (Ret r) w ψ ->
+      syntailsL (Ret r) w <( φ AU ψ )>
+  | SynAuRetR: forall w φ ψ r,
+      syntailsL (Ret r) w <( φ AN ψ )> ->
+      syntailsL (Ret r) w <( φ AU ψ )>
+  | SynAuBrSR: forall w {Y} (c: B Y) (k: Y -> ctree E B X) φ ψ,
+      syntailsL (BrS c k) w ψ ->
+      syntailsL (BrS c k) w <( φ AU ψ )>
+  | SynAuBrSL: forall w {Y} (c: B Y) (k: Y -> ctree E B X) (y: Y) φ ψ,
+      syntailsL (BrS c k) w φ ->
+      (forall (y: Y), syntailsL (k y) w <( φ AU ψ )>) ->
+      syntailsL (BrS c k) w <( φ AU ψ )>
+  | SynAuStepR: forall w t φ ψ,
+      syntailsL (Step t) w ψ ->
+      syntailsL (Step t) w <( φ AU ψ )>
+  | SynAuStepL: forall w t φ ψ,
+      syntailsL (Step t) w φ ->
+      syntailsL t w <( φ AU ψ )> ->
+      syntailsL (Step t) w <( φ AU ψ )>
+  | SynAuVisR: forall w {Y} (e: E Y) (k: Y -> ctree E B X) φ ψ,
+      syntailsL (Vis e k) w ψ ->
+      syntailsL (Vis e k) w <( φ AU ψ )>
+  | SynAuVisL: forall w {Y} (e: E Y) (k: Y -> ctree E B X) (wit: Y) φ ψ,
+      syntailsL (Vis e k) w φ ->
+      (forall (v: Y), syntailsL (k v) (Obs e v) <( φ AU ψ )>) ->
+      syntailsL (Vis e k) w <( φ AU ψ )>
+  | SynAuBindR: forall {Y} (t: ctree E B Y) (k: Y -> ctree E B X) φ ψ w R,
+      <[ t, w |= φ AU ret R ]> ->
+      (forall r w', R r w' -> syntailsL (k r) w' <( φ AU ψ )>) ->
+      syntailsL (x <- t ;; k x) w <( φ AU ψ )>
+  | SynAuIter: forall {I} Ri Rv (i: I) w (k: I -> ctree E B (I + X)) φ ψ,
+      well_founded Rv ->
+      not_done w ->
+      Ri i w ->
+      (forall (i: I) w,
+          not_done w ->
+          Ri i w ->
+          <( {k i}, w |= φ AU ψ )> \/
+            <[ {k i}, w |= φ AU ret
+                        {fun (lr: I + X) (w': World E) =>
+                           exists i', lr = inl i'
+                                 /\ not_done w'
+                                 /\ Ri i' w'
+                                 /\ Rv (i', w') (i, w)}]>) ->
+      syntailsL (iter k i) w <( φ AU ψ )>
+  (* φ EU ψ *)
+  | SynEuStuck: forall w φ ψ,
+      syntailsL Stuck w ψ ->
+      syntailsL Stuck w <( φ EU ψ )>
+  | SynEuRetL: forall w φ ψ r,
+      syntailsL (Ret r) w ψ ->
+      syntailsL (Ret r) w <( φ EU ψ )>
+  | SynEuRetR: forall w φ ψ r,
+      syntailsL (Ret r) w <( φ EN ψ )> ->
+      syntailsL (Ret r) w <( φ EU ψ )>
+  | SynEuBrSR: forall w {Y} (c: B Y) (k: Y -> ctree E B X) φ ψ,
+      syntailsL (BrS c k) w ψ ->
+      syntailsL (BrS c k) w <( φ EU ψ )>
+  | SynEuBrSL: forall w {Y} (c: B Y) (k: Y -> ctree E B X) φ ψ,
+      syntailsL (BrS c k) w φ ->
+      (exists (y: Y), <( {k y}, w |= φ EU ψ )>) ->
+      syntailsL (BrS c k) w <( φ EU ψ )>
+  | SynEuStepR: forall w t φ ψ,
+      syntailsL (Step t) w ψ ->
+      syntailsL (Step t) w <( φ EU ψ )>
+  | SynEuStepL: forall w t φ ψ,
+      syntailsL (Step t) w φ ->
+      syntailsL t w <( φ EU ψ )> ->
+      syntailsL (Step t) w <( φ EU ψ )>
+  | SynEuVisR: forall w {Y} (e: E Y) (k: Y -> ctree E B X) φ ψ,
+      syntailsL (Vis e k) w ψ ->
+      syntailsL (Vis e k) w <( φ EU ψ )>
+  | SynEuVisL: forall w {Y} (e: E Y) (k: Y -> ctree E B X) φ ψ,
+      syntailsL (Vis e k) w φ ->
+      (exists (v: Y), <( {k v}, {Obs e v} |= φ EU ψ )>) ->
+      syntailsL (Vis e k) w <( φ EU ψ )>
+  | SynEuBindR: forall {Y} (t: ctree E B Y) (k: Y -> ctree E B X) φ ψ w R,
+      <[ t, w |= φ EU ret R ]> ->
+      (forall r w', R r w' -> syntailsL (k r) w' <( φ EU ψ )>) ->
+      syntailsL (x <- t ;; k x) w <( φ EU ψ )>
+  | SynEuIter: forall {I} Ri Rv (i: I) w (k: I -> ctree E B (I + X)) φ ψ,
+      well_founded Rv ->
+      not_done w ->
+      Ri i w ->
+      (forall (i: I) w,
+          not_done w ->
+          Ri i w ->
+          <( {k i}, w |= φ EU ψ )> \/
+            <[ {k i}, w |= φ EU ret
+                        {fun (lr: I + X) (w': World E) =>
+                           exists i', lr = inl i'
+                                 /\ not_done w'
+                                 /\ Ri i' w'
+                                 /\ Rv (i', w') (i, w)}]>) ->
+      syntailsL (iter k i) w <( φ EU ψ )>
+  (* φ AN ψ *)
+  | SynAnStuck: forall w φ ψ,
+      False ->
+      syntailsL Stuck w <( φ AN ψ )>
+  | SynAnRetL: forall w φ ψ r,
+      False ->
+      syntailsL (Ret r) w <( φ AN ψ )>
+  | SynAnBrS: forall w {Y} (c: B Y) (k: Y -> ctree E B X) (y: Y) φ ψ,
+      syntailsL (BrS c k) w φ ->
+      (forall (y: Y), syntailsL (k y) w ψ) ->
+      syntailsL (BrS c k) w <( φ AN ψ )>
+  | SynAnStep: forall w t φ ψ,
+      syntailsL (Step t) w φ ->
+      syntailsL t w ψ ->
+      syntailsL (Step t) w <( φ AN ψ )>
+  | SynAnVis: forall w {Y} (e: E Y) (k: Y -> ctree E B X) (wit: Y) φ ψ,
+      syntailsL (Vis e k) w φ ->
+      (forall (v: Y), syntailsL (k v) (Obs e v) ψ) ->
+      syntailsL (Vis e k) w <( φ AN ψ )>
+  | SynAnBindR: forall {Y} (t: ctree E B Y) (k: Y -> ctree E B X) φ ψ w R,
+      <[ t, w |= φ AN done R ]> ->
+      (forall r w', R r w' -> syntailsL (k r) w' <( φ AN ψ )>) ->
+      syntailsL (x <- t ;; k x) w <( φ AN ψ )>
+  | SynAnIter: forall {I} Ri Rv (i: I) w (k: I -> ctree E B (I + X)) φ ψ,
+      well_founded Rv ->
+      Ri i w ->
+      (forall (i: I) w,
+          Ri i w ->
+          <( {k i}, w |= φ AN ψ )> \/
+            <[ {k i}, w |= φ AN done
+                        {fun (lr: I + X) (w': World E) =>
+                           exists i', lr = inl i' /\ Ri i' w' /\ Rv i' i}]>) ->
+      syntailsL (iter k i) w <( φ AN ψ )>
+  (* φ EN ψ *)
+  | SynEnStuck: forall w φ ψ,
+      False ->
+      syntailsL Stuck w <( φ EN ψ )>
+  | SynEnRetL: forall w φ ψ r,
+      False ->
+      syntailsL (Ret r) w <( φ EN ψ )>
+  | SynEnBrS: forall w {Y} (c: B Y) (k: Y -> ctree E B X) φ ψ,
+      syntailsL (BrS c k) w φ ->
+      (exists (y: Y), <( {k y}, w |= ψ )>) ->
+      syntailsL (BrS c k) w <( φ EN ψ )>
+  | SynEnStep: forall w t φ ψ,
+      syntailsL (Step t) w φ ->
+      syntailsL t w ψ ->
+      syntailsL (Step t) w <( φ EN ψ )>
+  | SynEnVis: forall w {Y} (e: E Y) (k: Y -> ctree E B X) φ ψ,
+      syntailsL (Vis e k) w φ ->
+      (exists (v: Y), <( {k v}, {Obs e v} |= ψ )>) ->
+      syntailsL (Vis e k) w <( φ EN ψ )>
+  | SynEnBindR: forall {Y} (t: ctree E B Y) (k: Y -> ctree E B X) φ ψ w R,
+      <[ t, w |= φ EN done R ]> ->
+      (forall r w', R r w' -> syntailsL (k r) w' <( φ EN ψ )>) ->
+      syntailsL (x <- t ;; k x) w <( φ EN ψ )>
+  | SynEnIter: forall {I} Ri Rv (i: I) w (k: I -> ctree E B (I + X)) φ ψ,
+      well_founded Rv ->
+      Ri i w ->
+      (forall (i: I) w,
+          Ri i w ->
+          <( {k i}, w |= φ EN ψ )> \/
+            <[ {k i}, w |= φ EN done
+                        {fun (lr: I + X) (w': World E) =>
+                           exists i', lr = inl i' /\ Ri i' w' /\ Rv i' i}]>) ->
+      syntailsL (iter k i) w <( φ EN ψ )>
+  (* AG φ *)
+  | SynAgStuck: forall w φ,
+      False ->
+      syntailsL Stuck w <( AG φ )>
+  | SynAgRetL: forall w φ r,
+      False ->
+      syntailsL (Ret r) w <( AG φ )>
+  | SynAgBrS: forall w {Y} (c: B Y) (k: Y -> ctree E B X) (y: Y) φ,
+      syntailsL (BrS c k) w φ ->
+      (forall (y: Y), syntailsL (k y) w <( AG φ )>) ->
+      syntailsL (BrS c k) w <( AG φ )>
+  | SynAgStep: forall w t φ,
+      syntailsL (Step t) w φ ->
+      syntailsL t w <( AG φ )> ->
+      syntailsL (Step t) w <( AG φ )>
+  | SynAgVis: forall w {Y} (e: E Y) (k: Y -> ctree E B X) (wit: Y) φ,
+      syntailsL (Vis e k) w φ ->
+      (forall (v: Y), syntailsL (k v) (Obs e v) <( AG φ )>) ->
+      syntailsL (Vis e k) w <( AG φ )>
+  | SynAgBindR: forall {Y} (t: ctree E B Y) (k: Y -> ctree E B X) φ w R,
+      <[ t, w |= φ AU ret R ]> ->
+      (forall r w', R r w' -> syntailsL (k r) w' <( AG φ )>) ->
+      syntailsL (x <- t ;; k x) w <( AG φ )>
+  | SynAgIter: forall {I} R (i: I) w (k: I -> ctree E B (I + X)) φ,
+      R i w ->
+      (forall (i: I) w,
+          R i w ->
+          <( {iter k i}, w |= φ)> /\
+            <[ {k i}, w |= AX (φ AU ret
+                                 {fun (lr: I + X) (w': World E) =>
+                                    exists (i': I), lr = inl i' /\ R i' w'}) ]>) ->
+      syntailsL (iter k i) w <( AG φ )>
+  (* EG φ *)
+  | SynEgStuck: forall w φ,
+      False ->
+      syntailsL Stuck w <( EG φ )>
+  | SynEgRetL: forall w φ r,
+      False ->
+      syntailsL (Ret r) w <( EG φ )>
+  | SynEgBrS: forall w {Y} (c: B Y) (k: Y -> ctree E B X) φ,
+      syntailsL (BrS c k) w φ ->
+      (exists (y: Y), <( {k y}, w |= EG φ )>) ->
+      syntailsL (BrS c k) w <( EG φ )>
+  | SynEgStep: forall w t φ,
+      syntailsL (Step t) w φ ->
+      syntailsL t w <( EG φ )> ->
+      syntailsL (Step t) w <( EG φ )>
+  | SynEgVis: forall w {Y} (e: E Y) (k: Y -> ctree E B X) φ,
+      syntailsL (Vis e k) w φ ->
+      (exists (v: Y), <( {k v}, {Obs e v} |= EG φ )>) ->
+      syntailsL (Vis e k) w <( EG φ )>
+  | SynEgBindR: forall {Y} (t: ctree E B Y) (k: Y -> ctree E B X) φ w R,
+      <[ t, w |= φ EU ret R ]> ->
+      (forall r w', R r w' -> syntailsL (k r) w' <( EG φ )>) ->
+      syntailsL (x <- t ;; k x) w <( EG φ )>
+  | SynEgIter: forall {I} R (i: I) w (k: I -> ctree E B (I + X)) φ,
+      R i w ->
+      (forall (i: I) w,
+          R i w ->
+          <( {iter k i}, w |= φ)> /\
+            <[ {k i}, w |= EX (φ EU ret
+                                 {fun (lr: I + X) (w': World E) =>
+                                    exists (i': I), lr = inl i' /\ R i' w'}) ]>) ->
+      syntailsL (iter k i) w <( EG φ )>.
+
+  Lemma soundnessL{X}: forall (t: ctree E B X) (w: World E) (φ: ticll E),
+      syntailsL t w φ -> <( t, w |= φ )>.
+  Proof with eauto with ticl.
+    intros.
+    induction H.
+    - rewrite sb_guard...
+    - csplit...
+    - csplit...
+    - cleft...
+    - cright...
+    - apply ticll_bind_l...
+    - apply aul_stuck...
+    - apply aul_ret; cleft...
+    - apply aul_ret; cright...
+    - cleft...
+    - apply (aul_brS c k y); right...
+    - cleft...
+    - apply aul_step; right...
+    - cleft...
+    - apply (aul_vis e k wit); right...
+    - apply aul_bind_r with (R:=R)...
+    - apply aul_iter with Ri Rv...
+    - apply eul_stuck...
+    - apply eul_ret; cleft...
+    - apply eul_ret; cright...
+    - cleft...
+    - apply eul_brS; right...
+    - cleft...
+    - apply eul_step; right...
+    - cleft...
+    - apply eul_vis; right...
+    - apply eul_bind_r with R...
+    - apply eul_iter with Ri Rv...
+    - contradiction.
+    - contradiction.
+    - apply (anl_brS c k y)...
+    - apply anl_step...
+    - apply (anl_vis e k wit)...
+    - apply anl_bind_r with R...
+    - apply anl_iter with Ri Rv...
+    - contradiction.
+    - contradiction.
+    - apply enl_brS...
+    - apply enl_step...
+    - apply enl_vis...
+    - apply enl_bind_r with R...
+    - apply enl_iter with Ri Rv...
+    - contradiction.
+    - contradiction.
+    - rewrite <- (ag_brS c k y)...
+    - rewrite <- ag_step...
+    - rewrite <- (ag_vis e k wit)...
+    - apply ag_bind_r with R...
+    - apply ag_iter with R...
+    - contradiction.
+    - contradiction.
+    - rewrite <- eg_brS...
+    - rewrite <- eg_step...
+    - rewrite <- eg_vis...
+    - apply eg_bind_r with R...
+    - apply eg_iter with R...
+  Qed.
+
+  (** Syntactic entailment for suffix formulas [<[ ]>]. Left premises reuse [syntailsL]. *)
+  Inductive syntailsR{X}: ctree E B X -> World E -> ticlr E X -> Prop :=
+  | SynRGuard: forall w φ t,
+      syntailsR t w φ ->
+      syntailsR (Guard t) w φ
+  (* The [ret] atom: [Ret x] returns [x], deterministically *)
+  | SynRet: forall w (R: rel X (World E)) (x: X),
+      R x w ->
+      not_done w ->
+      syntailsR (Ret x) w <[ ret R ]>
+  (* Boolean *)
+  | SynRAnd: forall t w φ ψ,
+      syntailsR t w φ ->
+      syntailsR t w ψ ->
+      syntailsR t w <[ φ /\ ψ ]>
+  | SynROrL: forall t w φ ψ,
+      syntailsR t w φ ->
+      syntailsR t w <[ φ \/ ψ ]>
+  | SynROrR: forall t w φ ψ,
+      syntailsR t w ψ ->
+      syntailsR t w <[ φ \/ ψ ]>
+  (* φ AU ψ *)
+  | SynRAuStuck: forall w φ ψ,
+      syntailsR Stuck w ψ ->
+      syntailsR Stuck w <[ φ AU ψ ]>
+  | SynRAuRetL: forall w φ ψ r,
+      syntailsR (Ret r) w ψ ->
+      syntailsR (Ret r) w <[ φ AU ψ ]>
+  | SynRAuRetR: forall w φ ψ r,
+      syntailsR (Ret r) w <[ φ AN ψ ]> ->
+      syntailsR (Ret r) w <[ φ AU ψ ]>
+  | SynRAuBrSR: forall w {Y} (c: B Y) (k: Y -> ctree E B X) φ ψ,
+      syntailsR (BrS c k) w ψ ->
+      syntailsR (BrS c k) w <[ φ AU ψ ]>
+  | SynRAuBrSL: forall w {Y} (c: B Y) (k: Y -> ctree E B X) (y: Y) φ ψ,
+      syntailsL (BrS c k) w φ ->
+      (forall (y: Y), syntailsR (k y) w <[ φ AU ψ ]>) ->
+      syntailsR (BrS c k) w <[ φ AU ψ ]>
+  | SynRAuStepR: forall w t φ ψ,
+      syntailsR (Step t) w ψ ->
+      syntailsR (Step t) w <[ φ AU ψ ]>
+  | SynRAuStepL: forall w t φ ψ,
+      syntailsL (Step t) w φ ->
+      syntailsR t w <[ φ AU ψ ]> ->
+      syntailsR (Step t) w <[ φ AU ψ ]>
+  | SynRAuVisR: forall w {Y} (e: E Y) (k: Y -> ctree E B X) φ ψ,
+      syntailsR (Vis e k) w ψ ->
+      syntailsR (Vis e k) w <[ φ AU ψ ]>
+  | SynRAuVisL: forall w {Y} (e: E Y) (k: Y -> ctree E B X) (wit: Y) φ ψ,
+      syntailsL (Vis e k) w φ ->
+      (forall (v: Y), syntailsR (k v) (Obs e v) <[ φ AU ψ ]>) ->
+      syntailsR (Vis e k) w <[ φ AU ψ ]>
+  | SynRAuBindR: forall {Y} (t: ctree E B Y) (k: Y -> ctree E B X) φ ψ w R,
+      <[ t, w |= φ AU ret R ]> ->
+      (forall r w', R r w' -> syntailsR (k r) w' <[ φ AU ψ ]>) ->
+      syntailsR (x <- t ;; k x) w <[ φ AU ψ ]>
+  | SynRAuIter: forall {I} Ri Rv (i: I) w (k: I -> ctree E B (I + X)) φ ψ,
+      well_founded Rv ->
+      Ri i w ->
+      (forall (i: I) w,
+          Ri i w ->
+          <[ {k i}, w |= φ AU ret
+                      {fun (lr: I + X) (w': World E) =>
+                         match lr with
+                         | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
+                         | inr r => <[ {Ret r: ctree E B X}, w' |= φ AN ψ ]>
+                         end} ]>) ->
+      syntailsR (iter k i) w <[ φ AU ψ ]>
+  (* φ EU ψ *)
+  | SynREuStuck: forall w φ ψ,
+      syntailsR Stuck w ψ ->
+      syntailsR Stuck w <[ φ EU ψ ]>
+  | SynREuRetL: forall w φ ψ r,
+      syntailsR (Ret r) w ψ ->
+      syntailsR (Ret r) w <[ φ EU ψ ]>
+  | SynREuRetR: forall w φ ψ r,
+      syntailsR (Ret r) w <[ φ EN ψ ]> ->
+      syntailsR (Ret r) w <[ φ EU ψ ]>
+  | SynREuBrSR: forall w {Y} (c: B Y) (k: Y -> ctree E B X) φ ψ,
+      syntailsR (BrS c k) w ψ ->
+      syntailsR (BrS c k) w <[ φ EU ψ ]>
+  | SynREuBrSL: forall w {Y} (c: B Y) (k: Y -> ctree E B X) φ ψ,
+      syntailsL (BrS c k) w φ ->
+      (exists (y: Y), <[ {k y}, w |= φ EU ψ ]>) ->
+      syntailsR (BrS c k) w <[ φ EU ψ ]>
+  | SynREuStepR: forall w t φ ψ,
+      syntailsR (Step t) w ψ ->
+      syntailsR (Step t) w <[ φ EU ψ ]>
+  | SynREuStepL: forall w t φ ψ,
+      syntailsL (Step t) w φ ->
+      syntailsR t w <[ φ EU ψ ]> ->
+      syntailsR (Step t) w <[ φ EU ψ ]>
+  | SynREuVisR: forall w {Y} (e: E Y) (k: Y -> ctree E B X) φ ψ,
+      syntailsR (Vis e k) w ψ ->
+      syntailsR (Vis e k) w <[ φ EU ψ ]>
+  | SynREuVisL: forall w {Y} (e: E Y) (k: Y -> ctree E B X) φ ψ,
+      syntailsL (Vis e k) w φ ->
+      (exists (v: Y), <[ {k v}, {Obs e v} |= φ EU ψ ]>) ->
+      syntailsR (Vis e k) w <[ φ EU ψ ]>
+  | SynREuBindR: forall {Y} (t: ctree E B Y) (k: Y -> ctree E B X) φ ψ w R,
+      <[ t, w |= φ EU ret R ]> ->
+      (forall r w', R r w' -> syntailsR (k r) w' <[ φ EU ψ ]>) ->
+      syntailsR (x <- t ;; k x) w <[ φ EU ψ ]>
+  | SynREuIter: forall {I} Ri Rv (i: I) w (k: I -> ctree E B (I + X)) φ ψ,
+      well_founded Rv ->
+      Ri i w ->
+      not_done w ->
+      (forall (i: I) w,
+          Ri i w ->
+          not_done w ->
+          <[ {k i}, w |= φ EU ret
+                      {fun (lr: I + X) (w': World E) =>
+                         match lr with
+                         | inl i' => not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)
+                         | inr r => <[ {Ret r: ctree E B X}, w' |= φ EN ψ ]>
+                         end} ]>) ->
+      syntailsR (iter k i) w <[ φ EU ψ ]>
+  (* φ AN ψ *)
+  | SynRAnStuck: forall w φ ψ,
+      False ->
+      syntailsR Stuck w <[ φ AN ψ ]>
+  | SynRAnRetDone: forall w φ (R: rel X (World E)) r,
+      syntailsL (Ret r) w φ ->
+      R r w ->
+      syntailsR (Ret r) w <[ φ AN done R ]>
+  | SynRAnBrS: forall w {Y} (c: B Y) (k: Y -> ctree E B X) (y: Y) φ ψ,
+      syntailsL (BrS c k) w φ ->
+      (forall (y: Y), syntailsR (k y) w ψ) ->
+      syntailsR (BrS c k) w <[ φ AN ψ ]>
+  | SynRAnStep: forall w t φ ψ,
+      syntailsL (Step t) w φ ->
+      syntailsR t w ψ ->
+      syntailsR (Step t) w <[ φ AN ψ ]>
+  | SynRAnVis: forall w {Y} (e: E Y) (k: Y -> ctree E B X) (wit: Y) φ ψ,
+      syntailsL (Vis e k) w φ ->
+      (forall (v: Y), syntailsR (k v) (Obs e v) ψ) ->
+      syntailsR (Vis e k) w <[ φ AN ψ ]>
+  | SynRAnBindL: forall {Y} (t: ctree E B Y) (k: Y -> ctree E B X) φ ψ w R,
+      <[ t, w |= φ AN ret R ]> ->
+      (forall r w', R r w' -> syntailsR (k r) w' ψ) ->
+      syntailsR (x <- t ;; k x) w <[ φ AN ψ ]>
+  | SynRAnBindR: forall {Y} (t: ctree E B Y) (k: Y -> ctree E B X) φ ψ w R,
+      <[ t, w |= φ AN done R ]> ->
+      (forall r w', R r w' -> syntailsR (k r) w' <[ φ AN ψ ]>) ->
+      syntailsR (x <- t ;; k x) w <[ φ AN ψ ]>
+  | SynRAnIter: forall {I} Ri Rv (i: I) w (k: I -> ctree E B (I + X)) φ ψ,
+      well_founded Rv ->
+      Ri i w ->
+      (forall (i: I) w,
+          Ri i w ->
+          <[ {k i}, w |= φ AN done
+                      {fun (lr: I + X) (w': World E) =>
+                         match lr with
+                         | inl i' => Ri i' w' /\ Rv i' i
+                         | inr r => <[ {Ret r: ctree E B X}, w' |= φ AN ψ ]>
+                         end} ]>) ->
+      syntailsR (iter k i) w <[ φ AN ψ ]>
+  (* φ EN ψ *)
+  | SynREnStuck: forall w φ ψ,
+      False ->
+      syntailsR Stuck w <[ φ EN ψ ]>
+  | SynREnRetDone: forall w φ (R: rel X (World E)) r,
+      syntailsL (Ret r) w φ ->
+      R r w ->
+      syntailsR (Ret r) w <[ φ EN done R ]>
+  | SynREnBrS: forall w {Y} (c: B Y) (k: Y -> ctree E B X) φ ψ,
+      syntailsL (BrS c k) w φ ->
+      (exists (y: Y), <[ {k y}, w |= ψ ]>) ->
+      syntailsR (BrS c k) w <[ φ EN ψ ]>
+  | SynREnStep: forall w t φ ψ,
+      syntailsL (Step t) w φ ->
+      syntailsR t w ψ ->
+      syntailsR (Step t) w <[ φ EN ψ ]>
+  | SynREnVis: forall w {Y} (e: E Y) (k: Y -> ctree E B X) φ ψ,
+      syntailsL (Vis e k) w φ ->
+      (exists (v: Y), <[ {k v}, {Obs e v} |= ψ ]>) ->
+      syntailsR (Vis e k) w <[ φ EN ψ ]>
+  | SynREnBindR: forall {Y} (t: ctree E B Y) (k: Y -> ctree E B X) φ ψ w R,
+      <[ t, w |= φ EN done R ]> ->
+      (forall r w', R r w' -> syntailsR (k r) w' <[ φ EN ψ ]>) ->
+      syntailsR (x <- t ;; k x) w <[ φ EN ψ ]>
+  | SynREnIter: forall {I} Ri Rv (i: I) w (k: I -> ctree E B (I + X)) φ ψ,
+      well_founded Rv ->
+      Ri i w ->
+      (forall (i: I) w,
+          Ri i w ->
+          <[ {k i}, w |= φ EN done
+                      {fun (lr: I + X) (w': World E) =>
+                         match lr with
+                         | inl i' => Ri i' w' /\ Rv i' i
+                         | inr r => <[ {Ret r: ctree E B X}, w' |= φ EN ψ ]>
+                         end} ]>) ->
+      syntailsR (iter k i) w <[ φ EN ψ ]>.
+
+  Lemma soundnessR{X}: forall (t: ctree E B X) (w: World E) (φ: ticlr E X),
+      syntailsR t w φ -> <[ t, w |= φ ]>.
+  Proof with eauto with ticl.
+    intros.
+    induction H.
+    - rewrite sb_guard...
+    - apply ret_ret...
+    - csplit...
+    - cleft...
+    - cright...
+    - apply aur_stuck...
+    - apply aur_ret; cleft...
+    - apply aur_ret; cright...
+    - cleft...
+    - apply (aur_brS c k y); right; split; auto; now apply soundnessL.
+    - cleft...
+    - apply aur_step; right; split; auto; now apply soundnessL.
+    - cleft...
+    - apply (aur_vis e k wit); right; split; auto; now apply soundnessL.
+    - apply aur_bind_r with (R:=R)...
+    - apply aur_iter with Ri Rv...
+    - apply eur_stuck...
+    - apply eur_ret; cleft...
+    - apply eur_ret; cright...
+    - cleft...
+    - apply eur_brS; right; split; auto; now apply soundnessL.
+    - cleft...
+    - apply eur_step; right; split; auto; now apply soundnessL.
+    - cleft...
+    - apply eur_vis; right; split; auto; now apply soundnessL.
+    - apply eur_bind_r with R...
+    - apply eur_iter with Ri Rv...
+    - contradiction.
+    - apply anr_ret_done; auto; now apply soundnessL.
+    - apply (anr_brS c k y); split; auto; now apply soundnessL.
+    - apply anr_step; split; auto; now apply soundnessL.
+    - apply (anr_vis e k wit); split; auto; now apply soundnessL.
+    - apply anr_bind_l with R...
+    - apply anr_bind_r with R...
+    - apply anr_iter with Ri Rv...
+    - contradiction.
+    - apply enr_ret; auto; now apply soundnessL.
+    - apply enr_brS; split; auto; now apply soundnessL.
+    - apply enr_step; split; auto; now apply soundnessL.
+    - apply enr_vis; split; auto; now apply soundnessL.
+    - apply enr_bind_r with R...
+    - apply enr_iter with Ri Rv...
+  Qed.
+
+End SyntacticEntailment.

@@ -1,24 +1,31 @@
 From Stdlib Require Import List Lia Arith.PeanoNat Fin Vector.
-From TICL Require Import ICTree.Interp.Yield.Execution.
+From Coinduction Require Import all.
+From TICL Require Import CTree.Interp.Yield.Execution.
 From TICL Require Import Utils.Execution.
 From Stdlib Require Import Classes.Morphisms.
-From TICL Require Import Lang.CSL.Mod ICTree.Core ICTree.Equ ICTree.SBisim
-  ICTree.Events.Writer ICTree.Events.Yield ICTree.Interp.State.Mod
-  ICTree.Interp.Yield.Mod ICTree.Interp.Yield.SBisim
-  ICTree.Interp.Yield.RoundRobin Utils.Vectors.
+From TICL Require Import
+  Lang.CSL.Mod
+  CTree.Core
+  CTree.Events.Writer
+  CTree.Events.Yield
+  CTree.Interp.State.Mod
+  CTree.Interp.Yield.Mod
+  CTree.Interp.Yield.SBisim
+  CTree.Interp.Yield.RoundRobin
+  Utils.Vectors.
 From examples Require Import CSL.Queue.Representation.
 From examples Require Import CSL.Allocator.Layout
   CSL.Allocator.Program CSL.Allocator.Model.
 
-Import ICtree ICTreeNotations ListNotations VectorNotations.
-Local Open Scope ictree_scope.
+Import CTree CTreeNotations ListNotations VectorNotations.
+Local Open Scope ctree_scope.
 Local Open Scope fin_vector_scope.
 Local Open Scope list_scope.
 
 
-Definition client_next base client : option (option unit) -> thread sE :=
+Definition client_next base client : option (option unit) -> thread sE Bn :=
   until_tail (client_round base client) (fun _ => Ret tt).
-Definition remote_after_free base client (flow : option unit) : thread sE :=
+Definition remote_after_free base client (flow : option unit) : thread sE Bn :=
   match flow with
   | None => client_next base client None
   | Some _ =>
@@ -36,7 +43,7 @@ Definition remote_link_tail base block old : CProg (option unit) :=
   CBind (CWrite block old) (fun _ =>
   CBind CYield (fun _ => remote_cas_tail base block old)).
 
-Definition remote_residual (base : nat) (client : bool) (pc : remote_pc) : thread sE :=
+Definition remote_residual (base : nat) (client : bool) (pc : remote_pc) : thread sE Bn :=
   match pc with
   | RPoll => denote (remote_client base client)
   | RRead block => denote_flow (remote_free base block) >>= remote_after_free base client
@@ -46,7 +53,7 @@ Definition remote_residual (base : nat) (client : bool) (pc : remote_pc) : threa
       until_tail (remote_attempt base block) (remote_after_free base client)
   end.
 
-Definition owner_next base : option (option unit) -> thread sE :=
+Definition owner_next base : option (option unit) -> thread sE Bn :=
   until_tail (owner_round base) (fun _ => Ret tt).
 Definition owner_offer_tail base (client : bool) : CProg (option unit) :=
   if client then
@@ -54,12 +61,12 @@ Definition owner_offer_tail base (client : bool) : CProg (option unit) :=
   else
     CBind (offer_block base false) (fun _ =>
     CBind (offer_block base true) (fun _ => CRet (Some tt : option unit))).
-Definition owner_after_collect base (flow : option unit) : thread sE :=
+Definition owner_after_collect base (flow : option unit) : thread sE Bn :=
   match flow with
   | None => owner_next base None
   | Some _ => denote_flow (owner_offer_tail base false) >>= owner_next base
   end.
-Definition owner_after_detach base (flow : option unit) : thread sE :=
+Definition owner_after_detach base (flow : option unit) : thread sE Bn :=
   match flow with
   | None => owner_after_collect base None
   | Some _ => denote_flow (CUntilNone (reclaim_step base)) >>= owner_after_collect base
@@ -71,7 +78,7 @@ Definition detach_cas_tail base old : CProg (option unit) :=
       CBind CYield (fun _ => CRet (None : option unit)))
     else CBind CYield (fun _ => CRet (Some tt : option unit))).
 
-Definition owner_residual (base : nat) (pc : owner_pc) : thread sE :=
+Definition owner_residual (base : nat) (pc : owner_pc) : thread sE Bn :=
   match pc with
   | ORead => denote (CUntilNone (owner_round base))
   | OCAS old => denote_flow (detach_cas_tail base old) >>=
@@ -79,11 +86,11 @@ Definition owner_residual (base : nat) (pc : owner_pc) : thread sE :=
   | ODrain => denote_flow (CUntilNone (reclaim_step base)) >>= owner_after_collect base
   | OOffer client => denote_flow (owner_offer_tail base client) >>= owner_next base
   end.
-Definition allocator_pool (base : nat) (s : AState) : pool sE 3 :=
+Definition allocator_pool (base : nat) (s : AState) : pool sE Bn 3 :=
   [remote_residual base true (remote1_state s);
    remote_residual base false (remote0_state s);
    owner_residual base (owner_state s)]%vector.
-Definition source_pool0 base : pool sE 3 :=
+Definition source_pool0 base : pool sE Bn 3 :=
   [denote (remote_client base true); denote (remote_client base false);
    denote (CUntilNone (owner_round base))]%vector.
 Definition state_agrees (sigma : SSig) (s : AState) : Prop :=
@@ -108,8 +115,8 @@ Proof. apply pool_equ_refl. Qed.
 
 
 
-Lemma interp_rr_init_links n (ts : pool sE (S n)) (i : Fin.t (S n))
-  first count (K : option unit -> thread sE) m h allocs ctx c :
+Lemma interp_rr_init_links n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  first count (K : option unit -> thread sE Bn) m h allocs ctx c :
   (forall offset, Nat.lt offset (2 * count) ->
     h (first + offset)%nat <> None) ->
   interp_schedule_rr sh (S n)
@@ -129,8 +136,8 @@ Proof.
       apply Allocated; cbn; lia.
 Qed.
 
-Lemma interp_nd_init_links n (ts : pool sE (S n)) (i : Fin.t (S n))
-  first count (K : option unit -> thread sE) h allocs ctx c :
+Lemma interp_nd_init_links n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  first count (K : option unit -> thread sE Bn) h allocs ctx c :
   (forall offset, Nat.lt offset (2 * count) ->
     h (first + offset)%nat <> None) ->
   interp_schedule_nd sh (S n)
@@ -153,8 +160,8 @@ Qed.
 (** The starting heap is the actual allocation overlay.  In particular the
     five metadata writes and every link write are checked against allocated
     cells, and the untouched payloads retain the allocation's zeroes. *)
-Lemma interp_rr_init_page n (ts : pool sE (S n)) (i : Fin.t (S n))
-  base capacity (K : option unit -> thread sE) m h allocs ctx c :
+Lemma interp_rr_init_page n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  base capacity (K : option unit -> thread sE Bn) m h allocs ctx c :
   interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (init_page base capacity) >>= K))
     (Some i) m ((hunion (hblock base (page_size capacity)) h,allocs),(ctx,c)) ~
@@ -173,8 +180,8 @@ Proof.
   rewrite page_backing_in by (unfold page_size; lia); discriminate.
 Qed.
 
-Lemma interp_nd_init_page n (ts : pool sE (S n)) (i : Fin.t (S n))
-  base capacity (K : option unit -> thread sE) h allocs ctx c :
+Lemma interp_nd_init_page n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  base capacity (K : option unit -> thread sE Bn) h allocs ctx c :
   interp_schedule_nd sh (S n)
     (ts @ i := (denote_flow (init_page base capacity) >>= K))
     (Some i) ((hunion (hblock base (page_size capacity)) h,allocs),(ctx,c)) ~
@@ -196,8 +203,8 @@ Qed.
 (** A first-fit equation is separated from the finite-heap existence proof,
     so concrete initialized source programs can use a known fresh base.  The
     allocation records the page's whole extent in the allocation table. *)
-Lemma interp_rr_new_page_first n (ts : pool sE (S n)) (i : Fin.t (S n))
-  capacity base (K : option nat -> thread sE) m h allocs ctx c :
+Lemma interp_rr_new_page_first n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  capacity base (K : option nat -> thread sE Bn) m h allocs ctx c :
   Nat.lt 0 base -> block_free h base (page_size capacity) ->
   (forall j, Nat.lt 0 j -> Nat.lt j base ->
     ~ block_free h j (page_size capacity)) ->
@@ -215,8 +222,8 @@ Proof.
   - rewrite interp_rr_ret; reflexivity.
 Qed.
 
-Lemma interp_nd_new_page_first n (ts : pool sE (S n)) (i : Fin.t (S n))
-  capacity base (K : option nat -> thread sE) h allocs ctx c :
+Lemma interp_nd_new_page_first n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  capacity base (K : option nat -> thread sE Bn) h allocs ctx c :
   Nat.lt 0 base -> block_free h base (page_size capacity) ->
   (forall j, Nat.lt 0 j -> Nat.lt j base ->
     ~ block_free h j (page_size capacity)) ->
@@ -234,8 +241,8 @@ Proof.
   - rewrite interp_nd_source_ret; reflexivity.
 Qed.
 
-Lemma interp_rr_new_page n (ts : pool sE (S n)) (i : Fin.t (S n))
-  capacity (K : option nat -> thread sE) m h allocs ctx c :
+Lemma interp_rr_new_page n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  capacity (K : option nat -> thread sE Bn) m h allocs ctx c :
   heap_finite h ->
   exists base,
     Nat.lt 0 base /\ block_free h base (page_size capacity) /\
@@ -249,16 +256,16 @@ Lemma interp_rr_new_page n (ts : pool sE (S n)) (i : Fin.t (S n))
       (Some i) m ((page_heap base capacity h,upd allocs base (page_size capacity)),(ctx,c)).
 Proof.
   intro Finite.
-  destruct (heap_handler_alloc_finite h allocs (page_size capacity) (ctx,c) Finite
-    (page_size_positive capacity)) as (base & Positive & Free & First & Alloc).
+  destruct (first_fit_exists h (page_size capacity) Finite
+    (page_size_positive capacity)) as (base & Positive & Free & First).
   exists base; split; [exact Positive |]; split; [exact Free |].
   split; [exact First |]; split; [now apply page_heap_finite |].
   split; [now apply page_heap_old_frame |].
   apply interp_rr_new_page_first; assumption.
 Qed.
 
-Lemma interp_nd_new_page n (ts : pool sE (S n)) (i : Fin.t (S n))
-  capacity (K : option nat -> thread sE) h allocs ctx c :
+Lemma interp_nd_new_page n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  capacity (K : option nat -> thread sE Bn) h allocs ctx c :
   heap_finite h ->
   exists base,
     Nat.lt 0 base /\ block_free h base (page_size capacity) /\
@@ -272,8 +279,8 @@ Lemma interp_nd_new_page n (ts : pool sE (S n)) (i : Fin.t (S n))
       (Some i) ((page_heap base capacity h,upd allocs base (page_size capacity)),(ctx,c)).
 Proof.
   intro Finite.
-  destruct (heap_handler_alloc_finite h allocs (page_size capacity) (ctx,c) Finite
-    (page_size_positive capacity)) as (base & Positive & Free & First & Alloc).
+  destruct (first_fit_exists h (page_size capacity) Finite
+    (page_size_positive capacity)) as (base & Positive & Free & First).
   exists base; split; [exact Positive |]; split; [exact Free |].
   split; [exact First |]; split; [now apply page_heap_finite |].
   split; [now apply page_heap_old_frame |].
@@ -283,8 +290,8 @@ Qed.
 (** Empty heaps accept the very first candidate, even when capacity is zero:
     the allocation request is always for at least the five metadata cells. *)
 
-Lemma interp_rr_new_page_hemp n (ts : pool sE (S n)) (i : Fin.t (S n))
-  capacity (K : option nat -> thread sE) m ctx c :
+Lemma interp_rr_new_page_hemp n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  capacity (K : option nat -> thread sE Bn) m ctx c :
   interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (new_page capacity) >>= K)) (Some i) m (managed_empty,(ctx,c)) ~
   interp_schedule_rr sh (S n) (ts @ i := K (Some 1))
@@ -296,8 +303,8 @@ Proof.
   - intros j Positive Before; lia.
 Qed.
 
-Lemma interp_nd_new_page_hemp n (ts : pool sE (S n)) (i : Fin.t (S n))
-  capacity (K : option nat -> thread sE) ctx c :
+Lemma interp_nd_new_page_hemp n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  capacity (K : option nat -> thread sE Bn) ctx c :
   interp_schedule_nd sh (S n)
     (ts @ i := (denote_flow (new_page capacity) >>= K)) (Some i) (managed_empty,(ctx,c)) ~
   interp_schedule_nd sh (S n) (ts @ i := K (Some 1))
@@ -313,8 +320,8 @@ Qed.
     with metadata, link, or payload addresses combines these equations with
     the corresponding [page_heap_*] lookup laws, without assuming a fixture. *)
 
-Lemma interp_rr_new_page_read n (ts : pool sE (S n)) (i : Fin.t (S n))
-  capacity (address : nat -> nat) value (K : option nat -> thread sE) m ctx c :
+Lemma interp_rr_new_page_read n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  capacity (address : nat -> nat) value (K : option nat -> thread sE Bn) m ctx c :
   page_heap 1 capacity hemp (address 1) = Some value ->
   interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CBind (new_page capacity)
@@ -326,8 +333,8 @@ Proof.
   apply interp_rr_read_value; exact Lookup.
 Qed.
 
-Lemma interp_nd_new_page_read n (ts : pool sE (S n)) (i : Fin.t (S n))
-  capacity (address : nat -> nat) value (K : option nat -> thread sE) ctx c :
+Lemma interp_nd_new_page_read n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  capacity (address : nat -> nat) value (K : option nat -> thread sE Bn) ctx c :
   page_heap 1 capacity hemp (address 1) = Some value ->
   interp_schedule_nd sh (S n)
     (ts @ i := (denote_flow (CBind (new_page capacity)
@@ -340,26 +347,26 @@ Proof.
 Qed.
 
 Lemma interp_rr_new_page_read_missing n
-  (ts : pool sE (S n)) (i : Fin.t (S n))
-  capacity (address : nat -> nat) (K : option nat -> thread sE) m ctx c :
+  (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  capacity (address : nat -> nat) (K : option nat -> thread sE Bn) m ctx c :
   page_heap 1 capacity hemp (address 1) = None ->
   interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CBind (new_page capacity)
       (fun base => CRead (address base))) >>= K)) (Some i) m (managed_empty,(ctx,c)) ~
-    (stuck : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
+    (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   intro Missing; rewrite interp_rr_bind, interp_rr_new_page_hemp.
   apply interp_rr_read_missing; exact Missing.
 Qed.
 
 Lemma interp_nd_new_page_read_missing n
-  (ts : pool sE (S n)) (i : Fin.t (S n))
-  capacity (address : nat -> nat) (K : option nat -> thread sE) ctx c :
+  (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  capacity (address : nat -> nat) (K : option nat -> thread sE Bn) ctx c :
   page_heap 1 capacity hemp (address 1) = None ->
   interp_schedule_nd sh (S n)
     (ts @ i := (denote_flow (CBind (new_page capacity)
       (fun base => CRead (address base))) >>= K)) (Some i) (managed_empty,(ctx,c)) ~
-    (stuck : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
+    (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   intro Missing; rewrite interp_nd_source_bind, interp_nd_new_page_hemp.
   apply interp_nd_source_read_missing; exact Missing.
@@ -437,16 +444,22 @@ Proof.
 Qed.
 
 From Stdlib Require Import List Program.Equality Classes.RelationClasses.
-From TICL Require Import Lang.CSL.Mod ICTree.Core ICTree.Equ ICTree.SBisim
-  ICTree.Trans ICTree.Events.Writer ICTree.Events.Yield
-  ICTree.Interp.State.Mod ICTree.Interp.Yield.Mod
-  ICTree.Interp.Yield.SBisim ICTree.Interp.Yield.RoundRobin
-  ICTree.Interp.Refine Utils.Vectors.
+From TICL Require Import
+  Lang.CSL.Mod
+  CTree.Core
+  CTree.Events.Writer
+  CTree.Events.Yield
+  CTree.Interp.State.Mod
+  CTree.Interp.Yield.Mod
+  CTree.Interp.Yield.SBisim
+  CTree.Interp.Yield.RoundRobin
+  CTree.Interp.Refine
+  Utils.Vectors.
 
 Unset Implicit Arguments.
 
-Import ICtree ICTreeNotations ListNotations VectorNotations.
-Local Open Scope ictree_scope.
+Import CTree CTreeNotations ListNotations VectorNotations.
+Local Open Scope ctree_scope.
 Local Open Scope fin_vector_scope.
 Local Open Scope list_scope.
 
@@ -539,7 +552,7 @@ Ltac allocator_segment_steps :=
 (** The checked model branches provide precisely the successful heap reads.
     Repeated checked writes remain allocated even if addresses coincide; no
     heap extensionality, freshness assumption, or unchecked CAS is used here. *)
-Local Opaque denote_flow ICtree.iter ICtree.bind.
+Local Opaque denote_flow CTree.iter CTree.bind.
 
 (** Every allocator round accesses linked-list cells only (read/write/CAS,
     emit, yield), so an arbitrary allocation table [allocs] is carried through
@@ -575,7 +588,7 @@ Proof.
   all: allocator_segment_steps.
 Qed.
 
-Local Transparent denote_flow ICtree.iter ICtree.bind.
+Local Transparent denote_flow CTree.iter CTree.bind.
 
 Lemma turn_other_slots base who s t event :
   turn base who s = Some (t,event) ->
@@ -609,7 +622,7 @@ Qed.
 
 (** ** The allocator's pool-simulation certificate.
 
-    One instantiation of [ICTree.Interp.Yield.Execution.PoolSimulation]; the
+    One instantiation of [CTree.Interp.Yield.Execution.PoolSimulation]; the
     scheduling-equivalence theorems it unlocks are the library's, so no
     allocator copy of the ND coinduction or the RR guard-alignment proof
     remains.  The exact segment is built at the ACTUAL heap through
@@ -715,7 +728,7 @@ Qed.
 
 (** At an arbitrary aligned pool and store the final handler state is only
     relationally determined, by the library segment of [allocator_simulation]. *)
-Theorem selected_turn_interp_nd base capacity (ts : pool sE 3)
+Theorem selected_turn_interp_nd base capacity (ts : pool sE Bn 3)
   sigma s who t event :
   pool_guard_equ ts (allocator_pool base s) ->
   state_agrees sigma s -> allocator_inv base capacity s ->
@@ -737,7 +750,7 @@ Proof.
   - exact Hinterp.
 Qed.
 
-Theorem selected_turn_interp_rr base capacity (ts : pool sE 3)
+Theorem selected_turn_interp_rr base capacity (ts : pool sE Bn 3)
   sigma s who t event cursor :
   pool_guard_equ ts (allocator_pool base s) ->
   state_agrees sigma s -> allocator_inv base capacity s ->
@@ -760,11 +773,9 @@ Proof.
       2 ts (slot_of_actor who) cursor sigma
       (event_obs event) residual sigma' Hseg).
 Qed.
-
-From Coinduction Require Import coinduction rel tactics.
 Local Open Scope nat_scope.
 
-Lemma selected_turn_exact_segment base (ts : pool sE 3) s who t event allocs ctx :
+Lemma selected_turn_exact_segment base (ts : pool sE Bn 3) s who t event allocs ctx :
   pool_guard_equ ts (allocator_pool base s) -> turn base who s = Some (t,event) ->
   exists residual,
     (ThreadSegment sh csl_equ) (ts $ slot_of_actor who) ((aheap s,allocs),(ctx,acount s))
@@ -784,7 +795,7 @@ Qed.
 Theorem run_rr_allocator_bisim capacity ctx c :
   run_rr (allocator_program capacity) (managed_empty,(ctx,c)) ~
     (model_rr 2 actor_of_slot (turn 1) (initial_state capacity c) 0
-       : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
+       : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   rewrite run_rr_allocator_initialized.
   exact (pool_simulation_rr_bisim actor_of_slot slot_of_actor_of_slot
@@ -798,7 +809,7 @@ Qed.
 Theorem run_nd_allocator_bisim capacity ctx c :
   run_nd (allocator_program capacity) (managed_empty,(ctx,c)) ~
     (model_nd 2 actor_of_slot (turn 1) (initial_state capacity c)
-       : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
+       : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   rewrite run_nd_allocator_initialized.
   exact (pool_simulation_nd_bisim actor_of_slot slot_of_actor_of_slot
@@ -813,6 +824,6 @@ Qed.
     the library's pool validity at the allocator handler, slot map, initial
     source pool, and initialized page with its recorded extent. *)
 Definition allocator_source_valid (capacity : nat) (ctx : Ctx.Ctx) (c : nat)
-  (se : Execution (pool sE 3 * SSig) Actor (list (CSLObs (nat * nat)))) : Prop :=
+  (se : Execution (pool sE Bn 3 * SSig) Actor (list (CSLObs (nat * nat)))) : Prop :=
   pool_execution_valid 2 sh slot_of_actor
     (source_pool0 1) ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c)) se.

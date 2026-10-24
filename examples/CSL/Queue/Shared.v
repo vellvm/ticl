@@ -9,15 +9,25 @@
 
 From Stdlib Require Import List Lia Arith.PeanoNat.
 From TICL Require Import
-  ICTree.Core ICTree.Equ ICTree.Events.Writer Events.WriterE
-  ICTree.Interp.Yield.Segments Lang.CSL.Mod Utils.Lists Utils.Relations
-  ICTree.Logic.Yield ICTree.Logic.AG ICTree.SBisim ICTree.Interp.Refine
-  ICTree.Interp.Yield.Mod ICTree.Interp.Yield.RoundRobin ICTree.Logic.State Logic.Core.
-From examples Require Import CSL.Queue.Representation CSL.Queue.Program
+  CTree.Core
+  CTree.Events.Writer
+  Events.WriterE
+  CTree.Interp.Yield.Segments
+  Lang.CSL.Mod
+  Utils.Lists
+  Utils.Relations
+  CTree.Logic.Yield
+  CTree.Logic.AG
+  CTree.Interp.Refine
+  CTree.Interp.Yield.Mod
+  CTree.Interp.Yield.RoundRobin
+  CTree.Logic.State
+  Logic.Core.
+From examples Require Import CSL.Queue.Representation CSL.Queue.Operations CSL.Queue.Program
   CSL.Queue.Trace CSL.Queue.Layout CSL.Queue.Frame.
 
-Import ICtree ICTreeNotations ListNotations.
-Local Open Scope ictree_scope.
+Import CTree CTreeNotations ListNotations.
+Local Open Scope ctree_scope.
 Local Open Scope list_scope.
 
 (** ** One worker turn as an exact source segment. *)
@@ -288,7 +298,7 @@ Proof.
   eapply shared_rotate_agaf_pop_rr_fresh; [apply allocated_shared_queue_rep|exact Hf].
 Qed.
 
-Local Open Scope ictree_scope.
+Local Open Scope ctree_scope.
 Local Open Scope list_scope.
 
 (** ** Concrete execution.
@@ -296,15 +306,17 @@ Local Open Scope list_scope.
     The first three complete rotations of the allocated program under round
     robin: worker 2 runs first (the parent is gone and the cursor is still
     [0]), then worker 1, then worker 2 again, each rotating the same queue
-    once and logging one pop. *)
+    once and logging one pop.  Every scheduling decision is one visible
+    [Step] ([run_rr_pool_select]). *)
 Theorem shared_queue_rr_prefix3 :
   let h0 := new_queue_heap 1 [10;20;30] hemp in
   let h3 := qstepN 1 3 [3;5;7] h0 in
   run_rr (allocated_shared_queue [10;20;30]) (managed_empty,(List.nil,0)) ~
-  emit_list [inr (stamp (2,10) 0); inr (stamp (1,20) 1);
-             inr (stamp (2,30) 2)]
-    (run_rr_pool [worker 2 1; worker 1 1]%vector None 3
-      ((h3,upd hemp 1 8),(List.nil,3))).
+  Step (log (inr (stamp (2,10) 0) : CSLObs (nat * nat));;
+   Step (log (inr (stamp (1,20) 1) : CSLObs (nat * nat));;
+    Step (log (inr (stamp (2,30) 2) : CSLObs (nat * nat));;
+     run_rr_pool [worker 2 1; worker 1 1]%vector None 3
+       ((h3,upd hemp 1 8),(List.nil,3))))).
 Proof.
   intros h0 h3.
   rewrite run_rr_allocated_shared_queue; unfold shared_queue; rewrite run_rr_two_forks.
@@ -315,29 +327,31 @@ Proof.
   change (qrep 1 [5;7;3] [20;30;10] (qstep 1 [3;5;7] h0)) in Hq1.
   pose proof (qstep_qrep 1 [5;7;3] [20;30;10] _ Hq1 ltac:(discriminate)) as Hq2.
   change (qrep 1 [7;3;5] [30;10;20] (qstep 1 [5;7;3] (qstep 1 [3;5;7] h0))) in Hq2.
-  cbn [emit_list List.fold_right].
   (* worker 2 *)
   rewrite (run_rr_pool_select [worker 2 1; worker 1 1]%vector 0), (rr_pick_even 0 eq_refl).
+  apply sb_step.
   etransitivity;
     [exact (run_rr_pool_turn [worker 2 1; worker 1 1]%vector Fin.F1 1 _ _ _
       (exact_worker_turn 2 1 3 [5;7] 10 [20;30] h0 allocs List.nil 0 Hq0))|].
   cbn [emit_list List.fold_right].
-  apply sbisim_clo_bind_eq; [reflexivity|intros []].
+  rewrite !log_vis; apply sb_vis; intros _.
   (* worker 1 *)
   rewrite (run_rr_pool_select [worker 2 1; worker 1 1]%vector 1), (rr_pick_odd 1 eq_refl).
+  apply sb_step.
   etransitivity;
     [exact (run_rr_pool_turn [worker 2 1; worker 1 1]%vector (Fin.FS Fin.F1) 2 _ _ _
       (exact_worker_turn 1 1 5 [7;3] 20 [30;10] (qstep 1 [3;5;7] h0) allocs List.nil 1 Hq1))|].
   cbn [emit_list List.fold_right].
-  apply sbisim_clo_bind_eq; [reflexivity|intros []].
+  rewrite !log_vis; apply sb_vis; intros _.
   (* worker 2 again *)
   rewrite (run_rr_pool_select [worker 2 1; worker 1 1]%vector 2), (rr_pick_even 2 eq_refl).
+  apply sb_step.
   etransitivity;
     [exact (run_rr_pool_turn [worker 2 1; worker 1 1]%vector Fin.F1 3 _ _ _
       (exact_worker_turn 2 1 7 [3;5] 30 [10;20] (qstep 1 [5;7;3] (qstep 1 [3;5;7] h0))
          allocs List.nil 2 Hq2))|].
   cbn [emit_list List.fold_right].
-  apply sbisim_clo_bind_eq; [reflexivity|intros []].
+  rewrite !log_vis; apply sb_vis; intros _.
   reflexivity.
 Qed.
 
@@ -346,21 +360,22 @@ Local Open Scope fin_vector_scope.
 (** ** The empty queue faults.
 
     An allocated empty queue has a null head pointer and the null cell is
-    unallocated: the first worker turn reads it and the whole run is stuck,
-    so no [AG] formula holds. *)
+    unallocated: after the scheduler's visible pick, the first worker turn
+    reads it and the whole run is stuck, so no [AG] formula holds. *)
 Lemma allocated_shared_queue_empty_stuck : forall ctx c,
   run_rr (allocated_shared_queue []) (managed_empty,(ctx,c)) ~
-    (stuck : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
+    Step (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   intros ctx c.
   rewrite run_rr_allocated_shared_queue; unfold shared_queue; rewrite run_rr_two_forks.
   rewrite run_rr_pool_select, (rr_pick_even 0 eq_refl).
+  apply sb_step.
   unfold run_rr_pool, csl_pool; cbn [Vector.map].
   change (interp_schedule_rr sh 2
     ([Ret tt; denote (worker 1 1)]%vector @ Fin.F1 :=
       (denote_flow (worker 2 1) >>= fun _ => Ret tt)) (Some Fin.F1) 1
     ((new_queue_heap 1 [] hemp, upd hemp 1 (2 * S (length (@List.nil nat)))),(ctx,c)) ~
-    (stuck : ictreeW (CSLObs (nat * nat)) (unit * SSig))).
+    (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit))).
   unfold worker at 2; rewrite interp_rr_until_none, interp_rr_bind.
   unfold rotate_once at 1; rewrite interp_rr_bind.
   rewrite (interp_rr_read_value _ _ _ 2 0) by reflexivity; cbv beta iota.
@@ -373,5 +388,6 @@ Lemma allocated_shared_queue_empty_no_ag : forall ctx c w
   ~ <( {run_rr (allocated_shared_queue []) (managed_empty,(ctx,c))}, {w}
        |= AG phi )>.
 Proof.
-  intros ctx c w phi; rewrite allocated_shared_queue_empty_stuck; apply ag_stuck.
+  intros ctx c w phi; rewrite allocated_shared_queue_empty_stuck.
+  intro H; apply ag_step in H as (_ & H); eapply ag_stuck; exact H.
 Qed.

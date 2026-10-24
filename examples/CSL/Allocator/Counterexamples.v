@@ -17,12 +17,18 @@
 From Stdlib Require Import List Lia Arith.PeanoNat.
 From examples Require Import CSL.Allocator.Layout CSL.Allocator.Program
   CSL.Allocator.Model CSL.Allocator.Execution CSL.Allocator.Liveness.
-From TICL Require Import Lang.CSL.Mod ICTree.Core ICTree.Equ ICTree.SBisim
-  ICTree.Trans ICTree.Trace ICTree.Interp.Yield.Execution.
-From TICL Require Import Utils.Relations Utils.Lists Utils.Execution.
+From TICL Require Import
+  Lang.CSL.Mod
+  CTree.Core
+  CTree.Trace
+  CTree.Interp.Yield.Execution.
+From TICL Require Import
+  Utils.Relations
+  Utils.Lists
+  Utils.Execution.
 
-Import ICtree ICTreeNotations ListNotations.
-Local Open Scope ictree_scope.
+Import CTree CTreeNotations ListNotations.
+Local Open Scope ctree_scope.
 Local Open Scope list_scope.
 Local Open Scope nat_scope.
 
@@ -362,7 +368,7 @@ Theorem starvation_chained_cycle_actual_source : exists last labels residual,
   label_taus labels = 32 /\
   finite_steps (run_nd (allocator_program 2) (managed_empty,((List.nil : Ctx.Ctx),0))) labels residual /\
   residual ~ (model_nd 2 actor_of_slot (turn 1) last
-                : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
+                : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   destruct (starve_prefix_run 0) as (first & Hprefix & Hfirst).
   destruct (starve_cycle_run_actual 6 first Hfirst) as (last & Hcycle & Hlast).
@@ -598,7 +604,7 @@ Theorem stalled_prefix_source : exists last labels residual,
   label_taus labels = 13 /\
   finite_steps (run_nd (allocator_program 2) (managed_empty,((List.nil : Ctx.Ctx),0))) labels residual /\
   residual ~ (model_nd 2 actor_of_slot (turn 1) last
-                : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
+                : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   destruct (stalled_prefix_run 0) as (last & Hrun & Hstate).
   destruct (run_turns_realizes_source 2 (List.nil : Ctx.Ctx) 0 owner_stall_prefix last
@@ -613,9 +619,9 @@ Qed.
 
 (** Every silent polling choice still consumes one real scheduler tau. *)
 Theorem stalled_tail_source_tau n
-  (t : ictreeW (CSLObs (nat * nat)) (unit * SSig)) :
+  (t : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)) :
   realizes (fun j => turn_labels (emitted owner_stall_execution j)) (13+n) t ->
-  exists next, finite_steps t [tau] next /\
+  exists next, finite_steps t [τ] next /\
     realizes (fun j => turn_labels (emitted owner_stall_execution j)) (S (13+n)) next.
 Proof.
   intros [next Hne Hsteps Hrest].

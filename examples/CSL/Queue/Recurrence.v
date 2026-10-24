@@ -11,12 +11,12 @@
 
     The temporal proof uses two reusable structural iteration rules:
 
-    - the outer [AG] needs NO adaptation.  [ICTree.Logic.State.ag_state_iter]
+    - the outer [AG] needs NO adaptation.  [CTree.Logic.State.ag_state_iter]
       takes an invariant [R i sigma w], and the abstract queue can be
       existentially quantified inside it.  There is no variant, so nothing
       has to be a function of the state.
 
-    - the inner [AF] uses [ICTree.Logic.State.aul_state_iter_ghost].
+    - the inner [AF] uses [CTree.Logic.State.aul_state_iter_ghost].
       Its rank belongs to ghost queue data tied to the heap by the invariant;
       it need not be a function of the concrete heap or observation world. *)
 
@@ -26,37 +26,32 @@ From Stdlib Require Import
   Arith.PeanoNat
   Arith.Wf_nat
   Relations.
+From Coinduction Require Import all.
 
 From TICL Require Import
-  ICTree.Core
-  ICTree.Equ
-  ICTree.SBisim
-  ICTree.Interp.State.Mod
-  ICTree.Events.State
-  ICTree.Events.Writer
-  ICTree.Logic.Trans
-  ICTree.Logic.CanStep
-  ICTree.Logic.AX
-  ICTree.Logic.AF
-  ICTree.Logic.AG
-  ICTree.Logic.Bind
-  ICTree.Logic.Iter
-  ICTree.Logic.State
+  CTree.Core
+  CTree.Interp.State.Mod
+  CTree.Events.State
+  CTree.Events.Writer
+  CTree.Logic.Trans
+  CTree.Logic.CanStep
+  CTree.Logic.AX
+  CTree.Logic.AF
+  CTree.Logic.AG
+  CTree.Logic.Bind
+  CTree.Logic.Iter
+  CTree.Logic.State
   Logic.Core.
 
 From examples Require Import CSL.Queue.Representation CSL.Queue.Sequential
   CSL.Queue.Operations.
 From TICL Require Import Utils.Relations.
 
-From Coinduction Require Import coinduction.
 
-Import ICtree ICTreeNotations TiclNotations ListNotations.
-Local Open Scope ictree_scope.
+Import CTree CTreeNotations TiclNotations ListNotations.
+Local Open Scope ctree_scope.
 Local Open Scope ticl_scope.
 Local Open Scope list_scope.
-
-Local Typeclasses Transparent equ.
-Local Typeclasses Transparent sbisim.
 
 
 (** ** The observation projection.
@@ -71,7 +66,7 @@ Local Typeclasses Transparent sbisim.
     [Obs (Log (stamp v j)) tt] does NOT satisfy
     [indexed_after (fun x => x = nl) (S j)], so an [AF] of that formula
     cannot be discharged by the world already in hand.  That is
-    [ICTree.Logic.Trace.indexed_excludes_retained], proved once for every
+    [CTree.Logic.Trace.indexed_excludes_retained], proved once for every
     payload and return type. *)
 
 
@@ -97,8 +92,8 @@ Section Recurrence.
       qrep hdr (a :: ns) (v :: vs) h ->
       not_done w ->
       <[ {interp_state (sh (A:=nat)) (rot_body hdr) ((h, allocs), (ctx, c))}, w
-         |= ⊤ AU AX done= {(@inl unit unit tt,
-                            ((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, allocs), (ctx, S c)))}
+         |= ⊤ AU AX done= {(((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, allocs), (ctx, S c)),
+                            @inl unit unit tt)}
               {Obs (Log (inr (stamp v c) : CSLObs nat)) tt} ]>.
   Proof.
     intros ns vs a v h allocs ctx c w Hq Hd.
@@ -142,7 +137,7 @@ Section Recurrence.
                                not_done w'
                                /\ <[ {interp_state (sh (A:=nat))
                                        ((fun _: unit => rot_body hdr) tt) ((h, allocs), (ctx, c))}, w
-                                     |= ⊤ AU AX done= {(@inl unit unit i', s')} w' ]>
+                                     |= ⊤ AU AX done= {(s', @inl unit unit i')} w' ]>
                                /\ InvQ g' i' s'
                                /\ lexnat g' m)).
       { intros d' Hd' Hlex.
@@ -196,7 +191,7 @@ Section Recurrence.
       + eapply inner_af; [exact Hd' | exact Hq1 | exact Hf1].
       + rewrite (rot_body_spec hdr a1 ns1' v1 vs1' h1 allocs1 ctx1 c1 Hq1).
         apply anr_log; [| apply ticll_top; assumption].
-        cleft; apply axr_ret; [constructor |].
+        cleft; apply ret_ret; [constructor |].
         exists tt; split; [reflexivity | split; [constructor |]].
         destruct (find_index_rotl_pres Nat.eqb Nat.eqb_eq _ _ _ _ Hf1) as (d' & Hd'').
         exists (ns1' ++ [a1]), (vs1' ++ [v1]), d'; split.
@@ -306,7 +301,7 @@ Proof.
     + apply ticll_now; split; assumption.
     + rewrite (rot_body_spec hdr a1 ns1' v1 vs1' h1 allocs1 ctx1 c1 Hq1).
       apply anr_log; [| apply ticll_top; assumption].
-      cleft; apply axr_ret; [constructor |].
+      cleft; apply ret_ret; [constructor |].
       exists tt; split; [reflexivity | split; [constructor |]].
       split.
       * exists (ns1' ++ [a1]), (vs1' ++ [v1]); split;

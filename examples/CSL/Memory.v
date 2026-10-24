@@ -8,11 +8,17 @@
 
 From Stdlib Require Import List Lia Arith.PeanoNat Fin Vector.
 From TICL Require Import
-  ICTree.Core ICTree.Equ ICTree.SBisim ICTree.Events.Writer ICTree.Events.Yield
-  ICTree.Interp.Yield.Mod ICTree.Interp.Yield.RoundRobin Lang.CSL.Mod Utils.Vectors.
+  CTree.Core
+  CTree.Trace
+  CTree.Events.Writer
+  CTree.Events.Yield
+  CTree.Interp.Yield.Mod
+  CTree.Interp.Yield.RoundRobin
+  Lang.CSL.Mod
+  Utils.Vectors.
 
-Import ICtree ICTreeNotations ListNotations VectorNotations.
-Local Open Scope ictree_scope.
+Import CTreeNotations ListNotations VectorNotations.
+Local Open Scope ctree_scope.
 Local Open Scope fin_vector_scope.
 
 (** ** Fixtures *)
@@ -66,7 +72,7 @@ Definition use_after_free_cas : CProg unit :=
 Lemma run_rr_focus p (s : SSig) :
   run_rr p s ≅
   interp_schedule_rr sh 1
-    (([Ret tt] : pool sE 1) @ Fin.F1 := (denote_flow p >>= fun _ => Ret tt))
+    (([Ret tt] : pool sE Bn 1) @ Fin.F1 := (denote_flow p >>= fun _ => Ret tt))
     (Some Fin.F1) 0 s.
 Proof. reflexivity. Qed.
 
@@ -78,6 +84,10 @@ Ltac first_fit :=
   intros j Pos Lt Free; apply block_freeb_spec in Free;
   repeat (lia || (destruct j as [|j];
     [solve [lia | vm_compute in Free; discriminate] |])).
+
+(** Split a shared leading observation. *)
+Ltac rr_log :=
+  unfold log; rewrite !bind_trigger; apply sb_vis; intros [].
 
 Ltac block_is_free := apply block_freeb_spec; vm_compute; reflexivity.
 
@@ -125,7 +135,8 @@ Theorem lifecycle_scope :
   exists memory : ManagedHeap,
     run_rr lifecycle (managed_empty,((List.nil : Ctx.Ctx),0)) ~
       emit_list [inr (stamp (80,1) 0); inr (stamp (81,0) 1); inr (stamp (82,11) 2)]%list
-        (Ret (tt,(memory,((List.nil : Ctx.Ctx),3)))) /\
+        (Ret ((memory,((List.nil : Ctx.Ctx),3)),tt)
+          : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)) /\
     fst memory 1 = None /\ fst memory 2 = None /\ fst memory 3 = None /\
     fst memory 4 = Some 11 /\ fst memory 5 = Some 0 /\
     snd memory 1 = None /\ snd memory 4 = Some 2.
@@ -139,12 +150,12 @@ Proof.
     do 4 rr_step.
     unfold emit_list; cbn [List.fold_right].
     rr_step; rr_step.
-    apply sbisim_clo_bind_eq; [reflexivity|intros []].
+    rr_log.
     rr_step; rr_step.
-    apply sbisim_clo_bind_eq; [reflexivity|intros []].
+    rr_log.
     (* free the first block, read the adjacent one, emit it *)
     do 6 rr_step.
-    apply sbisim_clo_bind_eq; [reflexivity|intros []].
+    rr_log.
     rr_step.
     rr_finish.
   - repeat split; vm_compute; reflexivity.
@@ -155,7 +166,8 @@ Qed.
 Theorem reuse_first_fit :
   exists memory : ManagedHeap,
     run_rr reallocate (managed_empty,((List.nil : Ctx.Ctx),0)) ~
-      emit_list [inr (stamp (83,1) 0)]%list (Ret (tt,(memory,((List.nil : Ctx.Ctx),1)))) /\
+      emit_list [inr (stamp (83,1) 0)]%list (Ret ((memory,((List.nil : Ctx.Ctx),1)),tt)
+          : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)) /\
     snd memory 1 = Some 3 /\
     fst memory 1 = Some 0 /\ fst memory 2 = Some 0 /\ fst memory 3 = Some 0.
 Proof.
@@ -166,7 +178,7 @@ Proof.
     rr_step; rr_alloc 1.
     unfold emit_list; cbn [List.fold_right].
     rr_step; rr_step.
-    apply sbisim_clo_bind_eq; [reflexivity|intros []].
+    rr_log.
     rr_step.
     rr_finish.
   - repeat split; vm_compute; reflexivity.
@@ -174,7 +186,8 @@ Qed.
 
 (** Freeing null leaves every component of the state unchanged. *)
 Theorem free_null_unchanged (memory : ManagedHeap) ctx c :
-  run_rr (CFree 0) (memory,(ctx,c)) ~ Ret (tt,(memory,(ctx,c))).
+  run_rr (CFree 0) (memory,(ctx,c)) ~
+    (Ret ((memory,(ctx,c)),tt) : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   rewrite run_rr_focus.
   rewrite (interp_rr_free _ _ _ 0 _ _ memory memory ctx c eq_refl).
@@ -185,7 +198,7 @@ Qed.
 
 Theorem invalid_interior_stuck :
   run_rr invalid_interior (managed_empty,((List.nil : Ctx.Ctx),0)) ~
-    (stuck : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
+    (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   rewrite run_rr_focus; unfold invalid_interior.
   rr_step; rr_alloc 1.
@@ -195,7 +208,7 @@ Qed.
 
 Theorem invalid_double_stuck :
   run_rr invalid_double (managed_empty,((List.nil : Ctx.Ctx),0)) ~
-    (stuck : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
+    (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   rewrite run_rr_focus; unfold invalid_double.
   rr_step; rr_alloc 1.
@@ -206,7 +219,7 @@ Qed.
 
 Theorem use_after_free_read_stuck :
   run_rr use_after_free_read (managed_empty,((List.nil : Ctx.Ctx),0)) ~
-    (stuck : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
+    (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   rewrite run_rr_focus; unfold use_after_free_read.
   rr_step; rr_alloc 1.
@@ -217,7 +230,7 @@ Qed.
 
 Theorem use_after_free_write_stuck :
   run_rr use_after_free_write (managed_empty,((List.nil : Ctx.Ctx),0)) ~
-    (stuck : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
+    (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   rewrite run_rr_focus; unfold use_after_free_write.
   rr_step; rr_alloc 1.
@@ -228,7 +241,7 @@ Qed.
 
 Theorem use_after_free_cas_stuck :
   run_rr use_after_free_cas (managed_empty,((List.nil : Ctx.Ctx),0)) ~
-    (stuck : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
+    (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   rewrite run_rr_focus; unfold use_after_free_cas.
   rr_step; rr_alloc 1.

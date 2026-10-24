@@ -11,7 +11,7 @@
     Periodic choice sequences and window list facts live in [Utils.Lists].
 
     This module imports only Stdlib, ExtLib and [Utils]; it never mentions
-    ictrees, schedulers, or any example. *)
+    ctrees, schedulers, or any example. *)
 
 From Stdlib Require Import
   List

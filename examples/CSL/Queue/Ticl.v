@@ -1,15 +1,20 @@
 From Stdlib Require Import List.
+From Coinduction Require Import all.
 From TICL Require Import
-  Lang.CSL.Mod ICTree.Core ICTree.Equ ICTree.Events.Writer ICTree.SBisim
-  ICTree.Logic.Trans ICTree.Logic.State ICTree.Logic.AG Logic.Core.
+  Lang.CSL.Mod
+  CTree.Core
+  CTree.Events.Writer
+  CTree.Logic.Trans
+  CTree.Logic.State
+  CTree.Logic.AG
+  Logic.Core.
 From examples Require Import CSL.Queue.Representation CSL.Queue.Layout
   CSL.Queue.Frame CSL.Queue.Separation CSL.Queue.Alternating
   CSL.Queue.Composition CSL.Queue.Program.
 
-Import ICtree ICTreeNotations TiclNotations ListNotations.
-Local Open Scope ictree_scope.
+Import CTree CTreeNotations TiclNotations ListNotations.
+Local Open Scope ctree_scope.
 Local Open Scope ticl_scope.
-Local Typeclasses Transparent equ sbisim.
 
 Theorem rotate_agaf_pop_rr :
   forall u v nl1 nl2 h allocs ctx c ns1 vs1 ns2 vs2 d1 d2,
@@ -59,8 +64,6 @@ Theorem rotate_agaf_pop_rr_q2_fresh :
 Proof.
   intros u v nl1 nl2 k h allocs ctx c ns1 vs1 ns2 vs2 d1 d2 H1 H2 Hd F1 F2.
   rewrite (run_rr_parallel_bisim u v ((h,allocs),(ctx,c))).
-
-From Coinduction Require Import coinduction.
   exact (Composition.sched_agaf_q2_fresh u v nl1 nl2 k 0 h allocs ctx c
     ns1 vs1 ns2 vs2 d1 d2 H1 H2 Hd F1 F2).
 Qed.

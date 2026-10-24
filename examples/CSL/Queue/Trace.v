@@ -9,33 +9,29 @@ From Stdlib Require Import
   List
   Lia
   Arith.PeanoNat.
+From Coinduction Require Import all.
 
 From TICL Require Import
-  ICTree.Core
-  ICTree.Equ
-  ICTree.SBisim
-  ICTree.Interp.State.Mod
-  ICTree.Events.State
-  ICTree.Events.Writer
-  ICTree.Logic.Trans
-  ICTree.Logic.CanStep
-  ICTree.Logic.AX
-  ICTree.Logic.AF
-  ICTree.Logic.AG
-  ICTree.Logic.Bind
-  ICTree.Logic.Iter
-  ICTree.Logic.State
+  CTree.Core
+  CTree.Interp.State.Mod
+  CTree.Events.State
+  CTree.Events.Writer
+  CTree.Logic.Trans
+  CTree.Logic.CanStep
+  CTree.Logic.AX
+  CTree.Logic.AF
+  CTree.Logic.AG
+  CTree.Logic.Bind
+  CTree.Logic.Iter
+  CTree.Logic.State
   Logic.Core.
 
-From examples Require Import CSL.Queue.Representation CSL.Queue.Sequential.
+From examples Require Import CSL.Queue.Representation CSL.Queue.Operations CSL.Queue.Sequential.
 
-Import ICtree ICTreeNotations TiclNotations ListNotations.
-Local Open Scope ictree_scope.
+Import CTree CTreeNotations TiclNotations ListNotations.
+Local Open Scope ctree_scope.
 Local Open Scope ticl_scope.
 Local Open Scope list_scope.
-
-Local Typeclasses Transparent equ.
-Local Typeclasses Transparent sbisim.
 
 (** One completed rotation of the run: a single logged pop, then the run from
     the rotated heap. This is [Sequential.rot_body_spec] lifted through the
@@ -53,11 +49,9 @@ Proof.
   cbv beta.
   rewrite (rot_body_spec hdr a ns v vs h allocs ctx c Hq).
   rewrite bind_bind.
-  apply sbisim_clo_bind_eq; [reflexivity | intros []].
+  rewrite !log_vis; apply sb_vis; intros _.
   rewrite bind_ret_l.
   apply sb_guard.
-
-From Coinduction Require Import coinduction.
 Qed.
 
 (** The heap after one rotation, and after [n] of them. *)
@@ -77,7 +71,7 @@ Fixpoint qstepN (hdr: nat) (n: nat) (ns: list nat) (h: Heap) : Heap :=
 (** The observation prefix of [n] rotations, with the continuation threaded so
     that no [bind]-associativity reasoning is needed. *)
 Fixpoint runN (hdr: nat) (n: nat) (ns vs: list nat) (h: Heap) (c: nat)
-              (k: ictreeW (CSLObs nat) (unit * SSig)) : ictreeW (CSLObs nat) (unit * SSig) :=
+              (k: ctreeW (CSLObs nat) Bn (SSig * unit)) : ctreeW (CSLObs nat) Bn (SSig * unit) :=
   match n with
   | 0 => k
   | S m => log (inr (stamp (hd 0 vs) c) : CSLObs nat) ;;
@@ -119,7 +113,7 @@ Proof.
     destruct vs as [| v vs']; [apply qrep_len in Hq; cbn in Hq; discriminate |].
     cbn [runN qstepN qstep hd].
     rewrite (run_step hdr a ns' v vs' h allocs ctx c Hq).
-    apply sbisim_clo_bind_eq; [reflexivity | intros []].
+    rewrite !log_vis; apply sb_vis; intros _.
     rewrite <- Nat.add_succ_comm.
     apply (IH hdr (rotl (a :: ns')) (rotl (v :: vs'))).
     + cbn [rotl]; apply (rot_heap_spec hdr a ns' v vs' h Hq).

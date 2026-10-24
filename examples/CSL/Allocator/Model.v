@@ -1,14 +1,19 @@
 From Stdlib Require Import List Lia Arith.PeanoNat Fin Sorting.Permutation.
+From Coinduction Require Import all.
 From TICL Require Import Utils.Execution.
-From TICL Require Import ICTree.Interp.Yield.Execution.
-From TICL Require Import Lang.CSL.Mod ICTree.Core ICTree.Equ ICTree.SBisim
-  ICTree.Events.Writer ICTree.Interp.Refine.
+From TICL Require Import CTree.Interp.Yield.Execution.
+From TICL Require Import
+  Lang.CSL.Mod
+  CTree.Core
+  CTree.Events.Writer
+  CTree.Interp.Refine.
 From examples Require Import CSL.Queue.Representation.
 From examples Require Import CSL.Allocator.Layout.
 
-Import ICtree ICTreeNotations ListNotations.
-Local Open Scope ictree_scope.
+Import CTree CTreeNotations ListNotations.
+Local Open Scope ctree_scope.
 Local Open Scope list_scope.
+Local Open Scope nat_scope.
 
 Inductive Actor := Owner | Remote0 | Remote1.
 Inductive owner_pc := ORead | OCAS (old : nat) | ODrain | OOffer (client : bool).
@@ -232,13 +237,16 @@ Qed.
 From Stdlib Require Import List Lia Arith.PeanoNat Fin
   Classes.RelationClasses Classes.RelationPairs Program.Equality.
 From ExtLib Require Import Data.Option.
-From Coinduction Require Import coinduction rel tactics.
-From TICL Require Import Lang.CSL.Mod ICTree.Core ICTree.Equ ICTree.SBisim
-  ICTree.Events.Writer ICTree.Interp.Refine.
+From TICL Require Import
+  Lang.CSL.Mod
+  CTree.Core
+  CTree.Events.Writer
+  CTree.Interp.Refine.
 
-Import ICtree ICTreeNotations ListNotations.
-Local Open Scope ictree_scope.
+Import CTree CTreeNotations ListNotations.
+Local Open Scope ctree_scope.
 Local Open Scope list_scope.
+Local Open Scope nat_scope.
 Local Typeclasses Transparent equ.
 
 Lemma state_equiv_refl s : state_equiv s s.

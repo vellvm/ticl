@@ -40,7 +40,9 @@ Import ListNotations.
 
 (** ** The resource model *)
 
-From TICL Require Export ICTree.Interp.CSL.Mod Utils.Lists.
+From TICL Require Export
+  CTree.Interp.CSL.Mod
+  Utils.Lists.
 
 (** ** Footprints and well-formedness
 

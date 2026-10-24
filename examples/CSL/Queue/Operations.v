@@ -1,17 +1,17 @@
 From Stdlib Require Import List Arith.PeanoNat.
 From examples Require Import CSL.Queue.Representation.
 From TICL Require Import
-  ICTree.Core ICTree.Equ ICTree.SBisim
-  ICTree.Events.Heap ICTree.Events.Writer ICTree.Interp.State.Mod.
+  CTree.Core
+  CTree.Events.Heap
+  CTree.Events.Writer
+  CTree.Interp.State.Mod.
 
-Import ICtree ICTreeNotations ListNotations.
-Local Open Scope ictree_scope.
-Local Typeclasses Opaque equ sbisim.
+Import CTree CTreeNotations ListNotations.
+Local Open Scope ctree_scope.
 
 (** The memory operations of one rotation are independent of its observation alphabet. *)
-Definition queue_turn {E : Type} `{HE : Encode E} `{RS : ReSum heapE E}
-  `{RR : @ReSumRet heapE E Encode_heapE HE RS} {X}
-  (emit_value : nat -> ictree E unit) (hdr : nat) (tail : ictree E X) : ictree E X :=
+Definition queue_turn {E B : Type -> Type} `{heapE -< E} {X}
+  (emit_value : nat -> ctree E B unit) (hdr : nat) (tail : ctree E B X) : ctree E B X :=
   a <- heap_read (S hdr);;
   value <- heap_read a;;
   emit_value value;;
@@ -23,9 +23,8 @@ Definition queue_turn {E : Type} `{HE : Encode E} `{RS : ReSum heapE E}
   heap_write hdr a;;
   tail.
 
-Lemma queue_turn_equ {E : Type} `{HE : Encode E} `{RS : ReSum heapE E}
-  `{RR : @ReSumRet heapE E Encode_heapE HE RS} {X}
-  (emit_value : nat -> ictree E unit) hdr (t u : ictree E X) :
+Lemma queue_turn_equ {E B : Type -> Type} `{heapE -< E} {X}
+  (emit_value : nat -> ctree E B unit) hdr (t u : ctree E B X) :
   t ≅ u -> queue_turn emit_value hdr t ≅ queue_turn emit_value hdr u.
 Proof.
   intro Htu; unfold queue_turn.
@@ -33,9 +32,8 @@ Proof.
   exact Htu.
 Qed.
 
-Lemma queue_turn_bind {E : Type} `{HE : Encode E} `{RS : ReSum heapE E}
-  `{RR : @ReSumRet heapE E Encode_heapE HE RS} {X Y}
-  (emit_value : nat -> ictree E unit) hdr (tail : ictree E X) (k : X -> ictree E Y) :
+Lemma queue_turn_bind {E B : Type -> Type} `{heapE -< E} {X Y}
+  (emit_value : nat -> ctree E B unit) hdr (tail : ctree E B X) (k : X -> ctree E B Y) :
   (queue_turn emit_value hdr tail >>= k) ≅ queue_turn emit_value hdr (tail >>= k).
 Proof.
   unfold queue_turn.
@@ -43,21 +41,37 @@ Proof.
   reflexivity.
 Qed.
 
-Lemma queue_turn_spec {E W : Type} {HE : Encode E} {X}
-  (other : E ~> stateT SSig (ictreeW W))
-  (emit_value : nat -> ictree (heapE + E) unit) (observe_value : nat -> nat -> W) :
-  (forall value h allocs ctx c (tail : ictree (heapE + E) X),
-    interp_state (h_sum heap_handler other) (emit_value value;; tail) ((h,allocs),(ctx,c)) ~
+(** A logged prefix as a single [Vis] node.  [log o;; t] is a bind whose two
+    trees may live at different [ctree] universes, which blocks the bind
+    congruences on [interp_state] results; the [Vis] form has one universe,
+    so [sb_vis] applies. *)
+Lemma log_vis {W B X} (o : W) (t : ctreeW W B X) :
+  (log o;; t) ≅ Vis (Log o) (fun _ => t).
+Proof.
+  unfold log; rewrite bind_trigger; step; constructor; intros []; reflexivity.
+Qed.
+
+(** Stated directly at the CSL handler [sh]: a handler-generic statement over
+    [ctreeW W B] pins the writer universe below ITree's monomorphic [stateT]
+    universes and cannot be instantiated at [sh]. *)
+Lemma queue_turn_spec {A : Type} {X}
+  (emit_value : nat -> ctree (heapE +' (stateE Ctx.Ctx +' writerE A)) Bn unit)
+  (observe_value : nat -> nat -> CSLObs A) :
+  (forall value h allocs ctx c (tail : ctree (heapE +' (stateE Ctx.Ctx +' writerE A)) Bn X),
+    interp_state sh (emit_value value;; tail) ((h,allocs),(ctx,c)) ~
       (log (observe_value value c);;
-       interp_state (h_sum heap_handler other) tail ((h,allocs),(ctx,S c)))) ->
-  forall hdr a ns value values h allocs ctx c (tail : ictree (heapE + E) X),
+       interp_state sh tail ((h,allocs),(ctx,S c)))) ->
+  forall hdr a ns value values h allocs ctx c
+    (tail : ctree (heapE +' (stateE Ctx.Ctx +' writerE A)) Bn X),
     qrep hdr (a :: ns) (value :: values) h ->
-    interp_state (h_sum heap_handler other) (queue_turn emit_value hdr tail) ((h,allocs),(ctx,c)) ~
+    interp_state sh (queue_turn emit_value hdr tail) ((h,allocs),(ctx,c)) ~
       (log (observe_value value c);;
-       interp_state (h_sum heap_handler other) tail
+       interp_state sh tail
          ((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h,allocs),(ctx,S c))).
 Proof.
   intros Emit hdr a ns value values h allocs ctx c tail Hq.
+  set (other := h_sum csl_context_handler (csl_emit_handler (A:=A))).
+  change (sh (A:=A)) with (h_sum heap_handler other) in *.
   pose proof Hq as (Hwf & Hhd & Htl & Hch & Hdom).
   cbn in Hhd, Htl.
   apply chain_cons in Hch as (Ha & Hsa & Hch).
@@ -72,7 +86,7 @@ Proof.
   etransitivity; [apply (interp_heap_rd other (S hdr) h allocs (ctx,c) a _ Hhd)|].
   etransitivity; [apply (interp_heap_rd other a h allocs (ctx,c) value _ Ha)|].
   etransitivity; [apply Emit|].
-  apply sbisim_clo_bind_eq; [reflexivity | intros []].
+  rewrite !log_vis; apply sb_vis; intros _.
   etransitivity; [apply (interp_heap_rd other (S a) h allocs (ctx,S c) (List.hd 0 ns) _ Hsa)|].
   etransitivity;
     [apply (interp_heap_wr_present other (S hdr) h allocs (ctx,S c) (List.hd 0 ns) _ Hshdrdom)|].

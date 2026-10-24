@@ -13,8 +13,8 @@
       component, and that is [Separation.foreign_pres], not a frame rule.
 
     - the temporal layer reuses the structural iteration rules
-      ([ICTree.Logic.State.ag_state_iter] for the outer [AG] and
-      [ICTree.Logic.State.aul_state_iter_ghost] for the inner [AF]). No fixed point
+      ([CTree.Logic.State.ag_state_iter] for the outer [AG] and
+      [CTree.Logic.State.aul_state_iter_ghost] for the inner [AF]). No fixed point
       is unfolded anywhere in this file.
 
     - the variant is the reused natural position rank plus ONE new component,
@@ -33,39 +33,34 @@ From Stdlib Require Import
   Arith.PeanoNat
   Arith.Wf_nat
   Relations.
+From Coinduction Require Import all.
 
 From TICL Require Import
-  ICTree.Core
-  ICTree.Equ
-  ICTree.SBisim
-  ICTree.Interp.State.Mod
-  ICTree.Events.State
-  ICTree.Events.Writer
-  ICTree.Logic.Trans
-  ICTree.Logic.CanStep
-  ICTree.Logic.AX
-  ICTree.Logic.AF
-  ICTree.Logic.AG
-  ICTree.Logic.Bind
-  ICTree.Logic.Iter
-  ICTree.Logic.State
+  CTree.Core
+  CTree.Interp.State.Mod
+  CTree.Events.State
+  CTree.Events.Writer
+  CTree.Logic.Trans
+  CTree.Logic.CanStep
+  CTree.Logic.AX
+  CTree.Logic.AF
+  CTree.Logic.AG
+  CTree.Logic.Bind
+  CTree.Logic.Iter
+  CTree.Logic.State
   Logic.Core.
 
 From examples Require Import
-  CSL.Queue.Representation CSL.Queue.Trace CSL.Queue.Layout
+  CSL.Queue.Representation CSL.Queue.Operations CSL.Queue.Trace CSL.Queue.Layout
   CSL.Queue.Frame CSL.Queue.Recurrence CSL.Queue.Separation
   CSL.Queue.Alternating.
 From TICL Require Import Utils.Relations.
 
-From Coinduction Require Import coinduction.
 
-Import ICtree ICTreeNotations TiclNotations ListNotations.
-Local Open Scope ictree_scope.
+Import CTree CTreeNotations TiclNotations ListNotations.
+Local Open Scope ctree_scope.
 Local Open Scope ticl_scope.
 Local Open Scope list_scope.
-
-Local Typeclasses Transparent equ.
-Local Typeclasses Transparent sbisim.
 
 (** A queue that still contains an element is non-empty.  Used to keep the
     focused queue's node list non-empty across a FOREIGN turn without
@@ -198,7 +193,7 @@ Section Composition.
                      (exists g' i' s' w',
                          not_done w'
                          /\ <[ {interp_state sh ((sbody u v) n) ((h, allocs), (ctx, c))}, w
-                               |= ⊤ AU AX done= {(@inl nat unit i', s')} w' ]>
+                               |= ⊤ AU AX done= {(s', @inl nat unit i')} w' ]>
                          /\ Ig nlf nlg kb g' i' s'
                          /\ rank3 g' m)).
           { intros df' Hdf' Hlex.
@@ -208,7 +203,9 @@ Section Composition.
             split; [constructor |].
             split.
             { rewrite Hspec; apply aur_log;
-                [cleft; apply axr_ret; [constructor | split; reflexivity]
+                [apply aur_step; right; split;
+                 [apply ticll_top; constructor
+                 | cleft; apply axr_ret; [constructor | split; reflexivity]]
                 | apply ticll_top; assumption]. }
             split; [| exact Hlex].
             exists (nsf' ++ [a]), (vsf' ++ [pv]), nsg, vsg, df', dg; cbn.
@@ -255,7 +252,9 @@ Section Composition.
           split; [constructor |].
           split.
           { rewrite Hspec; apply aur_log;
-              [cleft; apply axr_ret; [constructor | split; reflexivity]
+              [apply aur_step; right; split;
+               [apply ticll_top; constructor
+               | cleft; apply axr_ret; [constructor | split; reflexivity]]
               | apply ticll_top; assumption]. }
           split.
           { exists nsf, vsf, (nsg' ++ [b]), (vsg' ++ [pw]), df, dg'; cbn.
@@ -268,62 +267,97 @@ Section Composition.
           * apply rank3_bound; lia.
     Qed.
 
-    (** ** The recurrence theorem for the focused queue *)
+    (** One scheduler turn from an invariant heap: one logged pop, the
+        invariant heap after it.  The focus/foreign case analysis of the
+        [AG] proof happens here, once. *)
+    Lemma sched_turn_spec: forall n h allocs ctx c,
+        Iq nlf nlg h ->
+        exists o h',
+          interp_state sh (turn (tagof n) (hdrof u v n)) ((h, allocs), (ctx, c))
+            ~ (log (inr o : CSLObs (nat * nat));; Ret (((h', allocs), (ctx, S c)), tt)
+               : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit))
+          /\ Iq nlf nlg h'.
+    Proof.
+      intros n h allocs ctx c
+        (nsf & vsf & nsg & vsg & df & dg & Hqf & Hqg & Hdj & Hff & Hfg).
+      destruct (fturn n) eqn:Eph.
+      - (* focused turn *)
+        destruct vsf as [| pv vsf']; [cbn in Hff; discriminate |].
+        destruct nsf as [| a nsf'];
+          [apply qrep_len in Hqf; cbn in Hqf; discriminate |].
+        destruct (step_focus nsf' vsf' nsg vsg a pv h Hqf Hqg Hdj)
+          as (Hqf' & Hqg' & Hdj').
+        destruct (find_index_rotl_pres Nat.eqb Nat.eqb_eq _ _ _ _ Hff) as (df' & Hdf').
+        rewrite rotl_cons in Hdf'.
+        exists (stamp (fq, pv) c), (rot_heap fh a (List.hd 0 nsf') (zof fh nsf') h).
+        split.
+        + rewrite (Hfh n Eph), (Hft n Eph); unfold turn.
+          rewrite (turnk_spec fq fh a nsf' pv vsf' h allocs ctx c (Ret tt) Hqf).
+          rewrite !log_vis; apply sb_vis; intros _.
+          rewrite interp_state_ret; reflexivity.
+        + exists (nsf' ++ [a]), (vsf' ++ [pv]), nsg, vsg, df', dg.
+          split; [exact Hqf' |]; split; [exact Hqg' |]; split; [exact Hdj' |];
+            split; [exact Hdf' | exact Hfg].
+      - (* foreign turn *)
+        assert (Hnef: nsf <> []) by (eapply qrep_find_nonnil; eassumption).
+        destruct vsg as [| pw vsg']; [cbn in Hfg; discriminate |].
+        destruct nsg as [| b nsg'];
+          [apply qrep_len in Hqg; cbn in Hqg; discriminate |].
+        destruct (step_foreign nsf vsf nsg' vsg' b pw h Hqf Hnef Hqg Hdj)
+          as (Hqf' & Hqg' & Hdj').
+        destruct (find_index_rotl_pres Nat.eqb Nat.eqb_eq _ _ _ _ Hfg) as (dg' & Hdg').
+        rewrite rotl_cons in Hdg'.
+        exists (stamp (tagof n, pw) c), (rot_heap gh b (List.hd 0 nsg') (zof gh nsg') h).
+        split.
+        + rewrite (Hgh n Eph); unfold turn.
+          rewrite (turnk_spec (tagof n) gh b nsg' pw vsg' h allocs ctx c (Ret tt) Hqg).
+          rewrite !log_vis; apply sb_vis; intros _.
+          rewrite interp_state_ret; reflexivity.
+        + exists nsf, vsf, (nsg' ++ [b]), (vsg' ++ [pw]), df, dg'.
+          split; [exact Hqf' |]; split; [exact Hqg' |]; split; [exact Hdj' |];
+            split; [exact Hff | exact Hdg'].
+    Qed.
+
+    (** ** The recurrence theorem for the focused queue.
+
+        Each turn of the reference scheduler ends with a visible [Step]
+        (the source scheduler's selection), so one loop iteration has TWO
+        visible transitions: the pop and the step.  [ag_state_iter] would
+        require [AF] of the body alone at the intermediate step state, which
+        does not hold; the eventuality there comes from the next loop head.
+        The coinduction is therefore spelled out: at every loop head [AF]
+        is [inner_af], and the step state inherits it through [aul_step]. *)
     Theorem sched_agaf: forall n h allocs ctx c w,
         not_done w ->
         Iq nlf nlg h ->
         <( {interp_state sh (sched u v n) ((h, allocs), (ctx, c))}, w |= AG (AF visW {csl_indexed P}) )>.
     Proof.
       intros n h allocs ctx c w Hd HI.
-      unfold sched.
-      apply (ag_state_iter sh ((h, allocs), (ctx, c))
-               (fun (_: nat) (s: SSig) (_: WorldW (CSLObs (nat * nat))) =>
-                  Iq nlf nlg (fst (fst s)))
-               n w); [assumption | exact HI |].
-      clear n h allocs ctx c w Hd HI.
-      intros n s w Hd HI.
-      destruct s as ((h, allocs), (ctx, c)); cbn in HI.
-      split; [now apply inner_af |].
-      destruct HI
-        as (nsf & vsf & nsg & vsg & df & dg & Hqf & Hqg & Hdj & Hff & Hfg).
-      destruct (fturn n) eqn:Eph.
-      - (* focused turn *)
-        destruct vsf as [| pv vsf']; [cbn in Hff; discriminate |].
-        destruct nsf as [| a nsf'];
-          [apply qrep_len in Hqf; cbn in Hqf; discriminate |].
-        pose proof (sbody_spec u v n a nsf' pv vsf' h allocs ctx c) as Hspec.
-        rewrite (Hfh n Eph), (Hft n Eph) in Hspec.
-        specialize (Hspec Hqf).
-        destruct (step_focus nsf' vsf' nsg vsg a pv h Hqf Hqg Hdj)
-          as (Hqf' & Hqg' & Hdj').
-        destruct (find_index_rotl_pres Nat.eqb Nat.eqb_eq _ _ _ _ Hff) as (df' & Hdf').
-        rewrite rotl_cons in Hdf'.
-        rewrite Hspec.
-        apply anr_log; [| apply ticll_top; assumption].
-        cleft; apply axr_ret; [constructor |].
-        exists (S n); split; [reflexivity | split; [constructor |]].
-        exists (nsf' ++ [a]), (vsf' ++ [pv]), nsg, vsg, df', dg; cbn.
-        split; [exact Hqf' |]; split; [exact Hqg' |]; split; [exact Hdj' |];
-          split; [exact Hdf' | exact Hfg].
-      - (* foreign turn *)
-        assert (Hnef: nsf <> []) by (eapply qrep_find_nonnil; eassumption).
-        destruct vsg as [| pw vsg']; [cbn in Hfg; discriminate |].
-        destruct nsg as [| b nsg'];
-          [apply qrep_len in Hqg; cbn in Hqg; discriminate |].
-        pose proof (sbody_spec u v n b nsg' pw vsg' h allocs ctx c) as Hspec.
-        rewrite (Hgh n Eph) in Hspec.
-        specialize (Hspec Hqg).
-        destruct (step_foreign nsf vsf nsg' vsg' b pw h Hqf Hnef Hqg Hdj)
-          as (Hqf' & Hqg' & Hdj').
-        destruct (find_index_rotl_pres Nat.eqb Nat.eqb_eq _ _ _ _ Hfg) as (dg' & Hdg').
-        rewrite rotl_cons in Hdg'.
-        rewrite Hspec.
-        apply anr_log; [| apply ticll_top; assumption].
-        cleft; apply axr_ret; [constructor |].
-        exists (S n); split; [reflexivity | split; [constructor |]].
-        exists nsf, vsf, (nsg' ++ [b]), (vsg' ++ [pw]), df, dg'; cbn.
-        split; [exact Hqf' |]; split; [exact Hqg' |]; split; [exact Hdj' |];
-          split; [exact Hff | exact Hdg'].
+      change (interp_state sh (sched u v n) ((h, allocs), (ctx, c)))
+        with (srun u v n ((h, allocs), (ctx, c))).
+      revert n h allocs ctx c w Hd HI.
+      coinduction_g R CIH; intros n h allocs ctx c w Hd HI.
+      destruct (sched_turn_spec n h allocs ctx c HI) as (o & h' & Hsp & HI').
+      assert (Hsb: srun u v n ((h, allocs), (ctx, c)) ~
+                Vis (Log (inr o : CSLObs (nat * nat)))
+                  (fun _ => Step (srun u v (S n) ((h', allocs), (ctx, S c))))).
+      { rewrite srun_turn, Hsp, log_vis, bind_vis.
+        apply sb_vis; intros _; rewrite bind_ret_l; reflexivity. }
+      split; [| split].
+      - apply inner_af; assumption.
+      - rewrite Hsb; apply (can_step_vis _ _ tt); assumption.
+      - intros t' w' TR.
+        destruct (ktrans_semiproper _ _ _ _ _ Hsb TR) as (u' & TR' & Hsb').
+        apply ktrans_vis in TR' as ([] & -> & Heq & _).
+        rewrite Hsb', <- Heq.
+        apply (b_chain R); split; [| split].
+        + apply aul_step; right; split; [apply ticll_top; constructor |].
+          apply inner_af; [constructor | exact HI'].
+        + apply can_step_step; constructor.
+        + intros t'' w'' TR''.
+          apply ktrans_step in TR'' as (Heq'' & <- & _).
+          rewrite Heq''.
+          apply CIH; [constructor | exact HI'].
     Qed.
   End Inner.
 End Composition.

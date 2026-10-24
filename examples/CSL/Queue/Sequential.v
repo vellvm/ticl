@@ -4,7 +4,7 @@
     each of which is a research decision rather than a convenience:
 
     1. **The handler is safe.**  A read or a write outside the current heap's
-       domain produces [ICtree.stuck].  [HeapImp]'s [Put] never checks, and its
+       domain produces [Stuck].  [HeapImp]'s [Put] never checks, and its
        [Get] on an unmapped address is also stuck; here BOTH are checked, so an
        out-of-footprint access invalidates every [AG] specification rather than
        silently corrupting an unrelated cell.  The footprint discipline is
@@ -31,57 +31,50 @@ From Stdlib Require Import
   List
   Lia
   Arith.PeanoNat.
+From Coinduction Require Import all.
 
 From ExtLib Require Import
   Structures.MonadState
   Data.Monads.StateMonad.
 
 From TICL Require Import
-  ICTree.Core
-  ICTree.Equ
-  ICTree.SBisim
-  ICTree.Interp.State.Mod
-  ICTree.Events.State
-  ICTree.Events.Writer
-  ICTree.Logic.Trans
-  ICTree.Logic.CanStep
-  ICTree.Logic.AX
-  ICTree.Logic.AF
-  ICTree.Logic.AG
-  ICTree.Logic.Bind
-  ICTree.Logic.Iter
-  ICTree.Logic.State
+  CTree.Core
+  CTree.Interp.State.Mod
+  CTree.Events.State
+  CTree.Events.Writer
+  CTree.Logic.Trans
+  CTree.Logic.CanStep
+  CTree.Logic.AX
+  CTree.Logic.AF
+  CTree.Logic.AG
+  CTree.Logic.Bind
+  CTree.Logic.Iter
+  CTree.Logic.State
   Logic.Core
-  ICTree.Interp.CSL.Mod.
+  CTree.Interp.CSL.Mod.
 
 From examples Require Import CSL.Queue.Representation CSL.Queue.Operations.
 
-From Coinduction Require Import coinduction.
 
-Import ICtree ICTreeNotations TiclNotations ListNotations.
-Local Open Scope ictree_scope.
+Import CTree CTreeNotations TiclNotations ListNotations.
+Local Open Scope ctree_scope.
 Local Open Scope ticl_scope.
 Local Open Scope list_scope.
-
-(** Needed so that [equ] rewrites go through inside [sbisim] goals; the
-    reference files [Lang/MeQ.v] and [examples/Queue.v] do the same. *)
-Local Typeclasses Transparent equ.
-Local Typeclasses Transparent sbisim.
 
 (** ** The observation alphabet and its projection.
 
     Observations are [indexed nat]: the (fun o => indexed_value o = payload) together with the
     number of pops that preceded it.  Both the record and its indexing
-    handler are owned by [Events.WriterE] / [ICTree.Events.Writer]. *)
+    handler are owned by [Events.WriterE] / [CTree.Events.Writer]. *)
 
 (** ** Events *)
 
-Definition qE : Type := (heapE + (stateE Ctx.Ctx + writerE nat))%type.
+Notation qE := (heapE +' (stateE Ctx.Ctx +' writerE nat)).
 
 (** Memory commands use the shared heap triggers; payload emission is the
     example-specific instruction in the right summand. *)
-Definition emit (v: nat) : ictree qE unit :=
-  @ICtree.trigger qE qE _ _ ReSum_refl ReSumRet_refl (inr (inr (Log v))).
+Definition emit (v: nat) : ctree qE Bn unit :=
+  CTree.trigger (inr1 (inr1 (Log v)) : qE unit).
 
 (** ** The rotating queue program.
 
@@ -89,11 +82,11 @@ Definition emit (v: nat) : ictree qE unit :=
     the head's link, detach, find the node to append after, and re-link.  No
     allocation and no free: the same four cells are rewritten forever. *)
 
-Definition rot_body (hdr: nat) : ictree qE (unit + unit) :=
+Definition rot_body (hdr: nat) : ctree qE Bn (unit + unit) :=
   queue_turn emit hdr (Ret (inl tt)).
 
-Definition rotate (hdr: nat) : ictree qE unit :=
-  ICtree.iter (fun _: unit => rot_body hdr) tt.
+Definition rotate (hdr: nat) : ctree qE Bn unit :=
+  CTree.iter (fun _: unit => rot_body hdr) tt.
 
 (** [run] interprets the rotation with the one CSL handler [sh] at the unary
     payload [nat].  Its state is the shared CSL state [SSig]: the managed
@@ -101,7 +94,7 @@ Definition rotate (hdr: nat) : ictree qE unit :=
     occurrence counter.  The rotation never
     allocates or frees, so [allocs] is carried through unchanged; no heap
     operation reads the counter, which only indexes the observations. *)
-Definition run (hdr: nat) (s: SSig) : ictreeW (CSLObs nat) (unit * SSig) :=
+Definition run (hdr: nat) (s: SSig) : ctreeW (CSLObs nat) Bn (SSig * unit) :=
   interp_state (sh (A:=nat)) (rotate hdr) s.
 
 (** ** The body correspondence.
@@ -113,7 +106,7 @@ Definition run (hdr: nat) (s: SSig) : ictreeW (CSLObs nat) (unit * SSig) :=
       silent and finite, so the whole heap segment collapses; there is no
       stuttering to reason about, and in particular no next-sensitive
       stuttering theorem is needed.  This holds ONLY because every access is
-      inside the footprint: an out-of-footprint access would leave [ICtree.stuck]
+      inside the footprint: an out-of-footprint access would leave [Stuck]
       in place of a [Ret] and the collapse would fail ([interp_heap_rd_nostep]).
 
     - **operation correctness.**  The resulting heap is [rot_heap], which
@@ -126,15 +119,14 @@ Theorem rot_body_spec: forall hdr a ns v vs h allocs ctx c,
     qrep hdr (a :: ns) (v :: vs) h ->
     interp_state (sh (A:=nat)) (rot_body hdr) ((h, allocs), (ctx, c))
     ~ (log (inr (stamp v c) : CSLObs nat) ;;
-       Ret (@inl unit unit tt,
-         ((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, allocs), (ctx, S c)))).
+       Ret (((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, allocs), (ctx, S c)),
+            @inl unit unit tt) : ctreeW (CSLObs nat) Bn (SSig * (unit + unit))).
 Proof.
   intros hdr a ns v vs h allocs ctx c Hq; unfold rot_body.
   etransitivity.
-  - eapply (queue_turn_spec (h_sum csl_context_handler (csl_emit_handler (A:=nat)))
-      emit (fun v c => inr (stamp v c))).
+  - eapply (queue_turn_spec emit (fun v c => inr (stamp v c))).
     + intros; apply interp_csl_emit.
     + exact Hq.
-  - apply sbisim_clo_bind_eq; [reflexivity | intros []].
-    apply equ_sbisim, interp_state_ret.
+  - rewrite !log_vis; apply sb_vis; intros _.
+    rewrite interp_state_ret; reflexivity.
 Qed.

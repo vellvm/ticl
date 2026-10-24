@@ -9,28 +9,26 @@ From ExtLib Require Import
   Data.String.
 
 From TICL Require Import
-  ICTree.Core
-  ICTree.SBisim
-  ICTree.Equ
-  ICTree.Interp.State.Mod
-  ICTree.Events.State
-  ICTree.Events.Writer
-  ICTree.Logic.Trans
+  CTree.Core
+  CTree.Interp.State.Mod
+  CTree.Events.State
+  CTree.Events.Writer
+  CTree.Logic.Trans
   Logic.Core
-  ICTree.Logic.AX
-  ICTree.Logic.AF
-  ICTree.Logic.EX
-  ICTree.Logic.EF
-  ICTree.Logic.Bind
-  ICTree.Logic.CanStep
-  ICTree.Logic.State
+  CTree.Logic.AX
+  CTree.Logic.AF
+  CTree.Logic.EX
+  CTree.Logic.EF
+  CTree.Logic.Bind
+  CTree.Logic.CanStep
+  CTree.Logic.State
   Utils.Maps.
 
 Generalizable All Variables.
 
-Import ICtree ICTreeNotations TiclNotations.
+Import CTree CTreeNotations TiclNotations.
 Local Open Scope ticl_scope.
-Local Open Scope ictree_scope.
+Local Open Scope ctree_scope.
 Local Open Scope nat_scope.
 
 Generalizable All Variables.
@@ -91,10 +89,11 @@ Module ME.
   (** Both values and addresses are natural numbers for simplicity *)
   Notation Addr := nat.
   
-  Variant secE: Type :=
-    | Read (l: Sec) (addr: Addr)
-    | Write (l: Sec) (addr: Addr) (val: nat).
-  
+  (** Heap events, indexed by their result type *)
+  Variant secE: Type -> Type :=
+    | Read (l: Sec) (addr: Addr): secE (option nat)
+    | Write (l: Sec) (addr: Addr) (val: nat): secE unit.
+
 
   (* Secure tagged heaps *)
   #[local] Parameter (St: Type) 
@@ -103,13 +102,10 @@ Module ME.
   #[global] Existing Instance MF.
   #[global] Existing Instance OF.
   
-  Global Instance encode_secE: Encode secE :=
-    fun e => match e with
-          | Read l addr => option nat
-          | Write l addr v => unit
-          end.
-  
-        
+  Section MeS.
+    (** [B]: branch signature; the scheduler's choice is an observable binary branch *)
+    Context {B: Type -> Type} `{HB: B2 -< B}.
+
   (** * Ghost state *)
   (** The instrumentation handler [h_secE] keeps track of the security labels of the memory cells.
     It instruments every read with
@@ -120,24 +116,23 @@ Module ME.
   Record SecObs := { ml: Sec; al: Sec }.
 
   (* Insecure interpreter, does not check labels *)
-  Definition h_secE: secE ~> stateT St (ictreeW SecObs) :=
-    fun e => mkStateT
-            (fun (st: St) =>                                     
-               match e return ictreeW SecObs (encode e * St) with
-               | Read l addr =>
-                   match lookup addr st with
-                   (* [addr] exists and set to [(v, l_a)] *)
-                   | Some (l_a, v) =>
-                       (* Instrumentation *)
-                       log {| ml:=l_a; al := l |} ;;
-                       Ret (Some v, st)
-                   (* [addr] does not exist, return [None] *)
-                   | None => Ret (None, st)
-                   end
-               | Write l addr v =>
-                   (* Set [addr] to [(l, v)] *)
-                   Ret (tt, add addr (l, v) st)
-               end).
+  Definition h_secE: secE ~> stateT St (ctreeW SecObs B) :=
+    fun _ e (st: St) =>
+      match e in secE X return ctreeW SecObs B (St * X) with
+      | Read l addr =>
+          match lookup addr st with
+          (* [addr] exists and set to [(v, l_a)] *)
+          | Some (l_a, v) =>
+              (* Instrumentation *)
+              log {| ml:=l_a; al := l |} ;;
+              Ret (st, Some v)
+          (* [addr] does not exist, return [None] *)
+          | None => Ret (st, None)
+          end
+      | Write l addr v =>
+          (* Set [addr] to [(l, v)] *)
+          Ret (add addr (l, v) st, tt)
+      end.
 
   (** * The syntax of secure tagged heap programs *)
   (** It includes [Read], [Write], [If], [Ret], [Bind] commands. *)
@@ -148,10 +143,10 @@ Module ME.
   | CRet {A}(a: A): CProg A
   | CBind {A B}(l: CProg A) (k: A -> CProg B): CProg B.
 
-  Fixpoint denote_cprog {A}(s: CProg A): ictree secE A :=
+  Fixpoint denote_cprog {A}(s: CProg A): ctree secE B A :=
     match s with
-    | CRead l addr => ICtree.trigger (Read l addr)
-    | CWrite l addr v => ICtree.trigger (Write l addr v)
+    | CRead l addr => CTree.trigger (Read l addr)
+    | CWrite l addr v => CTree.trigger (Write l addr v)
     | CIf c t e =>
         if c then
           denote_cprog t
@@ -168,7 +163,7 @@ Module ME.
     It includes [SLoop], [SBr], [SCall], [SRet], [SBind] commands.
 
     The idea is that we write client programs in [CProg], then write the scheduler program in [SProg] to interleave them.
-    Denoting both languages to [ictree] gives us a way to reason about the interleaving of client programs.
+    Denoting both languages to [ctree] gives us a way to reason about the interleaving of client programs.
   *)
   Inductive SProg: Type -> Type :=
   | SLoop {X}(i: X) (b: X -> SProg X): SProg unit
@@ -177,16 +172,16 @@ Module ME.
   | SRet {A}(a: A): SProg A
   | SBind {A B}(l: SProg A) (k: A -> SProg B): SProg B.
 
-  (** Denotation of scheduler programs to [ictree] *)
-  Fixpoint denote_sprog {A}(s: SProg A): ictree secE A :=
+  (** Denotation of scheduler programs to [ctree] *)
+  Fixpoint denote_sprog {A}(s: SProg A): ctree secE B A :=
     match s with
     | @SLoop X i b =>
-        ICtree.iter
+        CTree.iter
           (fun (i: X) =>
              x <- denote_sprog (b i) ;;
              Ret (inl x)) i
     | SBr l r =>
-        ICtree.br2 (denote_sprog l) (denote_sprog r)
+        brS2 (denote_sprog l) (denote_sprog r)
     | SCall p => denote_cprog p
     | SRet x => Ret x
     | SBind l k =>
@@ -195,18 +190,18 @@ Module ME.
     end.
 
   (** Instrumentation of client programs *)
-  Definition instr_cprog {X}(p: CProg X): St -> ictreeW SecObs (X * St) :=
+  Definition instr_cprog {X}(p: CProg X): St -> ctreeW SecObs B (St * X) :=
     interp_state h_secE (denote_cprog p).
 
   (** Instrumentation of scheduler programs *)
-  Definition instr_sprog {X}(p: SProg X): St -> ictreeW SecObs (X * St) :=
+  Definition instr_sprog {X}(p: SProg X): St -> ctreeW SecObs B (St * X) :=
     interp_state h_secE (denote_sprog p).
 
   (** We lift the structural Ticl lemmas to the level of MeS programs. *)
   (** Bind lemmas *)
   Lemma aur_cprog_bind_r{X Y}: forall (h: CProg X) (k: X -> CProg Y) m w φ ψ R,
       (forall r m w, R r m w -> <[ {instr_cprog (k r) m}, w |= φ AU ψ ]>) ->
-      <[ {instr_cprog h m}, w |= φ AU AX done {fun '(r, m) w => R r m w} ]> ->
+      <[ {instr_cprog h m}, w |= φ AU ret {fun '(m, r) w => R r m w} ]> ->
       <[ {instr_cprog (CBind h k) m}, w |= φ AU ψ ]>.
   Proof with eauto with ticl.
     unfold instr_cprog; cbn; intros.
@@ -214,7 +209,7 @@ Module ME.
   Qed.
   
   Lemma aur_cprog_bind_r_eq{X Y}: forall (h: CProg X) (k: X -> CProg Y) m w r w' m' φ ψ,
-      <[ {instr_cprog h m}, w |= φ AU AX done={(r, m')} w' ]> ->
+      <[ {instr_cprog h m}, w |= φ AU AX done={(m', r)} w' ]> ->
       <[ {instr_cprog (k r) m'}, w' |= φ AU ψ ]> ->
       <[ {instr_cprog (CBind h k) m}, w |= φ AU ψ ]>.
   Proof with eauto with ticl.
@@ -224,7 +219,7 @@ Module ME.
   
   Lemma aur_sprog_bind_r{X Y}: forall (h: SProg X) (k: X -> SProg Y) m w φ ψ R,
       (forall r m w, R r m w -> <[ {instr_sprog (k r) m}, w |= φ AU ψ ]>) ->
-      <[ {instr_sprog h m}, w |= φ AU AX done {fun '(r, m) w => R r m w} ]> ->
+      <[ {instr_sprog h m}, w |= φ AU ret {fun '(m, r) w => R r m w} ]> ->
       <[ {instr_sprog (SBind h k) m}, w |= φ AU ψ ]>.
   Proof with eauto with ticl.
     unfold instr_sprog; cbn; intros.
@@ -232,7 +227,7 @@ Module ME.
   Qed.
   
   Lemma aur_sprog_bind_r_eq{X Y}: forall (h: SProg X) (k: X -> SProg Y) m m' (r: X) w w' φ ψ,
-      <[ {instr_sprog h m}, w |= φ AU AX done={(r,m')} w' ]> ->
+      <[ {instr_sprog h m}, w |= φ AU AX done={(m', r)} w' ]> ->
       <[ {instr_sprog (k r) m'}, w' |= φ AU ψ ]> ->
       <[ {instr_sprog (SBind h k) m}, w |= φ AU ψ ]>.
   Proof with eauto with ticl.
@@ -241,7 +236,7 @@ Module ME.
   Qed.  
   
   Lemma anr_sprog_bind_l{X Y}: forall (h: SProg X) (k: X -> SProg Y) m m' (r: X) w w' φ ψ,
-      <[ {instr_sprog h m}, w |= φ AN AX done={(r,m')} w' ]> ->
+      <[ {instr_sprog h m}, w |= φ AN AX done={(m', r)} w' ]> ->
       <[ {instr_sprog (k r) m'}, w' |= ψ ]> ->
       <[ {instr_sprog (SBind h k) m}, w |= φ AN ψ ]>.
   Proof with eauto with ticl.
@@ -257,7 +252,8 @@ Module ME.
       <[ {instr_sprog (SBr a b) m}, w |= φ AN ψ ]>.
   Proof with eauto with ticl.
     unfold instr_sprog; cbn; intros.
-    apply anr_state_br; split...
+    unfold brS2.
+    apply (anr_state_brS _ _ _ true); split...
     intros []...
   Qed.
 
@@ -269,7 +265,7 @@ Module ME.
     unfold instr_sprog, instr_cprog; cbn; intros...
   Qed.
 
-  Lemma ticlr_cprog_if{A B X}: forall (c: {A} + {B}) (t e: CProg X) m w ψ,
+  Lemma ticlr_cprog_if{P Q X}: forall (c: {P} + {Q}) (t e: CProg X) m w ψ,
       match c with
       | left _ => <[ {instr_cprog t m}, w |= ψ ]>
       | right _ => <[ {instr_cprog e m}, w |= ψ ]>
@@ -285,7 +281,7 @@ Module ME.
       (forall i m s,
           R i m s ->
           <( {instr_sprog (SLoop i b) m}, {Obs (Log s) tt} |= φ )> /\
-            <[ {instr_sprog (b i) m}, {Obs (Log s) tt} |= AX (φ AU AX done {fun '(i', m') w' =>
+            <[ {instr_sprog (b i) m}, {Obs (Log s) tt} |= AX (φ AU ret {fun '(m', i') w' =>
               exists s', w' = Obs (Log s') tt /\ R i' m' s' }) ]>) ->
       <( {instr_sprog (SLoop i b) m}, {Obs (Log s) tt} |= AG φ )>.
   Proof with eauto with ticl.
@@ -296,13 +292,14 @@ Module ME.
             exists s, w = Obs (Log s) tt /\
               <( {interp_state h_secE (denote_sprog (SLoop i b)) m}, {Obs (Log s) tt} |= φ )> /\
               <[ {interp_state h_secE (denote_sprog (b i)) m}, {Obs (Log s) tt}
-                             |= AX (φ AU AX done {fun '(i', m') w' => exists s', w' = Obs (Log s') tt /\ R i' m' s'}) ]>)...
+                             |= AX (φ AU ret {fun '(m', i') w' => exists s', w' = Obs (Log s') tt /\ R i' m' s'}) ]>)...
     intros i' m' w' _ (s' & -> & Hb & HR); split...
     rewrite interp_state_bind.
     eapply axr_aur_bind_r; [exact HR |].
-    intros [r_ m_] w'' (s'' & -> & HR').
+    intros [m_ r_] w'' (s'' & -> & HR').
     apply aur_state_ret...
-    exists r_; intuition.
+    exists r_; split2; [reflexivity | constructor |].
     exists s''; split...
   Qed.
+  End MeS.
 End ME.

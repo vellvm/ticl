@@ -1,6 +1,6 @@
 (** * Core logic theory *)
-From Coinduction Require Export coinduction tactics.
-From TICL Require Export           
+From Coinduction Require Export all.
+From TICL Require Export
   Utils.Utils
   Logic.Kripke
   Logic.Syntax

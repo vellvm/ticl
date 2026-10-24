@@ -18,15 +18,19 @@ secure memory, and distributed consensus.
 
 # Building
 
-Dependencies are
-- Rocq 9.0.0
-- dune (from opam)
-- odoc (from opam)
-- rocq-equations (from opam)
-- rocq-ext-lib (https://github.com/elefthei/coinduction)
-- The coinduction library (https://github.com/elefthei/coinduction)
+The model of programs is the `ctree E B X` type of the
+[ctrees](https://github.com/vellvm/ctrees) library, vendored as a git submodule in `ctrees/`
+(`git clone --recurse-submodules`, or `git submodule update --init`).
 
-Then use `make` in the root directory to build `TICL` and `make install` to install it.
+Dependencies (all from opam, see `INSTALL.md` for pinned versions) are
+- Rocq 9.2
+- dune (>= 3.23)
+- rocq-equations
+- coq-ext-lib
+- rocq-coinduction (>= 1.22, tower-based)
+- rocq-relation-algebra, coq-itree (needed by ctrees)
+
+Then use `make` in the root directory to build `TICL` (including the vendored `ctrees`) and `make install` to install it.
 
 # Documentation
 

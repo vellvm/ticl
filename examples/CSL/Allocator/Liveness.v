@@ -1,13 +1,19 @@
 From Stdlib Require Import List Lia Arith.PeanoNat.
-From TICL Require Import ICTree.Interp.Yield.Execution.
+From Coinduction Require Import all.
+From TICL Require Import CTree.Interp.Yield.Execution.
 From TICL Require Import Utils.Execution.
-From TICL Require Import Lang.CSL.Mod ICTree.Core ICTree.Equ ICTree.SBisim
-  ICTree.Trans ICTree.Events.Writer ICTree.Events.Yield ICTree.Logic.Trace Utils.Relations.
+From TICL Require Import
+  Lang.CSL.Mod
+  CTree.Core
+  CTree.Events.Writer
+  CTree.Events.Yield
+  CTree.Logic.Trace
+  Utils.Relations.
 From examples Require Import CSL.Allocator.Layout CSL.Allocator.Program
   CSL.Allocator.Model CSL.Allocator.Execution.
 
-Import ICtree ICTreeNotations ListNotations.
-Local Open Scope ictree_scope.
+Import CTree CTreeNotations ListNotations.
+Local Open Scope ctree_scope.
 Local Open Scope list_scope.
 Local Open Scope nat_scope.
 
@@ -336,15 +342,20 @@ Proof.
 Qed.
 
 From Stdlib Require Import List Lia Arith.PeanoNat Fin Vector Program.Equality.
-From TICL Require Import Lang.CSL.Mod ICTree.Core ICTree.Equ ICTree.SBisim
-  ICTree.Trans ICTree.Events.Writer ICTree.Events.Yield
-  ICTree.Interp.Yield.Mod ICTree.Interp.Yield.SBisim ICTree.Interp.Refine
+From TICL Require Import
+  Lang.CSL.Mod
+  CTree.Core
+  CTree.Events.Writer
+  CTree.Events.Yield
+  CTree.Interp.Yield.Mod
+  CTree.Interp.Yield.SBisim
+  CTree.Interp.Refine
   Utils.Vectors.
 From examples Require Import CSL.Allocator.Layout CSL.Allocator.Program
   CSL.Allocator.Model CSL.Allocator.Execution.
 
-Import ICtree ICTreeNotations ListNotations VectorNotations.
-Local Open Scope ictree_scope.
+Import CTree CTreeNotations ListNotations VectorNotations.
+Local Open Scope ctree_scope.
 Local Open Scope fin_vector_scope.
 Local Open Scope list_scope.
 Local Open Scope nat_scope.
@@ -352,7 +363,7 @@ Local Open Scope nat_scope.
 (** ** Raw source executions.
 
     A raw source execution is the library [Execution] at state
-    [pool sE 3 * SSig], valid by [allocator_source_valid].  Its alignment
+    [pool sE Bn 3 * SSig], valid by [allocator_source_valid].  Its alignment
     with the model execution making the same physical selections is the
     library's [source_execution_complete] at [allocator_simulation]; its
     finite reachability is the library closure [reachable]. *)
@@ -373,10 +384,11 @@ Theorem every_reachable_source_slot_yields capacity ctx c ts sigma (i : Fin.t 3)
   BranchFree (ts $ i) /\
   (exists logs residual sigma', (ThreadSegment sh csl_sb) (ts $ i) sigma logs residual sigma') /\
   not (guard_equ (ts $ i) (Ret tt)) /\
-  (forall k : bool -> thread sE, ~ guard_equ (ts $ i) (Vis (inr (inl Fork)) k)) /\
-  (forall n (k : Fin.t (S n) -> thread sE), ~ guard_equ (ts $ i) (Br n k)) /\
-  not (guard_equ (ts $ i) (stuck : thread sE)) /\
-  not (guard_equ (ts $ i) (spin : thread sE)).
+  (forall k : bool -> thread sE Bn, ~ guard_equ (ts $ i) (Vis (inr1 (inl1 Fork)) k)) /\
+  (forall Y (c : Bn Y) (k : Y -> thread sE Bn), ~ guard_equ (ts $ i) (Br c k)) /\
+  (forall u, ~ guard_equ (ts $ i) (Step u)) /\
+  not (guard_equ (ts $ i) (Stuck : thread sE Bn)) /\
+  not (guard_equ (ts $ i) (CTree.spinS : thread sE Bn)).
 Proof.
   intro Hreach.
   assert (Hbf : forall j, BranchFree (ts $ j)).
@@ -402,14 +414,14 @@ Proof.
     exists (event_obs event), residual, sigma'; exact Hseg.
   - destruct (pool_simulation_no_terminal_prefix
       (allocator_simulation 1 capacity) ts s (actor_of_slot i) sigma
-      Hinv Hagree Hpool) as (Hr & Hf & Hb & Hstuck).
+      Hinv Hagree Hpool) as (Hr & Hf & Hb & Hs & Hstuck).
     destruct (pool_simulation_no_fault_or_divergence
       (allocator_simulation 1 capacity) ts s (actor_of_slot i) sigma
       Hinv Hagree Hpool) as (_ & Hspin & _).
     repeat split; assumption.
 Qed.
 
-(** Realization is the library coinductive [ICTree.Trace.realizes] at the
+(** Realization is the library coinductive [CTree.Trace.realizes] at the
     allocator's per-turn chunking; the model application is the library's
     [valid_execution_realizes_model] at [step := turn 1].  No allocator-local
     cofixpoint remains. *)
@@ -434,10 +446,10 @@ Theorem run_turns_realizes_source capacity ctx c script last logs :
     label_logs labels = logs /\ label_taus labels = List.length script /\
     finite_steps (run_nd (allocator_program capacity) (managed_empty,(ctx,c))) labels residual /\
     residual ~ (model_nd 2 actor_of_slot (turn 1) last
-                  : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
+                  : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   intro Hrun.
-  destruct (model_run_turns_labels (X := (unit * SSig)%type)
+  destruct (model_run_turns_labels (X := (SSig * unit)%type) (B := Bn)
     2 actor_of_slot (turn 1) slot_of_actor actor_of_slot_of_actor
     script (initial_state capacity c) last logs Hrun)
     as (labels & model & Hlabels & Hlogs & Htaus & Hsteps & Emodel).
@@ -452,30 +464,62 @@ Qed.
 (** A pending raw remote is one of the actual continuations after mailbox
     pickup, and before remote_free returns through the successful CAS path.
     This predicate mentions neither a model execution nor future publication. *)
-Definition raw_remote_pending base client (t : thread sE) : Prop :=
+Definition raw_remote_pending base client (t : thread sE Bn) : Prop :=
   exists pc, pc <> RPoll /\ guard_equ t (remote_residual base client pc).
 Definition selected_source_pending
-  (se : Execution (pool sE 3 * SSig) Actor (list (CSLObs (nat * nat)))) k : Prop :=
+  (se : Execution (pool sE Bn 3 * SSig) Actor (list (CSLObs (nat * nat)))) k : Prop :=
   match selected se k with
   | Owner => False
   | Remote0 => raw_remote_pending 1 false (fst (states se k) $ slot_of_actor Remote0)
   | Remote1 => raw_remote_pending 1 true (fst (states se k) $ slot_of_actor Remote1)
   end.
 
-Definition remote_first_event base client pc : sE :=
-  match pc with
-  | RPoll => inl (HRead (mailbox base client))
-  | RRead _ => inl (HRead (remote_head base))
-  | RLink block old => inl (HWrite block old)
-  | RCAS block old => inl (HCAS (remote_head base) old block)
+(** Forgetting finitely many leading guards is a strong bisimulation. *)
+Lemma guard_equ_sbisim {E B : Type -> Type} {X} (t u : ctree E B X) :
+  guard_equ t u -> t ~ u.
+Proof.
+  intro H; induction H as [t u [E1|E1]|t|t u H IH|t u v H1 IH1 H2 IH2].
+  - now rewrite E1.
+  - rewrite E1; apply sb_guard.
+  - reflexivity.
+  - now symmetry.
+  - now transitivity u.
+Qed.
+
+(** The heap events answer in [nat], [unit] and [bool]: distinct index types. *)
+Lemma nat_neq_unit : @eq Type nat unit -> False.
+Proof.
+  intro H.
+  assert (C : exists x y : nat, x <> y) by (exists 0, 1; discriminate).
+  rewrite H in C; destruct C as (x & y & Hxy); apply Hxy; destruct x, y; reflexivity.
+Qed.
+
+Lemma nat_neq_bool : @eq Type nat bool -> False.
+Proof.
+  intro H.
+  assert (C : exists x y z : nat, x <> y /\ y <> z /\ x <> z)
+    by (exists 0, 1, 2; repeat split; discriminate).
+  rewrite H in C; destruct C as (x & y & z & Hxy & Hyz & Hxz).
+  destruct x, y, z; congruence.
+Qed.
+
+Definition remote_first_type (pc : remote_pc) : Type :=
+  match pc with RPoll | RRead _ => nat | RLink _ _ => unit | RCAS _ _ => bool end.
+
+Definition remote_first_event base client pc : heapE (remote_first_type pc) :=
+  match pc return heapE (remote_first_type pc) with
+  | RPoll => HRead (mailbox base client)
+  | RRead _ => HRead (remote_head base)
+  | RLink block old => HWrite block old
+  | RCAS block old => HCAS (remote_head base) old block
   end.
 
 Lemma remote_residual_first_event base client pc :
-  exists k : encode (remote_first_event base client pc) -> thread sE,
+  exists k : remote_first_type pc -> thread sE Bn,
     remote_residual base client pc ≅
-      @go CEff _ unit (VisF (inr (inr (remote_first_event base client pc)) : CEff) k).
+      Vis (inr1 (inr1 (inl1 (remote_first_event base client pc)))) k.
 Proof.
-  destruct pc; cbn [remote_first_event remote_residual].
+  destruct pc; cbn [remote_first_event remote_residual remote_first_type].
   - unfold denote, remote_client; eexists.
     etransitivity; [apply source_raw_until|].
     unfold client_round; etransitivity; [apply source_raw_bind|].
@@ -498,11 +542,14 @@ Proof.
   destruct (remote_residual_first_event base client RPoll) as [kp Ep].
   destruct (remote_residual_first_event base client pc) as [kq Eq].
   rewrite Ep, Eq in E.
-  pose proof (@sbisim_vis_invT CEff _ unit
-    (inr (inr (remote_first_event base client RPoll)))
-    (inr (inr (remote_first_event base client pc))) kp kq 0 E) as [_ Eevent].
-  destruct pc; cbn [remote_first_event] in Eevent; try contradiction; try discriminate.
-  unfold remote_head, mailbox in Eevent; destruct client; inversion Eevent; lia.
+  destruct pc as [|block|block old|block old];
+    cbn [remote_first_event remote_first_type] in *.
+  - contradiction.
+  - destruct (sbisim_vis_inv 0 E) as [Eevent _].
+    inversion Eevent as [Eaddr].
+    unfold remote_head, mailbox in Eaddr; destruct client; lia.
+  - exact (nat_neq_unit (sbisim_vis_invT 0 E)).
+  - exact (nat_neq_bool (sbisim_vis_invT 0 E)).
 Qed.
 
 Lemma raw_remote_pending_alignment base client t pc :
@@ -1071,17 +1118,29 @@ Proof.
   rewrite Hlogs, Ereclaim; cbn [event_obs]; now left.
 Qed.
 
-From Stdlib Require Import List Lia Arith.PeanoNat.
-From Coinduction Require Import coinduction rel tactics.
-From TICL Require Import Lang.CSL.Mod ICTree.Core ICTree.Equ ICTree.SBisim
-  ICTree.Events.Writer ICTree.Eq.Bind ICTree.Logic.AF ICTree.Logic.AG
-  ICTree.Logic.AX ICTree.Logic.Bind ICTree.Logic.Iter ICTree.Logic.State
-  ICTree.Logic.Trace ICTree.Logic.Yield Logic.Core.
+From Stdlib Require Import List Lia Arith.PeanoNat Classes.RelationPairs.
+From ExtLib Require Import Data.Option.
+From Coinduction Require Import all.
+From TICL Require Import
+  Lang.CSL.Mod
+  CTree.Core
+  CTree.Events.Writer
+  CTree.Logic.Trans
+  CTree.Logic.CanStep
+  CTree.Logic.AF
+  CTree.Logic.AG
+  CTree.Logic.AX
+  CTree.Logic.Bind
+  CTree.Logic.Iter
+  CTree.Logic.State
+  CTree.Logic.Trace
+  CTree.Logic.Yield
+  Logic.Core.
 From examples Require Import CSL.Allocator.Layout CSL.Allocator.Program
   CSL.Allocator.Model CSL.Allocator.Execution.
 
-Import ICtree ICTreeNotations TiclNotations ListNotations.
-Local Open Scope ictree_scope.
+Import CTree CTreeNotations CoindNotations TiclNotations ListNotations.
+Local Open Scope ctree_scope.
 Local Open Scope ticl_scope.
 Local Open Scope list_scope.
 Local Open Scope nat_scope.
@@ -1090,24 +1149,56 @@ Local Typeclasses Transparent equ sbisim.
 (** ** Round-robin recurrence of the two-client demo.
 
     The prefix of 57 turns and the repeating 42-turn cycle are executable
-    certificates for [model_rr_emit_batches] / [model_rr_agaf]; the logs,
+    certificates in the shape of [model_rr_emit_batches] / [model_rr_agaf];
+    the turn lists (one entry per scheduler step, [None] for a silent turn),
     boundary heap and boundary state are section-local witnesses. *)
+
+Local Lemma after_logs_app {W} (xs ys : list W) w :
+  after_logs (xs ++ ys) w = after_logs ys (after_logs xs w).
+Proof.
+  revert w; induction xs as [|o xs IH]; intro w; cbn [after_logs List.app];
+    [reflexivity | apply IH].
+Qed.
+
+(** Scheduler steps and observations are both transparent to [AG (AF _)]. *)
+Lemma agaf_emit_turns {W : Type} {B : Type -> Type} {X : Type}
+  turns (t : ctreeW W B X) w P :
+  not_done w ->
+  <( t, {after_logs (List.flat_map event_obs turns) w} |= AG (AF visW {P}) )> ->
+  <( {emit_turns turns t}, w |= AG (AF visW {P}) )>.
+Proof.
+  revert w; induction turns as [|ev rest IH]; intros w Hd H; [exact H|].
+  cbn [emit_turns List.flat_map] in *.
+  rewrite after_logs_app in H.
+  assert (Htail : <( {emit_list (event_obs ev) (emit_turns rest t)}, w
+    |= AG (AF visW {P}) )>).
+  { apply agaf_emit_list; [exact Hd|].
+    apply IH; [apply after_logs_not_done; exact Hd|exact H]. }
+  apply (proj1 (ag_step _ _ _)); split; [|exact Htail].
+  apply aul_step; right; split; [apply ticll_top; exact Hd|].
+  pose proof Htail as HH; cdestruct HH; assumption.
+Qed.
+
 Section AllocatorRecurrence.
 
 (** These lists use left numerals so that symbolic counters compute without
     inspecting the counter.  [n+c] is, of course, the prescribed [c+n]. *)
-Let demo_prefix (c : nat) : list (CSLObs (nat * nat)) :=
-  [inr (stamp (tag_alloc,6) c); inr (stamp (tag_alloc,8) (1+c));
-   inr (stamp (tag_retire,6) (2+c)); inr (stamp (tag_retry,8) (3+c));
-   inr (stamp (tag_retire,8) (4+c)); inr (stamp (tag_reclaim,8) (5+c));
-   inr (stamp (tag_reclaim,6) (6+c)); inr (stamp (tag_alloc,6) (7+c));
-   inr (stamp (tag_alloc,8) (8+c))].
+Let silent (k : nat) : list (option (CSLObs (nat * nat))) := List.repeat None k.
+Let turn_of (tag block idx : nat) : list (option (CSLObs (nat * nat))) :=
+  [Some (inr (stamp (tag,block) idx))].
 
-Let demo_cycle_logs (c : nat) : list (CSLObs (nat * nat)) :=
-  [inr (stamp (tag_retire,6) c); inr (stamp (tag_retry,8) (1+c));
-   inr (stamp (tag_retire,8) (2+c)); inr (stamp (tag_reclaim,8) (3+c));
-   inr (stamp (tag_reclaim,6) (4+c)); inr (stamp (tag_alloc,6) (5+c));
-   inr (stamp (tag_alloc,8) (6+c))].
+Let demo_prefix (c : nat) : list (option (CSLObs (nat * nat))) :=
+  silent 11 ++ turn_of tag_alloc 6 c ++ silent 2 ++ turn_of tag_alloc 8 (1+c) ++
+  silent 7 ++ turn_of tag_retire 6 (2+c) ++ silent 1 ++ turn_of tag_retry 8 (3+c) ++
+  silent 8 ++ turn_of tag_retire 8 (4+c) ++ silent 10 ++ turn_of tag_reclaim 8 (5+c) ++
+  silent 2 ++ turn_of tag_reclaim 6 (6+c) ++ silent 5 ++ turn_of tag_alloc 6 (7+c) ++
+  silent 2 ++ turn_of tag_alloc 8 (8+c).
+
+Let demo_cycle_turns (c : nat) : list (option (CSLObs (nat * nat))) :=
+  silent 7 ++ turn_of tag_retire 6 c ++ silent 1 ++ turn_of tag_retry 8 (1+c) ++
+  silent 8 ++ turn_of tag_retire 8 (2+c) ++ silent 10 ++ turn_of tag_reclaim 8 (3+c) ++
+  silent 2 ++ turn_of tag_reclaim 6 (4+c) ++ silent 5 ++ turn_of tag_alloc 6 (5+c) ++
+  silent 2 ++ turn_of tag_alloc 8 (6+c).
 
 (** Only a pointwise representative; no execution ever resets its heap to it. *)
 Let demo_boundary_heap : Heap := fun x =>
@@ -1122,7 +1213,7 @@ Let demo_boundary (c : nat) : AState :=
      remote1_state := RPoll |}.
 
 Local Lemma demo_prefix_run c : exists last,
-  run_turns (turn 1) event_obs (rr_script 2 actor_of_slot 0 57) (initial_state 2 c) =
+  run_turns (turn 1) turn_list (rr_script 2 actor_of_slot 0 57) (initial_state 2 c) =
     Some (last,demo_prefix c) /\
   state_equiv last (demo_boundary (c+9)).
 Proof.
@@ -1136,8 +1227,8 @@ Proof.
 Qed.
 
 Local Lemma demo_cycle_run c : exists last,
-  run_turns (turn 1) event_obs (rr_script 2 actor_of_slot 0 42) (demo_boundary c) =
-    Some (last,demo_cycle_logs c) /\
+  run_turns (turn 1) turn_list (rr_script 2 actor_of_slot 0 42) (demo_boundary c) =
+    Some (last,demo_cycle_turns c) /\
   state_equiv last (demo_boundary (c+7)).
 Proof.
   replace (c+7) with (7+c) by lia.
@@ -1151,41 +1242,45 @@ Qed.
 
 Local Lemma demo_cycle_fresh_member c kind :
   List.In kind [tag_alloc;tag_retire;tag_reclaim] ->
-  exists o, List.In (inr o) (demo_cycle_logs c) /\ (fst (indexed_value o)) = kind /\ c <= indexed_index o.
+  exists o, List.In (Some (inr o)) (demo_cycle_turns c) /\
+    (fst (indexed_value o)) = kind /\ c <= indexed_index o.
 Proof.
   intros [<-|[<-|[<-|[]]]].
-  - exists (stamp (tag_alloc,6) (5+c)); cbn [demo_cycle_logs List.In indexed_value indexed_index fst];
-      repeat split; intuition lia.
-  - exists (stamp (tag_retire,6) c); cbn [demo_cycle_logs List.In indexed_value indexed_index fst];
-      repeat split; intuition lia.
-  - exists (stamp (tag_reclaim,8) (3+c)); cbn [demo_cycle_logs List.In indexed_value indexed_index fst];
-      repeat split; intuition lia.
+  - exists (stamp (tag_alloc,6) (5+c)); split; [|split; [reflexivity|cbn; lia]].
+    unfold demo_cycle_turns, silent, turn_of; cbn [List.repeat List.app List.In].
+    do 38 right; left; reflexivity.
+  - exists (stamp (tag_retire,6) c); split; [|split; [reflexivity|cbn; lia]].
+    unfold demo_cycle_turns, silent, turn_of; cbn [List.repeat List.app List.In].
+    do 7 right; left; reflexivity.
+  - exists (stamp (tag_reclaim,8) (3+c)); split; [|split; [reflexivity|cbn; lia]].
+    unfold demo_cycle_turns, silent, turn_of; cbn [List.repeat List.app List.In].
+    do 29 right; left; reflexivity.
 Qed.
 
-Local Lemma demo_cycle_logs_nonempty : forall n : nat, True -> demo_cycle_logs n <> [].
-Proof. intros n _; unfold demo_cycle_logs; discriminate. Qed.
+Local Lemma demo_cycle_turns_nonempty : forall n : nat, True -> demo_cycle_turns n <> [].
+Proof. intros n _; unfold demo_cycle_turns, silent; discriminate. Qed.
 
 (** The actual source is the 57-turn prefix followed by the repeating cycle,
     each cycle a genuine 42-turn round-robin run from the actual state. *)
 Theorem run_rr_allocator_demo_bisim ctx c :
   run_rr (allocator_program 2) (managed_empty,(ctx,c)) ~
-  emit_list (demo_prefix c)
-    (emit_batches demo_cycle_logs (fun n => n+7) (c+9)
-       : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
+  emit_turns (demo_prefix c)
+    (emit_turn_batches demo_cycle_turns (fun n => n+7) (c+9)
+       : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   rewrite run_rr_allocator_bisim.
   destruct (demo_prefix_run c) as (last & Hrun & Hlast).
   etransitivity;
     [exact (model_rr_run_turns 2 actor_of_slot (turn 1) 57 0 _ _ _ Hrun)|].
-  apply emit_list_sbisim.
+  apply emit_turns_sbisim.
   etransitivity; [apply equ_sbisim; exact (model_rr_equ 2 actor_of_slot (turn 1)
     state_equiv (turn_proper 1) last (demo_boundary (c+9)) (0+57) 0 Hlast eq_refl)|].
   exact (model_rr_emit_batches 2 actor_of_slot (turn 1) state_equiv (turn_proper 1)
-    demo_boundary demo_cycle_logs (fun n => n+7) (fun _ => True) 0 42 eq_refl
-    (fun _ _ => I) demo_cycle_logs_nonempty (fun n _ => demo_cycle_run n) (c+9) I).
+    demo_boundary demo_cycle_turns (fun n => n+7) (fun _ => True) 0 42 eq_refl
+    (fun _ _ => I) demo_cycle_turns_nonempty (fun n _ => demo_cycle_run n) (c+9) I).
 Qed.
 
-(** Recurrence is [model_rr_agaf] at [rank := fun c => kb - c] and
+(** Recurrence is the [model_rr_agaf] route at [rank := fun c => kb - c] and
     [P o := fst (indexed_value o) = kind /\ kb <= indexed_index o].  The
     concrete tag premise is retained: the generic rule accepts arbitrary
     predicates, but this proof must not claim recurrence of arbitrary tags. *)
@@ -1196,7 +1291,7 @@ Theorem allocator_demo_agaf_fresh ctx c kind kb :
 Proof.
   intro Hkind.
   assert (Hprogress : forall n : nat, True ->
-    (exists o, List.In o (demo_cycle_logs n) /\
+    (exists o, List.In (Some o) (demo_cycle_turns n) /\
        csl_indexed (fun o => (fst (indexed_value o)) = kind /\ kb <= indexed_index o) o)
     \/ kb - (n+7) < kb - n).
   { intros n _; destruct (Nat.le_gt_cases kb n) as [Hle|Hlt].
@@ -1206,14 +1301,15 @@ Proof.
   rewrite run_rr_allocator_bisim.
   destruct (demo_prefix_run c) as (last & Hrun & Hlast).
   rewrite (model_rr_run_turns 2 actor_of_slot (turn 1) 57 0 _ _ _ Hrun).
-  apply agaf_emit_list; [constructor|].
+  apply agaf_emit_turns; [constructor|].
   rewrite (model_rr_equ 2 actor_of_slot (turn 1) state_equiv (turn_proper 1)
     last (demo_boundary (c+9)) (0+57) 0 Hlast eq_refl).
-  apply (model_rr_agaf 2 actor_of_slot (turn 1) state_equiv (turn_proper 1)
-    demo_boundary demo_cycle_logs (fun n => n+7) (fun _ => True) 0 42 eq_refl
-    (fun _ _ => I) demo_cycle_logs_nonempty (fun n _ => demo_cycle_run n)
+  rewrite (model_rr_emit_batches 2 actor_of_slot (turn 1) state_equiv (turn_proper 1)
+    demo_boundary demo_cycle_turns (fun n => n+7) (fun _ => True) 0 42 eq_refl
+    (fun _ _ => I) demo_cycle_turns_nonempty (fun n _ => demo_cycle_run n) (c+9) I).
+  apply (emit_turn_batches_agaf demo_cycle_turns (fun n => n+7) (fun _ => True)
     (fun n => kb - n) (csl_indexed (fun o => (fst (indexed_value o)) = kind /\ kb <= indexed_index o))
-    Hprogress (c+9)); [exact I|].
+    (fun _ _ => I) demo_cycle_turns_nonempty Hprogress (c+9)); [exact I|].
   apply after_logs_not_done; constructor.
 Qed.
 
@@ -1277,7 +1373,7 @@ Theorem aba_actual_source_no_loss : exists last labels residual,
   label_logs labels = aba_logs /\ label_taus labels = 23 /\
   finite_steps (run_nd (allocator_program 2) (managed_empty,((List.nil : Ctx.Ctx),0))) labels residual /\
   residual ~ (model_nd 2 actor_of_slot (turn 1) last
-                : ictreeW (CSLObs (nat * nat)) (unit * SSig)).
+                : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   destruct aba_run_no_loss as (last & Hrun & Hinv & Hhead & Hchain & Hnd & Hp).
   destruct (run_turns_realizes_source 2 (List.nil : Ctx.Ctx) 0 aba_script last aba_logs Hrun)

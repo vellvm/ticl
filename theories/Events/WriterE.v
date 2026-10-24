@@ -1,6 +1,3 @@
-From TICL Require Import
-  Events.Core.
-
 Set Implicit Arguments.
 Generalizable All Variables.
 
@@ -10,13 +7,9 @@ Section Writer.
   later reference those [log] events in specifications. *)
   Variable (S: Type).
 
-  (** The writer event type is [writerE] *)
-  Variant writerE : Type :=
-    | Log : S -> writerE.
-  
-  (** Writer events are deterministic, always return [unit] *)
-  #[global] Instance encode_writerE: Encode writerE :=
-    fun e => unit.
+  (** The writer event type is [writerE]; writer events are deterministic, always return [unit] *)
+  Variant writerE : Type -> Type :=
+    | Log : S -> writerE unit.
 
 End Writer.
 
@@ -42,4 +35,3 @@ Arguments indexed_index {A} _.
 Definition indexed_after {A} (P : A -> Prop) (lower : nat)
   (o : indexed A) : Prop :=
   P (indexed_value o) /\ lower <= indexed_index o.
-

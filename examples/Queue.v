@@ -1,17 +1,15 @@
 From TICL Require Import
-  ICTree.Core
+  CTree.Core
   Logic.Core
-  ICTree.Equ
-  ICTree.SBisim
-  ICTree.Logic.Trans
-  ICTree.Logic.AX
-  ICTree.Logic.AF
-  ICTree.Logic.Bind
-  ICTree.Logic.State
-  ICTree.Logic.CanStep
-  ICTree.Interp.State.Mod
-  ICTree.Events.State
-  ICTree.Events.Writer
+  CTree.Logic.Trans
+  CTree.Logic.AX
+  CTree.Logic.AF
+  CTree.Logic.Bind
+  CTree.Logic.State
+  CTree.Logic.CanStep
+  CTree.Interp.State.Mod
+  CTree.Events.State
+  CTree.Events.Writer
   Lang.MeQ
   Utils.Lists.
 
@@ -27,8 +25,8 @@ From ExtLib Require Import RelDec.
 
 Generalizable All Variables.
 
-Import ICtree ICTreeNotations TiclNotations ListNotations.
-Local Open Scope ictree_scope.
+Import CTree CTreeNotations TiclNotations ListNotations.
+Local Open Scope ctree_scope.
 Local Open Scope ticl_scope.
 Local Open Scope list_scope.
 
@@ -46,12 +44,9 @@ Module Queue.
               (fun 'tt => CRet (Some tt)))).
               
 
-  Local Typeclasses Transparent equ.
-  Local Typeclasses Transparent sbisim.
-
-  Theorem rotate_agaf_pop: forall q i (nl: T),
+  Theorem rotate_agaf_pop {B: Type -> Type}: forall q i (nl: T),
       find_index (@rel_dec T eq HDec) nl q = Some i ->
-      <( {instr_prog rotate q}, Pure |= AG AF visW {fun h => h = nl} )>.
+      <( {instr_prog (B:=B) rotate q}, Pure |= AG AF visW {fun h => h = nl} )>.
   Proof with eauto with ticl.
     intros.
     unfold rotate; cbn. 
@@ -87,7 +82,7 @@ Module Queue.
                 apply axr_push...
              ++ cbn; cleft.
                 apply axr_qprog_ret...
-                intuition.
+                split2; [reflexivity | constructor |].
                 (* Low-level list proof starts here *)
                 destruct ts.
                 ** exists nl, []...
@@ -161,7 +156,7 @@ Module Queue.
              ++ cbn.
                 cleft.
                 apply axr_qprog_ret...
-                intuition.
+                split2; [reflexivity | constructor |].
                 destruct ts; try solve [inv Hi].
                 exists t, (ts ++ [h]); intuition.
                 destruct (t =? nl) eqn:Hnl'; inv Hi.

@@ -1,17 +1,15 @@
 From TICL Require Import
-  ICTree.Core
+  CTree.Core
   Logic.Core
   Utils.Vectors
-  ICTree.Equ
-  ICTree.SBisim
-  ICTree.Logic.AG
-  ICTree.Logic.AF
-  ICTree.Logic.AX
-  ICTree.Logic.State
-  ICTree.Logic.Iter
-  ICTree.Logic.Bind
-  ICTree.Interp.State.Mod
-  ICTree.Events.Writer.
+  CTree.Logic.AG
+  CTree.Logic.AF
+  CTree.Logic.AX
+  CTree.Logic.State
+  CTree.Logic.Iter
+  CTree.Logic.Bind
+  CTree.Interp.State.Mod
+  CTree.Events.Writer.
 
 From Stdlib Require Import
   Lia
@@ -19,15 +17,12 @@ From Stdlib Require Import
   Vector
   Classes.SetoidClass.
 
-From ExtLib Require Import
-  Data.Monads.StateMonad.
-
 From Equations Require Import Equations.
 
 Set Implicit Arguments.
 
-Import TiclNotations ICTreeNotations ICtree.
-Local Open Scope ictree_scope.
+Import TiclNotations CTreeNotations CTree.
+Local Open Scope ctree_scope.
 Local Open Scope fin_vector_scope.
 Local Open Scope ticl_scope.
 
@@ -46,49 +41,42 @@ Module ElectionDefs(C: Cyclic).
 
   Notation Mails := (vec' n msg).
   
-  Variant netE: Type :=
-    | Recv (from: Id)
-    | Send (from: Id) (m: msg).
+  Variant netE: Type -> Type :=
+    | Recv (from: Id): netE msg
+    | Send (from: Id) (m: msg): netE unit.
 
-  Global Instance encode_netE: Encode netE :=
-    fun e => match e with
-          | Recv _ => msg
-          | Send _ _ => unit
-          end.
+  (** The scheduler's initial pick is a visible finite choice, so the branch signature is [Bn]. *)
+  Definition send: Id -> msg -> ctree netE Bn unit :=
+    fun i p => CTree.trigger (Send i p).
 
-  Definition send: Id -> msg -> ictree netE unit :=
-    fun i p => trigger (Send i p).
-
-  Definition recv: Id -> ictree netE msg :=
-    fun i => trigger (Recv i).
+  Definition recv: Id -> ctree netE Bn msg :=
+    fun i => CTree.trigger (Recv i).
 
   (* Local network instrumented semantics, instrument [Send] *)
   Definition h_netE
-    : netE ~> stateT Mails (ictreeW msg) :=
-    fun e =>
-      mkStateT
-        (fun mails =>
-           match e return ictreeW msg (encode e * Mails) with
-           | Send id msg =>
-               let next := next id in
-               Ret (tt, mails @ next := msg)
-           | Recv id =>
-               let msg := mails $ id in
-               log msg ;;
-               Ret (msg, mails)
-           end).
+    : netE ~> stateT Mails (ctreeW msg Bn) :=
+    fun _ e mails =>
+      match e in netE X return ctreeW msg Bn (Mails * X) with
+      | Send id msg =>
+          let next := next id in
+          Ret (mails @ next := msg, tt)
+      | Recv id =>
+          let msg := mails $ id in
+          log msg ;;
+          Ret (mails, msg)
+      end.
   
   Lemma aur_recv: forall (x: Id) (ms: Mails) w,
       not_done w ->
       <[ {interp_state h_netE (recv x) ms}, w |=
-           AF (AX (done= {(ms $ x, ms)} {Obs (Log (ms $ x)) tt})) ]>.
+           AF (AX (done= {(ms, ms $ x)} {Obs (Log (ms $ x)) tt})) ]>.
   Proof with eauto with ticl.
     intros.
-    unfold recv, trigger.
-    rewrite interp_state_vis; cbn.
+    unfold recv.
+    rewrite interp_state_trigger; cbn.
     rewrite bind_bind.
     apply aur_log.
-    - rewrite bind_ret_l, sb_guard, interp_state_ret.
+    - rewrite bind_ret_l, sb_guard.
       cleft.
       apply axr_ret...
     - csplit...
@@ -97,12 +85,12 @@ Module ElectionDefs(C: Cyclic).
   Lemma aur_send: forall (x: Id) (ms: Mails) (m: msg) w,
     not_done w ->
      <[ {interp_state h_netE (send x m) ms}, w |=
-         AF (AX (done= {(tt, ms @ (next x) := m)} w)) ]>.
+         AF (AX (done= {(ms @ (next x) := m, tt)} w)) ]>.
   Proof with eauto with ticl.
     intros.
-    unfold send, trigger.
-    rewrite interp_state_vis; cbn.
-    rewrite bind_ret_l, sb_guard, interp_state_ret.
+    unfold send.
+    rewrite interp_state_trigger; cbn.
+    rewrite bind_ret_l, sb_guard.
     cleft.
     apply axr_ret...
   Qed.
@@ -111,7 +99,7 @@ Module ElectionDefs(C: Cyclic).
      1. (Candidate candidate), where candidate = id -- I received my own [id] back
      2. (Elected leader) -- Someone else was elected [leader]
    *)
-  Definition elect(id: Id): ictree netE unit :=
+  Definition elect(id: Id): ctree netE Bn unit :=
     m <- recv id ;;
     match m with
     | Candidate candidate =>
@@ -128,9 +116,9 @@ Module ElectionDefs(C: Cyclic).
         send id (Elected leader)
     end.
 
-  (* Uniring scheduler, picks initial [i] nondeterministically, then runs forever *)
-  Definition elect_sched: ictree netE void :=
-    i <- branch n ;;
+  (* Uniring scheduler, picks initial [i] nondeterministically (visible choice), then runs forever *)
+  Definition elect_sched: ctree netE Bn void :=
+    i <- branchS (branchn (S n)) ;;
     iter (fun i =>
             elect i ;;
             Ret (inl (next i))
@@ -198,7 +186,7 @@ Module Election3.
         end
     | Elected leader => m' = (m @ (next i) := (Elected leader))
     end ->
-    <[ {interp_state h_netE (elect i) m}, {w} |= AF (AX (done= {(tt, m')} {Obs (Log (m $ i)) tt})) ]>.
+    <[ {interp_state h_netE (elect i) m}, {w} |= AF (AX (done= {(m', tt)} {Obs (Log (m $ i)) tt})) ]>.
   Proof with eauto with ticl.
     intros.
     unfold elect.
@@ -208,7 +196,8 @@ Module Election3.
       + destruct (Fin_compare u i) eqn:Hcomp; subst.
         * apply aur_send...
         * cleft.
-          apply axr_state_ret...
+          rewrite interp_state_ret.
+          apply axr_ret...
         * apply aur_send...
       + subst.
         apply aur_send...
@@ -217,7 +206,8 @@ Module Election3.
   Ltac vroom :=
     eapply aur_state_bind_r_eq;
     [apply aur_elect; eauto with ticl; try exact mailboxes 
-    | cleft; apply axr_state_ret; eauto with ticl; eexists; intuition; simp next; eauto with ticl].
+    | cleft; first [apply axr_state_ret | rewrite interp_state_ret; apply axr_ret];
+      eauto with ticl; try eexists; intuition; try simp next; eauto with ticl].
 
   Lemma election3_liveness:
     <( {interp_state h_netE elect_sched mailboxes}, Pure |= AF visW {fun msg => msg = Elected id3} )>.
@@ -226,7 +216,7 @@ Module Election3.
     unfold elect_sched, mailboxes.
     eapply aul_state_bind_r with (R:=fun _ σ' w' => σ' = mailboxes /\ w' = Pure).
     - cright.
-    apply anr_state_br; split.
+      unfold branchS; apply anr_state_brS with (y:=Fin.F1); split.
       + csplit...
       + intros.
         apply aur_state_ret...

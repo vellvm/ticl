@@ -7,25 +7,25 @@ From TICL Require Export
   Logic.World.
 
 From TICL Require Import
-  Utils.Utils
-  Events.Core.
+  Utils.Utils.
 
 Generalizable All Variables.
 
 (** * Ticl Kripke model *)
-(** We define Ticl abstractly over a family of models [M] parametrized by an event type [E].
-    The models are equipped with a transition relation [ktrans], a notion of world [World E] and a notion of done [not_done]. 
-    
-    The abstract model is extensible, for example if we want to define Ticl in terms of a new coinductive tree (e.g. ITrees, CTrees, etc.)
+(** We define Ticl abstractly over a family of models [M] parametrized by an indexed event
+    signature [E] and a branch signature [B].
+    The models are equipped with a transition relation [ktrans], a notion of world [World E] and a notion of done [not_done].
+
+    The abstract model is extensible, for example if we want to define Ticl in terms of a new coinductive tree
     we can simply give an instance of the Kripke class for the new coinductive tree and obtain a new Ticl logic.
 *)
-Class Kripke (M: forall E, Encode E -> Type -> Type) (E: Type) `{HE: Encode E} := {
+Class Kripke (M: (Type -> Type) -> (Type -> Type) -> Type -> Type) (E B: Type -> Type) := {
 
     (* - [ktrans] the transition relation over [M X * W] *)
-    ktrans {X}: M E HE X -> World E -> M E HE X -> World E -> Prop;
+    ktrans {X}: M E B X -> World E -> M E B X -> World E -> Prop;
 
     (* - [ktrans] only if [not_done] *)
-    ktrans_not_done {X}: forall (t t': M E HE X) (w w': World E),
+    ktrans_not_done {X}: forall (t t': M E B X) (w w': World E),
       ktrans t w t' w' ->
       not_done w;
   }.
@@ -43,10 +43,10 @@ Notation "| t , w | ↦ | t' , w' | " :=
 (** * [can_step] relation *)
 (** [can_step] is the relation that says that a model [m] can step from world [w],
 if there exists a model [m'] and a world [w'] such that [m] can step to [m'] from [w] to [w']. *)
-Definition can_step `{Kripke M W} {X} (m: M W _ X) (w: World W): Prop :=
+Definition can_step `{Kripke M E B} {X} (m: M E B X) (w: World E): Prop :=
   exists m' w', | m,w |  ↦ | m',w' |.
 
-Lemma can_step_not_done `{Kripke M W} {X}: forall (t: M W _ X) w,
+Lemma can_step_not_done `{Kripke M E B} {X}: forall (t: M E B X) w,
     can_step t w ->
     not_done w.
 Proof.
@@ -58,21 +58,21 @@ Global Hint Resolve can_step_not_done: ticl.
 
 Ltac world_inv :=
   match goal with
-  | [H: @Obs ?E ?HE ?e ?x = ?w |- _] =>
+  | [H: @Obs ?E ?Y ?e ?x = ?w |- _] =>
       dependent destruction H
-  | [H: @Pure ?E ?HE = ?w |- _] =>
+  | [H: @Pure ?E = ?w |- _] =>
       dependent destruction H
-  | [H: @Done ?E ?HE ?X ?x = ?w |- _] =>
+  | [H: @Done ?E ?X ?x = ?w |- _] =>
       dependent destruction H
-  | [H: @Finish ?E ?HE ?X ?e ?v ?x = ?w |- _] =>
+  | [H: @Finish ?E ?Y ?X ?e ?v ?x = ?w |- _] =>
       dependent destruction H
-  | [H: ?w = @Obs ?E ?HE ?e ?x |- _] =>
+  | [H: ?w = @Obs ?E ?Y ?e ?x |- _] =>
       dependent destruction H
-  | [H: ?w = @Pure ?E ?HE |- _] =>
+  | [H: ?w = @Pure ?E |- _] =>
       dependent destruction H
-  | [H: ?w = @Done ?E ?HE ?X ?x |- _] =>
+  | [H: ?w = @Done ?E ?X ?x |- _] =>
       dependent destruction H
-  | [H: ?w = @Finish ?E ?HE ?X ?e ?v ?x |- _] =>
+  | [H: ?w = @Finish ?E ?Y ?X ?e ?v ?x |- _] =>
       dependent destruction H
   end.
 Global Hint Extern 2 => world_inv: ticl.
