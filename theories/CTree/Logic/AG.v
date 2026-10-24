@@ -25,55 +25,55 @@ Section BasicLemmas.
   Lemma ag_vis: forall {Y} (e: E Y) (k: Y -> ctree E B X) (v: Y) w φ,
       (<( {Vis e k}, w |= φ )> /\ forall v, <( {k v}, {Obs e v} |= AG φ )>) <->
          <( {Vis e k}, w |= AG φ )>.
-  Proof with eauto with ticl.
+  Proof.
     split; intros.
     - destruct H as (Hφ & H).
-      csplit...
+      csplit; eauto with ticl.
       + apply ticll_not_done in Hφ.
-        apply (can_step_vis e k v)...
+        apply (can_step_vis e k v); eauto with ticl.
       + intros t' w' TR.
-        apply ktrans_vis in TR as (v' & -> & <- & ?)...
+        apply ktrans_vis in TR as (v' & -> & <- & ?); eauto with ticl.
     - cdestruct H.
-      split...
+      split; eauto with ticl.
       intro v'.
-      apply H, ktrans_vis...
+      apply H, ktrans_vis; eauto with ticl.
   Qed.
 
   (** Visible branch iff lemma for always [AG] *)
   Lemma ag_brS: forall {Y} (c: B Y) (k: Y -> ctree E B X) (y: Y) w φ,
       (<( {BrS c k}, w |= φ )> /\ forall (y: Y), <( {k y}, w |= AG φ )>) <->
         <( {BrS c k}, w |= AG φ )>.
-  Proof with eauto with ticl.
+  Proof.
     split; intros.
     - destruct H as (Hφ & H).
-      csplit...
+      csplit; eauto with ticl.
       + apply ticll_not_done in Hφ.
-        apply (can_step_brS c k y)...
+        apply (can_step_brS c k y); eauto with ticl.
       + intros t' w' TR.
         apply ktrans_brS in TR as (y' & Heq & -> & Hd).
         rewrite Heq; apply H.
     - cdestruct H.
-      split...
+      split; eauto with ticl.
       intro y'.
-      apply H, ktrans_brS; exists y'...
+      apply H, ktrans_brS; exists y'; eauto with ticl.
   Qed.
 
   (** Visible step iff lemma for always [AG] *)
   Lemma ag_step: forall (t: ctree E B X) w φ,
       (<( {Step t}, w |= φ )> /\ <( t, w |= AG φ )>) <->
         <( {Step t}, w |= AG φ )>.
-  Proof with eauto with ticl.
+  Proof.
     split; intros.
     - destruct H as (Hφ & H).
-      csplit...
+      csplit; eauto with ticl.
       + apply ticll_not_done in Hφ.
-        apply can_step_step...
+        apply can_step_step; eauto with ticl.
       + intros t' w' TR.
         apply ktrans_step in TR as (Heq & -> & Hd).
         now rewrite Heq.
     - cdestruct H.
-      split...
-      apply H, ktrans_step...
+      split; eauto with ticl.
+      apply H, ktrans_step; eauto with ticl.
   Qed.
 
   (** Hidden branch lemma for always [AG]: all successors of all branches
@@ -83,11 +83,11 @@ Section BasicLemmas.
       (exists y, can_step (k y) w) ->
       (forall y t' w', |k y, w| ↦ |t', w'| -> <( t', w' |= AG φ )>) ->
       <( {Br c k}, w |= AG φ )>.
-  Proof with eauto with ticl.
-    intros * Hφ Hs Hk; csplit...
+  Proof.
+    intros * Hφ Hs Hk; csplit; eauto with ticl.
     - now apply can_step_br.
     - intros t' w' TR.
-      apply ktrans_br in TR as (y & TR)...
+      apply ktrans_br in TR as (y & TR); eauto with ticl.
   Qed.
 
   (** Stuckness lemma for always [AG]: no AG formula for stuck as it doesn't step *)

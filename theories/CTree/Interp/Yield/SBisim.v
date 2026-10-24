@@ -210,10 +210,10 @@ End PoolSBisim.
 Section SchedulerTransitions.
   Context {E B : Type -> Type} `{Bn -< B}.
 
-  Notation Yield' := (inl1 Yield : (yieldE +' (spawnE +' E)) unit).
-  Notation Spawn' := (inr1 (inl1 Spawn) : (yieldE +' (spawnE +' E)) unit).
-  Notation Yield_ := (inl1 Yield : (yieldE +' (forkE +' E)) unit).
-  Notation Fork_ := (inr1 (inl1 Fork) : (yieldE +' (forkE +' E)) bool).
+  Abbreviation Yield' := (inl1 Yield : (yieldE +' (spawnE +' E)) unit).
+  Abbreviation Spawn' := (inr1 (inl1 Spawn) : (yieldE +' (spawnE +' E)) unit).
+  Abbreviation Yield_ := (inl1 Yield : (yieldE +' (forkE +' E)) unit).
+  Abbreviation Fork_ := (inr1 (inl1 Fork) : (yieldE +' (forkE +' E)) bool).
 
   (** ** Phase 1: [equ]-unfoldings of the scheduler. *)
 
@@ -653,8 +653,8 @@ Section SchedulerTransitions.
 
   (** ** Phase 5: [schedule] preserves pool strong bisimilarity (branch-free pools). *)
 
-  Notation completed' := (completed E B).
-  Notation sbC := (@sb (yieldE +' (spawnE +' E)) (yieldE +' (spawnE +' E)) B B unit unit eq).
+  Abbreviation completed' := (completed E B).
+  Abbreviation sbC := (@sb (yieldE +' (spawnE +' E)) (yieldE +' (spawnE +' E)) B B unit unit eq).
 
   Local Ltac branchfree_absurd Hbf Hvi :=
     exfalso; let Hb := fresh "Hb" in
@@ -1263,7 +1263,7 @@ Section InterpAlign.
   Universe r.
   Context {E F B : Type -> Type} (h : E ~> ctree@{_ _ _ _ r _} F B) {X : Type}.
 
-  Notation interp' := (interp (M := ctree F B) h).
+  Abbreviation interp' := (interp (M := ctree F B) h).
 
   Lemma interp_guards n (t : ctree E B X) : interp' (guards n t) ≅ guards n (interp' t).
   Proof.
@@ -1475,8 +1475,8 @@ End InterpStateAlign.
 Section ScheduleAlign.
   Context {E B : Type -> Type} `{Bn -< B}.
 
-  Notation Yield' := (inl1 Yield : (yieldE +' (spawnE +' E)) unit).
-  Notation Spawn' := (inr1 (inl1 Spawn) : (yieldE +' (spawnE +' E)) unit).
+  Abbreviation Yield' := (inl1 Yield : (yieldE +' (spawnE +' E)) unit).
+  Abbreviation Spawn' := (inr1 (inl1 Spawn) : (yieldE +' (spawnE +' E)) unit).
 
   Lemma schedule_focus_guards : forall a N (ts : pool E B (S N)) i (x : thread E B),
     (ts $ i) ≅ guards a x ->

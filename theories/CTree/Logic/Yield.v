@@ -64,10 +64,10 @@ Section ThreadStateRules.
       R (s, r) w ->
       <[ {interp_state h (interp_thread (Ret r : ctree (yieldE +' (forkE +' E)) B X)) s},
          w |= ret R ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros r s w R Hnd HR.
     rewrite interp_state_thread_ret.
-    apply ret_ret...
+    apply ret_ret; eauto with ticl.
   Qed.
 
   Lemma anr_ithread_bind_r_eq {A C} :
@@ -119,11 +119,11 @@ Section ScheduleStateRules.
       R (s, tt) w ->
       <[ {interp_schedule_nd h 1 [(Ret tt : thread E B)]%vector (Some Fin.F1) s},
          w |= ret R ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros s w R Hnd HR.
     rewrite (interp_schedule_nd_ret h 0 [(Ret tt : thread E B)]%vector Fin.F1 s eq_refl).
     rewrite interp_schedule_nd_empty.
-    apply ret_ret...
+    apply ret_ret; eauto with ticl.
   Qed.
 
   (** A cooperative [Yield] costs one visible step: the scheduling pick. *)
@@ -133,19 +133,19 @@ Section ScheduleStateRules.
       <[ {interp_schedule_nd h 1
             [Vis (inl1 Yield : (yieldE +' (forkE +' E)) unit) (fun _ : unit => Ret tt)]%vector
             (Some Fin.F1) s}, w |= AX ret R ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros s w R Hnd HR.
     rewrite (interp_schedule_nd_yield h 0
                [Vis (inl1 Yield : (yieldE +' (forkE +' E)) unit) (fun _ : unit => Ret tt)]%vector
                Fin.F1 (fun _ : unit => (Ret tt : thread E B)) s eq_refl).
     rewrite interp_schedule_nd_select.
     apply (anr_brS _ _ Fin.F1); split.
-    - csplit...
+    - csplit; eauto with ticl.
     - intro i; dependent destruction i.
       + rewrite (interp_schedule_nd_ret h 0 _ Fin.F1 s)
           by (now rewrite Vector.nth_replace_eq).
         rewrite interp_schedule_nd_empty.
-        apply ret_ret...
+        apply ret_ret; eauto with ticl.
       + inversion i.
   Qed.
 End ScheduleStateRules.
@@ -203,13 +203,13 @@ Section RawThreadRules.
                   Vis (inr1 (inr1 (Put (f σ0))) : (yieldE +' (forkE +' stateE Σ)) unit)
                     (fun _ : unit => Ret r))) σ},
          w |= ψ AU ret R ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros f r σ w ψ R Hlog HR.
     pose proof (ticll_not_done unit _ _ _ Hlog) as Hnd.
     rewrite instr_thread_get; cbv beta.
     setoid_rewrite instr_thread_put; cbv beta.
     eapply aur_log.
-    - cleft; apply axr_thread_ret...
+    - cleft; apply axr_thread_ret; eauto with ticl.
     - now apply ticll_bind_l.
   Qed.
 
@@ -224,7 +224,7 @@ Section RawThreadRules.
                   Vis (inr1 (inr1 (Put (f σ0))) : (yieldE +' (forkE +' stateE Σ)) unit)
                     (fun _ : unit => Ret r))) σ},
          w |= ψ AU φ )>.
-  Proof with eauto with ticl.
+  Proof.
     intros f r σ w ψ φ Hlog Hret.
     rewrite instr_thread_get; cbv beta.
     setoid_rewrite instr_thread_put; cbv beta.
@@ -270,7 +270,7 @@ Section RawThreadRules.
                     (fun _ : unit => Ret tt))]%vector
             (Some Fin.F1) σ},
          w |= ψ AU ret R ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros f σ w ψ R Hlog HR.
     pose proof (ticll_not_done unit _ _ _ Hlog) as Hnd.
     rewrite (interp_schedule_nd_singleton_update f
@@ -281,7 +281,7 @@ Section RawThreadRules.
                σ eq_refl
              : instr_schedule (B:=B) 1 _ (Some Fin.F1) σ ~ _).
     eapply aur_log.
-    - cleft; apply ret_ret...
+    - cleft; apply ret_ret; eauto with ticl.
     - now apply ticll_bind_l.
   Qed.
 
@@ -297,7 +297,7 @@ Section RawThreadRules.
                     (fun _ : unit => Ret tt))]%vector
             (Some Fin.F1) σ},
          w |= ψ AU φ )>.
-  Proof with eauto with ticl.
+  Proof.
     intros f σ w ψ φ Hlog Hret.
     rewrite (interp_schedule_nd_singleton_update f
                [Vis (inr1 (inr1 Get) : (yieldE +' (forkE +' stateE Σ)) Σ)
@@ -308,7 +308,7 @@ Section RawThreadRules.
              : instr_schedule (B:=B) 1 _ (Some Fin.F1) σ ~ _).
     cright.
     apply anl_log.
-    - cleft...
+    - cleft; eauto with ticl.
     - now apply ticll_bind_l.
   Qed.
 End RawThreadRules.
@@ -497,7 +497,7 @@ Section PoolRules.
   Context {E B : Type -> Type} `{Bn -< B} {W Sigma : Type}
     (handler : E ~> stateT Sigma (ctreeW W B)).
 
-  Notation exactW := (fun X (t u : ctreeW W B X) => t ≅ u).
+  Abbreviation exactW := (fun X (t u : ctreeW W B X) => t ≅ u).
 
   Definition ClosedTurns {G n} (ts : pool E B (S n))
       (Inv : G -> Sigma -> Prop) : Prop :=
@@ -588,7 +588,7 @@ Section PoolRulesRR.
   Context {E : Type -> Type} {W Sigma : Type}
     (handler : E ~> stateT Sigma (ctreeW W Bn)).
 
-  Notation exactW := (fun X (t u : ctreeW W Bn X) => t ≅ u).
+  Abbreviation exactW := (fun X (t u : ctreeW W Bn X) => t ≅ u).
 
   Lemma ag_pool_rr_invariance {G n} (ts : pool E Bn (S n))
       (Inv : G -> Sigma -> Prop) (φ : ticllW W) :

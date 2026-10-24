@@ -40,7 +40,7 @@ Variant SchedulerObs : Type -> Type :=
 | ObsSchedulingPoint : nat -> SchedulerObs unit
 | ObsOffered : SlotRef -> SchedulerObs unit.
 
-Notation schedulerObsE := SchedulerObs.
+Abbreviation schedulerObsE := SchedulerObs.
 
 Definition scheduler_observedE (E : Type -> Type) : Type -> Type :=
   schedulerObsE +' (yieldE +' (spawnE +' E)).

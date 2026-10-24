@@ -32,14 +32,14 @@ End Cyclic.
 
 Module ElectionDefs(C: Cyclic).
   Import C.
-  Notation Id := (fin' n). 
+  Abbreviation Id := (fin' n). 
   
   (*| Message passing in unidirectional ring |*)
   Variant msg :=
     | Candidate (u: Id)
     | Elected   (u: Id).
 
-  Notation Mails := (vec' n msg).
+  Abbreviation Mails := (vec' n msg).
   
   Variant netE: Type -> Type :=
     | Recv (from: Id): netE msg
@@ -70,7 +70,7 @@ Module ElectionDefs(C: Cyclic).
       not_done w ->
       <[ {interp_state h_netE (recv x) ms}, w |=
            AF (AX (done= {(ms, ms $ x)} {Obs (Log (ms $ x)) tt})) ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
     unfold recv.
     rewrite interp_state_trigger; cbn.
@@ -78,21 +78,21 @@ Module ElectionDefs(C: Cyclic).
     apply aur_log.
     - rewrite bind_ret_l, sb_guard.
       cleft.
-      apply axr_ret...
-    - csplit...
+      apply axr_ret; eauto with ticl.
+    - csplit; eauto with ticl.
   Qed.
 
   Lemma aur_send: forall (x: Id) (ms: Mails) (m: msg) w,
     not_done w ->
      <[ {interp_state h_netE (send x m) ms}, w |=
          AF (AX (done= {(ms @ (next x) := m, tt)} w)) ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
     unfold send.
     rewrite interp_state_trigger; cbn.
     rewrite bind_ret_l, sb_guard.
     cleft.
-    apply axr_ret...
+    apply axr_ret; eauto with ticl.
   Qed.
   
   (* Always terminates, conditional on receiving either:
@@ -143,9 +143,9 @@ Module Election3.
   Module E := ElectionDefs(Cyclic3).
   Import E Cyclic3.
 
-  Notation id1 := Fin.F1.
-  Notation id2 := (Fin.FS (Fin.F1)).
-  Notation id3 := (Fin.FS (Fin.FS (Fin.F1))).
+  Abbreviation id1 := Fin.F1.
+  Abbreviation id2 := (Fin.FS (Fin.F1)).
+  Abbreviation id3 := (Fin.FS (Fin.FS (Fin.F1))).
 
   Notation "{{ a , b , c }}" :=
     (Vector.cons _ a _
@@ -187,20 +187,20 @@ Module Election3.
     | Elected leader => m' = (m @ (next i) := (Elected leader))
     end ->
     <[ {interp_state h_netE (elect i) m}, {w} |= AF (AX (done= {(m', tt)} {Obs (Log (m $ i)) tt})) ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
     unfold elect.
     eapply aur_state_bind_r_eq.
-    - eapply aur_recv...
+    - eapply aur_recv; eauto with ticl.
     - destruct (m $ i) eqn:Hm.
       + destruct (Fin_compare u i) eqn:Hcomp; subst.
-        * apply aur_send...
+        * apply aur_send; eauto with ticl.
         * cleft.
           rewrite interp_state_ret.
-          apply axr_ret...
-        * apply aur_send...
+          apply axr_ret; eauto with ticl.
+        * apply aur_send; eauto with ticl.
       + subst.
-        apply aur_send...
+        apply aur_send; eauto with ticl.
   Qed.
 
   Ltac vroom :=
@@ -211,15 +211,15 @@ Module Election3.
 
   Lemma election3_liveness:
     <( {interp_state h_netE elect_sched mailboxes}, Pure |= AF visW {fun msg => msg = Elected id3} )>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
     unfold elect_sched, mailboxes.
     eapply aul_state_bind_r with (R:=fun _ σ' w' => σ' = mailboxes /\ w' = Pure).
     - cright.
       unfold branchS; apply anr_state_brS with (y:=Fin.F1); split.
-      + csplit...
+      + csplit; eauto with ticl.
       + intros.
-        apply aur_state_ret...
+        apply aur_state_ret; eauto with ticl.
     - intros * (-> & ->).
       unfold mailboxes.
       (* iter loop *)
@@ -240,7 +240,7 @@ Module Election3.
                        end eq_refl eq_refl
                    | _ => False
                    end)
-           (f:=fun id ms _ => ranking id ms)...
+           (f:=fun id ms _ => ranking id ms); eauto with ticl.
     + (* Prove it gets to the intermediate state *)
       intros; intuition; subst.
       rename σ into m.
@@ -264,10 +264,10 @@ Module Election3.
         -- right. vroom.
     + (* At checkpoint, now everything is deterministic *)
       intros i w m _ (-> & ? & ->); subst.
-      eapply aul_state_iter_next_eq...
+      eapply aul_state_iter_next_eq; eauto with ticl.
       * vroom.
       * do 2 (eapply aul_state_iter_next_eq; eauto with ticl; [vroom|simp next; cbn]).
-        cleft. csplit...
+        cleft. csplit; eauto with ticl.
   Qed.
   Print Assumptions election3_liveness.
 End Election3.

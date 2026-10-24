@@ -39,14 +39,14 @@ Section BasicLemmas.
       <( {Br c k}, w |= φ EN ψ )> <->
         <( {Br c k}, w |= φ )>
         /\ (exists (y: Y) t' w', |k y, w| ↦ |t', w'| /\ <( t', w' |= ψ )>).
-  Proof with eauto with ticl.
+  Proof.
     split; intros.
-    - cdestruct H; split...
-      apply ktrans_br in TR as (y & TR)...
+    - cdestruct H; split; eauto with ticl.
+      apply ktrans_br in TR as (y & TR); eauto with ticl.
     - destruct H as (Hφ & y & t' & w' & TR & H).
-      csplit...
-      exists t', w'; split...
-      apply ktrans_br...
+      csplit; eauto with ticl.
+      exists t', w'; split; eauto with ticl.
+      apply ktrans_br; eauto with ticl.
   Qed.
 
   (** Visible branch: [φ EN ψ] holds at [BrS c k] iff [φ] holds and some branch satisfies [ψ]. *)
@@ -54,15 +54,15 @@ Section BasicLemmas.
       <( {BrS c k}, w |= φ EN ψ )> <->
         <( {BrS c k}, w |= φ )>
         /\ (exists (y: Y), <( {k y}, w |= ψ )>).
-  Proof with eauto with ticl.
+  Proof.
     split; intros.
     - cdestruct H.
       apply ktrans_brS in TR as (y & Heq & -> & Hd).
-      rewrite Heq in H; split...
+      rewrite Heq in H; split; eauto with ticl.
     - destruct H as (Hφ & y & H).
-      csplit...
-      exists (k y), w; split...
-      apply ktrans_brS; exists y; split2...
+      csplit; eauto with ticl.
+      exists (k y), w; split; eauto with ticl.
+      apply ktrans_brS; exists y; split2; eauto with ticl.
       now apply ticll_not_done in Hφ.
   Qed.
 
@@ -70,15 +70,15 @@ Section BasicLemmas.
   Lemma enl_step: forall (t: ctree E B X) w φ ψ,
       <( {Step t}, w |= φ EN ψ )> <->
         <( {Step t}, w |= φ )> /\ <( t, w |= ψ )>.
-  Proof with eauto with ticl.
+  Proof.
     split; intros.
     - cdestruct H.
       apply ktrans_step in TR as (Heq & -> & Hd).
-      rewrite Heq in H; split...
+      rewrite Heq in H; split; eauto with ticl.
     - destruct H as (Hφ & H).
-      csplit...
-      exists t, w; split...
-      apply ktrans_step; split2...
+      csplit; eauto with ticl.
+      exists t, w; split; eauto with ticl.
+      apply ktrans_step; split2; eauto with ticl.
       now apply ticll_not_done in Hφ.
   Qed.
 
@@ -86,15 +86,15 @@ Section BasicLemmas.
   Lemma enl_vis: forall {Y} (e: E Y) (k: Y -> ctree E B X) w φ ψ,
       <( {Vis e k}, w |= φ EN ψ )> <->
         <( {Vis e k}, w |= φ )> /\ (exists (v: Y), <( {k v}, {Obs e v} |= ψ )>).
-  Proof with eauto with ticl.
+  Proof.
     split; intros.
     - cdestruct H.
       apply ktrans_vis in TR as (v & -> & Heq & Hd).
-      rewrite <- Heq in H; split...
+      rewrite <- Heq in H; split; eauto with ticl.
     - destruct H as (Hφ & v & H).
-      csplit...
-      exists (k v), (Obs e v); split...
-      apply ktrans_vis; exists v; split2...
+      csplit; eauto with ticl.
+      exists (k v), (Obs e v); split; eauto with ticl.
+      apply ktrans_vis; exists v; split2; eauto with ticl.
       now apply ticll_not_done in Hφ.
   Qed.
 
@@ -110,44 +110,44 @@ Section BasicLemmas.
       <[ {Br c k}, w |= φ EN ψ ]> <->
         <( {Br c k}, w |= φ )>
         /\ (exists (y: Y) t' w', |k y, w| ↦ |t', w'| /\ <[ t', w' |= ψ ]>).
-  Proof with eauto with ticl.
+  Proof.
     split; intros.
-    - cdestruct H; split...
-      apply ktrans_br in TR as (y & TR)...
+    - cdestruct H; split; eauto with ticl.
+      apply ktrans_br in TR as (y & TR); eauto with ticl.
     - destruct H as (Hφ & y & t' & w' & TR & H).
-      csplit...
-      exists t', w'; split...
-      apply ktrans_br...
+      csplit; eauto with ticl.
+      exists t', w'; split; eauto with ticl.
+      apply ktrans_br; eauto with ticl.
   Qed.
 
   Lemma enr_brS: forall {Y} (c: B Y) (k: Y -> ctree E B X) w φ ψ,
       <[ {BrS c k}, w |= φ EN ψ ]> <->
         <( {BrS c k}, w |= φ )>
         /\ (exists (y: Y), <[ {k y}, w |= ψ ]>).
-  Proof with eauto with ticl.
+  Proof.
     split; intros.
     - cdestruct H.
       apply ktrans_brS in TR as (y & Heq & -> & Hd).
-      rewrite Heq in H; split...
+      rewrite Heq in H; split; eauto with ticl.
     - destruct H as (Hφ & y & H).
-      csplit...
-      exists (k y), w; split...
-      apply ktrans_brS; exists y; split2...
+      csplit; eauto with ticl.
+      exists (k y), w; split; eauto with ticl.
+      apply ktrans_brS; exists y; split2; eauto with ticl.
       now apply ticll_not_done in Hφ.
   Qed.
 
   Lemma enr_step: forall (t: ctree E B X) w φ ψ,
       <[ {Step t}, w |= φ EN ψ ]> <->
         <( {Step t}, w |= φ )> /\ <[ t, w |= ψ ]>.
-  Proof with eauto with ticl.
+  Proof.
     split; intros.
     - cdestruct H.
       apply ktrans_step in TR as (Heq & -> & Hd).
-      rewrite Heq in H; split...
+      rewrite Heq in H; split; eauto with ticl.
     - destruct H as (Hφ & H).
-      csplit...
-      exists t, w; split...
-      apply ktrans_step; split2...
+      csplit; eauto with ticl.
+      exists t, w; split; eauto with ticl.
+      apply ktrans_step; split2; eauto with ticl.
       now apply ticll_not_done in Hφ.
   Qed.
 
@@ -155,15 +155,15 @@ Section BasicLemmas.
   Lemma enr_vis: forall {Y} (e: E Y) (k: Y -> ctree E B X) w φ ψ,
       <[ {Vis e k}, w |= φ EN ψ ]> <->
         <( {Vis e k}, w |= φ )> /\ (exists (v: Y), <[ {k v}, {Obs e v} |= ψ ]>).
-  Proof with eauto with ticl.
+  Proof.
     split; intros.
     - cdestruct H.
       apply ktrans_vis in TR as (v & -> & Heq & Hd).
-      rewrite <- Heq in H; split...
+      rewrite <- Heq in H; split; eauto with ticl.
     - destruct H as (Hφ & v & H).
-      csplit...
-      exists (k v), (Obs e v); split...
-      apply ktrans_vis; exists v; split2...
+      csplit; eauto with ticl.
+      exists (k v), (Obs e v); split; eauto with ticl.
+      apply ktrans_vis; exists v; split2; eauto with ticl.
       now apply ticll_not_done in Hφ.
   Qed.
 
@@ -172,20 +172,20 @@ Section BasicLemmas.
   Lemma enr_done: forall (t: ctree E B X) φ R w,
       <[ t, w |= φ EN done R ]> <->
         <( t, w |= φ )> /\ (exists (x: X) w', done_of x w w' /\ R x w /\ |t, w| ↦ |Stuck, w'|).
-  Proof with eauto with ticl.
+  Proof.
     split; intros.
-    - cdestruct H; split...
+    - cdestruct H; split; eauto with ticl.
       rewrite unfold_entailsR in H; inv H.
       + apply ktrans_to_done_inv in TR as Hinv; destruct Hinv as (Heq & ->).
         rewrite Heq in TR.
-        exists x, (Done x); split2...
+        exists x, (Done x); split2; eauto with ticl.
       + apply ktrans_to_finish_inv in TR as Hinv; destruct Hinv as (Heq & ->).
         rewrite Heq in TR.
-        exists x, (Finish e v x); split2...
+        exists x, (Finish e v x); split2; eauto with ticl.
     - destruct H as (Hφ & x & w' & Hd & HR & TR).
-      csplit...
-      exists Stuck, w'; split...
-      rewrite unfold_entailsR; inv Hd...
+      csplit; eauto with ticl.
+      exists Stuck, w'; split; eauto with ticl.
+      rewrite unfold_entailsR; inv Hd; eauto with ticl.
   Qed.
 
   (** A return tree does not satisfy prefix [φ EN ψ]; it does not step. *)
@@ -207,14 +207,14 @@ Section BasicLemmas.
       <( {Ret r: ctree E B X}, w |= φ )> ->
       R r w ->
       <[ {Ret r: ctree E B X}, w |= φ EN done R ]>.
-  Proof with auto with ticl.
+  Proof.
     intros.
-    apply enr_done; split...
+    apply enr_done; split; auto with ticl.
     apply ticll_not_done in H; inv H.
-    - exists r, (Done r); split2...
-      apply ktrans_done...
-    - exists r, (Finish e v r); split2...
-      apply ktrans_finish...
+    - exists r, (Done r); split2; auto with ticl.
+      apply ktrans_done; auto with ticl.
+    - exists r, (Finish e v r); split2; auto with ticl.
+      apply ktrans_finish; auto with ticl.
   Qed.
   
   (** A return tree satisfies suffix [EX done R] if its return value satisfies [R]. *)
@@ -222,10 +222,10 @@ Section BasicLemmas.
       not_done w ->
       R r w ->
       <[ {Ret r: ctree E B X}, w |= EX done R ]>.
-  Proof with auto with ticl.
+  Proof.
     intros.
-    apply enr_ret...
-    csplit...
+    apply enr_ret; auto with ticl.
+    csplit; auto with ticl.
   Qed.
   
   (** Inversion lemma for the next [EN] operator and post-condition [ψ]. *)
@@ -234,19 +234,19 @@ Section BasicLemmas.
         <( {Ret r: ctree E B X}, w |= φ )>
         /\ exists (w': World E), done_with (fun x w' => x = r /\ w = w') w'
         /\ <[ {Stuck: ctree E B X}, w' |= ψ ]>.
-  Proof with auto with ticl.
+  Proof.
     intros.
     cdestruct H.
     assert (Hd: not_done w) by now apply ktrans_not_done in TR. 
     inv Hd.
     + apply ktrans_done in TR as (-> & Heqt).
       rewrite Heqt in H.
-      split...
-      exists (Done r)...
+      split; auto with ticl.
+      exists (Done r); auto with ticl.
     + apply ktrans_finish in TR as (-> & Heqt).
       rewrite Heqt in H.
-      split...
-      exists (Finish e v r)...
+      split; auto with ticl.
+      exists (Finish e v r); auto with ticl.
   Qed.
 End BasicLemmas.
 
@@ -257,13 +257,13 @@ Section WriterLemmas.
   Lemma exr_log{S}: forall (x: S) w,
       not_done w ->
       <[ {log x: ctreeW S B unit}, w |= EX EX done=tt {Obs (Log x) tt} ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
     unfold log, CTree.trigger.
     apply enr_vis; split.
-    - csplit...
+    - csplit; eauto with ticl.
     - exists tt.
-      apply exr_ret...
+      apply exr_ret; eauto with ticl.
   Qed.
 
 End WriterLemmas.

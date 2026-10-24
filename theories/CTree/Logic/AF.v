@@ -55,10 +55,10 @@ Section BasicLemmas.
   Lemma aul_ret: forall (r: X) w φ ψ,
       <( {Ret r: ctree E B X}, w |= ψ \/ φ AN ψ )> <->
       <( {Ret r: ctree E B X}, w |= φ AU ψ )>.
-  Proof with auto with ticl.
+  Proof.
     split; intros H; cdestruct H.
     - now cleft.
-    - cright; csplit; cdestruct H...
+    - cright; csplit; cdestruct H; auto with ticl.
       intros t' w' TR.
       apply ticll_not_done in Hp.
       specialize (H _ _ TR).
@@ -71,7 +71,7 @@ Section BasicLemmas.
         now cleft.
     - now cleft.
     - cdestruct H.
-      cright; csplit...
+      cright; csplit; auto with ticl.
       intros t' w' TR.
       apply ticll_not_done in Hp.
       specialize (H _ _ TR).
@@ -88,10 +88,10 @@ Section BasicLemmas.
   Lemma aur_ret: forall (r: X) w φ ψ,
       <[ {Ret r: ctree E B X}, w |= ψ \/ φ AN ψ ]> <->
       <[ {Ret r: ctree E B X}, w |= φ AU ψ ]>.
-  Proof with auto with ticl.
+  Proof.
     split; intros H; cdestruct H.
     - now cleft.
-    - cright; csplit; cdestruct H...
+    - cright; csplit; cdestruct H; auto with ticl.
       intros t' w' TR.
       apply ticll_not_done in Hp.
       specialize (H _ _ TR).
@@ -104,7 +104,7 @@ Section BasicLemmas.
         now cleft.
     - now cleft.
     - cdestruct H.
-      cright; csplit...
+      cright; csplit; auto with ticl.
       intros t' w' TR.
       apply ticll_not_done in Hp.
       specialize (H _ _ TR).

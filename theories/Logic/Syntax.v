@@ -112,7 +112,7 @@ Module TiclNotations.
                        match pat in writerE _ Y return Y -> Prop with
                        | Log v => fun 'tt => R v
                        end)))
-      (in custom ticll at level 75): ticl_scope.
+      (in custom ticll at level 74): ticl_scope.
 
   Notation "'done' R" :=
     (CDone R)
@@ -139,31 +139,21 @@ Module TiclNotations.
                            match pat in writerE _ Y return Y -> Prop with
                            | Log w => fun 'tt => R x s w
                            end)))
-      (in custom ticlr at level 75): ticl_scope.
+      (in custom ticlr at level 74): ticl_scope.
 
   Notation "'finishW=' x s w" :=
     (CDone (finish_with (fun '(s', x') Y (pat : writerE _ Y) =>
                            match pat in writerE _ Y return Y -> Prop with
                            | Log w' => fun 'tt => x = x' /\ s = s' /\ w = w'
                            end)))
-      (in custom ticlr at level 75): ticl_scope.
+      (in custom ticlr at level 74): ticl_scope.
 
-  Notation "⊤" := (CNow (fun _ => True))
-                    (in custom ticll at level 76): ticl_scope.
-
-  Notation "⊥" := (CNow (fun _ => False))
-                     (in custom ticll at level 76): ticl_scope.
-  Notation "⊤" := (CNow (fun _ => True))
-                    (in custom ticlr at level 76): ticl_scope.
-
-  Notation "⊥" := (CNow (fun _ => False))
-                    (in custom ticlr at level 76): ticl_scope.
-
-  Notation "⫪" := (CDone (fun _ _ => True))
-                    (in custom ticlr at level 76): ticl_scope.
-
-  Notation "⫫" := (CDone (fun _ _ => False))
-                    (in custom ticlr at level 76): ticl_scope.
+  Notation "⊤" := (CNow (fun _ => True)) (in custom ticll): ticl_scope.
+  Notation "⊥" := (CNow (fun _ => False)) (in custom ticll): ticl_scope.
+  Notation "⊤" := (CNow (fun _ => True)) (in custom ticlr): ticl_scope.
+  Notation "⊥" := (CNow (fun _ => False)) (in custom ticlr): ticl_scope.
+  Notation "⫪" := (CDone (fun _ _ => True)) (in custom ticlr): ticl_scope.
+  Notation "⫫" := (CDone (fun _ _ => False)) (in custom ticlr): ticl_scope.
 
   (* Temporal syntax *)
   Notation "p 'EN' q" := (CxL Q_E p q) (in custom ticll at level 75): ticl_scope.
@@ -185,17 +175,17 @@ Module TiclNotations.
   Notation "'AG' p" := (Cg Q_A p) (in custom ticll at level 75): ticl_scope.
 
   (* Syntactic sugar [AF, EF] is finally *)
-  Notation "'EF' p" := <( ⊤ EU p )> (in custom ticll at level 74): ticl_scope.
-  Notation "'AF' p" := <( ⊤ AU p )> (in custom ticll at level 74): ticl_scope.
+  Notation "'EF' p" := <( ⊤ EU p )> (in custom ticll at level 74, p at level 74): ticl_scope.
+  Notation "'AF' p" := <( ⊤ AU p )> (in custom ticll at level 74, p at level 74): ticl_scope.
 
-  Notation "'EF' p" := <[ ⊤ EU p ]> (in custom ticlr at level 74): ticl_scope.
-  Notation "'AF' p" := <[ ⊤ AU p ]> (in custom ticlr at level 74): ticl_scope.
+  Notation "'EF' p" := <[ ⊤ EU p ]> (in custom ticlr at level 74, p at level 74): ticl_scope.
+  Notation "'AF' p" := <[ ⊤ AU p ]> (in custom ticlr at level 74, p at level 74): ticl_scope.
 
-  Notation "'EX' p" := <( ⊤ EN p )> (in custom ticll at level 74): ticl_scope.
-  Notation "'AX' p" := <( ⊤ AN p )> (in custom ticll at level 74): ticl_scope.
+  Notation "'EX' p" := <( ⊤ EN p )> (in custom ticll at level 74, p at level 74): ticl_scope.
+  Notation "'AX' p" := <( ⊤ AN p )> (in custom ticll at level 74, p at level 74): ticl_scope.
 
-  Notation "'EX' p" := <[ ⊤ EN p ]> (in custom ticlr at level 74): ticl_scope.
-  Notation "'AX' p" := <[ ⊤ AN p ]> (in custom ticlr at level 74): ticl_scope.
+  Notation "'EX' p" := <[ ⊤ EN p ]> (in custom ticlr at level 74, p at level 74): ticl_scope.
+  Notation "'AX' p" := <[ ⊤ AN p ]> (in custom ticlr at level 74, p at level 74): ticl_scope.
 
   (* Propositional syntax *)
   Notation "p '/\' q" := (CAndL p q)

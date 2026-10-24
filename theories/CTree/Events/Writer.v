@@ -18,8 +18,8 @@ Generalizable All Variables.
     while also being general enough to accomodate arbitrary ghost-state [W]. *)
 Definition log {S B}: S -> ctree (writerE S) B unit := fun s => CTree.trigger (Log s).
 
-Notation ctreeW Φ B := (ctree (writerE Φ) B).
-Notation InstrM Φ B Σ := (stateT Σ (ctreeW Φ B)).
+Abbreviation ctreeW Φ B := (ctree (writerE Φ) B).
+Abbreviation InstrM Φ B Σ := (stateT Σ (ctreeW Φ B)).
 
 Import CTreeNotations.
 Local Open Scope ctree_scope.

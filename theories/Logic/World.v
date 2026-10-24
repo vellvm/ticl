@@ -14,6 +14,7 @@ Variant World (E: Type -> Type) :=
   | Obs {Y} (e : E Y) (v : Y)
   | Done {X} (x: X)
   | Finish {Y X} (e: E Y) (v: Y) (x: X).
+Create HintDb ticl.
 Global Hint Constructors World: ticl.
 
 Arguments Pure {E}.

@@ -132,24 +132,24 @@ Module ME.
     Lemma axr_pop_nil: forall w,
         not_done w ->
         <[ {instr_prog CPop nil}, w |= AX (done= {(nil, None)} w) ]>.
-    Proof with auto with ticl.
+    Proof.
       intros; unfold instr_prog; cbn.
       unfold_trigger.
       rewrite bind_ret_l, sb_guard.
-      apply axr_ret...
+      apply axr_ret; auto with ticl.
     Qed.
 
     Lemma anr_pop_cons: forall w h ts φ,
         not_done w ->
         <( {log h: ctreeW T B unit}, w |= φ )> ->
         <[ {instr_prog CPop (h::ts)}, w |= φ AN AX (done= {(ts, Some h)} {Obs (Log h) tt}) ]>.
-    Proof with auto with ticl.
+    Proof.
       intros; unfold instr_prog; cbn.
       unfold_trigger.
       rewrite bind_bind.
       apply anr_log.
       - rewrite bind_ret_l, sb_guard.
-        apply axr_ret...
+        apply axr_ret; auto with ticl.
       - now apply ticll_bind_l.
     Qed.
 
@@ -157,22 +157,22 @@ Module ME.
         not_done w ->
         <( {log h: ctreeW T B unit}, w |= φ )> ->
         <[ {instr_prog CPop (h::ts)}, w |= φ AU AX (done= {(ts, Some h)} {Obs (Log h) tt}) ]>.
-    Proof with auto with ticl.
+    Proof.
       intros; unfold instr_prog; cbn.
       cright.
       apply implr_auan_anau.
       cleft.
-      apply anr_pop_cons...
+      apply anr_pop_cons; auto with ticl.
     Qed.
 
     Lemma axr_push: forall w x q,
         not_done w ->
         <[ {instr_prog (CPush x) q}, w |= AX (done= {(q ++ [x], tt)} w) ]>.
-    Proof with auto with ticl.
+    Proof.
       intros; unfold instr_prog; cbn.
       unfold_trigger.
       rewrite bind_ret_l, sb_guard.
-      apply axr_ret...
+      apply axr_ret; auto with ticl.
     Qed.
 
     (** Ret lemmas *)
@@ -180,9 +180,9 @@ Module ME.
         R (q, x) w ->
         not_done w ->
         <[ {instr_prog (CRet x) q}, w |= ret R ]>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog; cbn; intros.
-      apply axr_state_ret...
+      apply axr_state_ret; eauto with ticl.
     Qed.
 
     (** Sequence lemmas *)
@@ -190,42 +190,42 @@ Module ME.
         <[ {instr_prog h q}, w |= φ AU AX done={(q',r)} w' ]> ->
         <( {instr_prog (k r) q'}, w' |= φ AU ψ )> ->
         <( {instr_prog (CBind h k) q}, w |= φ AU ψ )>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog; cbn; intros.
-      eapply aul_state_bind_r_eq...
+      eapply aul_state_bind_r_eq; eauto with ticl.
     Qed.
 
     Lemma aur_qprog_bind_r{X Y}: forall (h: CProg X) (k: X -> CProg Y) q q' (r: X) w w' φ ψ,
         <[ {instr_prog h q}, w |= φ AU AX done={(q',r)} w' ]> ->
         <[ {instr_prog (k r) q'}, w' |= φ AU ψ ]> ->
         <[ {instr_prog (CBind h k) q}, w |= φ AU ψ ]>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog; cbn; intros.
-      eapply aur_state_bind_r_eq...
+      eapply aur_state_bind_r_eq; eauto with ticl.
     Qed.
 
     Lemma anr_qprog_bind_l{X Y}: forall (h: CProg X) (k: X -> CProg Y) q q' (r: X) w w' φ ψ,
         <[ {instr_prog h q}, w |= φ AN AX done={(q',r)} w' ]> ->
         <[ {instr_prog (k r) q'}, w' |= ψ ]> ->
         <[ {instr_prog (CBind h k) q}, w |= φ AN ψ ]>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog; cbn; intros.
-      eapply anr_state_bind_l_eq...
+      eapply anr_state_bind_l_eq; eauto with ticl.
     Qed.
 
     (** Conditional lemmas *)
     Lemma equivr_ifsome_some{X}: forall (k: X -> CProg unit) q ψ x w,
         <[ {instr_prog (k x) q}, w |= ψ ]> <->
         <[ {instr_prog (CIfSome (Some x) k) q}, w |= ψ ]>.
-    Proof with eauto.
-      unfold instr_prog; cbn; intros...
+    Proof.
+      unfold instr_prog; cbn; intros; eauto.
     Qed.
 
     (** While loops use the [iter] lemmas from [Iter.v] and [State.v] *)
     Lemma aul_qprog_until_now{X}: forall w φ ψ (b: CProg (option X)) q,
         <( {instr_prog b q}, w |= φ AU ψ )> ->
         <( {instr_prog (CUntilNone b) q}, w |= φ AU ψ )>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog; cbn; intros.
       rewrite unfold_iter, bind_bind.
       now eapply ticll_state_bind_l.
@@ -246,7 +246,7 @@ Module ME.
               | None => <[ {Ret (q', tt): ctreeW T B (Q * unit)}, w' |= φ AN ψ ]>
               end) ->
       <[ {instr_prog (CUntilNone b) q}, w |= φ AU ψ ]>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog; intros; cbn.
       eapply aur_state_iter_nat with
         (Ri:=fun 'tt q w =>
@@ -257,9 +257,9 @@ Module ME.
                    | Some _ => Ri q' w' /\ f q' < f q
                    | None => <[ {Ret (q', tt): ctreeW T B (Q * unit)}, w' |= φ AN ψ ]>
                    end)
-        (f:= fun _ q _ => f q)...
+        (f:= fun _ q _ => f q); eauto with ticl.
       - intros [] q' w' Hd (opt & q_ & w_ & Hd' & Hopt & HR).
-        eapply aur_state_bind_r_eq...
+        eapply aur_state_bind_r_eq; eauto with ticl.
         destruct opt eqn:Heqo.
         + (* Some x *)
           apply aur_state_ret; intuition.
@@ -277,25 +277,25 @@ Module ME.
           <[ {instr_prog b q}, w |= φ AU ret {fun '(q', opt) w' => exists x, opt = Some x /\ not_done w' /\ Ri q' w' /\ f q' < f q} ]> \/
           <( {instr_prog b q}, w |= φ AU ψ )>) ->
       <( {instr_prog (CUntilNone b) q}, w |= φ AU ψ )>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog; intros; cbn.
       eapply aul_state_iter_nat with
         (Ri:=fun 'tt q w =>
                <[ {interp_state h_queueE (cdenote_prog b) q}, w
                             |= φ AU ret {fun '(q', opt) w' => exists x, opt = Some x /\ not_done w' /\ Ri q' w' /\ f q' < f q} ]> \/
                  <( {interp_state h_queueE (cdenote_prog b) q}, w |= φ AU ψ )>)
-        (f:= fun _ q _ => f q)...
+        (f:= fun _ q _ => f q); eauto with ticl.
       - intros [] q' w' Hd [HR | HR].
         + (* Steps *)
           right.
           eapply aur_state_bind_r.
           * apply HR.
           * cbn; intros opt q_ w_ (x_ & Heqx_ & Hd_ & HR_ & Hf_); subst.
-            apply aur_state_ret...
-            exists tt; intuition...
+            apply aur_state_ret; eauto with ticl.
+            exists tt; intuition; eauto with ticl.
         + (* Matches *)
           left.
-          apply ticll_state_bind_l...
+          apply ticll_state_bind_l; eauto with ticl.
     Qed.
 
     (** Invariance lemma, uses [ag_state_iter] from [State.v] *)
@@ -308,19 +308,19 @@ Module ME.
             <( {instr_prog (CUntilNone b) q}, w |= φ )> /\
             <[ {instr_prog b q}, w |= AX (φ AU ret {fun '(q', r) w' => r = Some tt /\ not_done w' /\ R q' w'}) ]>) ->
         <( {instr_prog (CUntilNone b) q}, w |= AG φ )>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog; cbn.
       intros.
       eapply ag_state_iter with
         (R:=fun 'tt q w =>
               <( {interp_state h_queueE (cdenote_prog (CUntilNone b)) q}, w |= φ )> /\
                 <[ {interp_state h_queueE (cdenote_prog b) q}, w
-                   |= AX (φ AU ret {fun '(q', r) w' => r = Some tt /\ not_done w' /\ R q' w'}) ]>)...
-      - intros [] q' w' Hd (Hl & HR); cbn in Hl; split...
+                   |= AX (φ AU ret {fun '(q', r) w' => r = Some tt /\ not_done w' /\ R q' w'}) ]>); eauto with ticl.
+      - intros [] q' w' Hd (Hl & HR); cbn in Hl; split; eauto with ticl.
         rewrite interp_state_bind.
         eapply axr_aur_bind_r; [exact HR |].
         intros [q_ r_] w'' (-> & Hd'' & HR').
-        apply aur_state_ret...
+        apply aur_state_ret; eauto with ticl.
     Qed.
   End MeQ.
 End ME.

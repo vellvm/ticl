@@ -63,7 +63,7 @@ Local Open Scope ticl_scope.
     [sh] below is typed over [heapE +' (stateE Ctx.Ctx +' writerE A)], so
     instantiating it at the tagged payload yields this sum syntactically, and
     rewrites stated over [sE] keep matching terms elaborated through [sh]. *)
-Notation sE := (heapE +' (stateE Ctx.Ctx +' writerE (nat * nat))).
+Abbreviation sE := (heapE +' (stateE Ctx.Ctx +' writerE (nat * nat))).
 
 (** Interpretation state: the SHARED managed memory (data heap and live
     allocation extents), the SHARED variable context, and one GLOBAL
@@ -78,7 +78,7 @@ Definition CSLObs (A : Type) : Type := (Ctx.Ctx + indexed A)%type.
 (** Thread effects: yield, fork, and the interpreted sum.  A notation, so
     that [thread sE Bn] and [ctree CEff Bn unit] coincide syntactically and
     the ITree [-<] instances for the components resolve without unfolding. *)
-Notation CEff := (yieldE +' (forkE +' sE)).
+Abbreviation CEff := (yieldE +' (forkE +' sE)).
 
 Definition csl_memory (s : SSig) : ManagedHeap := fst s.
 Definition csl_context (s : SSig) : Ctx.Ctx := fst (snd s).
@@ -170,9 +170,9 @@ Definition source_put (ctx : Ctx.Ctx) : ctree CEff Bn unit :=
   CTree.trigger (inr1 (inr1 (inr1 (inl1 (Put ctx)))) : CEff unit).
 
 (** ** The two response-relation instances of the generic segment theory. *)
-Notation csl_sb :=
+Abbreviation csl_sb :=
   (fun X (t u : ctreeW (CSLObs (nat * nat)) Bn X) => t ~ u).
-Notation csl_equ :=
+Abbreviation csl_equ :=
   (fun X (t u : ctreeW (CSLObs (nat * nat)) Bn X) => t ≅ u).
 
 (** ** Raw physical free through the shared heap event *)

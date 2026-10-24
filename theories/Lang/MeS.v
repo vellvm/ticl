@@ -87,7 +87,7 @@ Module ME.
   Proof. destruct l; repeat econstructor. Qed.
   
   (** Both values and addresses are natural numbers for simplicity *)
-  Notation Addr := nat.
+  Abbreviation Addr := nat.
   
   (** Heap events, indexed by their result type *)
   Variant secE: Type -> Type :=
@@ -203,45 +203,45 @@ Module ME.
       (forall r m w, R r m w -> <[ {instr_cprog (k r) m}, w |= φ AU ψ ]>) ->
       <[ {instr_cprog h m}, w |= φ AU ret {fun '(m, r) w => R r m w} ]> ->
       <[ {instr_cprog (CBind h k) m}, w |= φ AU ψ ]>.
-  Proof with eauto with ticl.
+  Proof.
     unfold instr_cprog; cbn; intros.
-    eapply aur_state_bind_r...
+    eapply aur_state_bind_r; eauto with ticl.
   Qed.
   
   Lemma aur_cprog_bind_r_eq{X Y}: forall (h: CProg X) (k: X -> CProg Y) m w r w' m' φ ψ,
       <[ {instr_cprog h m}, w |= φ AU AX done={(m', r)} w' ]> ->
       <[ {instr_cprog (k r) m'}, w' |= φ AU ψ ]> ->
       <[ {instr_cprog (CBind h k) m}, w |= φ AU ψ ]>.
-  Proof with eauto with ticl.
+  Proof.
     unfold instr_cprog; cbn; intros.
-    eapply aur_state_bind_r_eq...
+    eapply aur_state_bind_r_eq; eauto with ticl.
   Qed.
   
   Lemma aur_sprog_bind_r{X Y}: forall (h: SProg X) (k: X -> SProg Y) m w φ ψ R,
       (forall r m w, R r m w -> <[ {instr_sprog (k r) m}, w |= φ AU ψ ]>) ->
       <[ {instr_sprog h m}, w |= φ AU ret {fun '(m, r) w => R r m w} ]> ->
       <[ {instr_sprog (SBind h k) m}, w |= φ AU ψ ]>.
-  Proof with eauto with ticl.
+  Proof.
     unfold instr_sprog; cbn; intros.
-    eapply aur_state_bind_r...
+    eapply aur_state_bind_r; eauto with ticl.
   Qed.
   
   Lemma aur_sprog_bind_r_eq{X Y}: forall (h: SProg X) (k: X -> SProg Y) m m' (r: X) w w' φ ψ,
       <[ {instr_sprog h m}, w |= φ AU AX done={(m', r)} w' ]> ->
       <[ {instr_sprog (k r) m'}, w' |= φ AU ψ ]> ->
       <[ {instr_sprog (SBind h k) m}, w |= φ AU ψ ]>.
-  Proof with eauto with ticl.
+  Proof.
     unfold instr_sprog; cbn; intros.
-    eapply aur_state_bind_r_eq...
+    eapply aur_state_bind_r_eq; eauto with ticl.
   Qed.  
   
   Lemma anr_sprog_bind_l{X Y}: forall (h: SProg X) (k: X -> SProg Y) m m' (r: X) w w' φ ψ,
       <[ {instr_sprog h m}, w |= φ AN AX done={(m', r)} w' ]> ->
       <[ {instr_sprog (k r) m'}, w' |= ψ ]> ->
       <[ {instr_sprog (SBind h k) m}, w |= φ AN ψ ]>.
-  Proof with eauto with ticl.
+  Proof.
     unfold instr_sprog; cbn; intros.
-    eapply anr_state_bind_l_eq...
+    eapply anr_state_bind_l_eq; eauto with ticl.
   Qed.
 
   (** Branch lemmas *)
@@ -250,19 +250,19 @@ Module ME.
       <[ {instr_sprog a m}, w |= ψ ]> ->
       <[ {instr_sprog b m}, w |= ψ ]> ->
       <[ {instr_sprog (SBr a b) m}, w |= φ AN ψ ]>.
-  Proof with eauto with ticl.
+  Proof.
     unfold instr_sprog; cbn; intros.
     unfold brS2.
-    apply (anr_state_brS _ _ _ true); split...
-    intros []...
+    apply (anr_state_brS _ _ _ true); split; eauto with ticl.
+    intros []; eauto with ticl.
   Qed.
 
   (** Call lemmas, call from [SProg] into the client [CProg]. *)
   Lemma ticlr_sprog_call{X}: forall (p: CProg X) m w ψ,
       <[ {instr_cprog p m}, w |= ψ ]> ->
       <[ {instr_sprog (SCall p) m}, w |= ψ ]>.
-  Proof with eauto with ticl.
-    unfold instr_sprog, instr_cprog; cbn; intros...
+  Proof.
+    unfold instr_sprog, instr_cprog; cbn; intros; eauto with ticl.
   Qed.
 
   Lemma ticlr_cprog_if{P Q X}: forall (c: {P} + {Q}) (t e: CProg X) m w ψ,
@@ -271,8 +271,8 @@ Module ME.
       | right _ => <[ {instr_cprog e m}, w |= ψ ]>
       end ->
       <[ {instr_cprog (CIf c t e) m}, w |= ψ ]>.
-  Proof with eauto with ticl.
-    unfold instr_cprog; cbn; intros []; intros...
+  Proof.
+    unfold instr_cprog; cbn; intros []; intros; eauto with ticl.
   Qed.
   
   (** Invariance lemmas, uses [ag_state_iter] from [State.v] *)
@@ -284,7 +284,7 @@ Module ME.
             <[ {instr_sprog (b i) m}, {Obs (Log s) tt} |= AX (φ AU ret {fun '(m', i') w' =>
               exists s', w' = Obs (Log s') tt /\ R i' m' s' }) ]>) ->
       <( {instr_sprog (SLoop i b) m}, {Obs (Log s) tt} |= AG φ )>.
-  Proof with eauto with ticl.
+  Proof.
     unfold instr_sprog; cbn.
     intros.
     eapply ag_state_iter with
@@ -292,14 +292,14 @@ Module ME.
             exists s, w = Obs (Log s) tt /\
               <( {interp_state h_secE (denote_sprog (SLoop i b)) m}, {Obs (Log s) tt} |= φ )> /\
               <[ {interp_state h_secE (denote_sprog (b i)) m}, {Obs (Log s) tt}
-                             |= AX (φ AU ret {fun '(m', i') w' => exists s', w' = Obs (Log s') tt /\ R i' m' s'}) ]>)...
-    intros i' m' w' _ (s' & -> & Hb & HR); split...
+                             |= AX (φ AU ret {fun '(m', i') w' => exists s', w' = Obs (Log s') tt /\ R i' m' s'}) ]>); eauto with ticl.
+    intros i' m' w' _ (s' & -> & Hb & HR); split; eauto with ticl.
     rewrite interp_state_bind.
     eapply axr_aur_bind_r; [exact HR |].
     intros [m_ r_] w'' (s'' & -> & HR').
-    apply aur_state_ret...
+    apply aur_state_ret; eauto with ticl.
     exists r_; split2; [reflexivity | constructor |].
-    exists s''; split...
+    exists s''; split; eauto with ticl.
   Qed.
   End MeS.
 End ME.

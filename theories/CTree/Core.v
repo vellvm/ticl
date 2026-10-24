@@ -54,7 +54,7 @@ Definition put {S E B} `{stateE S -< E} (s: S) : ctree E B unit :=
 Definition get {S E B} `{stateE S -< E} : ctree E B S :=
   CTree.trigger (subevent _ (@Get S)).
 
-Notation fin' n := (Fin.t (S n)).
+Abbreviation fin' n := (Fin.t (S n)).
 
 Create HintDb ctree.
 

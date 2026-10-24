@@ -49,11 +49,11 @@ Section BasicLemmas.
       (exists y, can_step (k y) w) ->
       (forall y t' w', |k y, w| ↦ |t', w'| -> <( t', w' |= ψ )>) ->
       <( {Br c k}, w |= φ AN ψ )>.
-  Proof with eauto with ticl.
-    intros * Hφ Hs Hk; csplit...
+  Proof.
+    intros * Hφ Hs Hk; csplit; eauto with ticl.
     - now apply can_step_br.
     - intros t' w' TR.
-      apply ktrans_br in TR as (y & TR)...
+      apply ktrans_br in TR as (y & TR); eauto with ticl.
   Qed.
 
   Lemma anr_br: forall {Y} (c: B Y) (k: Y -> ctree E B X) w φ ψ,
@@ -61,11 +61,11 @@ Section BasicLemmas.
       (exists y, can_step (k y) w) ->
       (forall y t' w', |k y, w| ↦ |t', w'| -> <[ t', w' |= ψ ]>) ->
       <[ {Br c k}, w |= φ AN ψ ]>.
-  Proof with eauto with ticl.
-    intros * Hφ Hs Hk; csplit...
+  Proof.
+    intros * Hφ Hs Hk; csplit; eauto with ticl.
     - now apply can_step_br.
     - intros t' w' TR.
-      apply ktrans_br in TR as (y & TR)...
+      apply ktrans_br in TR as (y & TR); eauto with ticl.
   Qed.
 
   (** Visible branch iff lemma for prefix next [AN] *)
@@ -73,15 +73,15 @@ Section BasicLemmas.
       <( {BrS c k}, w |= φ AN ψ )> <->
         <( {BrS c k}, w |= φ)>
         /\ (forall (y: Y), <( {k y}, w |= ψ )>).
-  Proof with eauto with ticl.
+  Proof.
     split; intros.    
     - cdestruct H.
       assert(Hd: not_done w) by now apply can_step_not_done in Hs.
-      split...
+      split; eauto with ticl.
       intros y'.
-      apply H, ktrans_brS; exists y'...
-    - destruct H; csplit...
-      + apply (can_step_brS c k y); apply ticll_not_done in H...
+      apply H, ktrans_brS; exists y'; eauto with ticl.
+    - destruct H; csplit; eauto with ticl.
+      + apply (can_step_brS c k y); apply ticll_not_done in H; eauto with ticl.
       + intros t' w' TR.
         apply ktrans_brS in TR as (y' & Heq & -> & Hd).
         rewrite Heq; apply H0.
@@ -92,15 +92,15 @@ Section BasicLemmas.
       <[ {BrS c k}, w |= φ AN ψ ]> <->
         <( {BrS c k}, w |= φ)>
         /\ (forall (y: Y), <[ {k y}, w |= ψ ]>).
-  Proof with eauto with ticl.
+  Proof.
     split; intros.    
     - cdestruct H.
       assert(Hd: not_done w) by now apply can_step_not_done in Hs.
-      split...
+      split; eauto with ticl.
       intros y'.
-      apply H, ktrans_brS; exists y'...
-    - destruct H; csplit...
-      + apply (can_step_brS c k y); apply ticll_not_done in H...
+      apply H, ktrans_brS; exists y'; eauto with ticl.
+    - destruct H; csplit; eauto with ticl.
+      + apply (can_step_brS c k y); apply ticll_not_done in H; eauto with ticl.
       + intros t' w' TR.
         apply ktrans_brS in TR as (y' & Heq & -> & Hd).
         rewrite Heq; apply H0.
@@ -110,14 +110,14 @@ Section BasicLemmas.
   Lemma anl_step: forall (t: ctree E B X) w φ ψ,
       <( {Step t}, w |= φ AN ψ )> <->
         <( {Step t}, w |= φ)> /\ <( t, w |= ψ )>.
-  Proof with eauto with ticl.
+  Proof.
     split; intros.    
     - cdestruct H.
       assert(Hd: not_done w) by now apply can_step_not_done in Hs.
-      split...
-      apply H, ktrans_step...
-    - destruct H; csplit...
-      + apply can_step_step; apply ticll_not_done in H...
+      split; eauto with ticl.
+      apply H, ktrans_step; eauto with ticl.
+    - destruct H; csplit; eauto with ticl.
+      + apply can_step_step; apply ticll_not_done in H; eauto with ticl.
       + intros t' w' TR.
         apply ktrans_step in TR as (Heq & -> & Hd).
         now rewrite Heq.
@@ -127,14 +127,14 @@ Section BasicLemmas.
   Lemma anr_step: forall (t: ctree E B X) w φ ψ,
       <[ {Step t}, w |= φ AN ψ ]> <->
         <( {Step t}, w |= φ)> /\ <[ t, w |= ψ ]>.
-  Proof with eauto with ticl.
+  Proof.
     split; intros.    
     - cdestruct H.
       assert(Hd: not_done w) by now apply can_step_not_done in Hs.
-      split...
-      apply H, ktrans_step...
-    - destruct H; csplit...
-      + apply can_step_step; apply ticll_not_done in H...
+      split; eauto with ticl.
+      apply H, ktrans_step; eauto with ticl.
+    - destruct H; csplit; eauto with ticl.
+      + apply can_step_step; apply ticll_not_done in H; eauto with ticl.
       + intros t' w' TR.
         apply ktrans_step in TR as (Heq & -> & Hd).
         now rewrite Heq.
@@ -144,15 +144,15 @@ Section BasicLemmas.
   Lemma anl_vis: forall {Y} (e: E Y) (k: Y -> ctree E B X) (v: Y) w φ ψ,
       <( {Vis e k}, w |= φ AN ψ )> <->
         <( {Vis e k}, w |= φ )> /\ (forall (v: Y), <( {k v}, {Obs e v} |= ψ )>).
-  Proof with eauto with ticl.
+  Proof.
     split; intros.
     - cdestruct H.
       assert(Hd: not_done w) by now apply can_step_not_done in Hs.
-      split...
+      split; eauto with ticl.
       intros v'.
-      apply H, ktrans_vis; exists v'...
-    - destruct H; csplit...
-      + apply (can_step_vis e k v)...
+      apply H, ktrans_vis; exists v'; eauto with ticl.
+    - destruct H; csplit; eauto with ticl.
+      + apply (can_step_vis e k v); eauto with ticl.
         now apply ticll_not_done in H.
       + intros t' w' TR.
         apply ktrans_vis in TR as (v' & -> & Heq & Hd).
@@ -163,15 +163,15 @@ Section BasicLemmas.
   Lemma anr_vis: forall {Y} (e: E Y) (k: Y -> ctree E B X) (v: Y) w φ ψ,
       <[ {Vis e k}, w |= φ AN ψ ]> <->
         <( {Vis e k}, w |= φ )> /\ (forall (v: Y), <[ {k v}, {Obs e v} |= ψ ]>).
-  Proof with eauto with ticl.
+  Proof.
     split; intros.
     - cdestruct H.
       assert(Hd: not_done w) by now apply can_step_not_done in Hs.
-      split...
+      split; eauto with ticl.
       intros v'.
-      apply H, ktrans_vis; exists v'...
-    - destruct H; csplit...
-      + apply (can_step_vis e k v)...
+      apply H, ktrans_vis; exists v'; eauto with ticl.
+    - destruct H; csplit; eauto with ticl.
+      + apply (can_step_vis e k v); eauto with ticl.
         now apply ticll_not_done in H.
       + intros t' w' TR.
         apply ktrans_vis in TR as (v' & -> & Heq & Hd).
@@ -182,7 +182,7 @@ Section BasicLemmas.
   Lemma anr_done_eq: forall (t: ctree E B X) φ (r: X) w w',
       <[ t, w |= φ AN done= r w' ]> ->
       <( t, w |= φ )> /\ w' = w /\ t ~ (Ret r: ctree E B X).
-  Proof with auto with ticl.
+  Proof.
     intros * H.
     cdestruct H.
     assert (Hw: w' = w).
@@ -191,11 +191,11 @@ Section BasicLemmas.
       - destruct H as (_ & ->); now apply ktrans_to_finish_inv in TR as (_ & ->). }
     subst.
     assert (Hret: <[ t, w |= ret= r w ]>).
-    { apply ret_unfold; exists r; split...
-      csplit...
+    { apply ret_unfold; exists r; split; auto with ticl.
+      csplit; auto with ticl.
       now apply can_step_not_done in Hs. }
     apply ret_sbisim in Hret as (x & (-> & _) & Heq).
-    split2...
+    split2; auto with ticl.
   Qed.
 
   (** Any tree bisimilar to [Ret r] satisfies [φ AN done= r w]. *)
@@ -203,15 +203,15 @@ Section BasicLemmas.
       <( t, w |= φ )> ->
       t ~ (Ret r: ctree E B X) ->
       <[ t, w |= φ AN done= r w ]>.
-  Proof with auto with ticl.
+  Proof.
     intros * Hφ Heq.
     pose proof (ticll_not_done _ _ _ _ Hφ) as Hd.
     rewrite Heq in Hφ |- *.
-    csplit...
+    csplit; auto with ticl.
     intros t' w' TR.
     inv Hd.
-    - apply ktrans_done in TR as (-> & _); csplit...
-    - apply ktrans_finish in TR as (-> & _); csplit...
+    - apply ktrans_done in TR as (-> & _); csplit; auto with ticl.
+    - apply ktrans_finish in TR as (-> & _); csplit; auto with ticl.
   Qed.
 
   (** Helper for the suffix [AN done R] formula on a [Ret r] tree. *)
@@ -219,14 +219,14 @@ Section BasicLemmas.
       <( {Ret r: ctree E B X}, w |= φ )> ->
       R r w ->
       <[ {Ret r: ctree E B X}, w |= φ AN done R ]>.
-  Proof with auto with ticl.
+  Proof.
     intros * Hφ HR.
     pose proof (ticll_not_done _ _ _ _ Hφ) as Hd.
-    csplit...
+    csplit; auto with ticl.
     intros t' w' TR.
     inv Hd.
-    - apply ktrans_done in TR as (-> & _); csplit...
-    - apply ktrans_finish in TR as (-> & _); csplit...
+    - apply ktrans_done in TR as (-> & _); csplit; auto with ticl.
+    - apply ktrans_finish in TR as (-> & _); csplit; auto with ticl.
   Qed.
 
   (** Return lemma for prefix next [AN], there is no prefix formula [ψ] for return *)
@@ -250,10 +250,10 @@ Section BasicLemmas.
       not_done w ->
       R r w ->
       <[ {Ret r: ctree E B X}, w |= AX done R ]>.
-  Proof with auto with ticl.
+  Proof.
     intros.
-    apply anr_ret_done...
-    csplit...
+    apply anr_ret_done; auto with ticl.
+    csplit; auto with ticl.
   Qed.
   
   (** Inversion lemma for the next [AN] operator on a [Ret r] tree. *)
@@ -262,7 +262,7 @@ Section BasicLemmas.
         <( {Ret r: ctree E B X}, w |= φ )>
         /\ exists (w': World E), done_with (fun x w' => x = r /\ w = w') w'
         /\ <[ {Stuck: ctree E B X}, w' |= ψ ]>.
-  Proof with auto with ticl.
+  Proof.
     intros.
     cdestruct H.
     assert (Hd: not_done w) by now apply can_step_not_done in Hs.
@@ -271,11 +271,11 @@ Section BasicLemmas.
     inv Hd.
     + apply ktrans_done in TR as (-> & Heqt).
       rewrite Heqt in H.
-      split...
-      exists (Done r)...
+      split; auto with ticl.
+      exists (Done r); auto with ticl.
     + apply ktrans_finish in TR as (-> & Heqt).
       rewrite Heqt in H.
-      split...
-      exists (Finish e v r)...
+      split; auto with ticl.
+      exists (Finish e v r); auto with ticl.
   Qed.
 End BasicLemmas.

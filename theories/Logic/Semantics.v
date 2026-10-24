@@ -35,8 +35,8 @@ Generalizable All Variables.
 Section Shallow.
   Context `{KMS: Kripke M E B} {X: Type}.
 
-  Notation MS := (M E B X).
-  Notation MP := (MS -> World E -> Prop).
+  Abbreviation MS := (M E B X).
+  Abbreviation MP := (MS -> World E -> Prop).
   Local Open Scope ticl_scope.
 
   (** ** Binary shallow forall [next] modality *)
@@ -168,17 +168,20 @@ Section Shallow.
 
 End Shallow.
 
+Register Scheme auc_ind as ind_nodep for auc.
+Register Scheme euc_ind as ind_nodep for euc.
+
 (** Greatest fixpoint notations *)
-Notation agc p   := (gfp (agcF p)).
-Notation egc p   := (gfp (egcF p)).
+Abbreviation agc p   := (gfp (agcF p)).
+Abbreviation egc p   := (gfp (egcF p)).
 #[global] Hint Constructors euc auc: ticl.
 
 (** * Semantics of TICL entailment *)
 (** We define the semantics of TICL entailment as a fixpoint over the structure of the TICL formulas. *)
 Section Entailment.
   Context `{KMS: Kripke M E B}.
-  Notation MS X := (M E B X).
-  Notation MP X := (M E B X -> World E -> Prop).
+  Abbreviation MS X := (M E B X).
+  Abbreviation MP X := (M E B X -> World E -> Prop).
 
   (** ** Semantics of TICL prefix formulas *)
   (** [entailsL] is the semantics of TICL prefix formulas, denoted to [MP X], a predicate over [M E B X * World E]
@@ -270,6 +273,7 @@ Lemma ticll_now `{KMS: Kripke M E B} X:
   forall (t: M E B X) (w: World E) (φ: World E -> Prop),
     <( t, w |= now φ )> <-> φ w /\ not_done w.
 Proof. reflexivity. Qed.
+Create HintDb ticll.
 Global Hint Resolve ticll_now: ticll.
 
 Lemma ticll_pure `{KMS: Kripke M E B} X:
@@ -296,6 +300,7 @@ Lemma ticlr_done `{KMS: Kripke M E B} X:
   forall (t: M E B X) (w: World E) (φ: X -> World E -> Prop),
     <[ t, w |= done φ ]> <-> done_with φ w.
 Proof. intros; auto. Qed.
+Create HintDb ticlr.
 Global Hint Resolve ticlr_done: ticlr.
 
 Lemma ticlr_done_eq `{KMS: Kripke M E B} X:

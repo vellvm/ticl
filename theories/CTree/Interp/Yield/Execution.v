@@ -450,7 +450,7 @@ Section RawExecution.
     (handler : E ~> stateT Sigma (ctreeW W B))
     (slot : Act -> Fin.t (S n)).
 
-  Notation Rsb := (fun Y (t u : ctreeW W B Y) => t ~ u).
+  Abbreviation Rsb := (fun Y (t u : ctreeW W B Y) => t ~ u).
 
   Definition pool_step (who : Act) (p : pool E B (S n) * Sigma) (logs : list W)
     (q : pool E B (S n) * Sigma) : Prop :=
@@ -487,7 +487,7 @@ Section RawExecutionND.
     (handler : E ~> stateT Sigma (ctreeW W B))
     (slot : Act -> Fin.t (S n)).
 
-  Notation Rsb := (fun Y (t u : ctreeW W B Y) => t ~ u).
+  Abbreviation Rsb := (fun Y (t u : ctreeW W B Y) => t ~ u).
 
   Theorem valid_pool_execution_scheduler_steps
     (se : Execution (pool E B (S n) * Sigma) Act (list W)) ts0 sigma0 k :
@@ -528,8 +528,8 @@ Section PoolSimulation.
     {agree : Sigma -> St -> Prop}
     {Inv : St -> Prop}.
 
-  Notation Rexact := (fun Y (t u : ctreeW W B Y) => t ≅ u).
-  Notation Rsb := (fun Y (t u : ctreeW W B Y) => t ~ u).
+  Abbreviation Rexact := (fun Y (t u : ctreeW W B Y) => t ≅ u).
+  Abbreviation Rsb := (fun Y (t u : ctreeW W B Y) => t ~ u).
 
   Record PoolSimulation : Prop := {
     simulation_total : forall who s, Inv s ->

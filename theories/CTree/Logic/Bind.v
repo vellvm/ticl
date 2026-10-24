@@ -37,7 +37,7 @@ Section BindLemmas.
   Theorem ticll_bind_l{X Y}: forall (t: ctree E B Y) (k: Y -> ctree E B X) φ w,
       <( t, w |= φ )> ->
       <( {x <- t ;; k x}, w |= φ )>.
-  Proof with auto with ticl.
+  Proof.
     intros.
     generalize dependent t.
     revert X Y w k.
@@ -45,9 +45,9 @@ Section BindLemmas.
     - (* NOW *) cdestruct H; now csplit.
     - (* AU *)
       cinduction H; intros; subst.
-      + (* MatchA *) cleft...
+      + (* MatchA *) cleft; auto with ticl.
       + (* StepA *)
-        cright; csplit... 
+        cright; csplit; auto with ticl. 
         * (* can_step *)          
           destruct Hs as (t' & w' & TR').
           eapply can_step_bind_l with t' w'; auto.
@@ -61,34 +61,34 @@ Section BindLemmas.
               [(t' & TR' & Hd & ->) |
                 (x & ? & TR' & Hr & TRk)].
           -- specialize (Hau _ _ TR').
-             apply HInd...
+             apply HInd; auto with ticl.
           -- specialize (HInd _ _ TR').
              apply ticll_not_done in HInd; inv Hr; inv HInd.
     - (* EU *)      
       cinduction H; intros; subst.
-      + (* MatchE *) cleft...
+      + (* MatchE *) cleft; auto with ticl.
       + (* StepE *)
-        cright; csplit...
+        cright; csplit; auto with ticl.
         exists (x <- t0 ;; k x), w0; split.
-        * apply ktrans_bind_l...
+        * apply ktrans_bind_l; auto with ticl.
           now apply ticll_not_done in HInd. 
         * apply HInd.
     - (* AN *)
-      cdestruct H; csplit...
+      cdestruct H; csplit; auto with ticl.
       + (* can_step *) destruct Hs as (t' & w' & TR).
-        apply can_step_bind_l with t' w'...
+        apply can_step_bind_l with t' w'; auto with ticl.
         eapply ticll_not_done, (H _ _ TR).
       + (* forall *) intros t' w' TR.
         apply ktrans_bind_inv in TR as
             [(t_ & TR' & Hd & ->) |
               (x & w_ & TR' & Hr & TRk)].
-        * apply IHφ2, H...
+        * apply IHφ2, H; auto with ticl.
         * specialize (H _ _ TR').
           inv Hr; apply ticll_not_done in H; inv H.
     - (* EN *)
-      cdestruct H; csplit...
-      exists (x <- t0;; k x), w0; split...
-      apply ktrans_bind_l...
+      cdestruct H; csplit; auto with ticl.
+      exists (x <- t0;; k x), w0; split; auto with ticl.
+      apply ktrans_bind_l; auto with ticl.
       now apply ticll_not_done in H.
     - (* AG *)
       generalize dependent t.
@@ -98,14 +98,14 @@ Section BindLemmas.
         now cdestruct H.
       + cdestruct H.
         destruct Hs as (t' & w' & TR).
-        apply can_step_bind_l with t' w'...
+        apply can_step_bind_l with t' w'; auto with ticl.
         eapply ticll_not_done, (H _ _ TR).
       + intros t' w' TR.
         cdestruct H.
         apply ktrans_bind_inv in TR as
             [(t_ & TR' & Hd & ->) |
               (x & w_ & TR' & Hr & TRk)].
-        * apply CIH...
+        * apply CIH; auto with ticl.
         * specialize (H _ _ TR').
           inv Hr; apply ticll_not_done in H; inv H.
     - (* EG *)
@@ -116,13 +116,13 @@ Section BindLemmas.
         now cdestruct H.
       + cdestruct H.
         exists (x <- t0;; k x), w0.
-        split...
-        apply ktrans_bind_l...
+        split; auto with ticl.
+        apply ktrans_bind_l; auto with ticl.
         eapply ticll_not_done, H.
     - (* AND *)
-      cdestruct H; csplit...
+      cdestruct H; csplit; auto with ticl.
     - (* OR *)
-      cdestruct H; [cleft | cright]...
+      cdestruct H; [cleft | cright]; auto with ticl.
   Qed.
 
   (** Bind lemmas for prefix [AN]; requires specifying a postcondition [R] for the return values of [t],
@@ -131,16 +131,16 @@ Section BindLemmas.
       <[ t, w |= φ AN done R ]> ->
       (forall x w, R x w -> <( {k x}, w |= φ AN ψ )>) ->
       <( {x <- t ;; k x}, w |= φ AN ψ )>.  
-  Proof with eauto with ticl.
+  Proof.
     intros.
-    cdestruct H; csplit...
+    cdestruct H; csplit; eauto with ticl.
     - now apply ticll_bind_l.
     - (* can_step *)
       destruct Hs as (t' & w' & TR).
       eapply can_step_bind_r.
       + cleft.
-        csplit...
-        csplit...
+        csplit; eauto with ticl.
+        csplit; eauto with ticl.
       + intros y wr HR.
         specialize (H0 _ _ HR) as Hax.   
         now cdestruct Hax.
@@ -153,10 +153,10 @@ Section BindLemmas.
       + specialize (H _ _ TR_); inv Hr; cdestruct H.
         * eapply ktrans_to_done_inv in TR_ as (? & ->).
           specialize (H0 _ _ H) as Hax.
-          cdestruct Hax...
+          cdestruct Hax; eauto with ticl.
         * eapply ktrans_to_finish_inv in TR_ as (? & ->).
           specialize (H0 _ _ H) as Hax.
-          cdestruct Hax...
+          cdestruct Hax; eauto with ticl.
   Qed.
  
   (** Bind lemmas for suffix [AN]; requires specifying a postcondition [R] for the return values of [t].
@@ -165,22 +165,22 @@ Section BindLemmas.
       <[ t, w |= φ AN ret R ]> ->
       (forall x w, R x w -> <[ {k x}, w |= ψ ]>) ->
       <[ {x <- t ;; k x}, w |= φ AN ψ ]>.  
-  Proof with eauto with ticl.
+  Proof.
     intros.
-    cdestruct H; csplit...
+    cdestruct H; csplit; eauto with ticl.
     - now apply ticll_bind_l.
     - (* can_step *)
       destruct Hs as (t_ & w_ & TR_).
-      eapply can_step_bind_l...
+      eapply can_step_bind_l; eauto with ticl.
       specialize (H _ _ TR_).
-      cdestruct H...
+      cdestruct H; eauto with ticl.
     - intros y wr TR.
       apply ktrans_bind_inv in TR as
           [(t_ & TR_ & Hd & ->) |
             (x & w_ & TR_ & Hr & TRk)].
       + specialize (H _ _ TR_).
         apply ret_sbisim in H as (x & HR & Heqt).
-        rewrite Heqt, bind_ret_l...
+        rewrite Heqt, bind_ret_l; eauto with ticl.
       + specialize (H _ _ TR_) as Hax.
         cdestruct Hax; inv Hr; inv Hd.
   Qed.
@@ -191,16 +191,16 @@ Section BindLemmas.
       <[ t, w |= φ AN done R ]> ->
       (forall x w, R x w -> <[ {k x}, w |= φ AN ψ ]>) ->
       <[ {x <- t ;; k x}, w |= φ AN ψ ]>.  
-  Proof with eauto with ticl.
+  Proof.
     intros.
-    cdestruct H; csplit...
+    cdestruct H; csplit; eauto with ticl.
     - now apply ticll_bind_l.
     - (* can_step *)
       destruct Hs as (t' & w' & TR).
       eapply can_step_bind_r.
       + cleft.
-        csplit...
-        csplit...
+        csplit; eauto with ticl.
+        csplit; eauto with ticl.
       + intros y wr HR.
         specialize (H0 _ _ HR) as Hax.   
         now cdestruct Hax.
@@ -213,10 +213,10 @@ Section BindLemmas.
       + specialize (H _ _ TR_); inv Hr; cdestruct H.
         * eapply ktrans_to_done_inv in TR_ as (? & ->).
           specialize (H0 _ _ H) as Hax.
-          cdestruct Hax...
+          cdestruct Hax; eauto with ticl.
         * eapply ktrans_to_finish_inv in TR_ as (? & ->).
           specialize (H0 _ _ H) as Hax.
-          cdestruct Hax...
+          cdestruct Hax; eauto with ticl.
   Qed.
 
   (** Helper version of [anr_bind_r] for deterministic [t], it allows us to
@@ -226,9 +226,9 @@ Section BindLemmas.
       <[ t, w |= φ AN done= r w' ]> ->
       <[ {k r}, w' |= φ AN ψ ]> ->
       <[ {x <- t ;; k x}, w |= φ AN ψ ]>.  
-  Proof with eauto with ticl.
+  Proof.
     intros.
-    eapply anr_bind_r...
+    eapply anr_bind_r; eauto with ticl.
     now intros * [-> ->].
   Qed.
   
@@ -238,14 +238,14 @@ Section BindLemmas.
       <[ t, w |= φ EN done R ]> ->
       (forall r w', R r w' -> <( {k r}, w' |= φ EN ψ )>) ->
       <( {x <- t ;; k x}, w |= φ EN ψ )>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
     apply enr_done in H as (Hφ & r & w' & Hd & HR & TR).
     specialize (H0 _ _ HR).
     cdestruct H0; csplit.
     - now apply ticll_bind_l.
-    - exists t0, w0; split...
-      eapply ktrans_bind_r...
+    - exists t0, w0; split; eauto with ticl.
+      eapply ktrans_bind_r; eauto with ticl.
       inv Hd; now constructor.
   Qed.
 
@@ -256,10 +256,10 @@ Section BindLemmas.
       <[ t, w |= φ EN done= r w' ]> ->
       <( {k r}, w' |= φ EN ψ )> ->
       <( {x <- t ;; k x}, w |= φ EN ψ )>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
-    apply enl_bind_r with (R:=fun x w => r = x /\ w' = w)...
-    intros r_ w_ (-> & ->)...
+    apply enl_bind_r with (R:=fun x w => r = x /\ w' = w); eauto with ticl.
+    intros r_ w_ (-> & ->); eauto with ticl.
   Qed.
   
   (** Bind lemmas for suffix [EN]; requires specifying a postcondition [R] for the return values of [t],
@@ -268,14 +268,14 @@ Section BindLemmas.
       <[ t, w |= φ EN done R ]> ->
       (forall r w', R r w' -> <[ {k r}, w' |= φ EN ψ ]>) ->
       <[ {x <- t ;; k x}, w |= φ EN ψ ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
     apply enr_done in H as (Hφ & r & w' & Hd & HR & TR).
     specialize (H0 _ _ HR).
     cdestruct H0; csplit.
     - now apply ticll_bind_l.
-    - exists t0, w0; split...
-      eapply ktrans_bind_r...
+    - exists t0, w0; split; eauto with ticl.
+      eapply ktrans_bind_r; eauto with ticl.
       inv Hd; now constructor.
   Qed.
   
@@ -286,10 +286,10 @@ Section BindLemmas.
       <[ t, w |= φ EN done= r w' ]> ->
       <[ {k r}, w' |= φ EN ψ ]> ->
       <[ {x <- t ;; k x}, w |= φ EN ψ ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
-    apply enr_bind_r with (R:=fun x w => r = x /\ w' = w)...
-    intros r_ w_ (-> & ->)...
+    apply enr_bind_r with (R:=fun x w => r = x /\ w' = w); eauto with ticl.
+    intros r_ w_ (-> & ->); eauto with ticl.
   Qed.
   
   (** Bind lemmas for prefix until [AU]; requires specifying a postcondition [R] for the return values of [t],
@@ -298,7 +298,7 @@ Section BindLemmas.
       <[ t, w |= φ AU ret R ]> ->
       (forall x w, R x w -> <( {k x}, w |= φ AU ψ )>) ->
       <( {x <- t ;; k x}, w |= φ AU ψ )>.  
-  Proof with eauto with ticl.
+  Proof.
     intros.
     cinduction H. 
     - apply ret_sbisim in Hp as (y & HR & Heqt).
@@ -307,14 +307,14 @@ Section BindLemmas.
     - cright; csplit.
       + now apply ticll_bind_l.
       + destruct Hs as (t' & w' & TR).
-        apply can_step_bind_l with t' w'...
+        apply can_step_bind_l with t' w'; eauto with ticl.
         specialize (HInd _ _ TR).
         now apply ticll_not_done in HInd.
       + intros t' w' TR'.
         apply ktrans_bind_inv in TR' as
             [(t_ & TR_ & Hd & ->) |
               (x & w_ & TR_ & Hr & TRk)].
-        * apply HInd...
+        * apply HInd; eauto with ticl.
         * specialize (Hau _ _ TR_).
           change (auc  (entailsL _ ?φ) (entailsR ?ψ) ?t ?w)
             with <[ t, w |= φ AU ψ ]> in Hau.
@@ -327,7 +327,7 @@ Section BindLemmas.
   Lemma axr_done_eq_ret{X}: forall (t: ctree E B X) w r w',
       <[ t, w |= AX done= r w' ]> ->
       <[ t, w |= ret= r w' ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros * H.
     cdestruct H.
     assert (Hw: w' = w).
@@ -335,18 +335,18 @@ Section BindLemmas.
       - destruct H as (_ & ->); now apply ktrans_to_done_inv in TR as (_ & ->).
       - destruct H as (_ & ->); now apply ktrans_to_finish_inv in TR as (_ & ->). }
     subst.
-    apply ret_unfold; exists r; split...
-    csplit...
+    apply ret_unfold; exists r; split; eauto with ticl.
+    csplit; eauto with ticl.
   Qed.
 
   Lemma aur_axr_done_eq_ret{X}: forall (t: ctree E B X) w φ r w',
       <[ t, w |= φ AU AX done= r w' ]> ->
       <[ t, w |= φ AU ret= r w' ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros * H.
     cinduction H.
     - cleft; now apply axr_done_eq_ret.
-    - cright; csplit...
+    - cright; csplit; eauto with ticl.
   Qed.
 
   (** Helper version of [aul_bind_r] for deterministic [t], it allows us to
@@ -356,11 +356,11 @@ Section BindLemmas.
       <[ t, w |= φ AU AX done= r w' ]> ->
       <( {k r}, w' |= φ AU ψ )> ->
       <( {x <- t ;; k x}, w |= φ AU ψ )>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
-    apply aul_bind_r with (R:=fun x w => r = x /\ w' = w)...
+    apply aul_bind_r with (R:=fun x w => r = x /\ w' = w); eauto with ticl.
     - now apply aur_axr_done_eq_ret.
-    - intros ? ? [<- <-]...
+    - intros ? ? [<- <-]; eauto with ticl.
   Qed.
 
   (** Bind lemmas for suffix until [AU]; requires specifying a postcondition [R] for the return values of [t],
@@ -369,7 +369,7 @@ Section BindLemmas.
       <[ t, w |= φ AU ret R ]> ->
       (forall x w, R x w -> <[ {k x}, w |= φ AU ψ ]>) ->
       <[ {x <- t ;; k x}, w |= φ AU ψ ]>.  
-  Proof with eauto with ticl.
+  Proof.
     intros.
     cinduction H. 
     - apply ret_sbisim in Hp as (y & HR & Heqt).
@@ -378,7 +378,7 @@ Section BindLemmas.
     - cright; csplit.
       + now apply ticll_bind_l.
       + destruct Hs as (t' & w' & TR).
-        apply can_step_bind_l with t' w'...
+        apply can_step_bind_l with t' w'; eauto with ticl.
         specialize (Hau _ _ TR) as Hau.        
         destruct Hau.
         -- cdestruct H.
@@ -389,7 +389,7 @@ Section BindLemmas.
         apply ktrans_bind_inv in TR' as
             [(t_ & TR_ & Hd & ->) |
               (x & w_ & TR_ & Hr & TRk)].
-        * apply HInd...
+        * apply HInd; eauto with ticl.
         * specialize (Hau _ _ TR_).
           change (auc  (entailsL _ ?φ) (entailsR ?ψ) ?t ?w)
             with <[ t, w |= φ AU ψ ]> in Hau.
@@ -414,9 +414,9 @@ Section BindLemmas.
     <[ t, w |= AX (phi AU ret R) ]> ->
     (forall x w, R x w -> <[ {k x}, w |= phi AU psi ]>) ->
     <[ {x <- t ;; k x}, w |= AX (phi AU psi) ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros t k w phi psi R Ht Hk.
-    cdestruct Ht; csplit...
+    cdestruct Ht; csplit; eauto with ticl.
     - destruct Hs as (t' & w' & Hstep).
       eapply can_step_bind_l; [exact Hstep |].
       eapply aur_ret_not_done, Ht, Hstep.
@@ -436,11 +436,11 @@ Section BindLemmas.
       <[ t, w |= φ AU AX done= r w' ]> ->
       <[ {k r}, w' |= φ AU ψ ]> ->
       <[ {x <- t ;; k x}, w |= φ AU ψ ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
-    apply aur_bind_r with (R:=fun x w => r = x /\ w' = w)...
+    apply aur_bind_r with (R:=fun x w => r = x /\ w' = w); eauto with ticl.
     - now apply aur_axr_done_eq_ret.
-    - intros ? ? [<- <-]...
+    - intros ? ? [<- <-]; eauto with ticl.
   Qed.
   
   (** Bind lemmas for prefix [EU]; requires specifying a postcondition [R] for the return values of [t],
@@ -449,7 +449,7 @@ Section BindLemmas.
       <[ t, w |= φ EU ret R ]> ->
       (forall r w', R r w' -> <( {k r}, w' |= φ EU ψ )>) ->
       <( {x <- t ;; k x}, w |= φ EU ψ )>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
     cinduction H; intros.
     - apply ret_sbisim in Hp as (y & HR & Heqt).
@@ -457,9 +457,9 @@ Section BindLemmas.
       now apply H0.
     - cright; csplit.
       + now apply ticll_bind_l.
-      + exists (x <- t0;; k x), w0; split...
+      + exists (x <- t0;; k x), w0; split; eauto with ticl.
         assert(Hd: not_done w0) by now apply ticll_not_done in HInd.
-        apply ktrans_bind_l...
+        apply ktrans_bind_l; eauto with ticl.
   Qed.
 
   (** Helper version of [eul_bind_r] for deterministic [t] ([ret= r w']), it allows us to
@@ -470,10 +470,10 @@ Section BindLemmas.
       <[ t, w |= φ EU ret= r w' ]> ->
       <( {k r}, w' |= φ EU ψ )> ->
       <( {x <- t ;; k x}, w |= φ EU ψ )>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
-    apply eul_bind_r with (R:=fun x w => r = x /\ w' = w)...
-    intros ? ? [<- <-]...
+    apply eul_bind_r with (R:=fun x w => r = x /\ w' = w); eauto with ticl.
+    intros ? ? [<- <-]; eauto with ticl.
   Qed.
   
   (** Bind lemmas for suffix [EU]; requires specifying a postcondition [R] for the return values of [t],
@@ -482,7 +482,7 @@ Section BindLemmas.
       <[ t, w |= φ EU ret R ]> ->
       (forall r w', R r w' -> <[ {k r}, w' |= φ EU ψ ]>) ->
       <[ {x <- t ;; k x}, w |= φ EU ψ ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
     cinduction H; intros.
     - apply ret_sbisim in Hp as (y & HR & Heqt).
@@ -490,13 +490,13 @@ Section BindLemmas.
       now apply H0.
     - cright; csplit.
       + now apply ticll_bind_l.
-      + exists (x <- t0;; k x), w0; split...
+      + exists (x <- t0;; k x), w0; split; eauto with ticl.
         destruct Heu.
         * cdestruct H.
-          apply ktrans_bind_l...
+          apply ktrans_bind_l; eauto with ticl.
         * destruct H.
           apply ticll_not_done in H.
-          apply ktrans_bind_l...
+          apply ktrans_bind_l; eauto with ticl.
   Qed.
 
   (** Helper version of [eur_bind_r] for deterministic [t] ([ret= r w']), it allows us to
@@ -506,10 +506,10 @@ Section BindLemmas.
       <[ t, w |= φ EU ret= r w' ]> ->
       <[ {k r}, w' |= φ EU ψ ]> ->
       <[ {x <- t ;; k x}, w |= φ EU ψ ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
-    apply eur_bind_r with (R:=fun x w => r = x /\ w' = w)...
-    intros ? ? [<- <-]...
+    apply eur_bind_r with (R:=fun x w => r = x /\ w' = w); eauto with ticl.
+    intros ? ? [<- <-]; eauto with ticl.
   Qed.
 
   (** ** Up-to bind principles for [AG] and [EG] (tower form) *)
@@ -523,7 +523,7 @@ Section BindLemmas.
       <[ t, w |= φ AU ret Post ]> ->
       (forall x w, Post x w -> `R (k x) w) ->
       `R (x <- t ;; k x) w.
-  Proof with auto with ticl.
+  Proof.
     apply tower.
     - (* inf-closed *)
       intros ? INC t k w Hau Hk ? ?.
@@ -543,7 +543,7 @@ Section BindLemmas.
         split2.
         * now apply ticll_bind_l.
         * destruct Hs as (t' & w' & TR).
-          apply can_step_bind_l with t' w'...
+          apply can_step_bind_l with t' w'; auto with ticl.
           specialize (Hau0 _ _ TR) as Hinv.
           change (auc (entailsL ?X ?φ) (entailsR ?ψ) ?t ?w)
             with (@entailsR _ _ _ _ X (CuR Q_A φ ψ) t w) in Hinv.
@@ -581,7 +581,7 @@ Section BindLemmas.
       <[ t, w |= φ EU ret Post ]> ->
       (forall x w, Post x w -> `R (k x) w) ->
       `R (x <- t ;; k x) w.
-  Proof with auto with ticl.
+  Proof.
     apply tower.
     - (* inf-closed *)
       intros ? INC t k w Heu Hk ? ?.
@@ -601,9 +601,9 @@ Section BindLemmas.
         split.
         * now apply ticll_bind_l.
         * exists (x <- t0 ;; k x), w0; split.
-          -- apply ktrans_bind_l...
+          -- apply ktrans_bind_l; auto with ticl.
              destruct Heu as [? ? Hret | ? ? (Hφ & _)].
-             ++ cdestruct Hret...
+             ++ cdestruct Hret; auto with ticl.
              ++ now apply ticll_not_done in Hφ.
           -- apply IH; [rewrite unfold_entailsR; apply Heu |].
              intros; apply (b_chain R'); now apply Hk.
@@ -662,12 +662,12 @@ Section BindLemmas.
       (forall t' w', |t, w| ↦ |t', w'| -> <[ t', w' |= φ AU done R ]>) ->
       (forall x w, R x w -> can_step (k x) w) ->
       can_step (x <- t ;; k x) w.
-  Proof with eauto with ticl.
+  Proof.
     intros * (t' & w' & TR) Hau Hk.
     specialize (Hau _ _ TR) as Hleaf.
     apply ktrans_succ_cases in TR as Hc;
       destruct Hc as [Hd' | [(x & -> & -> & Heq) | (Z & e & v & x & -> & -> & Heq)]].
-    - eapply can_step_bind_l...
+    - eapply can_step_bind_l; eauto with ticl.
     - rewrite Heq in TR, Hleaf.
       apply aur_stuck in Hleaf; cdestruct Hleaf.
       destruct (Hk _ _ H) as (k' & w' & TRk).
@@ -700,7 +700,7 @@ Section BindLemmas.
       <[ t, w |= φ AU done R ]> ->
       (forall x w, R x w -> <[ {k x}, w |= φ AN (φ AU ψ) ]>) ->
       <[ {x <- t ;; k x}, w |= φ AN (φ AU ψ) ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros * Hd Hau Hk.
     cinduction Hau.
     - (* MatchA: done R in a not-done world, impossible *)
@@ -715,10 +715,10 @@ Section BindLemmas.
         apply ktrans_bind_inv in TRk as
             [(t0' & TR0 & Hd_ & Heq) | (x & w0 & TRt0 & Hr & TRk)].
         * rewrite Heq.
-          cright; apply HInd...
+          cright; apply HInd; eauto with ticl.
         * assert (HR: R x w).
           { eapply aur_done_leaf; eauto; rewrite unfold_entailsR; now apply Hau0. }
-          specialize (Hk _ _ HR) as Hkx; cdestruct Hkx...
+          specialize (Hk _ _ HR) as Hkx; cdestruct Hkx; eauto with ticl.
   Qed.
 
   Corollary aur_bind_r_done_au{X Y}: forall (t: ctree E B Y) (k: Y -> ctree E B X) w φ ψ R,
@@ -734,22 +734,22 @@ Section BindLemmas.
   Lemma aur_done_not_done{X}: forall (t: ctree E B X) w φ R,
       <[ t, w |= φ AU done R ]> ->
       <[ t, w |= φ AU done {fun x w => R x w /\ not_done w} ]>.
-  Proof with auto with ticl.
+  Proof.
     intros * H.
     cinduction H.
-    - cleft; cdestruct Hp; csplit...
-    - cright; csplit...
+    - cleft; cdestruct Hp; csplit; auto with ticl.
+    - cright; csplit; auto with ticl.
   Qed.
 
   Lemma eur_done_not_done{X}: forall (t: ctree E B X) w φ R,
       <[ t, w |= φ EU done R ]> ->
       <[ t, w |= φ EU done {fun x w => R x w /\ not_done w} ]>.
-  Proof with auto with ticl.
+  Proof.
     intros * H.
     cinduction H.
-    - cleft; cdestruct Hp; csplit...
-    - cright; csplit...
-      exists t0, w0...
+    - cleft; cdestruct Hp; csplit; auto with ticl.
+    - cright; csplit; auto with ticl.
+      exists t0, w0; auto with ticl.
   Qed.
 
   (** In a not-done world, [φ AU done R'] is a [StepA] state, i.e. [φ AN (φ AU done R')]. *)
@@ -781,7 +781,7 @@ Section BindLemmas.
       <[ t, w |= φ AU done R ]> ->
       (forall x w, R x w -> <( {k x}, w |= φ AN (φ AU ψ) )>) ->
       <( {x <- t ;; k x}, w |= φ AN (φ AU ψ) )>.
-  Proof with eauto with ticl.
+  Proof.
     intros * Hd Hau Hk.
     cinduction Hau.
     - cdestruct Hp; inv Hd.
@@ -794,10 +794,10 @@ Section BindLemmas.
         apply ktrans_bind_inv in TRk as
             [(t0' & TR0 & Hd_ & Heq) | (x & w0 & TRt0 & Hr & TRk)].
         * rewrite Heq.
-          cright; apply HInd...
+          cright; apply HInd; eauto with ticl.
         * assert (HR: R x w).
           { eapply aur_done_leaf; eauto; rewrite unfold_entailsR; now apply Hau0. }
-          specialize (Hk _ _ HR) as Hkx; cdestruct Hkx...
+          specialize (Hk _ _ HR) as Hkx; cdestruct Hkx; eauto with ticl.
   Qed.
 
   (** The witnessed successor of [φ EU done R] in a done world is a leaf giving [R x w]. *)
@@ -822,7 +822,7 @@ Section BindLemmas.
       <[ t, w |= φ EU done R ]> ->
       (forall x w, R x w -> <[ {k x}, w |= φ EN (φ EU ψ) ]>) ->
       <[ {x <- t ;; k x}, w |= φ EN (φ EU ψ) ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros * Hd Heu Hk.
     cinduction Heu.
     - cdestruct Hp; inv Hd.
@@ -831,18 +831,18 @@ Section BindLemmas.
       + apply ktrans_succ_cases in TR as Hc;
           destruct Hc as [Hd' | [(x & -> & Hw & Heq) | (Z & e & v & x & -> & Hw & Heq)]].
         * exists (x <- t0 ;; k x), w0; split.
-          -- apply ktrans_bind_l...
-          -- cright; apply HInd...
+          -- apply ktrans_bind_l; eauto with ticl.
+          -- cright; apply HInd; eauto with ticl.
         * assert (HR: R x w).
           { eapply (eur_done_leaf _ _ _ x (Done x)); eauto; [now constructor | rewrite unfold_entailsR; apply Heu]. }
           specialize (Hk _ _ HR) as Hkx; cdestruct Hkx.
-          exists t1, w0; split...
+          exists t1, w0; split; eauto with ticl.
           rewrite Heq in TR.
           eapply (ktrans_bind_r _ _ _ x _ (Done x)); eauto; now constructor.
         * assert (HR: R x w).
           { eapply (eur_done_leaf _ _ _ x (Finish e v x)); eauto; [now constructor | rewrite unfold_entailsR; apply Heu]. }
           specialize (Hk _ _ HR) as Hkx; cdestruct Hkx.
-          exists t1, w0; split...
+          exists t1, w0; split; eauto with ticl.
           rewrite Heq in TR.
           eapply (ktrans_bind_r _ _ _ x _ (Finish e v x)); eauto; now constructor.
   Qed.
@@ -884,7 +884,7 @@ Section BindLemmas.
       <[ t, w |= φ EU done R ]> ->
       (forall x w, R x w -> <( {k x}, w |= φ EN (φ EU ψ) )>) ->
       <( {x <- t ;; k x}, w |= φ EN (φ EU ψ) )>.
-  Proof with eauto with ticl.
+  Proof.
     intros * Hd Heu Hk.
     cinduction Heu.
     - cdestruct Hp; inv Hd.
@@ -893,18 +893,18 @@ Section BindLemmas.
       + apply ktrans_succ_cases in TR as Hc;
           destruct Hc as [Hd' | [(x & -> & Hw & Heq) | (Z & e & v & x & -> & Hw & Heq)]].
         * exists (x <- t0 ;; k x), w0; split.
-          -- apply ktrans_bind_l...
-          -- cright; apply HInd...
+          -- apply ktrans_bind_l; eauto with ticl.
+          -- cright; apply HInd; eauto with ticl.
         * assert (HR: R x w).
           { eapply (eur_done_leaf _ _ _ x (Done x)); eauto; [now constructor | rewrite unfold_entailsR; apply Heu]. }
           specialize (Hk _ _ HR) as Hkx; cdestruct Hkx.
-          exists t1, w0; split...
+          exists t1, w0; split; eauto with ticl.
           rewrite Heq in TR.
           eapply (ktrans_bind_r _ _ _ x _ (Done x)); eauto; now constructor.
         * assert (HR: R x w).
           { eapply (eur_done_leaf _ _ _ x (Finish e v x)); eauto; [now constructor | rewrite unfold_entailsR; apply Heu]. }
           specialize (Hk _ _ HR) as Hkx; cdestruct Hkx.
-          exists t1, w0; split...
+          exists t1, w0; split; eauto with ticl.
           rewrite Heq in TR.
           eapply (ktrans_bind_r _ _ _ x _ (Finish e v x)); eauto; now constructor.
   Qed.
@@ -917,7 +917,7 @@ Section BindLemmas.
       <[ t, w |= φ AU done Post ]> ->
       (forall x w, Post x w -> `R (k x) w) ->
       `R (x <- t ;; k x) w.
-  Proof with auto with ticl.
+  Proof.
     apply tower.
     - intros ? INC t k w Hd Hau Hk ? ?.
       apply INC; auto.
@@ -962,7 +962,7 @@ Section BindLemmas.
       <[ t, w |= φ EU done Post ]> ->
       (forall x w, Post x w -> `R (k x) w) ->
       `R (x <- t ;; k x) w.
-  Proof with auto with ticl.
+  Proof.
     apply tower.
     - intros ? INC t k w Hd Heu Hk ? ?.
       apply INC; auto.
@@ -977,7 +977,7 @@ Section BindLemmas.
         * apply ktrans_succ_cases in TR as Hc;
             destruct Hc as [Hd' | [(x & -> & Hw & Heq) | (Z & e & v & x & -> & Hw & Heq)]].
           -- exists (x <- t0 ;; k x), w0; split.
-             ++ apply ktrans_bind_l...
+             ++ apply ktrans_bind_l; auto with ticl.
              ++ apply (IH _ _ _ Hd').
                 ** rewrite unfold_entailsR; exact Heu.
                 ** intros; apply (b_chain R'); now apply Hk.
@@ -1094,10 +1094,10 @@ Section LogLemmas.
       not_done w ->
       <( k, {Obs (Log s) tt} |= φ )> ->
       <( {log s;; k }, w |= AX φ )>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
-    apply anl_log...
-    csplit...
+    apply anl_log; eauto with ticl.
+    csplit; eauto with ticl.
   Qed.
   
   Lemma anr_log{X S}: forall (s: S) (k: ctreeW S B X) w ψ φ,
@@ -1112,20 +1112,20 @@ Section LogLemmas.
       not_done w ->
       <[ k, {Obs (Log s) tt} |= φ ]> ->
       <[ {log s;; k }, w |= AX φ ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
-    apply anr_log...
-    csplit...
+    apply anr_log; eauto with ticl.
+    csplit; eauto with ticl.
   Qed.
   
   Lemma afl_log{X S}: forall (s: S) (k: ctreeW S B X) w φ,
       not_done w ->
       <( k, {Obs (Log s) tt} |= AF φ )> ->
       <( {log s;; k }, w |= AF φ )>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
-    apply aul_log_iff; right; split...
-    csplit...
+    apply aul_log_iff; right; split; eauto with ticl.
+    csplit; eauto with ticl.
   Qed.
 
   Lemma aur_log{X S}: forall (s: S) (k: ctreeW S B X) w ψ φ,
@@ -1140,22 +1140,22 @@ Section LogLemmas.
       not_done w ->
       <[ k, {Obs (Log s) tt} |= AF φ ]> ->
       <[ {log s;; k }, w |= AF φ ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
-    eapply aur_log...
-    csplit...
+    eapply aur_log; eauto with ticl.
+    csplit; eauto with ticl.
   Qed.
 
   Lemma enr_log{X S}: forall (s: S) (k: ctreeW S B X) w ψ φ,
       <[ k, {Obs (Log s) tt} |= EX ψ ]> ->
       <( {log s;; k }, w |= φ )> ->
       <[ {log s;; k }, w |= φ EN EX ψ ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
-    csplit...
-    exists k, (Obs (Log s) tt); split...
+    csplit; eauto with ticl.
+    exists k, (Obs (Log s) tt); split; eauto with ticl.
     unfold log, CTree.trigger; rewrite bind_vis.
-    apply ktrans_vis; exists tt; split2...
+    apply ktrans_vis; exists tt; split2; eauto with ticl.
     - now rewrite bind_ret_l.
     - now apply ticll_not_done in H0.
   Qed.
@@ -1164,13 +1164,13 @@ Section LogLemmas.
       <[ k, {Obs (Log s) tt} |= ψ EU φ ]> ->
       <( {log s;; k }, w |= ψ )> ->
       <[ {log s;; k }, w |= ψ EU φ ]>. 
-  Proof with eauto with ticl.
+  Proof.
     intros.
     cright.
-    csplit...    
-    exists k, (Obs (Log s) tt); split...
+    csplit; eauto with ticl.    
+    exists k, (Obs (Log s) tt); split; eauto with ticl.
     unfold log, CTree.trigger; rewrite bind_vis.
-    apply ktrans_vis; exists tt; split2...
+    apply ktrans_vis; exists tt; split2; eauto with ticl.
     - now rewrite bind_ret_l.
     - now apply ticll_not_done in H0.
   Qed.
@@ -1179,9 +1179,9 @@ Section LogLemmas.
       not_done w ->
       <[ k, {Obs (Log s) tt} |= EF φ ]> ->
       <[ {log s;; k }, w |= EF φ ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
-    eapply eur_log...
+    eapply eur_log; eauto with ticl.
     csplit; intuition.
   Qed.
 

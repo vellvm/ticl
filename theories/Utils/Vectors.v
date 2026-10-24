@@ -14,10 +14,10 @@ From Equations Require Import Equations.
 Import VectorNotations.
 Declare Scope fin_vector_scope.
 
-Notation vec n T := (Vector.t T n).
-Notation vec' n T := (vec (S n) T). 
-Notation fin := Fin.t.
-Notation fin' n := (fin (S n)).
+Abbreviation vec n T := (Vector.t T n).
+Abbreviation vec' n T := (vec (S n) T). 
+Abbreviation fin := Fin.t.
+Abbreviation fin' n := (fin (S n)).
 
 Fixpoint fin_max(n: nat): fin' n :=
   match n with

@@ -753,7 +753,7 @@ Section ExactRoundRobinPrefix.
   Context {E : Type -> Type} {W Sigma : Type}
     (handler : E ~> stateT Sigma (ctreeW W Bn)).
 
-  Notation Rexact := (fun X (t u : ctreeW W Bn X) => t ≅ u).
+  Abbreviation Rexact := (fun X (t u : ctreeW W Bn X) => t ≅ u).
 
   Lemma exact_segment_rr_prefix n (ts : pool E Bn (S n)) (i : Fin.t (S n))
     t m sigma logs residual sigma' :
@@ -827,8 +827,8 @@ Section SegmentPoolLoopND.
   Context {E B : Type -> Type} `{Bn -< B} {W Sigma : Type}
     (handler : E ~> stateT Sigma (ctreeW W B)).
 
-  Notation Rexact := (fun X (t u : ctreeW W B X) => t ≅ u).
-  Notation Rsb := (fun X (t u : ctreeW W B X) => t ~ u).
+  Abbreviation Rexact := (fun X (t u : ctreeW W B X) => t ≅ u).
+  Abbreviation Rsb := (fun X (t u : ctreeW W B X) => t ~ u).
 
   Lemma segment_pool_nd_loop n (ts : pool E B (S n)) (i : Fin.t (S n))
     sigma logs sigma' :
@@ -850,8 +850,8 @@ Section SegmentPoolLoopRR.
   Context {E : Type -> Type} {W Sigma : Type}
     (handler : E ~> stateT Sigma (ctreeW W Bn)).
 
-  Notation Rexact := (fun X (t u : ctreeW W Bn X) => t ≅ u).
-  Notation Rsb := (fun X (t u : ctreeW W Bn X) => t ~ u).
+  Abbreviation Rexact := (fun X (t u : ctreeW W Bn X) => t ≅ u).
+  Abbreviation Rsb := (fun X (t u : ctreeW W Bn X) => t ~ u).
 
   Lemma segment_pool_rr_loop n (ts : pool E Bn (S n)) (i : Fin.t (S n))
     m sigma logs sigma' :

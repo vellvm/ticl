@@ -200,7 +200,7 @@ Proof.
   intro Hn; apply Nat.even_spec in Hn; destruct Hn as [k ->].
   transitivity (rr_pick 1 0); [apply rr_pick_mod_congr|reflexivity].
   change ((2 * k) mod 2 = 0).
-  rewrite Nat.mul_comm; apply Nat.mod_mul; discriminate.
+  rewrite Nat.mul_comm; apply Nat.Div0.mod_mul.
 Qed.
 
 Lemma rr_pick_odd n : Nat.even n = false -> rr_pick 1 n = Fin.FS Fin.F1.
@@ -211,6 +211,6 @@ Proof.
   transitivity (rr_pick 1 1); [apply rr_pick_mod_congr|reflexivity].
   change ((2 * k + 1) mod 2 = 1).
   rewrite Nat.Div0.add_mod.
-  rewrite (Nat.mul_comm 2 k), Nat.mod_mul by discriminate.
+  rewrite (Nat.mul_comm 2 k), Nat.Div0.mod_mul.
   reflexivity.
 Qed.

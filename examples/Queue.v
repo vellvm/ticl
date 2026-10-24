@@ -47,20 +47,20 @@ Module Queue.
   Theorem rotate_agaf_pop {B: Type -> Type}: forall q i (nl: T),
       find_index (@rel_dec T eq HDec) nl q = Some i ->
       <( {instr_prog (B:=B) rotate q}, Pure |= AG AF visW {fun h => h = nl} )>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
     unfold rotate; cbn. 
     apply ag_qprog_invariance with
-      (R:= fun q w => exists h ts, q = h :: ts /\ (h = nl \/ (h <> nl /\ exists i, find_index (@rel_dec T eq HDec) nl ts = Some i)))...
+      (R:= fun q w => exists h ts, q = h :: ts /\ (h = nl \/ (h <> nl /\ exists i, find_index (@rel_dec T eq HDec) nl ts = Some i))); eauto with ticl.
     - destruct q; try solve [ inv H ].
       exists t, q; intuition.
       rewrite find_index_cons in H.
       destruct (t =? nl) eqn:Hnl; inv H.
       + rewrite rel_dec_correct in Hnl.
-        left...
+        left; eauto with ticl.
       + right.
         destruct (find_index (@rel_dec T eq HDec) nl q) eqn:Hq, i; inv H1.
-        apply neg_rel_dec_correct in Hnl; split...
+        apply neg_rel_dec_correct in Hnl; split; eauto with ticl.
     - clear H q.
       intros q w (h & ts & -> & [-> | (Hnl & Hi)]) Hd.
       + (* h = nl *)
@@ -68,30 +68,30 @@ Module Queue.
         * (* iter |= AF *)
           apply aul_qprog_until_now.
           eapply aul_qprog_bind.
-          -- eapply aur_pop_cons...
-             csplit...
+          -- eapply aur_pop_cons; eauto with ticl.
+             csplit; eauto with ticl.
           -- cleft.
-             apply ticll_vis...
+             apply ticll_vis; eauto with ticl.
         * (* body variant/invariant *)
           eapply anr_qprog_bind_l.
-          -- apply anr_pop_cons...
-             csplit...
+          -- apply anr_pop_cons; eauto with ticl.
+             csplit; eauto with ticl.
           -- eapply aur_qprog_bind_r.
              ++ apply equivr_ifsome_some.
                 cleft.
-                apply axr_push...
+                apply axr_push; eauto with ticl.
              ++ cbn; cleft.
-                apply axr_qprog_ret...
+                apply axr_qprog_ret; eauto with ticl.
                 split2; [reflexivity | constructor |].
                 (* Low-level list proof starts here *)
                 destruct ts.
-                ** exists nl, []...
-                ** exists t, (ts ++ [nl]); split...
+                ** exists nl, []; eauto with ticl.
+                ** exists t, (ts ++ [nl]); split; eauto with ticl.
                    destruct (t =? nl) eqn:Hnl.
                    --- left.
                        now apply rel_dec_correct.
                    --- right.
-                       apply neg_rel_dec_correct in Hnl; split...
+                       apply neg_rel_dec_correct in Hnl; split; eauto with ticl.
                        apply (find_index_last_ex (@rel_dec T eq HDec) rel_dec_correct).
       + (* h <> nl *)
         clear i.
@@ -104,35 +104,35 @@ Module Queue.
                   match find_index (@rel_dec T eq HDec) nl q with
                   | None => length q
                   | Some v => v
-                  end)...
-          -- exists h, ts; split...
+                  end); eauto with ticl.
+          -- exists h, ts; split; eauto with ticl.
           -- intros q w' (h' & ts' & -> & [-> | (Hnl' & ?)]) Hd'.
              ++ right.
                 eapply aul_qprog_bind.
-                ** apply aur_pop_cons...
-                   csplit...
+                ** apply aur_pop_cons; eauto with ticl.
+                   csplit; eauto with ticl.
                 ** eapply aul_qprog_bind.
                    --- apply equivr_ifsome_some.
                        cleft.
-                       apply axr_push...
+                       apply axr_push; eauto with ticl.
                    --- cleft.
-                       csplit...
+                       csplit; eauto with ticl.
              ++ left.
                 destruct H as (i' & Hi').
                 eapply aur_qprog_bind_r.
-                ** apply aur_pop_cons...
-                   csplit...
+                ** apply aur_pop_cons; eauto with ticl.
+                   csplit; eauto with ticl.
                 ** eapply aur_qprog_bind_r.
                    --- apply equivr_ifsome_some.
                        cleft.
-                       apply axr_push...
+                       apply axr_push; eauto with ticl.
                    --- cbn.
                        cleft.
-                       apply axr_qprog_ret...
-                       exists tt; split2...
+                       apply axr_qprog_ret; eauto with ticl.
+                       exists tt; split2; eauto with ticl.
                        split.
                        +++ destruct ts'; cbn; try solve [inv Hi'].
-                           exists t, (ts' ++ [h']); split...
+                           exists t, (ts' ++ [h']); split; eauto with ticl.
                            rewrite find_index_cons in Hi'.
                            destruct (t =? nl) eqn:Hnl''; inv Hi'.
                            *** rewrite rel_dec_correct in Hnl''; subst.
@@ -145,22 +145,22 @@ Module Queue.
                        +++ (* variant *)
                          apply rel_dec_neq_false with (r:=HDec) in Hnl'; [|typeclasses eauto].
                          rewrite Hnl', Hi'; cbn.
-                         erewrite find_index_app_l...
+                         erewrite find_index_app_l; eauto with ticl.
         * eapply anr_qprog_bind_l.
-          -- apply anr_pop_cons...
-             csplit...
+          -- apply anr_pop_cons; eauto with ticl.
+             csplit; eauto with ticl.
           -- eapply aur_qprog_bind_r.
              ++ eapply equivr_ifsome_some.
                 cleft.
-                eapply axr_push...
+                eapply axr_push; eauto with ticl.
              ++ cbn.
                 cleft.
-                apply axr_qprog_ret...
+                apply axr_qprog_ret; eauto with ticl.
                 split2; [reflexivity | constructor |].
                 destruct ts; try solve [inv Hi].
                 exists t, (ts ++ [h]); intuition.
                 destruct (t =? nl) eqn:Hnl'; inv Hi.
-                ** rewrite rel_dec_correct in Hnl'; subst...
+                ** rewrite rel_dec_correct in Hnl'; subst; eauto with ticl.
                 ** right.
                    rewrite Hnl' in H0.
                    destruct (find_index (@rel_dec T eq HDec) nl ts) eqn:Hts; inv H0.

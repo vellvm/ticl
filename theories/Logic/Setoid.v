@@ -72,8 +72,8 @@ Section EquivSetoid.
   Context `{K: Kripke M E B} {X} {meq: relation (M E B X)} {Eqm: Equivalence meq}
     {KS: KripkeSetoid M E B X meq}.
 
-  Notation MS := (M E B X).
-  Notation MP := (MS -> World E -> Prop).
+  Abbreviation MS := (M E B X).
+  Abbreviation MP := (MS -> World E -> Prop).
 
   Global Add Parametric Morphism: can_step
     with signature meq ==> eq ==> iff as proper_can_step.

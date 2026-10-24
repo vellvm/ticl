@@ -35,7 +35,7 @@ Definition offer_live_slot {E : Type -> Type}
 Section ObservedScheduler.
   Context {E B : Type -> Type} `{Bn -< B}.
 
-  Local Notation SchedObs o := (inl1 o : scheduler_observedE E unit).
+  Local Abbreviation SchedObs o := (inl1 o : scheduler_observedE E unit).
 
   Lemma offer_live_slot_now n (i : LiveSlot n)
       (t : observed_completed E B) :

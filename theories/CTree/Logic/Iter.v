@@ -52,7 +52,7 @@ Section IterLemmas.
                       {fun (lr: I + X) (w': World E) => 
                          exists i', lr = inl i' /\ Ri i' w' /\ Rv i' i}]>) ->
     <( {iter k i}, w |= φ AN ψ )>.
-  Proof with auto with ticl.
+  Proof.
     intros WfR Hi H.
     generalize dependent k.
     generalize dependent w.
@@ -65,11 +65,11 @@ Section IterLemmas.
     - now eapply ticll_bind_l.
     - eapply anl_bind_r with
         (R:=fun (lr: I + X) (w': World E) =>
-              exists i' : I, lr = inl i' /\ Ri i' w' /\ Rv i' i)... 
+              exists i' : I, lr = inl i' /\ Ri i' w' /\ Rv i' i); auto with ticl. 
       intros [i' | r] w'.            
       + intros (j & Hinv & Hi' & Hv); inv Hinv.
         rewrite sb_guard.
-        apply HindWf...
+        apply HindWf; auto with ticl.
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
 
@@ -88,7 +88,7 @@ Section IterLemmas.
                        | inr r => <[ {Ret r: ctree E B X}, w' |= φ AN ψ ]>
                        end} ]>) ->
     <[ {iter k i}, w |= φ AN ψ ]>.
-  Proof with auto with ticl.
+  Proof.
     intros WfR Hi H.
     generalize dependent k.
     generalize dependent w.
@@ -103,11 +103,11 @@ Section IterLemmas.
                match lr with
                | inl i' => Ri i' w' /\ Rv i' i
                | inr r => <[ {Ret r: ctree E B X}, w' |= φ AN ψ ]>
-               end))...
-      intros [i' | r] w'...
+               end)); auto with ticl.
+      intros [i' | r] w'; auto with ticl.
       intros (Hi' & Hv). 
       rewrite sb_guard.
-      apply HindWf...
+      apply HindWf; auto with ticl.
   Qed.
 
   (** ** Iteration lemmas for the [EN] operator *)
@@ -123,7 +123,7 @@ Section IterLemmas.
           <[ {k i}, w |= φ EN done {fun (lr: I + X) w' =>
             exists i', lr = inl i' /\ Ri i' w' /\ Rv i' i} ]>) ->
     <( {iter k i}, w |= φ EN ψ )>.
-  Proof with auto with ticl.    
+  Proof.    
     intros WfR Hi H.
     generalize dependent k.
     generalize dependent w.
@@ -137,11 +137,11 @@ Section IterLemmas.
     - now eapply ticll_bind_l.
     - eapply enl_bind_r with
         (R:=fun (lr: I + X) (w': World E) =>
-              exists i' : I, lr = inl i' /\ Ri i' w' /\ Rv i' i)...
+              exists i' : I, lr = inl i' /\ Ri i' w' /\ Rv i' i); auto with ticl.
       intros [i' | r] w'.
       + intros (j & Hinv & Hi' & Hv); inv Hinv.
         rewrite sb_guard.
-        apply HindWf...
+        apply HindWf; auto with ticl.
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
 
@@ -160,7 +160,7 @@ Section IterLemmas.
                                     | inr r => <[ {Ret r: ctree E B X}, w' |= φ EN ψ ]>
                                     end}]>) ->
     <[ {iter k i}, w |= φ EN ψ ]>.
-  Proof with auto with ticl.
+  Proof.
     intros WfR Hi H.
     generalize dependent k.
     generalize dependent w.
@@ -175,11 +175,11 @@ Section IterLemmas.
              match lr with
              | inl i' => Ri i' w' /\ Rv i' i
              | inr r => <[ {Ret r: ctree E B X}, w' |= φ EN ψ ]>
-             end))...
-    intros [i' | r] w'...
+             end)); auto with ticl.
+    intros [i' | r] w'; auto with ticl.
     intros (Hi' & Hv).
     rewrite sb_guard.
-    apply HindWf...
+    apply HindWf; auto with ticl.
   Qed.  
 
   (** ** Iteration lemmas for the [AU] operator *)
@@ -190,13 +190,13 @@ Section IterLemmas.
     <[ {k i}, w |= φ AU ret {fun lr w => exists i', lr = inl i' /\ R i' w} ]> ->
     (forall i w, R i w -> <( {iter k i}, w |= φ AU ψ )>) ->
     <( {iter k i}, w |= φ AU ψ )>.
-  Proof with auto with ticl.
+  Proof.
     unfold iter, MonadIter_ctree.
     intros.
     rewrite unfold_iter.
-    apply aul_bind_r with (R:=(fun lr w => exists i', lr = inl i' /\ R i' w))...
+    apply aul_bind_r with (R:=(fun lr w => exists i', lr = inl i' /\ R i' w)); auto with ticl.
     intros ? ? (i' & -> & HR).
-    rewrite sb_guard...
+    rewrite sb_guard; auto with ticl.
   Qed.
 
   (** ** The liveness split lemma. *)
@@ -227,7 +227,7 @@ Section IterLemmas.
                              /\ R i' w'
                              /\ Rv (i', w') (i, w) }]>) ->
     <( {iter k i}, w |= φ AU ψ )>.
-  Proof with auto with ticl.
+  Proof.
     remember (i, w) as P.
     replace i with (fst P) by now subst.
     replace w with (snd P) by now subst.
@@ -241,21 +241,21 @@ Section IterLemmas.
     unfold iter, MonadIter_ctree.
     destruct (H _ _ Hd HR).
     - rewrite unfold_iter.
-      eapply aul_bind_r with (R:=fun (lr : I + X) (w' : World E) => exists i' : I, lr = inl i' /\ not_done w' /\ Ri i' w')...
+      eapply aul_bind_r with (R:=fun (lr : I + X) (w' : World E) => exists i' : I, lr = inl i' /\ not_done w' /\ Ri i' w'); auto with ticl.
       intros [i' | r] w' (i_ & His & Hd' & HRi); inv His.
       rewrite sb_guard.
-      apply Hi...
+      apply Hi; auto with ticl.
     - rewrite unfold_iter.
       eapply aul_bind_r with
         (R:=fun (lr: I + X) (w': World E) =>
-              exists i' : I, lr = inl i' /\ not_done w'/\ R i' w' /\ Rv (i', w') (i, w))... 
+              exists i' : I, lr = inl i' /\ not_done w'/\ R i' w' /\ Rv (i', w') (i, w)); auto with ticl. 
       intros [i' | r] w'.            
       + intros (j & Hinv & Hd' & Hi' & Hv); inv Hinv.
         rewrite sb_guard.
         remember (j, w') as y.
         replace j with (fst y) in Hi' |- * by now subst.
         replace w' with (snd y) in Hd', Hi' |- * by now subst.
-        apply HindWf...
+        apply HindWf; auto with ticl.
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
       
@@ -276,7 +276,7 @@ Section IterLemmas.
                                /\ R i' w'
                                /\ Rv (i', w') (i, w)}]>) ->
     <( {iter k i}, w |= φ AU ψ )>.
-  Proof with auto with ticl.
+  Proof.
     remember (i, w) as P.
     replace i with (fst P) by now subst.
     replace w with (snd P) by now subst.
@@ -290,18 +290,18 @@ Section IterLemmas.
     unfold iter, MonadIter_ctree.
     destruct (H _ _ Hd Hi).
     - rewrite unfold_iter.
-      apply ticll_bind_l... 
+      apply ticll_bind_l; auto with ticl. 
     - rewrite unfold_iter.
       eapply aul_bind_r with
         (R:=fun (lr: I + X) (w': World E) =>
-              exists i' : I, lr = inl i' /\ not_done w'/\ R i' w' /\ Rv (i', w') (i, w))... 
+              exists i' : I, lr = inl i' /\ not_done w'/\ R i' w' /\ Rv (i', w') (i, w)); auto with ticl. 
       intros [i' | r] w'.            
       + intros (j & Hinv & Hd' & Hi' & Hv); inv Hinv.
         rewrite sb_guard.
         remember (j, w') as y.
         replace j with (fst y) in Hi' |- * by now subst.
         replace w' with (snd y) in Hd', Hi' |- * by now subst.
-        apply HindWf...
+        apply HindWf; auto with ticl.
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
 
@@ -335,13 +335,13 @@ Section IterLemmas.
     <[ {k i}, w |= φ AU ret {fun lr w => exists i', lr = inl i' /\ R i' w} ]> ->
     (forall i w, R i w -> <[ {iter k i}, w |= φ AU ψ ]>) ->
     <[ {iter k i}, w |= φ AU ψ ]>.
-  Proof with auto with ticl.
+  Proof.
     unfold iter, MonadIter_ctree.
     intros.
     rewrite unfold_iter.
-    apply aur_bind_r with (R:=(fun lr w => exists i', lr = inl i' /\ R i' w))...
+    apply aur_bind_r with (R:=(fun lr w => exists i', lr = inl i' /\ R i' w)); auto with ticl.
     intros ? ? (i' & -> & HR).
-    rewrite sb_guard...
+    rewrite sb_guard; auto with ticl.
   Qed.
   
   (** A loop [iter k i] satisfies suffix [φ AU ψ] if [k i] eventually terminates with loop invariant [Ri],
@@ -358,7 +358,7 @@ Section IterLemmas.
                        | inr r => <[ {Ret r: ctree E B X}, w' |= φ AN ψ ]>
                        end} ]>) ->
     <[ {iter k i}, w |= φ AU ψ ]>.
-  Proof with auto with ticl.
+  Proof.
     remember (i, w) as P.
     replace i with (fst P) by now subst.
     replace w with (snd P) by now subst.
@@ -376,14 +376,14 @@ Section IterLemmas.
              match lr with
              | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
              | inr r => <[ {Ret r: ctree E B X}, w' |= φ AN ψ ]>
-             end))...
-    intros [i' | r] w'...
+             end)); auto with ticl.
+    intros [i' | r] w'; auto with ticl.
     - intros (Hi' & Hv). 
       rewrite sb_guard.
       remember (i', w') as y.
       replace i' with (fst y) in Hi' |- * by now subst.
       replace w' with (snd y) in Hi' |- * by now subst.
-      apply HindWf...
+      apply HindWf; auto with ticl.
     - apply ticlr_an_au. 
   Qed.
 
@@ -421,7 +421,7 @@ Section IterLemmas.
                       {fun (lr: I + X) (w': World E) =>
                          exists i', lr = inl i' /\ not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)}]>) ->
     <( {iter k i}, w |= φ EU ψ )>.
-  Proof with auto with ticl.
+  Proof.
     remember (i, w) as P.
     replace i with (fst P) by now subst.
     replace w with (snd P) by now subst.
@@ -434,18 +434,18 @@ Section IterLemmas.
     intros.
     unfold iter, MonadIter_ctree.
     rewrite unfold_iter.
-    destruct (H _ _ Hi)...
+    destruct (H _ _ Hi); auto with ticl.
     - now eapply ticll_bind_l.
     - eapply eul_bind_r with
         (R:=fun (lr: I + X) (w': World E) =>
-              exists i' : I, lr = inl i' /\ not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w))... 
+              exists i' : I, lr = inl i' /\ not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)); auto with ticl. 
       intros [i' | r] w'.            
       + intros (j & Hinv & Hd' & Hi' & Hv); inv Hinv.
         rewrite sb_guard.
         remember (j, w') as y.
         replace j with (fst y) in Hi' |- * by now subst.
         replace w' with (snd y) in Hi',Hd' |- * by now subst.
-        apply HindWf...
+        apply HindWf; auto with ticl.
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
 
@@ -465,7 +465,7 @@ Section IterLemmas.
                        | inr r => <[ {Ret r: ctree E B X}, w' |= φ EN ψ ]>
                        end} ]>) ->
     <[ {iter k i}, w |= φ EU ψ ]>.
-  Proof with auto with ticl.
+  Proof.
     remember (i, w) as P.
     replace i with (fst P) by now subst.
     replace w with (snd P) by now subst.
@@ -483,14 +483,14 @@ Section IterLemmas.
              match lr with
              | inl i' => not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)
              | inr r => <[ {Ret r: ctree E B X}, w' |= φ EN ψ ]>
-             end))...
-    intros [i' | r] w'...
+             end)); auto with ticl.
+    intros [i' | r] w'; auto with ticl.
     intros (Hd' & Hi' & Hv). 
     rewrite sb_guard.
     remember (i', w') as y.
     replace i' with (fst y) in Hi' |- * by now subst.
     replace w' with (snd y) in Hi',Hd' |- * by now subst.
-    apply HindWf...
+    apply HindWf; auto with ticl.
     apply ticlr_en_eu.
   Qed.
   
@@ -518,7 +518,7 @@ Section IterLemmas.
                       {fun (lr: I + X) (w': World E) =>
                          exists (i': I), lr = inl i' /\ R i' w'}) ]>) ->
     <( {iter k i}, w |= AG φ )>.
-  Proof with auto with ticl.
+  Proof.
     intros HR H.
     (* coinductive case *)
     generalize dependent i.
@@ -531,7 +531,7 @@ Section IterLemmas.
     - apply Hφ. 
     - destruct Hs as (k' & wk & TR).
       rewrite unfold_iter.
-      apply can_step_bind_l with k' wk...
+      apply can_step_bind_l with k' wk; auto with ticl.
       specialize (H' _ _ TR).
       now apply aur_ret_not_done in H'.
     - intros t' w' TR.
@@ -545,7 +545,7 @@ Section IterLemmas.
         * now apply H'. 
         * intros [l | r] w_ (? & Hinv & HR'); inv Hinv.
           rewrite sb_guard. 
-          apply CIH...
+          apply CIH; auto with ticl.
       + (* [k x] returns *)        
         specialize (H' _ _ TRt0) as HAN.
         apply aur_stuck in HAN; cdestruct HAN; exfalso; eapply can_step_stuck; eauto.
@@ -563,7 +563,7 @@ Section IterLemmas.
                     {fun (lr: I + X) (w': World E) =>
                        exists (i': I), lr = inl i' /\ R i' w'}) ]>) ->
     <( {iter k i}, w |= EG φ )>.
-  Proof with auto with ticl.
+  Proof.
     intros.
     (* coinductive case *)
     generalize dependent i.
@@ -579,14 +579,14 @@ Section IterLemmas.
                  | inr r => Ret r
                   end), w0; split.
       + rewrite unfold_iter.
-        apply ktrans_bind_l...
+        apply ktrans_bind_l; auto with ticl.
         now apply eur_ret_not_done in H0'.
       + apply (eg_bind_chain φ
                  (fun (lr: I+X) (w0: World E) => exists i' : I, lr = inl i' /\ R i' w0)).
         * now apply H0'. 
         * intros [l | r] w_ (? & Hinv & HR); inv Hinv.          
           rewrite sb_guard.
-          apply CIH...
+          apply CIH; auto with ticl.
   Qed.
 
   (** ** Regime B: iteration through a body with hidden value choice *)
@@ -598,20 +598,20 @@ Section IterLemmas.
   Lemma anr_au{X}: forall (t: ctree E B X) w φ ψ,
       <[ t, w |= φ AN ψ ]> ->
       <[ t, w |= φ AN (φ AU ψ) ]>.
-  Proof with auto with ticl.
+  Proof.
     intros * H.
-    cdestruct H; csplit...
-    intros t' w' TR; cleft...
+    cdestruct H; csplit; auto with ticl.
+    intros t' w' TR; cleft; auto with ticl.
   Qed.
 
   Lemma enr_eu{X}: forall (t: ctree E B X) w φ ψ,
       <[ t, w |= φ EN ψ ]> ->
       <[ t, w |= φ EN (φ EU ψ) ]>.
-  Proof with auto with ticl.
+  Proof.
     intros * H.
-    cdestruct H; csplit...
-    exists t0, w0; split...
-    cleft...
+    cdestruct H; csplit; auto with ticl.
+    exists t0, w0; split; auto with ticl.
+    cleft; auto with ticl.
   Qed.
 
   Lemma aur_iter_done{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E B (I + X)) (φ: ticll E) (ψ: ticlr E X):
@@ -628,7 +628,7 @@ Section IterLemmas.
                        | inr r => <[ {Ret r: ctree E B X}, w' |= φ AN ψ ]>
                        end} ]>) ->
     <[ {iter k i}, w |= φ AN (φ AU ψ) ]>.
-  Proof with auto with ticl.
+  Proof.
     remember (i, w) as P.
     replace i with (fst P) by now subst.
     replace w with (snd P) by now subst.
@@ -646,14 +646,14 @@ Section IterLemmas.
              match lr with
              | inl i' => not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)
              | inr r => <[ {Ret r: ctree E B X}, w' |= φ AN ψ ]>
-             end))...
-    intros [i' | r] w'...
+             end)); auto with ticl.
+    intros [i' | r] w'; auto with ticl.
     - intros (Hd' & Hi' & Hv). 
       rewrite sb_guard.
       remember (i', w') as y.
       replace i' with (fst y) in Hi' |- * by now subst.
       replace w' with (snd y) in Hi', Hd' |- * by now subst.
-      apply HindWf...
+      apply HindWf; auto with ticl.
     - apply anr_au.
   Qed.
 
@@ -689,7 +689,7 @@ Section IterLemmas.
                        | inr r => <[ {Ret r: ctree E B X}, w' |= φ EN ψ ]>
                        end} ]>) ->
     <[ {iter k i}, w |= φ EN (φ EU ψ) ]>.
-  Proof with auto with ticl.
+  Proof.
     remember (i, w) as P.
     replace i with (fst P) by now subst.
     replace w with (snd P) by now subst.
@@ -707,14 +707,14 @@ Section IterLemmas.
              match lr with
              | inl i' => not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)
              | inr r => <[ {Ret r: ctree E B X}, w' |= φ EN ψ ]>
-             end))...
-    intros [i' | r] w'...
+             end)); auto with ticl.
+    intros [i' | r] w'; auto with ticl.
     - intros (Hd' & Hi' & Hv). 
       rewrite sb_guard.
       remember (i', w') as y.
       replace i' with (fst y) in Hi' |- * by now subst.
       replace w' with (snd y) in Hi', Hd' |- * by now subst.
-      apply HindWf...
+      apply HindWf; auto with ticl.
     - apply enr_eu.
   Qed.
 
@@ -730,7 +730,7 @@ Section IterLemmas.
                       {fun (lr: I + X) (w': World E) =>
                          exists i', lr = inl i' /\ R i' w'})) ]>) ->
     <( {iter k i}, w |= AG φ )>.
-  Proof with auto with ticl.
+  Proof.
     intros HR H.
     generalize dependent i.
     generalize dependent w.
@@ -742,7 +742,7 @@ Section IterLemmas.
     - apply Hφ.
     - destruct Hs as (k' & wk & TR).
       rewrite unfold_iter.
-      apply can_step_bind_l with k' wk...
+      apply can_step_bind_l with k' wk; auto with ticl.
       specialize (H' _ _ TR) as HAN.
       cdestruct HAN.
       eapply ticll_not_done; eauto.
@@ -753,11 +753,11 @@ Section IterLemmas.
       + (* [k x] steps *)
         rewrite Heq; clear Heq t'.
         apply (ag_bind_done_chain φ
-                 (fun (lr: I+X) (w0: World E) => exists i' : I, lr = inl i' /\ R i' w0))...
+                 (fun (lr: I+X) (w0: World E) => exists i' : I, lr = inl i' /\ R i' w0)); auto with ticl.
         * cright; now apply H'.
         * intros [l | r] w_ (? & Hinv & HR'); inv Hinv.
           rewrite sb_guard.
-          apply CIH...
+          apply CIH; auto with ticl.
       + (* [k x] returns immediately: contradicts [AX (φ AN …)] *)
         specialize (H' _ _ TRt0) as HAN.
         now apply anr_stuck in HAN.
@@ -772,7 +772,7 @@ Section IterLemmas.
                       {fun (lr: I + X) (w': World E) =>
                          exists i', lr = inl i' /\ R i' w'})) ]>) ->
     <( {iter k i}, w |= EG φ )>.
-  Proof with auto with ticl.
+  Proof.
     intros HR H.
     generalize dependent i.
     generalize dependent w.
@@ -788,13 +788,13 @@ Section IterLemmas.
                  | inr r => Ret r
                   end), w0; split.
       + rewrite unfold_iter.
-        apply ktrans_bind_l...
+        apply ktrans_bind_l; auto with ticl.
       + apply (eg_bind_done_chain φ
-                 (fun (lr: I+X) (w0: World E) => exists i' : I, lr = inl i' /\ R i' w0))...
+                 (fun (lr: I+X) (w0: World E) => exists i' : I, lr = inl i' /\ R i' w0)); auto with ticl.
         * cright; apply H'.
         * intros [l | r] w_ (? & Hinv & HR'); inv Hinv.
           rewrite sb_guard.
-          apply CIH...
+          apply CIH; auto with ticl.
   Qed.
 
 End IterLemmas.

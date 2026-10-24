@@ -40,10 +40,10 @@ Definition equiv_ticlr {M} {E B} {K: Kripke M E B} (X: Type): relation (ticlr E 
 (** * Now we develop the equational theory of Ticl formulas. *)
 Section EquivTiclEquivalences.
   Context `{K: Kripke M E B} {X: Type}.
-  Notation impl_ticll := (@impl_ticll M E B K X).
-  Notation impl_ticlr := (@impl_ticlr M E B K X).
-  Notation equiv_ticll := (@equiv_ticll M E B K X).
-  Notation equiv_ticlr := (@equiv_ticlr M E B K X).
+  Abbreviation impl_ticll := (@impl_ticll M E B K X).
+  Abbreviation impl_ticlr := (@impl_ticlr M E B K X).
+  Abbreviation equiv_ticll := (@equiv_ticll M E B K X).
+  Abbreviation equiv_ticlr := (@equiv_ticlr M E B K X).
 
   (** Implications are a partial order. *)
   Global Instance Reflexive_impl_ticll:
@@ -131,10 +131,10 @@ End EquivTiclEquivalences.
 (** * Equations of TICL (prefix versions) *)
 Section EquivTicllFormulas.
   Context `{KMS: Kripke M E B} {X: Type}.
-  Notation MS := (M E B X).
-  Notation MP := (MS -> World E -> Prop).
-  Notation impl_ticll := (@impl_ticll M E B KMS X).
-  Notation equiv_ticll := (@equiv_ticll M E B KMS X).
+  Abbreviation MS := (M E B X).
+  Abbreviation MP := (MS -> World E -> Prop).
+  Abbreviation impl_ticll := (@impl_ticll M E B KMS X).
+  Abbreviation equiv_ticll := (@equiv_ticll M E B KMS X).
 
   Arguments impl /.
   (** Rewriting [equiv_ticl] over [entailsF] *)
@@ -243,10 +243,10 @@ End EquivTicllFormulas.
 
 Section EquivTiclrFormulas.
   Context `{KMS: Kripke M E B} {X: Type}.
-  Notation MS := (M E B X).
-  Notation MP := (MS -> World E -> Prop).
-  Notation impl_ticlr := (@impl_ticlr M E B KMS X).
-  Notation equiv_ticlr := (@equiv_ticlr M E B KMS X).
+  Abbreviation MS := (M E B X).
+  Abbreviation MP := (MS -> World E -> Prop).
+  Abbreviation impl_ticlr := (@impl_ticlr M E B KMS X).
+  Abbreviation equiv_ticlr := (@equiv_ticlr M E B KMS X).
 
   (** Rewriting [impl_ticl], [equiv_ticl] over [entailsR] *)
   Arguments impl /.
@@ -353,8 +353,8 @@ End EquivTiclrFormulas.
 (** * Equations of TICL prefix formulas [ticll] *)
 Section TicllEquations.
   Context `{KMS: Kripke M E B} {X: Type}.
-  Notation MS := (M E B X).
-  Notation MP := (MS -> World E -> Prop).
+  Abbreviation MS := (M E B X).
+  Abbreviation MP := (MS -> World E -> Prop).
   Infix "⋖" := (impl_ticll X (K:=KMS)) (at level 58, left associativity).
   Infix "⩸" := (equiv_ticll X (K:=KMS)) (at level 58, left associativity).
 
@@ -557,7 +557,7 @@ Section TicllEquations.
   (** [AG (p /\ q)] is equivalent to [AG p /\ AG q]. *)
   Lemma equivl_and_ag: forall p q,
       <( AG (p /\ q) )> ⩸ <( AG p /\ AG q )>.
-  Proof with eauto.
+  Proof.
     intros p q; split.
     - intros t w H; apply ticll_and; split.
       + eapply impl_ticll_global; [reflexivity | | exact H].
@@ -569,8 +569,8 @@ Section TicllEquations.
       destruct H as (Hp & Hq).
       apply equivl_ag_an, ticll_an in Hp as (Hp & Hs & Hgp).
       apply equivl_ag_an, ticll_an in Hq as (Hq & _ & Hgq).
-      split2...
-      apply ticll_and...
+      split2; eauto.
+      apply ticll_and; eauto.
   Qed.
 
   (** [EG (p /\ q)] implies [EG p /\ EG q] but is not equivalent like [AG].
@@ -620,22 +620,22 @@ End TicllEquations.
 (** * Equations of TICL suffix formulas [ticlr] *)
 Section TiclrEquations.
   Context `{KMS: Kripke M E B} {X: Type}.
-  Notation MS := (M E B X).
-  Notation MP := (MS -> World E -> Prop).
+  Abbreviation MS := (M E B X).
+  Abbreviation MP := (MS -> World E -> Prop).
   Infix "⋖" := (@impl_ticlr M E B KMS X) (at level 58, left associativity).
   Infix "⩸" := (@equiv_ticlr M E B KMS X) (at level 58, left associativity).
 
   Lemma equivr_finish_done: forall (φ: X -> forall Y, E Y -> Y -> Prop),
       <[ finish φ ]> ⩸ <[ done {fun x w =>
                                   exists Y (e: E Y) (v: Y), w = Obs e v /\ φ x Y e v} ]>.
-  Proof with eauto with ticl.
+  Proof.
     intros; split; intros t w Hinv.
     - apply ticlr_done.
       apply ticlr_finish in Hinv; inv Hinv; constructor;
-        destruct H as (Y' & e' & v' & Hinv & ?); ddestruction Hinv...
+        destruct H as (Y' & e' & v' & Hinv & ?); ddestruction Hinv; eauto with ticl.
     - apply ticlr_finish.
       apply ticlr_finish in Hinv; inv Hinv; constructor;
-        destruct H as (Y' & e' & v' & Hinv & ?); ddestruction Hinv; exists Y', e', v'...
+        destruct H as (Y' & e' & v' & Hinv & ?); ddestruction Hinv; exists Y', e', v'; eauto with ticl.
   Qed.
 
   (** Left injection of [p] into [p \/ q] *)
@@ -688,28 +688,28 @@ Section TiclrEquations.
   *)
   Lemma implr_an_or: forall p q r,
       <[ p AN q \/ p AN r ]> ⋖ <[ p AN (q \/ r) ]>.
-  Proof with auto with ticl.
+  Proof.
     unfold impl_ticlr.
     intros p q r t' w' Hn.
     apply ticlr_or in Hn as [Hn | Hn].
     - apply ticlr_an; 
-        apply ticlr_an in Hn as (Hp & Hs & H); split2...
+        apply ticlr_an in Hn as (Hp & Hs & H); split2; auto with ticl.
       intros t_ w_ TR_.
-      apply ticlr_or; left...
+      apply ticlr_or; left; auto with ticl.
     - apply ticlr_an; 
-        apply ticlr_an in Hn as (Hp & Hs & H); split2...
+        apply ticlr_an in Hn as (Hp & Hs & H); split2; auto with ticl.
       intros t_ w_ TR_.
-      apply ticlr_or; right...
+      apply ticlr_or; right; auto with ticl.
   Qed.
   
   (** [p AU q] is equivalent to [q] or [p] holds now and [p AU q] holds next. *)
   Lemma equivr_au_an: forall (p: ticll E) (q: ticlr E X),
       <[ p AU q ]> ⩸ <[ q \/ (p AN (p AU q)) ]>.
-  Proof with auto with ticl.
+  Proof.
     intros p q; split; intros t w Hind.
     - cinduction Hind.
       + now left.
-      + right; split...
+      + right; split; auto with ticl.
     - apply ticlr_or in Hind as [Hind | Hind].
       + now left.
       + rewrite unfold_entailsR.
@@ -736,7 +736,7 @@ Section TiclrEquations.
       Intuitively, we move the [AN] from the end to the beginning. *)
   Lemma implr_auan_anau: forall (p: ticll E) (q: ticlr E X),
       <[ p AU (p AN q) ]> ⋖ <[ p AN (p AU q) ]>.
-  Proof with auto with ticl.
+  Proof.
     intros p q t w H.
     cinduction H.
     - apply ticlr_an in Hp as (? & ? & ?).
@@ -758,22 +758,22 @@ Section TiclrEquations.
       Intuitively, we move the [EN] from the end to the beginning. *)
   Lemma implr_euen_eneu: forall (p: ticll E) (q: ticlr E X),
       <[ p EU (p EN q) ]> ⋖ <[ p EN (p EU q) ]>.
-  Proof with auto with ticl.
+  Proof.
     intros p q t w H.
     cinduction H.
     - apply ticlr_en in Hp as (? & t' & w' & TR & ?).
       rewrite unfold_entailsR.
-      split...
+      split; auto with ticl.
       exists t', w'.
-      split...
+      split; auto with ticl.
       rewrite equivr_eu_en, ticlr_or.
       now left.
     - rewrite ticlr_en.
-      split...
+      split; auto with ticl.
       exists t0, w0.
-      split...
+      split; auto with ticl.
       rewrite equivr_eu_en, ticlr_or.
-      right...
+      right; auto with ticl.
   Qed.
 
   (** [p AU q] is idempotent. *)

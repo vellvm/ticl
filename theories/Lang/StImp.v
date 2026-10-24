@@ -189,7 +189,7 @@ Module StImp.
     (CIf c t CSkip) (in custom stimp at level 63): ctree_scope.
 
   Notation "'while' c 'do' b 'done'" :=
-    (CWhile c b) (in custom stimp at level 63): ctree_scope.
+    (CWhile c b) (in custom stimp): ctree_scope.
 
   Notation "'skip'" :=
     (CSkip) (in custom stimp at level 63): ctree_scope.
@@ -234,19 +234,19 @@ Module StImp.
   Section Lemmas.
     Context {B: Type -> Type}.
     (* [B] is not inferable from the lemma statements; fix it for the section. *)
-    Local Notation instr_exp := (@instr_exp B).
-    Local Notation instr_comp := (@instr_comp B).
-    Local Notation instr_prog := (@instr_prog B).
-    Local Notation cdenote_comp := (@cdenote_comp B).
-    Local Notation cdenote_prog := (@cdenote_prog B).
+    Local Abbreviation instr_exp := (@instr_exp B).
+    Local Abbreviation instr_comp := (@instr_comp B).
+    Local Abbreviation instr_prog := (@instr_prog B).
+    Local Abbreviation cdenote_comp := (@cdenote_comp B).
+    Local Abbreviation cdenote_prog := (@cdenote_prog B).
 
     (** Utility lemmas *)
     Lemma var_eq{X}: forall (p: ctreeW Ctx B X) c v m,
         lookup c m = Some v ->      
         <( p, {Obs (Log m) tt} |= var c = v )>.
-    Proof with eauto with ticl.
+    Proof.
       intros.
-      apply ticll_vis... 
+      apply ticll_vis; eauto with ticl. 
     Qed.
 
     Lemma var_ge{X}: forall (p: ctreeW Ctx B X) c v v' m,
@@ -283,14 +283,14 @@ Module StImp.
         b = Nat.ltb x v ->
         not_done w ->
         <[ {instr_comp [[x <? c]] ctx}, {w} |= AX (done= {(ctx, b)} {w}) ]>.
-    Proof with eauto with ticl.
+    Proof.
       intros.
       Opaque Nat.ltb.
       unfold instr_comp, instr_stateE; cbn.
-      eapply anr_state_bind_r_eq...
+      eapply anr_state_bind_r_eq; eauto with ticl.
       - axr_state_ret_eq.
-      - eapply anr_state_bind_r_eq...
-        + eapply anr_state_bind_r_eq...
+      - eapply anr_state_bind_r_eq; eauto with ticl.
+        + eapply anr_state_bind_r_eq; eauto with ticl.
           * axr_get_eq.
           * setoid_rewrite H.
             axr_state_ret_eq.
@@ -320,7 +320,7 @@ Module StImp.
         w = w' ->
         not_done w ->
         <[ {instr_exp [[ c + v1 ]] ctx}, w |= AX done= {(ctx', v2)} w' ]>.
-    Proof with eauto with ticl.
+    Proof.
       intros; subst.
       unfold instr_exp, instr_stateE; cbn.
       rewrite bind_bind.
@@ -339,7 +339,7 @@ Module StImp.
         w = w' ->
         not_done w ->
         <[ {instr_exp [[ c - v1 ]] ctx}, w |= AX done= {(ctx', v2)} w' ]>.
-    Proof with eauto with ticl.
+    Proof.
       intros; subst.
       unfold instr_exp, instr_stateE; cbn.
       rewrite bind_bind.
@@ -359,17 +359,17 @@ Module StImp.
         <( {log (add x r ctx): ctreeW Ctx B unit}, w |= ψ )> ->
         R (add x r ctx, tt) (Obs (Log (add x r ctx)) tt) ->
         <[ {instr_prog [[ x := a ]] ctx}, w |= ψ AU ret R ]>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_exp.
       intros; cbn.
       eapply aur_state_bind_r_eq.
-      - cleft...
+      - cleft; eauto with ticl.
       - eapply aur_state_bind_r_eq.
         + apply ticll_not_done in H0 as Hd.
           cleft; axr_get_eq.
         + rewrite interp_state_put.
           eapply aur_log.
-          * cleft; apply ret_ret...
+          * cleft; apply ret_ret; eauto with ticl.
           * now apply ticll_bind_l.
     Qed.
 
@@ -378,17 +378,17 @@ Module StImp.
         <[ {instr_exp a ctx}, w |= AX done= {(ctx, r)} w ]> ->
         <( {log (add x r ctx): ctreeW Ctx B unit}, w |= ψ )> ->
         <[ {instr_prog [[ x := a ]] ctx}, w |= ψ AU AX done= {(add x r ctx, tt)} {Obs (Log (add x r ctx)) tt} ]>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_exp.
       intros; cbn.
       eapply aur_state_bind_r_eq.
-      - cleft...
+      - cleft; eauto with ticl.
       - eapply aur_state_bind_r_eq.
         + apply ticll_not_done in H0 as Hd.
           cleft; axr_get_eq.
         + rewrite interp_state_put.
           eapply aur_log.
-          * cleft; apply axr_ret...
+          * cleft; apply axr_ret; eauto with ticl.
           * now apply ticll_bind_l.
     Qed.
 
@@ -400,19 +400,19 @@ Module StImp.
         <( {log (add x r ctx): ctreeW Ctx B unit}, w |= ψ )> ->
         <( {Ret (add x r ctx, tt): ctreeW Ctx B (Ctx * unit)}, {Obs (Log (add x r ctx)) tt} |= φ )> ->
         <( {instr_prog [[ x := a ]] ctx}, w |= ψ AU φ )>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_exp.
       intros; cbn.
       eapply aul_state_bind_r_eq.
-      - cleft...
+      - cleft; eauto with ticl.
       - eapply aul_state_bind_r_eq.
         + apply ticll_not_done in H0 as Hd.
           cleft; axr_get_eq.
         + rewrite interp_state_put.
           cright.
           apply anl_log.
-          * cleft...
-          * apply ticll_bind_l...
+          * cleft; eauto with ticl.
+          * apply ticll_bind_l; eauto with ticl.
     Qed.
     
     (** * Sequence: structural temporal lemmas *)
@@ -466,12 +466,12 @@ Module StImp.
          else
            <( {instr_prog f ctx}, w |= φ AU ψ )>) ->
         <( {instr_prog [[ if c then t else f ]] ctx}, w |= φ AU ψ )>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_comp. 
       intros; cbn.
       eapply aul_state_bind_r_eq.
-      - cleft...
-      - destruct b...
+      - cleft; eauto with ticl.
+      - destruct b; eauto with ticl.
     Qed.
 
     Lemma aur_cprog_ite: forall c ctx w φ ψ (b: bool) t f,
@@ -481,12 +481,12 @@ Module StImp.
          else
            <[ {instr_prog f ctx}, w |= φ AU ψ ]>) ->
         <[ {instr_prog [[ if c then t else f ]] ctx}, w |= φ AU ψ ]>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_comp. 
       intros; cbn.
       eapply aur_state_bind_r_eq.
-      - cleft...
-      - destruct b...
+      - cleft; eauto with ticl.
+      - destruct b; eauto with ticl.
     Qed.
 
     (** * While loops *)
@@ -496,15 +496,15 @@ Module StImp.
         <[ {instr_prog t ctx}, w |= φ AU AX done={(ctx', tt)} w' ]> ->
         <( {instr_prog [[ while c do t done ]] ctx'}, w' |= φ AU ψ )> ->   
         <( {instr_prog [[ while c do t done ]] ctx}, w |= φ AU ψ )>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_comp; cbn; intros.
-      apply aul_state_iter_next_eq with tt w' ctx'...
+      apply aul_state_iter_next_eq with tt w' ctx'; eauto with ticl.
       - eapply aur_state_bind_r_eq.
-        + cleft...
+        + cleft; eauto with ticl.
         + cbn; apply ticll_not_done in H1.
-          eapply aur_state_bind_r_eq...
+          eapply aur_state_bind_r_eq; eauto with ticl.
           cleft; axr_state_ret_eq.
-      - apply ticll_not_done in H1...
+      - apply ticll_not_done in H1; eauto with ticl.
     Qed.
 
     (** The loop terminates if [c] evaluates to [false] *)
@@ -512,15 +512,15 @@ Module StImp.
         <[ {instr_comp c ctx}, w |= AX done={(ctx, false)} w ]> ->
         <( {Ret (ctx, tt): ctreeW Ctx B (Ctx * unit)}, w |= ψ )> ->
         <( {instr_prog [[ while c do t done ]] ctx}, w |= φ AU ψ )>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_comp; cbn; intros.
       unfold instr_stateE; rewrite interp_state_unfold_iter.
       eapply aul_bind_r_eq.
       - eapply aur_state_bind_r_eq.
-        + cleft...
+        + cleft; eauto with ticl.
         + apply ticll_not_done in H0.
           cleft; axr_state_ret_eq.
-      - cleft...
+      - cleft; eauto with ticl.
     Qed.
 
     (** Unroll one iteration of the while loop if [c] evaluates to [true], suffix [AU] version *)
@@ -529,13 +529,13 @@ Module StImp.
         <[ {instr_prog t ctx}, w |= φ AU AX done={(ctx', tt)} w' ]> ->
         <[ {instr_prog [[ while c do t done ]] ctx'}, w' |= φ AU AX ψ ]> ->   
         <[ {instr_prog [[ while c do t done ]] ctx}, w |= φ AU AX ψ ]>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_comp; cbn; intros.
-      apply aur_state_iter_next_eq with tt w' ctx'...
+      apply aur_state_iter_next_eq with tt w' ctx'; eauto with ticl.
       - eapply aur_state_bind_r_eq.
-        + cleft...
+        + cleft; eauto with ticl.
         + cbn. 
-          eapply aur_state_bind_r_eq...
+          eapply aur_state_bind_r_eq; eauto with ticl.
           cleft; axr_state_ret_eq.
           now apply aur_not_done in H1.
       - now apply aur_not_done in H1. 
@@ -546,16 +546,16 @@ Module StImp.
         <[ {instr_comp c ctx}, w |= AX done={(ctx, false)} w ]> ->
         <[ {Ret (ctx, tt): ctreeW Ctx B (Ctx * unit)}, w |= AX ψ ]> ->
         <[ {instr_prog [[ while c do t done ]] ctx}, w |= φ AU AX ψ ]>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_comp; cbn; intros.
       unfold instr_stateE; rewrite interp_state_unfold_iter.
       eapply aur_bind_r_eq.
       - eapply aur_state_bind_r_eq.
-        + cleft...
+        + cleft; eauto with ticl.
         + cleft; axr_state_ret_eq.
           cdestruct H.
-          apply can_step_not_done in Hs...
-      - cleft...
+          apply can_step_not_done in Hs; eauto with ticl.
+      - cleft; eauto with ticl.
     Qed.
     
     (** Termination lemma for a while loop, lifts the [aul_state_iter_nat] lemma from [State.v] 
@@ -573,7 +573,7 @@ Module StImp.
             else
               <( {Ret (ctx, inr unit tt): ctreeW Ctx B (Ctx * (unit + unit))}, {Obs (Log ctx) tt} |= ψ )>) ->
         <( {instr_prog [[ while c do t done ]] ctx}, {Obs (Log ctx) tt} |= φ AU ψ )>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_comp.
       intros HR Hb H.
       eapply aul_state_iter_nat with
@@ -587,29 +587,29 @@ Module StImp.
                                                                                     w' = Obs (Log ctx') tt /\ Ri ctx' /\ f ctx' < f ctx} ]>
                    else
                      <( {Ret (ctx, inr unit tt): ctreeW Ctx B (Ctx * (unit + unit))}, w |= ψ )>)
-        (f:= fun _ ctx _ => f ctx)...
+        (f:= fun _ ctx _ => f ctx); eauto with ticl.
       - intros [] ctx' w' _ (-> & b' & Hb' & HR').
         destruct b'.
         + (* true *)
           destruct HR'.
           * left.
-            eapply aul_state_bind_r_eq...
-            -- cleft...
-            -- eapply ticll_state_bind_l...
+            eapply aul_state_bind_r_eq; eauto with ticl.
+            -- cleft; eauto with ticl.
+            -- eapply ticll_state_bind_l; eauto with ticl.
           * right.
-            eapply aur_state_bind_r_eq...
-            -- cleft...
-            -- eapply aur_state_bind_r with (R:=fun _ ctx'0 w' => w' = Obs (Log ctx'0) tt /\ Ri ctx'0 /\ f ctx'0 < f ctx')...
+            eapply aur_state_bind_r_eq; eauto with ticl.
+            -- cleft; eauto with ticl.
+            -- eapply aur_state_bind_r with (R:=fun _ ctx'0 w' => w' = Obs (Log ctx'0) tt /\ Ri ctx'0 /\ f ctx'0 < f ctx'); eauto with ticl.
                intros [] ctx_ w_ (-> & HR_ & Hf).
-               apply aur_state_ret...
+               apply aur_state_ret; eauto with ticl.
                exists tt; repeat split; auto.
                constructor.
         + (* false *)
           left.
-          eapply aul_state_bind_r_eq...
-          * cleft...
+          eapply aul_state_bind_r_eq; eauto with ticl.
+          * cleft; eauto with ticl.
           * cbn.
-            apply aul_state_ret...
+            apply aul_state_ret; eauto with ticl.
     Qed.
 
     (** Termination lemma for a while loop (suffix version) lifts the [aur_state_iter_nat] lemma from [State.v] 
@@ -625,7 +625,7 @@ Module StImp.
             else
               <[ {Ret (ctx, tt): ctreeW Ctx B (Ctx * unit)}, {Obs (Log ctx) tt} |= φ AN ψ ]>) ->
         <[ {instr_prog [[ while c do t done ]] ctx}, {Obs (Log ctx) tt} |= φ AU ψ ]>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_comp; intros.
       eapply aur_state_iter_nat with
         (Ri:=fun 'tt ctx w =>
@@ -637,13 +637,13 @@ Module StImp.
                       <[ {instr_stateE (cdenote_prog t) ctx}, {Obs (Log ctx) tt} |= {φ} AU ret {fun '(ctx', _) (w' : WorldW Ctx) =>
                                                                          w' = Obs (Log ctx') tt /\ Ri ctx' /\ f ctx' < f ctx} ]>
                     else <[ {Ret (ctx, tt): ctreeW Ctx B (Ctx * unit)}, {Obs (Log ctx) tt} |= {φ} AN {ψ} ]>))
-        (f:= fun _ ctx _ => f ctx)...
+        (f:= fun _ ctx _ => f ctx); eauto with ticl.
       - intros [] ctx' w' Hd (-> & b' & Hb' & HR).
-        eapply aur_state_bind_r_eq...
-        + cleft...
+        eapply aur_state_bind_r_eq; eauto with ticl.
+        + cleft; eauto with ticl.
         + destruct b'.
           * (* true *)
-            eapply aur_state_bind_r with (R:=fun _ ctx'0 w' => w' = Obs (Log ctx'0) tt /\ Ri ctx'0 /\ f ctx'0 < f ctx')...
+            eapply aur_state_bind_r with (R:=fun _ ctx'0 w' => w' = Obs (Log ctx'0) tt /\ Ri ctx'0 /\ f ctx'0 < f ctx'); eauto with ticl.
             intros [] ctx_ w_ (-> & HR_ & Hf).
             apply aur_state_ret; intuition; constructor.
           * (* false *)
@@ -660,7 +660,7 @@ Module StImp.
             <[ {instr_comp c ctx}, {Obs (Log ctx) tt} |= AX done={(ctx, true)} {Obs (Log ctx) tt} ]>  /\            
             <[ {instr_prog t ctx}, {Obs (Log ctx) tt} |= AX (φ AU ret {fun '(ctx', _) w' => w' = Obs (Log ctx') tt /\ R ctx'}) ]>) ->
       <( {instr_prog [[ while c do t done ]] ctx}, {Obs (Log ctx) tt} |= AG φ )>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_comp. 
       intros; subst.
       eapply ag_state_iter with (R:=fun 'tt ctx w =>
@@ -668,10 +668,10 @@ Module StImp.
                                       <( {instr_prog [[while c do t done ]] ctx}, w |= φ )> /\
                                         <[ {instr_comp c ctx}, w |= AX done={(ctx, true)} w ]>  /\            
                                         <[ {instr_prog t ctx}, w |= AX (φ AU ret {fun '(ctx', _) w' =>
-                                                                                        w' = Obs (Log ctx') tt /\ R ctx'}) ]>)...
+                                                                                        w' = Obs (Log ctx') tt /\ R ctx'}) ]>); eauto with ticl.
       - intros [] ctx' w' Hd (-> & Ht & Hc & HR); intuition.
         rewrite interp_state_bind.
-        eapply anr_bind_r_eq...
+        eapply anr_bind_r_eq; eauto with ticl.
         cbn; rewrite interp_state_bind.
         eapply axr_aur_bind_r; [exact HR |].
         intros [ctx_ u] w'' (-> & HR'); destruct u; cbn.

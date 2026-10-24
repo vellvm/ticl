@@ -69,7 +69,7 @@ Local Open Scope list_scope.
 
 (** ** Events *)
 
-Notation qE := (heapE +' (stateE Ctx.Ctx +' writerE nat)).
+Abbreviation qE := (heapE +' (stateE Ctx.Ctx +' writerE nat)).
 
 (** Memory commands use the shared heap triggers; payload emission is the
     example-specific instruction in the right summand. *)

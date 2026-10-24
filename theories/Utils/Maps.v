@@ -23,7 +23,7 @@ Module Ctx.
   (** Map equations *)
   Lemma lookup_add_eq: forall c (v: nat) m,
     lookup c (add c v m) = Some v.
-  Proof with auto.
+  Proof.
     intros.  
     pose proof (mapsto_add_eq (R:=@eq string) (V:=nat) m c v).
     now apply mapsto_lookup in H.
@@ -32,14 +32,14 @@ Module Ctx.
   Lemma lookup_add_neq: forall c r (v: nat) m,
     r <> c ->
     lookup c (add r v m) = lookup c m.
-  Proof with auto.
+  Proof.
     intros.
     destruct (lookup c (add r v m)) eqn:Hc;
       destruct (lookup c m) eqn: Hr; rewrite ?mapsto_lookup in *.
-    - apply mapsto_add_neq with (R:=eq) in Hc...
+    - apply mapsto_add_neq with (R:=eq) in Hc; auto.
       rewrite <- mapsto_lookup in *.
-      rewrite Hc in Hr; inv Hr...
-    - apply mapsto_add_neq with (R:=eq) in Hc...
+      rewrite Hc in Hr; inv Hr; auto.
+    - apply mapsto_add_neq with (R:=eq) in Hc; auto.
       rewrite <- mapsto_lookup in Hc.
       rewrite Hc in Hr; inv Hr.
     - rewrite mapsto_add_neq with (R:=eq) in Hr. 
@@ -58,25 +58,25 @@ Module Ctx.
   Lemma assert1_add_eq: forall c (v: nat) m p,
       p v ->
       assert1 c (add c v m) p.
-  Proof with eauto.
+  Proof.
     intros.
     unfold assert1.
     pose proof (mapsto_add_eq (R:=@eq string) (V:=nat) m c v).
     apply mapsto_lookup in H0.
-    rewrite H0...
+    rewrite H0; eauto.
   Qed.
 
   Lemma assert1_add_neq: forall c1 c2 (v: nat) m p,
       assert1 c1 m p ->
       c1 <> c2 ->
       assert1 c1 (add c2 v m) p.
-  Proof with eauto.
+  Proof.
     intros.
     unfold assert1 in *.
     destruct H as (v1 & Hc1 & Hv1).    
-    exists v1; split...
+    exists v1; split; eauto.
     rewrite mapsto_lookup with (R:=@eq string) in Hc1 |- *.
-    apply mapsto_add_neq with (R:=@eq string)...
+    apply mapsto_add_neq with (R:=@eq string); eauto.
     Unshelve.
     typeclasses eauto.
   Qed.
@@ -85,17 +85,17 @@ Module Ctx.
       c1 <> c2 ->
       p v1 v2 ->
       assert2 c1 c2 (add c1 v1 (add c2 v2 m)) p.
-  Proof with eauto.
+  Proof.
     intros.
     unfold assert2.
     pose proof (mapsto_add_eq (R:=@eq string) (V:=nat) (add c2 v2 m) c1 v1) as H1.
     apply mapsto_lookup in H1.
     assert (H2: lookup c2 (add c1 v1 (add c2 v2 m)) = Some v2).
     - rewrite mapsto_lookup with (R:=eq).
-      apply mapsto_add_neq...
+      apply mapsto_add_neq; eauto.
       apply mapsto_add_eq.
     - exists v1, v2.
-      rewrite H1, H2...
+      rewrite H1, H2; eauto.
       Unshelve.
       typeclasses eauto.
   Qed.

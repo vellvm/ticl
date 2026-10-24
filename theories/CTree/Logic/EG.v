@@ -26,16 +26,16 @@ Section BasicLemmas.
   Lemma eg_vis: forall {Y} (e: E Y) (k: Y -> ctree E B X) w φ,
       (<( {Vis e k}, w |= φ )> /\ exists v, <( {k v}, {Obs e v} |= EG φ )>) <->
          <( {Vis e k}, w |= EG φ )>.
-  Proof with eauto with ticl.
+  Proof.
     split; intros.
     - destruct H as (Hφ & v & H).
-      csplit...
-      exists (k v), (Obs e v); split...
+      csplit; eauto with ticl.
+      exists (k v), (Obs e v); split; eauto with ticl.
       apply ticll_not_done in Hφ.
       apply ktrans_vis.
-      exists v; split2...
+      exists v; split2; eauto with ticl.
     - cdestruct H.
-      split...
+      split; eauto with ticl.
       apply ktrans_vis in TR as (v & -> & Heqt & ?).
       rewrite <- Heqt in H.
       exists v.
@@ -46,17 +46,17 @@ Section BasicLemmas.
   Lemma eg_brS: forall {Y} (c: B Y) (k: Y -> ctree E B X) w φ,
       (<( {BrS c k}, w |= φ )> /\ exists (y: Y), <( {k y}, w |= EG φ )>) <->
         <( {BrS c k}, w |= EG φ )>.
-  Proof with eauto with ticl.
+  Proof.
     split; intros.
     - destruct H as (Hφ & y & H).
-      csplit...
-      exists (k y), w; split...
+      csplit; eauto with ticl.
+      exists (k y), w; split; eauto with ticl.
       apply ticll_not_done in Hφ.
       apply ktrans_brS.
-      exists y...
+      exists y; eauto with ticl.
     - cdestruct H.
       apply ktrans_brS in TR as (y & Heqt & -> & ?).
-      split...
+      split; eauto with ticl.
       rewrite Heqt in H.
       exists y.
       apply H.
@@ -66,16 +66,16 @@ Section BasicLemmas.
   Lemma eg_step: forall (t: ctree E B X) w φ,
       (<( {Step t}, w |= φ )> /\ <( t, w |= EG φ )>) <->
         <( {Step t}, w |= EG φ )>.
-  Proof with eauto with ticl.
+  Proof.
     split; intros.
     - destruct H as (Hφ & H).
-      csplit...
-      exists t, w; split...
+      csplit; eauto with ticl.
+      exists t, w; split; eauto with ticl.
       apply ticll_not_done in Hφ.
-      apply ktrans_step...
+      apply ktrans_step; eauto with ticl.
     - cdestruct H.
       apply ktrans_step in TR as (Heqt & -> & ?).
-      split...
+      split; eauto with ticl.
       now rewrite Heqt in H.
   Qed.
 
@@ -85,11 +85,11 @@ Section BasicLemmas.
       <( {Br c k}, w |= φ )> ->
       (exists y t' w', |k y, w| ↦ |t', w'| /\ <( t', w' |= EG φ )>) ->
       <( {Br c k}, w |= EG φ )>.
-  Proof with eauto with ticl.
+  Proof.
     intros * Hφ (y & t' & w' & TR & H).
-    csplit...
-    exists t', w'; split...
-    apply ktrans_br...
+    csplit; eauto with ticl.
+    exists t', w'; split; eauto with ticl.
+    apply ktrans_br; eauto with ticl.
   Qed.
 
   (** Inversion of [EG φ] at a hidden branch: some branch has a successor satisfying [EG φ]. *)
@@ -97,10 +97,10 @@ Section BasicLemmas.
       <( {Br c k}, w |= EG φ )> ->
       <( {Br c k}, w |= φ )> /\
       (exists y t' w', |k y, w| ↦ |t', w'| /\ <( t', w' |= EG φ )>).
-  Proof with eauto with ticl.
+  Proof.
     intros * H.
-    cdestruct H; split...
-    apply ktrans_br in TR as (y & TR)...
+    cdestruct H; split; eauto with ticl.
+    apply ktrans_br in TR as (y & TR); eauto with ticl.
   Qed.
 
   (** A stuck tree does not satisfy [EG φ]; it does not step. *)

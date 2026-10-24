@@ -52,7 +52,7 @@ Module HeapImp.
 
   Record Mem := { store: Store; heap: Heap }.
 
-  Notation memE := (stateE Mem).
+  Abbreviation memE := (stateE Mem).
   Opaque lookup.
 
   (** Convenience: update just the store, preserving the heap *)
@@ -389,28 +389,28 @@ Module HeapImp.
   Section Lemmas.
     Context {B: Type -> Type}.
     (** Fix the branch signature of the denotations for this section. *)
-    Local Notation instr_exp := (@instr_exp B).
-    Local Notation instr_comp := (@instr_comp B).
-    Local Notation instr_prog := (@instr_prog B).
-    Local Notation instr_stateE := (@instr_stateE Mem B).
-    Local Notation log := (@log Mem B).
+    Local Abbreviation instr_exp := (@instr_exp B).
+    Local Abbreviation instr_comp := (@instr_comp B).
+    Local Abbreviation instr_prog := (@instr_prog B).
+    Local Abbreviation instr_stateE := (@instr_stateE Mem B).
+    Local Abbreviation log := (@log Mem B).
 
     (** Utility lemmas *)
     Lemma var_eq{X}: forall (p: ctreeW Mem B X) c v m,
         lookup c (store m) = Some v ->      
         <( p, {Obs (Log m) tt} |= obs <p{ c =? v }> )>.
-    Proof with eauto with ticl.
+    Proof.
       intros.
-      apply ticll_vis... 
+      apply ticll_vis; eauto with ticl. 
     Qed.
 
     Lemma var_ge{X}: forall (p: ctreeW Mem B X) c v v' m,
         v' >= v ->
         lookup c (store m) = Some v' ->
         <( p, {Obs (Log m) tt} |= obs <p{ c >=? v }> )>.
-    Proof with eauto with ticl.
+    Proof.
       intros.
-      apply ticll_vis...
+      apply ticll_vis; eauto with ticl.
       constructor.
       exists v'; intuition.
     Qed.
@@ -419,9 +419,9 @@ Module HeapImp.
         v' <= v ->
         lookup c (store m) = Some v' ->
         <( p, {Obs (Log m) tt} |= obs <p{ c <=? v }> )>.
-    Proof with eauto with ticl.
+    Proof.
       intros.
-      apply ticll_vis...
+      apply ticll_vis; eauto with ticl.
       constructor.
       exists v'; intuition.
     Qed.
@@ -432,10 +432,10 @@ Module HeapImp.
     Lemma axr_state_ret_eq{E Σ W X} (h: E ~> stateT Σ (ctreeW W B)): forall (x: X) σ (w: WorldW W),
         not_done w ->
         <[ {interp_state h (Ret x: ctree E B X) σ}, w |= AX done= {(σ, x)} w ]>.
-    Proof with eauto with ticl.
+    Proof.
       intros.
       rewrite interp_state_ret.
-      apply axr_ret...
+      apply axr_ret; eauto with ticl.
     Qed.
 
     (** Comparing [x] and [c] returns a boolean [b] in one step *)
@@ -444,20 +444,20 @@ Module HeapImp.
         b = Nat.ltb x v ->
         not_done w ->
         <[ {instr_comp <b{ x <? c }> mem}, {w} |= AX (done= {(mem, b)} {w}) ]>.
-    Proof with eauto with ticl.
+    Proof.
       intros.
       Opaque Nat.ltb.
       unfold instr_comp, instr_stateE; cbn.
-      eapply anr_state_bind_r_eq...
-      - apply axr_state_ret_eq...
-      - eapply anr_state_bind_r_eq...
-        + eapply anr_state_bind_r_eq...
+      eapply anr_state_bind_r_eq; eauto with ticl.
+      - apply axr_state_ret_eq; eauto with ticl.
+      - eapply anr_state_bind_r_eq; eauto with ticl.
+        + eapply anr_state_bind_r_eq; eauto with ticl.
           * unfold instr_stateE; rewrite interp_state_get.
-            apply axr_ret...
+            apply axr_ret; eauto with ticl.
           * setoid_rewrite H.
-            apply axr_state_ret_eq...
+            apply axr_state_ret_eq; eauto with ticl.
         + rewrite H0.
-          apply axr_state_ret_eq...
+          apply axr_state_ret_eq; eauto with ticl.
     Qed.
       
     (** Constant expressions are evaluated to the constant in one step *)
@@ -481,16 +481,16 @@ Module HeapImp.
         w = w' ->
         not_done w ->
         <[ {instr_exp <e{ c + v1 }> mem}, w |= AX done= {(mem', v2)} w' ]>.
-    Proof with eauto with ticl.
+    Proof.
       intros; subst.
       unfold instr_exp, instr_stateE; cbn.
       rewrite bind_bind.
       eapply anr_state_bind_r_eq.
       - unfold instr_stateE; rewrite interp_state_get.
-        apply axr_ret...
+        apply axr_ret; eauto with ticl.
       - setoid_rewrite H.
         rewrite ?bind_ret_l.
-        apply axr_state_ret_eq...
+        apply axr_state_ret_eq; eauto with ticl.
     Qed.
 
     (** Subtracting [v1] from [c] returns [v2] in one step *)
@@ -501,16 +501,16 @@ Module HeapImp.
         w = w' ->
         not_done w ->
         <[ {instr_exp <e{ c - v1 }> mem}, w |= AX done= {(mem', v2)} w' ]>.
-    Proof with eauto with ticl.
+    Proof.
       intros; subst.
       unfold instr_exp, instr_stateE; cbn.
       rewrite bind_bind.
       eapply anr_state_bind_r_eq.
       - unfold instr_stateE; rewrite interp_state_get.
-        apply axr_ret...
+        apply axr_ret; eauto with ticl.
       - setoid_rewrite H.
         rewrite ?bind_ret_l.
-        apply axr_state_ret_eq...
+        apply axr_state_ret_eq; eauto with ticl.
     Qed.
     
     (** * Variable assignment: structural temporal lemmas *)
@@ -523,15 +523,15 @@ Module HeapImp.
         <( {log mem'}, w |= ψ )> ->
         R (mem', tt) (Obs (Log mem') tt) ->
         <[ {instr_prog <{ x := a }> mem}, w |= ψ AU ret R ]>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_exp.
       intros; cbn.
       eapply aur_state_bind_r_eq.
-      - cleft...
+      - cleft; eauto with ticl.
       - eapply aur_state_bind_r_eq.
-        + cleft; apply anr_get...
-          csplit; apply ticll_not_done in H0...
-        + apply aur_put...
+        + cleft; apply anr_get; eauto with ticl.
+          csplit; apply ticll_not_done in H0; eauto with ticl.
+        + apply aur_put; eauto with ticl.
     Qed.
 
     (** A variable write [x := a] eventually (prefix) [AU] returns, where [r] is the evaluation of [a]. 
@@ -543,15 +543,15 @@ Module HeapImp.
         <( {log mem'}, w |= ψ )> ->
         <( {Ret (mem', tt): ctreeW Mem B (Mem * unit)}, {Obs (Log mem') tt} |= φ )> ->
         <( {instr_prog <{ x := a }> mem}, w |= ψ AU φ )>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_exp.
       intros; cbn.
       eapply aul_state_bind_r_eq.
-      - cleft...
+      - cleft; eauto with ticl.
       - eapply aul_state_bind_r_eq.
-        + cleft; apply anr_get...
-          csplit; apply ticll_not_done in H0...
-        + apply aul_put...
+        + cleft; apply anr_get; eauto with ticl.
+          csplit; apply ticll_not_done in H0; eauto with ticl.
+        + apply aul_put; eauto with ticl.
     Qed.
 
     (** * Heap write: structural temporal lemmas *)
@@ -563,17 +563,17 @@ Module HeapImp.
         <( {log mem'}, w |= ψ )> ->
         R (mem', tt) (Obs (Log mem') tt) ->
         <[ {instr_prog (CHeapWrite ae ve) mem}, w |= ψ AU ret R ]>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_exp.
       intros; cbn.
       eapply aur_state_bind_r_eq.
-      - cleft...
+      - cleft; eauto with ticl.
       - eapply aur_state_bind_r_eq.
-        + cleft...
+        + cleft; eauto with ticl.
         + eapply aur_state_bind_r_eq.
-          * cleft; apply anr_get...
-            csplit; apply ticll_not_done in H1...
-          * apply aur_put...
+          * cleft; apply anr_get; eauto with ticl.
+            csplit; apply ticll_not_done in H1; eauto with ticl.
+          * apply aur_put; eauto with ticl.
     Qed.
 
     (** A heap write [*a := v] eventually (prefix) [AU] returns. *)
@@ -584,17 +584,17 @@ Module HeapImp.
         <( {log mem'}, w |= ψ )> ->
         <( {Ret (mem', tt): ctreeW Mem B (Mem * unit)}, {Obs (Log mem') tt} |= φ )> ->
         <( {instr_prog (CHeapWrite ae ve) mem}, w |= ψ AU φ )>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_exp.
       intros; cbn.
       eapply aul_state_bind_r_eq.
-      - cleft...
+      - cleft; eauto with ticl.
       - eapply aul_state_bind_r_eq.
-        + cleft...
+        + cleft; eauto with ticl.
         + eapply aul_state_bind_r_eq.
-          * cleft; apply anr_get...
-            csplit; apply ticll_not_done in H1...
-          * apply aul_put...
+          * cleft; apply anr_get; eauto with ticl.
+            csplit; apply ticll_not_done in H1; eauto with ticl.
+          * apply aul_put; eauto with ticl.
     Qed.
 
     (** * Heap free: structural temporal lemmas *)
@@ -605,15 +605,15 @@ Module HeapImp.
         <( {log mem'}, w |= ψ )> ->
         R (mem', tt) (Obs (Log mem') tt) ->
         <[ {instr_prog (CHeapFree ae) mem}, w |= ψ AU ret R ]>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_exp.
       intros; cbn.
       eapply aur_state_bind_r_eq.
-      - cleft...
+      - cleft; eauto with ticl.
       - eapply aur_state_bind_r_eq.
-        + cleft; apply anr_get...
-          csplit; apply ticll_not_done in H0...
-        + apply aur_put...
+        + cleft; apply anr_get; eauto with ticl.
+          csplit; apply ticll_not_done in H0; eauto with ticl.
+        + apply aur_put; eauto with ticl.
     Qed.
 
     (** A heap free eventually (prefix) [AU] returns. *)
@@ -623,15 +623,15 @@ Module HeapImp.
         <( {log mem'}, w |= ψ )> ->
         <( {Ret (mem', tt): ctreeW Mem B (Mem * unit)}, {Obs (Log mem') tt} |= φ )> ->
         <( {instr_prog (CHeapFree ae) mem}, w |= ψ AU φ )>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_exp.
       intros; cbn.
       eapply aul_state_bind_r_eq.
-      - cleft...
+      - cleft; eauto with ticl.
       - eapply aul_state_bind_r_eq.
-        + cleft; apply anr_get...
-          csplit; apply ticll_not_done in H0...
-        + apply aul_put...
+        + cleft; apply anr_get; eauto with ticl.
+          csplit; apply ticll_not_done in H0; eauto with ticl.
+        + apply aul_put; eauto with ticl.
     Qed.
     
     (** * Sequence: structural temporal lemmas *)
@@ -685,12 +685,12 @@ Module HeapImp.
          else
            <( {instr_prog f mem}, w |= φ AU ψ )>) ->
         <( {instr_prog <{ if c then t else f }> mem}, w |= φ AU ψ )>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_comp. 
       intros; cbn.
       eapply aul_state_bind_r_eq.
-      - cleft...
-      - destruct b...
+      - cleft; eauto with ticl.
+      - destruct b; eauto with ticl.
     Qed.
 
     Lemma aur_cprog_ite: forall c mem w φ ψ (b: bool) t f,
@@ -700,12 +700,12 @@ Module HeapImp.
          else
            <[ {instr_prog f mem}, w |= φ AU ψ ]>) ->
         <[ {instr_prog <{ if c then t else f }> mem}, w |= φ AU ψ ]>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_comp. 
       intros; cbn.
       eapply aur_state_bind_r_eq.
-      - cleft...
-      - destruct b...
+      - cleft; eauto with ticl.
+      - destruct b; eauto with ticl.
     Qed.
 
     (** * While loops *)
@@ -715,15 +715,15 @@ Module HeapImp.
         <[ {instr_prog t mem}, w |= φ AU AX done={(mem', tt)} w' ]> ->
         <( {instr_prog <{ while c do t done }> mem'}, w' |= φ AU ψ )> ->   
         <( {instr_prog <{ while c do t done }> mem}, w |= φ AU ψ )>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_comp; cbn; intros.
-      apply aul_state_iter_next_eq with tt w' mem'...
+      apply aul_state_iter_next_eq with tt w' mem'; eauto with ticl.
       - eapply aur_state_bind_r_eq.
-        + cleft...
+        + cleft; eauto with ticl.
         + cbn; apply ticll_not_done in H1.
-          eapply aur_state_bind_r_eq...
-          cleft; apply axr_state_ret_eq...
-      - apply ticll_not_done in H1...
+          eapply aur_state_bind_r_eq; eauto with ticl.
+          cleft; apply axr_state_ret_eq; eauto with ticl.
+      - apply ticll_not_done in H1; eauto with ticl.
     Qed.
 
     (** The loop terminates if [c] evaluates to [false] *)
@@ -731,15 +731,15 @@ Module HeapImp.
         <[ {instr_comp c mem}, w |= AX done={(mem, false)} w ]> ->
         <( {Ret (mem, tt): ctreeW Mem B (Mem * unit)}, w |= ψ )> ->
         <( {instr_prog <{ while c do t done }> mem}, w |= φ AU ψ )>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_comp; cbn; intros.
       unfold instr_stateE; rewrite interp_state_unfold_iter.
       eapply aul_bind_r_eq.
       - eapply aur_state_bind_r_eq.
-        + cleft...
+        + cleft; eauto with ticl.
         + apply ticll_not_done in H0.
-          cleft; apply axr_state_ret_eq...
-      - cleft...
+          cleft; apply axr_state_ret_eq; eauto with ticl.
+      - cleft; eauto with ticl.
     Qed.
 
     (** Unroll one iteration of the while loop if [c] evaluates to [true], suffix [AU] version *)
@@ -748,13 +748,13 @@ Module HeapImp.
         <[ {instr_prog t mem}, w |= φ AU AX done={(mem', tt)} w' ]> ->
         <[ {instr_prog <{ while c do t done }> mem'}, w' |= φ AU AX ψ ]> ->   
         <[ {instr_prog <{ while c do t done }> mem}, w |= φ AU AX ψ ]>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_comp; cbn; intros.
-      apply aur_state_iter_next_eq with tt w' mem'...
+      apply aur_state_iter_next_eq with tt w' mem'; eauto with ticl.
       - eapply aur_state_bind_r_eq.
-        + cleft...
+        + cleft; eauto with ticl.
         + cbn. 
-          eapply aur_state_bind_r_eq...
+          eapply aur_state_bind_r_eq; eauto with ticl.
           cleft; apply axr_state_ret_eq.
           now apply aur_not_done in H1.
       - now apply aur_not_done in H1. 
@@ -765,16 +765,16 @@ Module HeapImp.
         <[ {instr_comp c mem}, w |= AX done={(mem, false)} w ]> ->
         <[ {Ret (mem, tt): ctreeW Mem B (Mem * unit)}, w |= AX ψ ]> ->
         <[ {instr_prog <{ while c do t done }> mem}, w |= φ AU AX ψ ]>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_comp; cbn; intros.
       unfold instr_stateE; rewrite interp_state_unfold_iter.
       eapply aur_bind_r_eq.
       - eapply aur_state_bind_r_eq.
-        + cleft...
+        + cleft; eauto with ticl.
         + cleft; apply axr_state_ret_eq.
           cdestruct H.
-          apply can_step_not_done in Hs...
-      - cleft...
+          apply can_step_not_done in Hs; eauto with ticl.
+      - cleft; eauto with ticl.
     Qed.
     
     (** Termination lemma for a while loop, lifts the [aul_state_iter_nat] lemma from [State.v] 
@@ -792,7 +792,7 @@ Module HeapImp.
             else
               <( {Ret (mem, inr unit tt): ctreeW Mem B (Mem * (unit + unit))}, {Obs (Log mem) tt} |= ψ )>) ->
         <( {instr_prog <{ while c do t done }> mem}, {Obs (Log mem) tt} |= φ AU ψ )>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_comp.
       intros HR Hb H.
       eapply aul_state_iter_nat with
@@ -806,29 +806,29 @@ Module HeapImp.
                                                                                     w' = Obs (Log mem') tt /\ Ri mem' /\ f mem' < f mem} ]>
                    else
                      <( {Ret (mem, inr unit tt): ctreeW Mem B (Mem * (unit + unit))}, w |= ψ )>)
-        (f:= fun _ mem _ => f mem)...
+        (f:= fun _ mem _ => f mem); eauto with ticl.
       - intros [] mem' w' _ (-> & b' & Hb' & HR').
         destruct b'.
         + (* true *)
           destruct HR'.
           * left.
-            eapply aul_state_bind_r_eq...
-            -- cleft...
-            -- eapply ticll_state_bind_l...
+            eapply aul_state_bind_r_eq; eauto with ticl.
+            -- cleft; eauto with ticl.
+            -- eapply ticll_state_bind_l; eauto with ticl.
           * right.
-            eapply aur_state_bind_r_eq...
-            -- cleft...
-            -- eapply aur_state_bind_r with (R:=fun _ mem'0 w' => w' = Obs (Log mem'0) tt /\ Ri mem'0 /\ f mem'0 < f mem')...
+            eapply aur_state_bind_r_eq; eauto with ticl.
+            -- cleft; eauto with ticl.
+            -- eapply aur_state_bind_r with (R:=fun _ mem'0 w' => w' = Obs (Log mem'0) tt /\ Ri mem'0 /\ f mem'0 < f mem'); eauto with ticl.
                intros [] mem_ w_ (-> & HR_ & Hf).
                destruct (H _ HR_) as (b_ & Hb_ & HR'_).
-               apply aur_state_ret...
+               apply aur_state_ret; eauto with ticl.
                exists tt; cbn; intuition (eauto with ticl).
         + (* false *)
           left.
-          eapply aul_state_bind_r_eq...
-          * cleft...
+          eapply aul_state_bind_r_eq; eauto with ticl.
+          * cleft; eauto with ticl.
           * cbn.
-            apply aul_state_ret...
+            apply aul_state_ret; eauto with ticl.
     Qed.
 
     (** Termination lemma for a while loop (suffix version) lifts the [aur_state_iter_nat] lemma from [State.v] 
@@ -844,7 +844,7 @@ Module HeapImp.
             else
               <[ {Ret (mem, tt): ctreeW Mem B (Mem * unit)}, {Obs (Log mem) tt} |= φ AN ψ ]>) ->
         <[ {instr_prog <{ while c do t done }> mem}, {Obs (Log mem) tt} |= φ AU ψ ]>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_comp; intros.
       eapply aur_state_iter_nat with
         (Ri:=fun 'tt mem w =>
@@ -856,13 +856,13 @@ Module HeapImp.
                       <[ {instr_stateE (cdenote_prog t) mem}, {Obs (Log mem) tt} |= {φ} AU ret {fun '(mem', _) (w' : WorldW Mem) =>
                                                                          w' = Obs (Log mem') tt /\ Ri mem' /\ f mem' < f mem} ]>
                     else <[ {Ret (mem, tt): ctreeW Mem B (Mem * unit)}, {Obs (Log mem) tt} |= {φ} AN {ψ} ]>))
-        (f:= fun _ mem _ => f mem)...
+        (f:= fun _ mem _ => f mem); eauto with ticl.
       - intros [] mem' w' Hd (-> & b' & Hb' & HR).
-        eapply aur_state_bind_r_eq...
-        + cleft...
+        eapply aur_state_bind_r_eq; eauto with ticl.
+        + cleft; eauto with ticl.
         + destruct b'.
           * (* true *)
-            eapply aur_state_bind_r with (R:=fun _ mem'0 w' => w' = Obs (Log mem'0) tt /\ Ri mem'0 /\ f mem'0 < f mem')...
+            eapply aur_state_bind_r with (R:=fun _ mem'0 w' => w' = Obs (Log mem'0) tt /\ Ri mem'0 /\ f mem'0 < f mem'); eauto with ticl.
             intros [] mem_ w_ (-> & HR_ & Hf).
             destruct (H1 _ HR_) as (b_ & Hb_ & HR'_).
             apply aur_state_ret; cbn; intuition (eauto with ticl).
@@ -880,7 +880,7 @@ Module HeapImp.
             <[ {instr_comp c mem}, {Obs (Log mem) tt} |= AX done={(mem, true)} {Obs (Log mem) tt} ]>  /\            
             <[ {instr_prog t mem}, {Obs (Log mem) tt} |= AX (φ AU ret {fun '(mem', _) w' => w' = Obs (Log mem') tt /\ R mem'}) ]>) ->
       <( {instr_prog <{ while c do t done }> mem}, {Obs (Log mem) tt} |= AG φ )>.
-    Proof with eauto with ticl.
+    Proof.
       unfold instr_prog, instr_comp. 
       intros; subst.
       eapply ag_state_iter with (R:=fun 'tt mem w =>
@@ -888,15 +888,15 @@ Module HeapImp.
                                       <( {instr_prog <{while c do t done }> mem}, w |= φ )> /\
                                         <[ {instr_comp c mem}, w |= AX done={(mem, true)} w ]>  /\            
                                         <[ {instr_prog t mem}, w |= AX (φ AU ret {fun '(mem', _) w' =>
-                                                                                        w' = Obs (Log mem') tt /\ R mem'}) ]>)...
+                                                                                        w' = Obs (Log mem') tt /\ R mem'}) ]>); eauto with ticl.
       - intros [] mem' w' Hd (-> & Ht & Hc & HR); intuition.
         rewrite interp_state_bind.
-        eapply anr_bind_r_eq...
+        eapply anr_bind_r_eq; eauto with ticl.
         cbn; rewrite interp_state_bind.
         eapply axr_aur_bind_r; [exact HR |].
         intros [mem_ []] w'' (Hd'' & HR').
         destruct (H0 _ HR') as (? & ? & ?).
-        apply aur_state_ret...
+        apply aur_state_ret; eauto with ticl.
         exists tt; subst; cbn; intuition (eauto with ticl).
     Qed.
   End Lemmas.

@@ -252,7 +252,7 @@ Section ExecutionFacts.
     (step : Act -> St -> option (St * Out))
     (Inv : St -> Prop) (initial : St -> Prop).
 
-  Notation valid := (execution_valid (fun a s o s' => step a s = Some (s',o)) initial).
+  Abbreviation valid := (execution_valid (fun a s o s' => step a s = Some (s',o)) initial).
 
   Lemma execution_step (e : Execution St Act Out) k :
     valid e -> step (selected e k) (states e k) = Some (states e (S k),emitted e k).
@@ -299,7 +299,7 @@ Section ExecutionWindow.
     (R : St -> St -> Prop)
     (Hstep : Proper (eq ==> R ==> Roption (RelProd R eq)) step).
 
-  Notation valid := (execution_valid (fun a s o s' => step a s = Some (s',o)) initial).
+  Abbreviation valid := (execution_valid (fun a s o s' => step a s = Some (s',o)) initial).
 
   Lemma execution_window_state (e : Execution St Act Out) lo len s :
     valid e -> R (states e lo) s ->
@@ -377,7 +377,7 @@ Section ExecutionCounter.
     (initial : St -> Prop)
     (counter : St -> nat) (index : W -> nat).
 
-  Notation valid := (execution_valid (fun a s o s' => step a s = Some (s',o)) initial).
+  Abbreviation valid := (execution_valid (fun a s o s' => step a s = Some (s',o)) initial).
 
   Context (Hcounter : forall a s s' o, step a s = Some (s',o) ->
     match o with

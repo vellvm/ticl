@@ -124,18 +124,18 @@ Section CanStepCtrees.
         \/ (exists y w', |t, w| ↦ |Stuck, w'|
                    /\ done_eq y w'
                    /\ can_step (k y) w).
-  Proof with eauto with ticl.
+  Proof.
     unfold can_step; split.
     - intros (k' & w' & TR).
       apply ktrans_bind_inv in TR
           as [(t' & TR' & Hd & ?) |
                (x & w_ & TRr & ? & TRk)].
-      + left; exists t', w'...
-      + right; exists x, w_...
+      + left; exists t', w'; eauto with ticl.
+      + right; exists x, w_; eauto with ticl.
     - intros * [(t' & w' & TR & Hd) |
                  (y & w' & TR & Hd & k_ & w_ & TR_)].
       + exists (x <- t' ;; k x), w'.
-        apply ktrans_bind_l...
+        apply ktrans_bind_l; eauto with ticl.
       + exists k_, w_.
         eapply ktrans_bind_r; eauto.
   Qed.
@@ -159,7 +159,7 @@ Section CanStepCtrees.
       <[ t, w |= AF AX done R ]> ->
       (forall y w, R y w -> can_step (k y) w) ->
       can_step (x <- t ;; k x) w.
-  Proof with eauto with ticl. 
+  Proof. 
     intros * Hau Hk.
     apply can_step_bind.
     induction Hau.
@@ -168,17 +168,17 @@ Section CanStepCtrees.
       specialize (Hdone _ _ TR') as Hd; inv Hd.
       + (* Done x: t returned from Pure *)
         apply ktrans_to_done_inv in TR' as Hinv; destruct Hinv as (Heq & ->).
-        right; exists x, (Done x); split2...
+        right; exists x, (Done x); split2; eauto with ticl.
         now rewrite <- Heq.
       + (* Finish e v x *)
         apply ktrans_to_finish_inv in TR' as Hinv; destruct Hinv as (Heq & ->).
-        right; exists x, (Finish e v x); split2...
+        right; exists x, (Finish e v x); split2; eauto with ticl.
         now rewrite <- Heq.
     - (* StepA *)
       destruct H as (Hp & (t' & w' & TR') & Htr); clear H0.
       pose proof TR' as TR_; cbn in TR_; ddestruction TR_.
-      + left; exists t', w; split...
-      + left; exists t', (Obs e v); split...
+      + left; exists t', w; split; eauto with ticl.
+      + left; exists t', (Obs e v); split; eauto with ticl.
       + (* the successor is done: the successor [Stuck] must be a [MatchA] of [AX done R],
            but a stuck tree cannot step; contradiction *)
         exfalso.

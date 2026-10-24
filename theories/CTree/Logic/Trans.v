@@ -90,19 +90,19 @@ Section CTreeTrans.
                  \/ (exists Y (e: E Y) (x: Y), l = obs e x /\ not_done w /\ w' = Obs e x)
                  \/ (exists (x: X), l = val x /\ w = Pure /\ t' ≅ Stuck /\ w' = Done x)
                  \/ (exists Y (e: E Y) (v: Y) (x: X), l = val x /\ w = Obs e v /\ t' ≅ Stuck /\ w' = Finish e v x))).
-  Proof with eauto with ticl.
+  Proof.
     split; intro H.
     - inv H.
       + exists τ; split; auto.
       + exists (obs e v); split; auto.
-        right; left; exists Y, e, v...
+        right; left; exists Y, e, v; eauto with ticl.
       + exists (val x); split; auto.
         right; right; left; exists x; split2; auto.
         now apply trans_val_inv in H0.
       + exists (val x); split; auto.
         right; right; right; exists Y, e, v, x; split2; auto.
         now apply trans_val_inv in H0.
-    - destruct H as (l & TR & [(-> & Hd & ->) | [(Y & e & x & -> & Hd & ->) | [(x & -> & -> & Hs & ->) | (Y & e & v & x & -> & -> & Hs & ->)]]])...
+    - destruct H as (l & TR & [(-> & Hd & ->) | [(Y & e & x & -> & Hd & ->) | [(x & -> & -> & Hs & ->) | (Y & e & v & x & -> & -> & Hs & ->)]]]); eauto with ticl.
   Qed.
 
   (** [equ eq] is a Kripke setoid for [ktrans]. *)
@@ -372,25 +372,25 @@ Section CTreeTrans.
         (exists y w_, |t, w| ↦ |Stuck, w_|
                  /\ done_eq y w_
                  /\ |k y, w| ↦ |u, w'|).
-  Proof with eauto with ticl.
+  Proof.
     intros X Y w w' t u k TR; cbn in *.
     ddestruction TR.
     - apply trans_bind_inv in H0 as [(Hv & t_ & TR & Heq) | (x & TRv & TRk)].
-      + left; exists t_; split2...
+      + left; exists t_; split2; eauto with ticl.
       + right; dependent destruction H.
-        * exists x, (Done x); split2...
-        * exists x, (Finish e v x); split2...
+        * exists x, (Done x); split2; eauto with ticl.
+        * exists x, (Finish e v x); split2; eauto with ticl.
     - apply trans_bind_inv in H0 as [(Hv & t_ & TR & Heq) | (x & TRv & TRk)].
-      + left; exists t_; split2...
+      + left; exists t_; split2; eauto with ticl.
       + right; dependent destruction H.
-        * exists x, (Done x); split2...
-        * exists x, (Finish e0 v0 x); split2...
+        * exists x, (Done x); split2; eauto with ticl.
+        * exists x, (Finish e0 v0 x); split2; eauto with ticl.
     - apply trans_bind_inv in H as [(Hv & t_ & TR & Heq) | (x' & TRv & TRk)].
       + exfalso; apply Hv; constructor.
-      + right; exists x', (Done x'); split2...
+      + right; exists x', (Done x'); split2; eauto with ticl.
     - apply trans_bind_inv in H as [(Hv & t_ & TR & Heq) | (x' & TRv & TRk)].
       + exfalso; apply Hv; constructor.
-      + right; exists x', (Finish e v x'); split2...
+      + right; exists x', (Finish e v x'); split2; eauto with ticl.
   Qed.
   Hint Resolve ktrans_bind_inv: ticl.
 

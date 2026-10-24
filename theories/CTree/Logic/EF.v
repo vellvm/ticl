@@ -27,9 +27,9 @@ Section BasicLemmas.
   Lemma eul_stuck: forall w φ ψ,
       <( {Stuck: ctree E B X}, w |= φ EU ψ )> <->
       <( {Stuck: ctree E B X}, w |= ψ )>.
-  Proof with auto with ticl.
+  Proof.
     split; intros.
-    - cdestruct H...
+    - cdestruct H; auto with ticl.
       cdestruct H.
       now apply ktrans_stuck in TR.
     - now cleft. 
@@ -39,9 +39,9 @@ Section BasicLemmas.
   Lemma eur_stuck: forall w φ ψ,
       <[ {Stuck: ctree E B X}, w |= φ EU ψ ]> <->
       <[ {Stuck: ctree E B X}, w |= ψ ]>.
-  Proof with auto with ticl.
+  Proof.
     split; intros.
-    - cdestruct H...
+    - cdestruct H; auto with ticl.
       cdestruct H.
       now apply ktrans_stuck in TR.
     - now cleft. 
@@ -51,25 +51,25 @@ Section BasicLemmas.
   Lemma eul_ret: forall (r: X) w φ ψ,
       <( {Ret r: ctree E B X}, w |= ψ \/ φ EN ψ )> <->
       <( {Ret r: ctree E B X}, w |= φ EU ψ )>.
-  Proof with auto with ticl.
+  Proof.
     split; intros H; cdestruct H.
     - now cleft.
-    - cright; csplit; cdestruct H...
+    - cright; csplit; cdestruct H; auto with ticl.
       assert (Hd: not_done w) by now apply ktrans_not_done in TR.
       inv Hd.
       + apply ktrans_done in TR as (-> & ?).
         exists (Stuck), (Done r); split.
-        * apply ktrans_done...
+        * apply ktrans_done; auto with ticl.
         * rewrite H0 in H.
           now cleft.
       + apply ktrans_finish in TR as (-> & ?).
         exists (Stuck), (Finish e v r); split.
-        * apply ktrans_finish...
+        * apply ktrans_finish; auto with ticl.
         * rewrite H0 in H.
           now cleft.
     - now cleft.
     - cdestruct H.
-      cright; csplit...
+      cright; csplit; auto with ticl.
       assert (Hd: not_done w) by now apply ktrans_not_done in TR.
       inv Hd.
       + apply ktrans_done in TR as (-> & ?).
@@ -86,20 +86,20 @@ Section BasicLemmas.
   Lemma eur_ret: forall (r: X) w φ ψ,
       <[ {Ret r: ctree E B X}, w |= ψ \/ φ EN ψ ]> <->
       <[ {Ret r: ctree E B X}, w |= φ EU ψ ]>.
-  Proof with auto with ticl.
+  Proof.
     split; intros H; cdestruct H.
     - now cleft.
-    - cright; csplit; cdestruct H...
+    - cright; csplit; cdestruct H; auto with ticl.
       assert (Hd: not_done w) by now apply ktrans_not_done in TR.
       inv Hd.
       + apply ktrans_done in TR as (-> & ?).
         exists (Stuck), (Done r); split.
-        * apply ktrans_done...
+        * apply ktrans_done; auto with ticl.
         * rewrite H0 in H.
           now cleft.
       + apply ktrans_finish in TR as (-> & ?).
         exists (Stuck), (Finish e v r); split.
-        * apply ktrans_finish...
+        * apply ktrans_finish; auto with ticl.
         * rewrite H0 in H.
           now cleft.
     - now cleft.
@@ -109,15 +109,15 @@ Section BasicLemmas.
       + apply ktrans_done in TR as (-> & ?).
         rewrite H0 in H.
         apply eur_stuck in H.
-        cright; csplit...
-        exists (Stuck), (Done r); split...
-        apply ktrans_done...
+        cright; csplit; auto with ticl.
+        exists (Stuck), (Done r); split; auto with ticl.
+        apply ktrans_done; auto with ticl.
       + apply ktrans_finish in TR as (-> & ?).
         rewrite H0 in H.
         apply eur_stuck in H.
-        cright; csplit...
-        exists (Stuck), (Finish e v r); split...
-        apply ktrans_finish...
+        cright; csplit; auto with ticl.
+        exists (Stuck), (Finish e v r); split; auto with ticl.
+        apply ktrans_finish; auto with ticl.
   Qed.
 
   (** A hidden branch satisfies prefix [φ EU ψ] if it satisfies [φ] and some

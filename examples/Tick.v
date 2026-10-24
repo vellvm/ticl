@@ -43,12 +43,12 @@ Section TickTock.
   (** There exists an infinite path that will allways [tock]. *)
   Example eg_tock:
     <( tocker, {Obs Tock tt} |= EG vis {fun _ e _ => existT _ _ e = existT _ _ Tock} )>.
-  Proof with auto with ticl.
+  Proof.
     unfold tocker.
-    apply eg_iter with (R:=fun 'tt w => w = Obs Tock tt)...
+    apply eg_iter with (R:=fun 'tt w => w = Obs Tock tt); auto with ticl.
     intros [] w ->.
     split.
-    - csplit...
+    - csplit; auto with ticl.
     - unfold CTree.map, brS2.
       rewrite bind_br; setoid_rewrite bind_step.
       apply enr_brS; split; [csplit; eauto with ticl|].
@@ -56,14 +56,14 @@ Section TickTock.
       rewrite bind_br; setoid_rewrite bind_step.
       apply eur_brS.
       right; split.
-      + csplit...
+      + csplit; auto with ticl.
       + exists false; cbn.
         unfold tock, CTree.trigger.
         rewrite bind_vis.
         apply eur_vis.
         right.
         split.
-        * csplit...
+        * csplit; auto with ticl.
         * exists tt.
           rewrite bind_ret_l.
           apply eur_ret.
