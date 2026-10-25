@@ -1118,24 +1118,16 @@ Proof.
   rewrite Hlogs, Ereclaim; cbn [event_obs]; now left.
 Qed.
 
-From Stdlib Require Import List Lia Arith.PeanoNat Classes.RelationPairs.
-From ExtLib Require Import Data.Option.
+From Stdlib Require Import List Lia Arith.PeanoNat Fin Sorting.Permutation.
 From Coinduction Require Import all.
 From TICL Require Import
   Lang.CSL.Mod
   CTree.Core
   CTree.Events.Writer
-  CTree.Logic.Trans
-  CTree.Logic.CanStep
-  CTree.Logic.AF
-  CTree.Logic.AG
-  CTree.Logic.AX
-  CTree.Logic.Bind
-  CTree.Logic.Iter
+  CTree.Interp.Yield.Fair
   CTree.Logic.State
-  CTree.Logic.Trace
-  CTree.Logic.Yield
-  Logic.Core.
+  Logic.Core
+  Utils.Relations.
 From examples Require Import CSL.Allocator.Layout CSL.Allocator.Program
   CSL.Allocator.Model CSL.Allocator.Execution.
 
@@ -1146,174 +1138,521 @@ Local Open Scope list_scope.
 Local Open Scope nat_scope.
 Local Typeclasses Transparent equ sbisim.
 
-(** ** Round-robin recurrence of the two-client demo.
+(** ** Recurrence of every observation kind under any fair scheduler.
 
-    The prefix of 57 turns and the repeating 42-turn cycle are executable
-    certificates in the shape of [model_rr_emit_batches] / [model_rr_agaf];
-    the turn lists (one entry per scheduler step, [None] for a silent turn),
-    boundary heap and boundary state are section-local witnesses. *)
+    The fairness inversion rule [agaf_pool_simulation_fair] wants an
+    invariant, a well-founded rank and a helpful slot on ghost data that
+    projects to model states.  The ghost is the model state with the
+    ownership lists of [allocator_view]; the rank is
 
-Local Lemma after_logs_app {W} (xs ys : list W) w :
-  after_logs (xs ++ ys) w = after_logs ys (after_logs xs w).
-Proof.
-  revert w; induction xs as [|o xs IH]; intro w; cbn [after_logs List.app];
-    [reflexivity | apply IH].
-Qed.
+      (occurrence bound left, block-position potential, helpful distance)
 
-(** Scheduler steps and observations are both transparent to [AG (AF _)]. *)
-Lemma agaf_emit_turns {W : Type} {B : Type -> Type} {X : Type}
-  turns (t : ctreeW W B X) w P :
-  not_done w ->
-  <( t, {after_logs (List.flat_map event_obs turns) w} |= AG (AF visW {P}) )> ->
-  <( {emit_turns turns t}, w |= AG (AF visW {P}) )>.
-Proof.
-  revert w; induction turns as [|ev rest IH]; intros w Hd H; [exact H|].
-  cbn [emit_turns List.flat_map] in *.
-  rewrite after_logs_app in H.
-  assert (Htail : <( {emit_list (event_obs ev) (emit_turns rest t)}, w
-    |= AG (AF visW {P}) )>).
-  { apply agaf_emit_list; [exact Hd|].
-    apply IH; [apply after_logs_not_done; exact Hd|exact H]. }
-  apply (proj1 (ag_step _ _ _)); split; [|exact Htail].
-  apply aul_step; right; split; [apply ticll_top; exact Hd|].
-  pose proof Htail as HH; cdestruct HH; assumption.
-Qed.
+    under [rank3].  Every block move that is not itself a [kind] event drops
+    the potential; the helpful actor is the one that can move a block next,
+    and each of its silent turns drops its distance to that move by one. *)
 
-Section AllocatorRecurrence.
+Definition mboxh (h : Heap) (client : bool) : nat :=
+  match h (mailbox 1 client) with Some m => m | None => 0 end.
+Definition mbox (s : AState) (client : bool) : nat := mboxh (aheap s) client.
+Definition nH (s : AState) : nat :=
+  length (held (remote0_state s)) + length (held (remote1_state s)).
+Definition is_poll (pc : remote_pc) : bool :=
+  match pc with RPoll => true | _ => false end.
 
-(** These lists use left numerals so that symbolic counters compute without
-    inspecting the counter.  [n+c] is, of course, the prescribed [c+n]. *)
-Let silent (k : nat) : list (option (CSLObs (nat * nat))) := List.repeat None k.
-Let turn_of (tag block idx : nat) : list (option (CSLObs (nat * nat))) :=
-  [Some (inr (stamp (tag,block) idx))].
+Lemma mailbox_nodes_length m : length (mailbox_nodes m) = if Nat.eqb m 0 then 0 else 1.
+Proof. unfold mailbox_nodes; destruct (Nat.eqb m 0); reflexivity. Qed.
+Lemma held_length pc : length (held pc) = if is_poll pc then 0 else 1.
+Proof. destruct pc; reflexivity. Qed.
 
-Let demo_prefix (c : nat) : list (option (CSLObs (nat * nat))) :=
-  silent 11 ++ turn_of tag_alloc 6 c ++ silent 2 ++ turn_of tag_alloc 8 (1+c) ++
-  silent 7 ++ turn_of tag_retire 6 (2+c) ++ silent 1 ++ turn_of tag_retry 8 (3+c) ++
-  silent 8 ++ turn_of tag_retire 8 (4+c) ++ silent 10 ++ turn_of tag_reclaim 8 (5+c) ++
-  silent 2 ++ turn_of tag_reclaim 6 (6+c) ++ silent 5 ++ turn_of tag_alloc 6 (7+c) ++
-  silent 2 ++ turn_of tag_alloc 8 (8+c).
+(** Block-position potential.  Moves: alloc L->mailbox, pickup mailbox->held,
+    retire held->R, detach R->D, reclaim D->L; the coefficients make every
+    move that is not a [kind] event strictly decreasing. *)
+Definition phi (kind : nat) (s : AState) (L R D : list nat) : nat :=
+  let mailboxes := length (mailbox_nodes (mbox s false)) + length (mailbox_nodes (mbox s true)) in
+  if Nat.eqb kind tag_alloc then 4 * mailboxes + 3 * nH s + 2 * length R + length D
+  else if Nat.eqb kind tag_retire then mailboxes + 2 * length L + 3 * length D + 4 * length R
+  else length R + 2 * nH s + 3 * mailboxes + 4 * length L.
 
-Let demo_cycle_turns (c : nat) : list (option (CSLObs (nat * nat))) :=
-  silent 7 ++ turn_of tag_retire 6 c ++ silent 1 ++ turn_of tag_retry 8 (1+c) ++
-  silent 8 ++ turn_of tag_retire 8 (2+c) ++ silent 10 ++ turn_of tag_reclaim 8 (3+c) ++
-  silent 2 ++ turn_of tag_reclaim 6 (4+c) ++ silent 5 ++ turn_of tag_alloc 6 (5+c) ++
-  silent 2 ++ turn_of tag_alloc 8 (6+c).
+(** Owner block moves enabled at the points of its cycle:
+    1 = OCAS (detach), 2 = ODrain (reclaim), 3 = OOffer false, 4 = OOffer true.
+    Stated on the heap so that a silent turn leaves them syntactically alone. *)
+Definition en1 (R : list nat) : bool := 0 <? length R.
+Definition en2 (D : list nat) : bool := 0 <? length D.
+Definition en3 (h : Heap) (L : list nat) : bool := (0 <? length L) && (mboxh h false =? 0).
+Definition en4 (h : Heap) (L : list nat) : bool := (0 <? length L) && (mboxh h true =? 0).
+Definition owner_work (h : Heap) (L R D : list nat) : bool :=
+  en1 R || en2 D || en3 h L || en4 h L.
+Definition remote_has_block (s : AState) (client : bool) : bool :=
+  negb (mbox s client =? 0) ||
+  negb (is_poll (if client then remote1_state s else remote0_state s)).
+Definition helpful (s : AState) (L R D : list nat) : Actor :=
+  if owner_work (aheap s) L R D then Owner
+  else if remote_has_block s false then Remote0 else Remote1.
 
-(** Only a pointwise representative; no execution ever resets its heap to it. *)
-Let demo_boundary_heap : Heap := fun x =>
-  match x with
-  | 1 => Some 0 | 2 => Some 0 | 3 => Some 0 | 4 => Some 0
-  | 5 => Some 8 | 6 => Some 8 | 7 => Some 1 | 8 => Some 0
-  | 9 => Some 2 | _ => None
+(** Owner turns until its next block move, from each cycle point. *)
+Definition from1 (h : Heap) L R D : nat :=
+  if en1 R then 1 else if en2 D then 2 else if en3 h L then 3 else if en4 h L then 4 else 0.
+Definition odist (s : AState) (L R D : list nat) : nat :=
+  match owner_state s with
+  | ORead => 1 + from1 (aheap s) L R D
+  | OCAS old => if hd 0 R =? old then from1 (aheap s) L R D else 2 + from1 (aheap s) L R D
+  | ODrain =>
+      if en2 D then 1 else if en3 (aheap s) L then 2 else if en4 (aheap s) L then 3 else if en1 R then 5 else 0
+  | OOffer false =>
+      if en3 (aheap s) L then 1 else if en4 (aheap s) L then 2 else if en1 R then 4 else if en2 D then 5 else 0
+  | OOffer true =>
+      if en4 (aheap s) L then 1 else if en1 R then 3 else if en2 D then 4 else if en3 (aheap s) L then 5 else 0
   end.
-Let demo_boundary (c : nat) : AState :=
-  {| aheap := demo_boundary_heap; acount := c;
-     owner_state := ORead; remote0_state := RRead 6;
-     remote1_state := RPoll |}.
+(** Remote distance: the existing contention cost (phase + staleness). *)
+Definition rdist (s : AState) (who : Actor) : nat :=
+  match who with
+  | Owner => 0
+  | Remote0 => contention_cost (contention_head s) (remote0_state s)
+  | Remote1 => contention_cost (contention_head s) (remote1_state s)
+  end.
+Definition hdist (s : AState) (L R D : list nat) : nat :=
+  match helpful s L R D with Owner => odist s L R D | who => rdist s who end.
 
-Local Lemma demo_prefix_run c : exists last,
-  run_turns (turn 1) turn_list (rr_script 2 actor_of_slot 0 57) (initial_state 2 c) =
-    Some (last,demo_prefix c) /\
-  state_equiv last (demo_boundary (c+9)).
+Definition fresh_kind (kind kb : nat) : CSLObs (nat * nat) -> Prop :=
+  csl_indexed (fun o => fst (indexed_value o) = kind /\ kb <= indexed_index o).
+
+Definition AG_ghost : Type := AState * (list nat * (list nat * list nat)).
+Definition InvG (capacity : nat) (g : AG_ghost) : Prop :=
+  let '(s, (L, (R, D))) := g in allocator_view 1 capacity s L R D.
+Definition rankG (kind kb : nat) (g : AG_ghost) : nat * (nat * nat) :=
+  let '(s, (L, (R, D))) := g in (kb - acount s, (phi kind s L R D, hdist s L R D)).
+Definition targetG (g : AG_ghost) : Fin.t 3 :=
+  let '(s, (L, (R, D))) := g in slot_of_actor (helpful s L R D).
+
+(** The three-way obligation of [agaf_pool_simulation_fair]. *)
+Definition progress (kind kb : nat) (who : Actor) (event : option (CSLObs (nat * nat)))
+    (g g' : AG_ghost) : Prop :=
+  (exists o, event = Some o /\ fresh_kind kind kb o) \/
+  rank3 (rankG kind kb g') (rankG kind kb g) \/
+  (slot_of_actor who <> targetG g /\ rankG kind kb g' = rankG kind kb g /\ targetG g' = targetG g).
+
+Lemma rank3_step a a' b b' c c' :
+  a' <= a -> (a' = a -> b' < b \/ (b' = b /\ c' < c)) -> rank3 (a', (b', c')) (a, (b, c)).
 Proof.
-  replace (c+9) with (9+c) by lia.
-  eexists; split; [vm_compute; reflexivity|].
-  unfold state_equiv; split.
-  - intro x.
-    do 10 (destruct x as [|x]; [vm_compute; reflexivity|]).
-    vm_compute; reflexivity.
-  - vm_compute; repeat split; reflexivity.
+  intros Hle Hcase; destruct (Nat.lt_ge_cases a' a) as [Hlt|Hge].
+  - apply rank3_bound; exact Hlt.
+  - assert (E : a' = a) by lia; subst a'.
+    destruct (Hcase eq_refl) as [Hb|(-> & Hc)]; [apply rank3_pos; exact Hb|apply rank3_phase; exact Hc].
 Qed.
 
-Local Lemma demo_cycle_run c : exists last,
-  run_turns (turn 1) turn_list (rr_script 2 actor_of_slot 0 42) (demo_boundary c) =
-    Some (last,demo_cycle_turns c) /\
-  state_equiv last (demo_boundary (c+7)).
+Lemma helpful_owner s L R D : helpful s L R D = Owner -> owner_work (aheap s) L R D = true.
 Proof.
-  replace (c+7) with (7+c) by lia.
-  eexists; split; [vm_compute; reflexivity|].
-  unfold state_equiv; split.
-  - intro x.
-    do 10 (destruct x as [|x]; [vm_compute; reflexivity|]).
-    vm_compute; reflexivity.
-  - vm_compute; repeat split; reflexivity.
+  unfold helpful; destruct (owner_work (aheap s) L R D); [reflexivity|].
+  destruct (remote_has_block s false); discriminate.
 Qed.
 
-Local Lemma demo_cycle_fresh_member c kind :
-  List.In kind [tag_alloc;tag_retire;tag_reclaim] ->
-  exists o, List.In (Some (inr o)) (demo_cycle_turns c) /\
-    (fst (indexed_value o)) = kind /\ c <= indexed_index o.
+Lemma helpful_remote0 s L R D : helpful s L R D = Remote0 -> remote_has_block s false = true.
 Proof.
-  intros [<-|[<-|[<-|[]]]].
-  - exists (stamp (tag_alloc,6) (5+c)); split; [|split; [reflexivity|cbn; lia]].
-    unfold demo_cycle_turns, silent, turn_of; cbn [List.repeat List.app List.In].
-    do 38 right; left; reflexivity.
-  - exists (stamp (tag_retire,6) c); split; [|split; [reflexivity|cbn; lia]].
-    unfold demo_cycle_turns, silent, turn_of; cbn [List.repeat List.app List.In].
-    do 7 right; left; reflexivity.
-  - exists (stamp (tag_reclaim,8) (3+c)); split; [|split; [reflexivity|cbn; lia]].
-    unfold demo_cycle_turns, silent, turn_of; cbn [List.repeat List.app List.In].
-    do 29 right; left; reflexivity.
+  unfold helpful; destruct (owner_work (aheap s) L R D); [discriminate|].
+  destruct (remote_has_block s false); [reflexivity|discriminate].
 Qed.
 
-Local Lemma demo_cycle_turns_nonempty : forall n : nat, True -> demo_cycle_turns n <> [].
-Proof. intros n _; unfold demo_cycle_turns, silent; discriminate. Qed.
-
-(** The actual source is the 57-turn prefix followed by the repeating cycle,
-    each cycle a genuine 42-turn round-robin run from the actual state. *)
-Theorem run_rr_allocator_demo_bisim ctx c :
-  run_rr (allocator_program 2) (managed_empty,(ctx,c)) ~
-  emit_turns (demo_prefix c)
-    (emit_turn_batches demo_cycle_turns (fun n => n+7) (c+9)
-       : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+(** The default helpful remote holds or owns a block: the pool is non-empty
+    and nothing else does. *)
+Lemma helpful_remote1 capacity s L R D :
+  0 < capacity -> allocator_view 1 capacity s L R D ->
+  helpful s L R D = Remote1 -> remote_has_block s true = true.
 Proof.
-  rewrite run_rr_allocator_bisim.
-  destruct (demo_prefix_run c) as (last & Hrun & Hlast).
-  etransitivity;
-    [exact (model_rr_run_turns 2 actor_of_slot (turn 1) 57 0 _ _ _ Hrun)|].
-  apply emit_turns_sbisim.
-  etransitivity; [apply equ_sbisim; exact (model_rr_equ 2 actor_of_slot (turn 1)
-    state_equiv (turn_proper 1) last (demo_boundary (c+9)) (0+57) 0 Hlast eq_refl)|].
-  exact (model_rr_emit_batches 2 actor_of_slot (turn 1) state_equiv (turn_proper 1)
-    demo_boundary demo_cycle_turns (fun n => n+7) (fun _ => True) 0 42 eq_refl
-    (fun _ _ => I) demo_cycle_turns_nonempty (fun n _ => demo_cycle_run n) (c+9) I).
+  intros Hcap (_ & _ & m0 & m1 & _ & _ & _ & _ & _ & _ & Hm0 & Hm1 & Hp & _) Hh.
+  unfold helpful in Hh.
+  destruct (owner_work (aheap s) L R D) eqn:Eow; [discriminate|].
+  destruct (remote_has_block s false) eqn:E0; [discriminate|].
+  unfold owner_work, en1, en2, en3, en4, mboxh in Eow; rewrite Hm0, Hm1 in Eow.
+  unfold remote_has_block, mbox, mboxh in *; rewrite Hm0, Hm1 in *.
+  apply Permutation_length in Hp; rewrite page_blocks_length in Hp.
+  repeat rewrite length_app in Hp.
+  rewrite !mailbox_nodes_length, !held_length in Hp.
+  destruct m0 as [|m0]; cbn in E0; [|discriminate].
+  destruct (is_poll (remote0_state s)) eqn:Ep0; cbn in E0; [|discriminate].
+  destruct R as [|? ?], D as [|? ?], L as [|? ?]; cbn in Eow; try discriminate.
+  destruct m1 as [|m1]; [|reflexivity].
+  destruct (is_poll (remote1_state s)); [cbn in Hp; lia|reflexivity].
 Qed.
 
-(** Recurrence is the [model_rr_agaf] route at [rank := fun c => kb - c] and
-    [P o := fst (indexed_value o) = kind /\ kb <= indexed_index o].  The
-    concrete tag premise is retained: the generic rule accepts arbitrary
-    predicates, but this proof must not claim recurrence of arbitrary tags. *)
-Theorem allocator_demo_agaf_fresh ctx c kind kb :
-  List.In kind [tag_alloc;tag_retire;tag_reclaim] ->
-  <( {run_rr (allocator_program 2) (managed_empty,(ctx,c))}, Pure
-      |= AG (AF visW {csl_indexed (fun o => (fst (indexed_value o)) = kind /\ kb <= indexed_index o)}) )>.
+(** *** The three progress shapes *)
+
+Lemma progress_kind_event kind kb who s s' ls ls' b count :
+  acount s = count -> acount s' = S count ->
+  progress kind kb who (Some (inr (stamp (kind,b) count))) (s,ls) (s',ls').
 Proof.
-  intro Hkind.
-  assert (Hprogress : forall n : nat, True ->
-    (exists o, List.In (Some o) (demo_cycle_turns n) /\
-       csl_indexed (fun o => (fst (indexed_value o)) = kind /\ kb <= indexed_index o) o)
-    \/ kb - (n+7) < kb - n).
-  { intros n _; destruct (Nat.le_gt_cases kb n) as [Hle|Hlt].
-    - left; destruct (demo_cycle_fresh_member n kind Hkind) as (o & Hin & Htag & Hidx).
-      exists (inr o); split; [exact Hin |]; cbn; split; [exact Htag | lia].
-    - right; lia. }
-  rewrite run_rr_allocator_bisim.
-  destruct (demo_prefix_run c) as (last & Hrun & Hlast).
-  rewrite (model_rr_run_turns 2 actor_of_slot (turn 1) 57 0 _ _ _ Hrun).
-  apply agaf_emit_turns; [constructor|].
-  rewrite (model_rr_equ 2 actor_of_slot (turn 1) state_equiv (turn_proper 1)
-    last (demo_boundary (c+9)) (0+57) 0 Hlast eq_refl).
-  rewrite (model_rr_emit_batches 2 actor_of_slot (turn 1) state_equiv (turn_proper 1)
-    demo_boundary demo_cycle_turns (fun n => n+7) (fun _ => True) 0 42 eq_refl
-    (fun _ _ => I) demo_cycle_turns_nonempty (fun n _ => demo_cycle_run n) (c+9) I).
-  apply (emit_turn_batches_agaf demo_cycle_turns (fun n => n+7) (fun _ => True)
-    (fun n => kb - n) (csl_indexed (fun o => (fst (indexed_value o)) = kind /\ kb <= indexed_index o))
-    (fun _ _ => I) demo_cycle_turns_nonempty Hprogress (c+9)); [exact I|].
-  apply after_logs_not_done; constructor.
+  intros <- Hc; destruct ls as (L & R & D), ls' as (L' & R' & D').
+  destruct (Nat.le_gt_cases kb (acount s)) as [Hle|Hlt].
+  - left; eexists; split; [reflexivity|]; cbn; split; [reflexivity|exact Hle].
+  - right; left; unfold rankG; rewrite Hc; apply rank3_bound; lia.
 Qed.
 
-End AllocatorRecurrence.
+Lemma progress_move kind kb who event s s' L R D L' R' D' :
+  acount s <= acount s' -> acount s' <= S (acount s) ->
+  phi kind s' L' R' D' < phi kind s L R D ->
+  progress kind kb who event (s,(L,(R,D))) (s',(L',(R',D'))).
+Proof.
+  intros Hlo Hhi Hphi; right; left; unfold rankG.
+  apply rank3_step; [lia|intros _; left; exact Hphi].
+Qed.
+
+Lemma progress_idle kind kb who event s s' L R D :
+  mbox s' false = mbox s false -> mbox s' true = mbox s true ->
+  contention_head s' = contention_head s ->
+  acount s <= acount s' -> acount s' <= S (acount s) ->
+  match who with
+  | Owner =>
+      remote0_state s' = remote0_state s /\ remote1_state s' = remote1_state s /\
+      (owner_work (aheap s) L R D = true -> S (odist s' L R D) = odist s L R D)
+  | Remote0 =>
+      owner_state s' = owner_state s /\ remote1_state s' = remote1_state s /\
+      is_poll (remote0_state s') = is_poll (remote0_state s) /\
+      (helpful s L R D = Remote0 -> S (rdist s' Remote0) = rdist s Remote0)
+  | Remote1 =>
+      owner_state s' = owner_state s /\ remote0_state s' = remote0_state s /\
+      is_poll (remote1_state s') = is_poll (remote1_state s) /\
+      (helpful s L R D = Remote1 -> S (rdist s' Remote1) = rdist s Remote1)
+  end ->
+  progress kind kb who event (s,(L,(R,D))) (s',(L,(R,D))).
+Proof.
+  intros Em0 Em1 Ehead Hlo Hhi Hwho.
+  assert (Hhelp : helpful s' L R D = helpful s L R D).
+  { unfold helpful, owner_work, en1, en2, en3, en4, remote_has_block, mbox.
+    unfold mbox in Em0, Em1; rewrite Em0, Em1.
+    destruct who as [| |]; destruct Hwho as (E1 & E2 & Hwho);
+      [rewrite ?E1, ?E2|destruct Hwho as (E3 & _); rewrite ?E2, ?E3
+      |destruct Hwho as (E3 & _); rewrite ?E2, ?E3]; reflexivity. }
+  assert (Hphi : phi kind s' L R D = phi kind s L R D).
+  { unfold phi, nH, mbox; cbv zeta; unfold mbox in Em0, Em1; rewrite Em0, Em1, !held_length.
+    destruct who as [| |]; destruct Hwho as (E1 & E2 & Hwho);
+      [rewrite ?E1, ?E2|destruct Hwho as (E3 & _); rewrite ?E2, ?E3
+      |destruct Hwho as (E3 & _); rewrite ?E2, ?E3]; reflexivity. }
+  assert (Hodist : owner_state s' = owner_state s -> odist s' L R D = odist s L R D).
+  { intro Eop; unfold odist, from1, en1, en2, en3, en4.
+    unfold mbox in Em0, Em1; rewrite Eop, Em0, Em1; reflexivity. }
+  assert (Hhd : (who = helpful s L R D -> S (hdist s' L R D) = hdist s L R D) /\
+                (who <> helpful s L R D -> hdist s' L R D = hdist s L R D)).
+  { unfold hdist; rewrite Hhelp.
+    destruct who as [| |]; destruct Hwho as (E1 & E2 & Hwho);
+      [|destruct Hwho as (E3 & Hwho)|destruct Hwho as (E3 & Hwho)];
+      destruct (helpful s L R D) eqn:Hh; split; intro Hne; try congruence.
+    all: first
+      [ solve [apply Hwho; first [reflexivity | apply helpful_owner; exact Hh]]
+      | solve [apply Hodist; exact E1]
+      | solve [cbn; rewrite Ehead, ?E1, ?E2; reflexivity] ]. }
+  destruct Hhd as (Hsame & Hother).
+  destruct (Fin.eq_dec (slot_of_actor who) (slot_of_actor (helpful s L R D))) as [Hslot|Hslot].
+  - pose proof (f_equal actor_of_slot Hslot) as Heq.
+    rewrite !actor_of_slot_of_actor in Heq.
+    right; left; unfold rankG; rewrite Hphi.
+    apply rank3_step; [lia|intros _; right; split; [reflexivity|]].
+    rewrite <- (Hsame Heq); lia.
+  - assert (Hne : who <> helpful s L R D).
+    { intro Heq; apply Hslot; rewrite Heq; reflexivity. }
+    destruct (Nat.lt_ge_cases (kb - acount s') (kb - acount s)) as [Hlt|Hge].
+    + right; left; unfold rankG; apply rank3_bound; exact Hlt.
+    + assert (Ecount : kb - acount s' = kb - acount s) by lia.
+      right; right; split; [exact Hslot|split].
+      * unfold rankG; rewrite Hphi, (Hother Hne), Ecount; reflexivity.
+      * unfold targetG; rewrite Hhelp; reflexivity.
+Qed.
+
+(** *** One turn makes progress. *)
+
+Local Ltac fair_heap :=
+  repeat first [rewrite upd_eq | rewrite upd_neq by ai_distinct].
+
+Local Ltac fair_cells :=
+  unfold mbox, mboxh, contention_head, is_poll;
+  cbn [aheap owner_state remote0_state remote1_state acount];
+  fair_heap;
+  repeat match goal with H : ?h ?x = Some _ |- context [?h ?x] => rewrite H end;
+  reflexivity.
+
+Local Ltac fair_idle_owner Hw :=
+  split; [reflexivity|split; [reflexivity|intro Hw; cbn [aheap] in Hw]].
+Local Ltac fair_idle_remote Hh :=
+  split; [reflexivity|split; [reflexivity|split; [reflexivity|intro Hh]]].
+
+(** Pin the ownership change of the leaf; [ownership_remote]'s [who <> Owner]
+    premise is the only constructor inversion cannot discharge by itself. *)
+Local Ltac fair_inv Hstep :=
+  cbn [owner_state remote0_state remote1_state] in Hstep; inversion Hstep; subst;
+  try match goal with H : ?x <> ?x |- _ => exfalso; exact (H eq_refl) end.
+
+(** A helpful owner's silent turn: both distances are the same [if]-chain on
+    the same mailbox reads, one step apart. *)
+Local Ltac fair_odist Hw Hm0 Hm1 :=
+  unfold odist, owner_work, from1, en1, en2, en3, en4, mboxh in Hw |- *;
+  cbv beta iota delta [aheap owner_state] in Hw |- *;
+  fair_heap;
+  rewrite ?Hm0, ?Hm1 in Hw |- *;
+  cbv beta iota;
+  rewrite ?Nat.eqb_refl;
+  cbn [Nat.eqb Nat.ltb Nat.leb length andb orb] in Hw |- *;
+  repeat match goal with
+  | |- context [if ?b then _ else _] =>
+      let E := fresh "E" in destruct b eqn:E; rewrite ?E in Hw
+  end;
+  cbn in Hw; try discriminate; lia.
+
+(** A helpful remote's silent turn: the contention cost drops by one. *)
+Local Ltac fair_rdist Hr :=
+  unfold rdist, contention_cost, contention_head, contention_phase, contention_stale;
+  cbn [aheap remote0_state remote1_state];
+  fair_heap;
+  rewrite ?Hr, ?Nat.eqb_refl;
+  repeat match goal with H : Nat.eqb _ _ = _ |- _ => rewrite H end;
+  repeat match goal with |- context [if ?b then _ else _] => destruct b end;
+  lia.
+
+Local Ltac fair_phi Hkind :=
+  unfold phi, nH, mbox, mboxh; cbv zeta;
+  cbn [aheap remote0_state remote1_state];
+  fair_heap;
+  repeat match goal with H : ?h ?x = Some _ |- context [?h ?x] => rewrite H end;
+  rewrite !mailbox_nodes_length, !held_length;
+  cbn [is_poll length Nat.eqb];
+  repeat match goal with H : Nat.eqb _ _ = _ |- _ => rewrite H end;
+  destruct Hkind as [<-|[<-|[<-|[]]]]; cbn [Nat.eqb tag_alloc tag_retire tag_reclaim]; lia.
+
+Lemma allocator_fair_turn capacity kind kb :
+  0 < capacity -> List.In kind [tag_alloc; tag_retire; tag_reclaim] ->
+  forall (g : AG_ghost) who s' event,
+    InvG capacity g -> turn 1 who (fst g) = Some (s', event) ->
+    exists g', fst g' = s' /\ InvG capacity g' /\ progress kind kb who event g g'.
+Proof.
+  intros Hcap Hkind (s & L & R & D) who s' event Hview Hturn.
+  cbn [fst InvG] in *.
+  destruct (turn_view_step 1 capacity who s s' event L R D Hview Hturn)
+    as (L' & R' & D' & Hview' & Hstep).
+  exists (s', (L', (R', D'))); split; [reflexivity|]; split; [exact Hview'|].
+  pose proof Hview as Hview_s.
+  destruct s as [h count op p0 p1].
+  destruct Hview as (Hbase & Hback & m0 & m1 & Hr & Hl & Hd & CL & CR & CD &
+    Hm0 & Hm1 & Hp & Hop & Ho & Hc0 & Hc1).
+  cbn [aheap acount owner_state remote0_state remote1_state] in *.
+  destruct who.
+  - (* Owner *)
+    destruct op as [|old| |client].
+    + (* ORead -> OCAS: silent *)
+      cbn [turn aheap acount owner_state remote0_state remote1_state] in Hturn.
+      rewrite Hr in Hturn; injection Hturn as <- <-.
+      fair_inv Hstep.
+      apply progress_idle; try fair_cells; cbn [acount]; try lia.
+      fair_idle_owner Hw; fair_odist Hw Hm0 Hm1.
+    + (* OCAS *)
+      cbn in Hop; subst D.
+      cbn [turn aheap acount owner_state remote0_state remote1_state] in Hturn.
+      rewrite Hr in Hturn.
+      destruct (Nat.eqb (hd 0 R) old) eqn:Ecas.
+      * apply Nat.eqb_eq in Ecas; subst old.
+        rewrite upd_neq in Hturn by ai_distinct; rewrite Hd in Hturn.
+        injection Hturn as <- <-.
+        destruct R as [|b R].
+        -- (* nothing to detach: silent *)
+           fair_inv Hstep.
+           apply progress_idle; try fair_cells; cbn [acount]; try lia.
+           fair_idle_owner Hw; fair_odist Hw Hm0 Hm1.
+        -- (* detach: a block move *)
+           fair_inv Hstep.
+           apply progress_move; cbn [acount]; try lia.
+           fair_phi Hkind.
+      * injection Hturn as <- <-.
+        fair_inv Hstep.
+        apply progress_idle; try fair_cells; cbn [acount]; try lia.
+        fair_idle_owner Hw; fair_odist Hw Hm0 Hm1.
+    + (* ODrain *)
+      destruct D as [|b D].
+      * cbn [turn aheap acount owner_state remote0_state remote1_state] in Hturn.
+        rewrite Hd in Hturn; cbn [hd Nat.eqb] in Hturn.
+        injection Hturn as <- <-.
+        fair_inv Hstep.
+        apply progress_idle; try fair_cells; cbn [acount]; try lia.
+        fair_idle_owner Hw; fair_odist Hw Hm0 Hm1.
+      * cbn [linked] in CD; destruct CD as [Hnext CD].
+        assert (Eb : Nat.eqb b 0 = false) by (apply Nat.eqb_neq; ai_distinct).
+        cbn [turn aheap acount owner_state remote0_state remote1_state] in Hturn.
+        rewrite Hd in Hturn; cbn [hd] in Hturn; rewrite Eb, Hnext, Hl in Hturn.
+        injection Hturn as <- <-.
+        fair_inv Hstep.
+        destruct (Nat.eq_dec kind tag_reclaim) as [->|Hne].
+        -- apply progress_kind_event; reflexivity.
+        -- apply progress_move; cbn [acount]; try lia.
+           fair_phi Hkind; contradiction.
+    + (* OOffer *)
+      cbn in Hop; subst D.
+      cbn [turn aheap acount owner_state remote0_state remote1_state] in Hturn.
+      destruct client.
+      * rewrite Hm1 in Hturn.
+        destruct m1 as [|m1].
+        -- cbn [Nat.eqb] in Hturn; rewrite Hl in Hturn.
+           destruct L as [|b L].
+           ++ cbn [hd Nat.eqb] in Hturn; injection Hturn as <- <-.
+              fair_inv Hstep.
+              apply progress_idle; try fair_cells; cbn [acount]; try lia.
+              fair_idle_owner Hw; fair_odist Hw Hm0 Hm1.
+           ++ cbn [linked] in CL; destruct CL as [Hnext CL].
+              assert (Eb : Nat.eqb b 0 = false) by (apply Nat.eqb_neq; ai_distinct).
+              cbn [hd] in Hturn; rewrite Eb, Hnext in Hturn.
+              injection Hturn as <- <-.
+              fair_inv Hstep.
+              destruct (Nat.eq_dec kind tag_alloc) as [->|Hne].
+              ** apply progress_kind_event; reflexivity.
+              ** apply progress_move; cbn [acount]; try lia.
+                 fair_phi Hkind; contradiction.
+        -- cbn [Nat.eqb] in Hturn; injection Hturn as <- <-.
+           fair_inv Hstep.
+           apply progress_idle; try fair_cells; cbn [acount]; try lia.
+           fair_idle_owner Hw; fair_odist Hw Hm0 Hm1.
+      * rewrite Hm0 in Hturn.
+        destruct m0 as [|m0].
+        -- cbn [Nat.eqb] in Hturn; rewrite Hl in Hturn.
+           destruct L as [|b L].
+           ++ cbn [hd Nat.eqb] in Hturn; injection Hturn as <- <-.
+              fair_inv Hstep.
+              apply progress_idle; try fair_cells; cbn [acount]; try lia.
+              fair_idle_owner Hw; fair_odist Hw Hm0 Hm1.
+           ++ cbn [linked] in CL; destruct CL as [Hnext CL].
+              assert (Eb : Nat.eqb b 0 = false) by (apply Nat.eqb_neq; ai_distinct).
+              cbn [hd] in Hturn; rewrite Eb, Hnext in Hturn.
+              injection Hturn as <- <-.
+              fair_inv Hstep.
+              destruct (Nat.eq_dec kind tag_alloc) as [->|Hne].
+              ** apply progress_kind_event; reflexivity.
+              ** apply progress_move; cbn [acount]; try lia.
+                 fair_phi Hkind; contradiction.
+        -- cbn [Nat.eqb] in Hturn; injection Hturn as <- <-.
+           fair_inv Hstep.
+           apply progress_idle; try fair_cells; cbn [acount]; try lia.
+           fair_idle_owner Hw; fair_odist Hw Hm0 Hm1.
+  - (* Remote0 *)
+    destruct p0 as [|b|b old|b old].
+    + cbn [turn aheap acount owner_state remote0_state remote1_state] in Hturn.
+      rewrite Hm0 in Hturn.
+      destruct m0 as [|m0].
+      * cbn [Nat.eqb] in Hturn; injection Hturn as <- <-.
+        fair_inv Hstep.
+        apply progress_idle; try fair_cells; cbn [acount]; try lia.
+        fair_idle_remote Hh.
+        apply helpful_remote0 in Hh; unfold remote_has_block, mbox, mboxh in Hh.
+        cbn [aheap remote0_state] in Hh; rewrite Hm0 in Hh; discriminate.
+      * assert (Hcell : exists v, h (S (S m0)) = Some v).
+        { eapply ai_backing_present; [exact Hback | ai_interval]. }
+        destruct Hcell as [v Hv].
+        cbn [Nat.eqb] in Hturn.
+        rewrite upd_neq in Hturn by ai_distinct; rewrite Hv in Hturn.
+        injection Hturn as <- <-.
+        fair_inv Hstep.
+        apply progress_move; cbn [acount]; try lia.
+        fair_phi Hkind.
+    + cbn [turn aheap acount owner_state remote0_state remote1_state] in Hturn.
+      rewrite Hr in Hturn; injection Hturn as <- <-.
+      fair_inv Hstep.
+      apply progress_idle; try fair_cells; cbn [acount]; try lia.
+      fair_idle_remote Hh; fair_rdist Hr.
+    + cbn [cached_remote] in Hc0; destruct Hc0 as [Hbound Hneq].
+      assert (Hcell : exists v, h b = Some v).
+      { eapply ai_backing_present; [exact Hback | ai_interval]. }
+      destruct Hcell as [v Hv].
+      cbn [turn aheap acount owner_state remote0_state remote1_state] in Hturn.
+      rewrite Hv in Hturn; injection Hturn as <- <-.
+      fair_inv Hstep.
+      apply progress_idle; try fair_cells; cbn [acount]; try lia.
+      fair_idle_remote Hh; fair_rdist Hr.
+    + cbn [cached_remote] in Hc0; destruct Hc0 as [Hbound [Hneq Hlink]].
+      cbn [turn aheap acount owner_state remote0_state remote1_state] in Hturn.
+      rewrite Hr in Hturn.
+      destruct (Nat.eqb (hd 0 R) old) eqn:Ecas.
+      * apply Nat.eqb_eq in Ecas; subst old.
+        injection Hturn as <- <-.
+        fair_inv Hstep.
+        -- match goal with H : _ \/ _ |- _ => destruct H as [H|(? & ? & H)]; inversion H end.
+        -- destruct (Nat.eq_dec kind tag_retire) as [->|Hne].
+           ++ apply progress_kind_event; reflexivity.
+           ++ apply progress_move; cbn [acount]; try lia.
+              fair_phi Hkind; contradiction.
+      * injection Hturn as <- <-.
+        fair_inv Hstep.
+        apply progress_idle; try fair_cells; cbn [acount]; try lia.
+        fair_idle_remote Hh; fair_rdist Hr.
+  - (* Remote1 *)
+    destruct p1 as [|b|b old|b old].
+    + cbn [turn aheap acount owner_state remote0_state remote1_state] in Hturn.
+      rewrite Hm1 in Hturn.
+      destruct m1 as [|m1].
+      * cbn [Nat.eqb] in Hturn; injection Hturn as <- <-.
+        fair_inv Hstep.
+        apply progress_idle; try fair_cells; cbn [acount]; try lia.
+        fair_idle_remote Hh.
+        apply (helpful_remote1 capacity _ _ _ _ Hcap Hview_s) in Hh.
+        unfold remote_has_block, mbox, mboxh in Hh.
+        cbn [aheap remote1_state] in Hh; rewrite Hm1 in Hh; discriminate.
+      * assert (Hcell : exists v, h (S (S m1)) = Some v).
+        { eapply ai_backing_present; [exact Hback | ai_interval]. }
+        destruct Hcell as [v Hv].
+        cbn [Nat.eqb] in Hturn.
+        rewrite upd_neq in Hturn by ai_distinct; rewrite Hv in Hturn.
+        injection Hturn as <- <-.
+        fair_inv Hstep.
+        apply progress_move; cbn [acount]; try lia.
+        fair_phi Hkind.
+    + cbn [turn aheap acount owner_state remote0_state remote1_state] in Hturn.
+      rewrite Hr in Hturn; injection Hturn as <- <-.
+      fair_inv Hstep.
+      apply progress_idle; try fair_cells; cbn [acount]; try lia.
+      fair_idle_remote Hh; fair_rdist Hr.
+    + cbn [cached_remote] in Hc1; destruct Hc1 as [Hbound Hneq].
+      assert (Hcell : exists v, h b = Some v).
+      { eapply ai_backing_present; [exact Hback | ai_interval]. }
+      destruct Hcell as [v Hv].
+      cbn [turn aheap acount owner_state remote0_state remote1_state] in Hturn.
+      rewrite Hv in Hturn; injection Hturn as <- <-.
+      fair_inv Hstep.
+      apply progress_idle; try fair_cells; cbn [acount]; try lia.
+      fair_idle_remote Hh; fair_rdist Hr.
+    + cbn [cached_remote] in Hc1; destruct Hc1 as [Hbound [Hneq Hlink]].
+      cbn [turn aheap acount owner_state remote0_state remote1_state] in Hturn.
+      rewrite Hr in Hturn.
+      destruct (Nat.eqb (hd 0 R) old) eqn:Ecas.
+      * apply Nat.eqb_eq in Ecas; subst old.
+        injection Hturn as <- <-.
+        fair_inv Hstep.
+        -- match goal with H : _ \/ _ |- _ => destruct H as [H|(? & ? & H)]; inversion H end.
+        -- destruct (Nat.eq_dec kind tag_retire) as [->|Hne].
+           ++ apply progress_kind_event; reflexivity.
+           ++ apply progress_move; cbn [acount]; try lia.
+              fair_phi Hkind; contradiction.
+      * injection Hturn as <- <-.
+        fair_inv Hstep.
+        apply progress_idle; try fair_cells; cbn [acount]; try lia.
+        fair_idle_remote Hh; fair_rdist Hr.
+Qed.
+
+(** Every observation kind of the allocator recurs under every fair policy,
+    for every page capacity, from the real source program. *)
+Theorem allocator_agaf_fair (sch : Scheduler) `{FairScheduler sch} capacity ctx c kind kb
+  (st : sched_state sch) :
+  0 < capacity ->
+  List.In kind [tag_alloc; tag_retire; tag_reclaim] ->
+  <( {run_fair sch (allocator_program capacity) st (managed_empty,(ctx,c))}, Pure
+     |= AG (AF visW {fair_obs (fresh_kind kind kb)}) )>.
+Proof.
+  intros Hcap Hkind.
+  rewrite run_fair_allocator_initialized.
+  destruct (initial_state_inv capacity c) as (L0 & R0 & D0 & Hview0).
+  refine (agaf_pool_simulation_fair sh sch actor_of_slot slot_of_actor slot_of_actor_of_slot
+    (turn 1) (allocator_pool 1) state_agrees (allocator_inv 1 capacity)
+    (allocator_simulation 1 capacity) (fst : AG_ghost -> AState) (InvG capacity) (rankG kind kb) rank3 targetG
+    (fresh_kind kind kb) rank3_wf _ _
+    (initial_state capacity c, (L0, (R0, D0))) (source_pool0 1)
+    ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c)) None st Pure
+    Hview0 _ (pool_equ_guard _ _ (source_pool0_initial capacity c))
+    ltac:(constructor)).
+  3: { split; [apply heq_refl|reflexivity]. }
+  - intros (s & L & R & D) Hg; exists L, R, D; exact Hg.
+  - intros g who s' event Hg Hturn.
+    exact (allocator_fair_turn capacity kind kb Hcap Hkind g who s' event Hg Hturn).
+Qed.
 
 (** ** ABA robustness.
 

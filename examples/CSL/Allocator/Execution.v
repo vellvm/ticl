@@ -409,6 +409,115 @@ Proof.
   unfold owner; rewrite interp_rr_bind, interp_rr_yield; reflexivity.
 Qed.
 
+(** The same startup on the scheduler-generic instrumented runner. *)
+
+Lemma interp_fair_init_links sch n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  first count (K : option unit -> thread sE Bn) st h allocs ctx c :
+  (forall offset, Nat.lt offset (2 * count) ->
+    h (first + offset)%nat <> None) ->
+  interp_schedule_fair sch sh (S n)
+    (ts @ i := (denote_flow (init_links first count) >>= K)) (Some i) st ((h,allocs),(ctx,c)) ~
+  interp_schedule_fair sch sh (S n) (ts @ i := K (Some tt))
+    (Some i) st ((init_links_heap first count h,allocs),(ctx,c)).
+Proof.
+  revert first h; induction count as [|count IH]; intros first h Allocated.
+  - cbn [init_links init_links_heap]; rewrite interp_fair_ret; reflexivity.
+  - cbn [init_links init_links_heap]; rewrite interp_fair_bind.
+    etransitivity.
+    + apply interp_fair_write_present.
+      specialize (Allocated 0 ltac:(cbn; lia)).
+      now rewrite Nat.add_0_r in Allocated.
+    + apply IH; intros offset O; apply upd_mono.
+      replace (first + 2 + offset)%nat with (first + (2 + offset))%nat by lia.
+      apply Allocated; cbn; lia.
+Qed.
+
+Lemma interp_fair_init_page sch n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  base capacity (K : option unit -> thread sE Bn) st h allocs ctx c :
+  interp_schedule_fair sch sh (S n)
+    (ts @ i := (denote_flow (init_page base capacity) >>= K))
+    (Some i) st ((hunion (hblock base (page_size capacity)) h,allocs),(ctx,c)) ~
+  interp_schedule_fair sch sh (S n) (ts @ i := K (Some tt))
+    (Some i) st ((page_heap base capacity h,allocs),(ctx,c)).
+Proof.
+  unfold init_page, page_heap.
+  do 5 (rewrite interp_fair_bind; etransitivity;
+    [apply interp_fair_write_present;
+      repeat apply upd_mono;
+      rewrite page_backing_in by
+        (unfold remote_head, drain_head, mailbox, local_head, page_size; lia);
+      discriminate |]).
+  apply interp_fair_init_links; intros offset O.
+  repeat apply upd_mono.
+  rewrite page_backing_in by (unfold page_size; lia); discriminate.
+Qed.
+
+Lemma interp_fair_new_page_first sch n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  capacity base (K : option nat -> thread sE Bn) st h allocs ctx c :
+  Nat.lt 0 base -> block_free h base (page_size capacity) ->
+  (forall j, Nat.lt 0 j -> Nat.lt j base ->
+    ~ block_free h j (page_size capacity)) ->
+  interp_schedule_fair sch sh (S n)
+    (ts @ i := (denote_flow (new_page capacity) >>= K)) (Some i) st ((h,allocs),(ctx,c)) ~
+  interp_schedule_fair sch sh (S n) (ts @ i := K (Some base))
+    (Some i) st ((page_heap base capacity h,upd allocs base (page_size capacity)),(ctx,c)).
+Proof.
+  intros Positive Free First.
+  unfold new_page; rewrite interp_fair_bind.
+  rewrite interp_fair_alloc_first with (base:=base) by
+    (try apply page_size_positive; assumption).
+  rewrite interp_fair_bind; etransitivity.
+  - apply interp_fair_init_page.
+  - rewrite interp_fair_ret; reflexivity.
+Qed.
+
+Lemma interp_fair_new_page_hemp sch n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  capacity (K : option nat -> thread sE Bn) st ctx c :
+  interp_schedule_fair sch sh (S n)
+    (ts @ i := (denote_flow (new_page capacity) >>= K)) (Some i) st (managed_empty,(ctx,c)) ~
+  interp_schedule_fair sch sh (S n) (ts @ i := K (Some 1))
+    (Some i) st ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c)).
+Proof.
+  apply interp_fair_new_page_first.
+  - lia.
+  - intros offset O; reflexivity.
+  - intros j Positive Before; lia.
+Qed.
+
+Theorem run_fair_allocator_initialized sch capacity st ctx c :
+  run_fair sch (allocator_program capacity) st (managed_empty,(ctx,c)) ~
+    interp_schedule_fair sch sh 3 (source_pool0 1) None st
+      ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c)).
+Proof.
+  unfold run_fair, run_fair_pool.
+  change (interp_schedule_fair sch sh 1
+    ([Ret tt]%vector @ Fin.F1 :=
+      (denote_flow (allocator_program capacity) >>= fun _ => Ret tt))
+    (Some Fin.F1) st (managed_empty,(ctx,c)) ~
+    interp_schedule_fair sch sh 3 (source_pool0 1) None st
+      ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c))).
+  unfold allocator_program; rewrite interp_fair_bind, interp_fair_new_page_hemp.
+  rewrite interp_fair_bind, interp_fair_fork.
+  change (interp_schedule_fair sch sh 2
+    ([denote (remote_client 1 false); Ret tt]%vector @ Fin.FS Fin.F1 :=
+      (denote_flow (CBind (CFork (remote_client 1 true)) (fun _ => owner 1))
+        >>= fun _ => Ret tt))
+    (Some (Fin.FS Fin.F1)) st
+      ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c)) ~
+    interp_schedule_fair sch sh 3 (source_pool0 1) None st
+      ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c))).
+  rewrite interp_fair_bind, interp_fair_fork.
+  change (interp_schedule_fair sch sh 3
+    ([denote (remote_client 1 true); denote (remote_client 1 false); Ret tt]%vector
+      @ Fin.FS (Fin.FS Fin.F1) :=
+        (denote_flow (owner 1) >>= fun _ => Ret tt))
+    (Some (Fin.FS (Fin.FS Fin.F1))) st
+      ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c)) ~
+    interp_schedule_fair sch sh 3 (source_pool0 1) None st
+      ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c))).
+  unfold owner; rewrite interp_fair_bind, interp_fair_yield; reflexivity.
+Qed.
+
 Theorem run_nd_allocator_initialized capacity ctx c :
   run_nd (allocator_program capacity) (managed_empty,(ctx,c)) ~
     interp_schedule_nd sh 3 (source_pool0 1) None

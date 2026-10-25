@@ -21,5 +21,6 @@
   (rocq-equations (>= 1.3.1))
   (rocq-relation-algebra (>= 1.9.0))
   (coq-itree (>= 5.0))
+  rocq-ctree
  )
 )

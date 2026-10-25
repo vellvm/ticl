@@ -1,4 +1,0 @@
-[submodule "ctrees"]
-	path = ctrees
-	url = https://github.com/vellvm/ctrees
-	branch = fix/universe-check

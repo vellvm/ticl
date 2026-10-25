@@ -1,7 +1,7 @@
 (** * TICL-side facade over the [ctrees] library.
 
-    TICL's model is [ctree E B X] from the vendored [ctrees] library (git submodule
-    [ctrees/]).  This module re-exports everything a TICL development needs
+    TICL's model is [ctree E B X] from the [ctrees] library (opam package
+    [rocq-ctree], branch [fix/universe-check]).  This module re-exports everything a TICL development needs
     (the datatype and its combinators, [equ]/[sbisim]/[ssim] and the LTS
     [trans], the [fold]/[interp]/[interp_state] interpreters, ITree's
     subevent machinery) and adds the few TICL-only notations. *)

@@ -1,26 +1,23 @@
-(** * Recurring per-queue progress for two active queues.
+(** * Recurring per-queue progress for two active queues under any fair scheduler.
 
-    Both queues execute under [Alternating.sbody]'s nonpreemptive cyclic
-    scheduler, preserving the single-queue recurrence contract.
+    Both workers of [parallel_queues] rotate their OWN queue in the shared
+    heap; the scheduler is any [FairScheduler].
 
     The claim is deliberately NOT "the second queue is a frame".  A frame is a
-    resource nobody touches; here the other queue is rewritten on every second
-    turn.  The proof is organised to make the difference visible:
+    resource nobody touches; here the other queue is rewritten on every one of
+    its turns.  The proof is organised to make the difference visible:
 
     - [step_focus] / [step_foreign] are the two resource-level turn lemmas.
       [step_foreign] is where active composition differs from framing: the
       focused queue's representation must survive a step of the OTHER
       component, and that is [Separation.foreign_pres], not a frame rule.
 
-    - the temporal layer reuses the structural iteration rules
-      ([CTree.Logic.State.ag_state_iter] for the outer [AG] and
-      [CTree.Logic.State.aul_state_iter_ghost] for the inner [AF]). No fixed point
-      is unfolded anywhere in this file.
-
-    - the variant is the reused natural position rank plus ONE new component,
-      the scheduler phase ([Utils.Relations.rank3]). The phase component makes a
-      foreign turn count as progress; without it the composition does not
-      close.  It is still a [nat]: no ordinal is used or needed.
+    - the temporal layer is the fairness inversion rule [agaf_fair_turns]:
+      the invariant is both queues represented and disjoint, the rank is
+      (occurrence bound left, position of the element in the focused queue)
+      under [lexnat], and the helpful slot is the focused worker.  A foreign
+      turn leaves the rank alone; fairness of the policy supplies the focused
+      turn.  No fixed point is unfolded anywhere in this file.
 
     The whole development is stated for an arbitrary FOCUS, so the two
     per-queue theorems are two instantiations of one proof rather than a
@@ -29,68 +26,35 @@
 From Stdlib Require Import
   List
   Lia
-  Bool
   Arith.PeanoNat
-  Arith.Wf_nat
-  Relations.
+  Fin
+  Vector.
 From Coinduction Require Import all.
 
 From TICL Require Import
   CTree.Core
-  CTree.Interp.State.Mod
-  CTree.Events.State
   CTree.Events.Writer
-  CTree.Logic.Trans
-  CTree.Logic.CanStep
-  CTree.Logic.AX
-  CTree.Logic.AF
-  CTree.Logic.AG
-  CTree.Logic.Bind
-  CTree.Logic.Iter
+  CTree.Interp.Yield.Fair
+  Lang.CSL.Mod
   CTree.Logic.State
-  Logic.Core.
+  Logic.Core
+  Utils.Relations
+  Utils.Lists.
 
 From examples Require Import
   CSL.Queue.Representation CSL.Queue.Operations CSL.Queue.Trace CSL.Queue.Layout
-  CSL.Queue.Frame CSL.Queue.Recurrence CSL.Queue.Separation
-  CSL.Queue.Alternating.
-From TICL Require Import Utils.Relations.
+  CSL.Queue.Frame CSL.Queue.Separation CSL.Queue.Program CSL.Queue.Shared.
 
-
-Import CTree CTreeNotations TiclNotations ListNotations.
+Import CTree CTreeNotations TiclNotations ListNotations VectorNotations.
 Local Open Scope ctree_scope.
+Local Open Scope fin_vector_scope.
 Local Open Scope ticl_scope.
 Local Open Scope list_scope.
 
-(** A queue that still contains an element is non-empty.  Used to keep the
-    focused queue's node list non-empty across a FOREIGN turn without
-    destructing it. *)
-Lemma qrep_find_nonnil: forall hdr ns vs h nl d,
-    qrep hdr ns vs h -> find_index Nat.eqb nl vs = Some d -> ns <> [].
-Proof.
-  intros hdr ns vs h nl d Hq Hf C; subst ns.
-  apply qrep_len in Hq; cbn in Hq.
-  destruct vs as [| x vs]; [cbn in Hf; discriminate | cbn in Hq; discriminate].
-Qed.
-
 Section Composition.
-  (** [u]/[v] are the two headers the PROGRAM alternates between.  [fh] is the
-      header of the queue whose progress we are proving, [gh] the other one,
-      and [fturn] the (program-computed) predicate saying whose turn it is.
-      The four hypotheses connect the focus to the scheduler; they are
-      discharged by [Nat.even] / [negb ∘ Nat.even] at the two instantiations
-      below, so no scheduling assumption survives into the theorems. *)
-  Context (u v: nat) (fq fh gh: nat) (fturn: nat -> bool)
-          (Hfh: forall n, fturn n = true -> hdrof u v n = fh)
-          (Hgh: forall n, fturn n = false -> hdrof u v n = gh)
-          (Hft: forall n, fturn n = true -> tagof n = fq)
-          (Hflip: forall n, fturn (S n) = negb (fturn n)).
-
-  Lemma fturn_t: forall n, fturn n = true -> fturn (S n) = false.
-  Proof. intros n H; rewrite Hflip, H; reflexivity. Qed.
-
-  Lemma fturn_f: forall n, fturn n = false -> fturn (S n) = true.
-  Proof. intros n H; rewrite Hflip, H; reflexivity. Qed.
+  (** [fh] is the header of the queue whose progress we are proving, [gh] the
+      other one. *)
+  Context (fh gh: nat).
 
   (** ** The two resource-level turn lemmas *)
 
@@ -134,328 +98,156 @@ Section Composition.
       intros x Hx Hy; apply (Hdj x Hx), (qcells_rot gh b nsg x), Hy.
   Qed.
 
-  (** ** The invariants *)
+  (** ** The invariant and rank
 
-  (** The [AG] invariant: BOTH queues are represented in the shared heap, their
-      footprints are disjoint, and each still contains its observed element.
-      The abstract queues are existentially quantified, exactly as in the
-      frozen single-queue proof. *)
-  Definition Iq (nlf nlg: nat) (h: Heap) : Prop :=
-    exists nsf vsf nsg vsg df dg,
-      qrep fh nsf vsf h /\ qrep gh nsg vsg h /\ Disj fh nsf gh nsg
-      /\ find_index Nat.eqb nlf vsf = Some df /\ find_index Nat.eqb nlg vsg = Some dg.
+      BOTH queues are represented in the shared heap, their footprints are
+      disjoint, and each still contains its observed element.  The ghost is
+      the rank: (occurrence bound left, position of [nlf] in the focused
+      queue).  Neither the heap nor the world appears in it. *)
+  Definition Ifair (nlf nlg kb: nat) (g: nat * nat) (s: SSig) : Prop :=
+    exists nsf vsf nsg vsg dg,
+      qrep fh nsf vsf (fst (csl_memory s)) /\ qrep gh nsg vsg (fst (csl_memory s))
+      /\ Disj fh nsf gh nsg
+      /\ find_index Nat.eqb nlf vsf = Some (snd g) /\ find_index Nat.eqb nlg vsg = Some dg
+      /\ fst g = kb - csl_counter s.
 
-  (** The ghost invariant of the inner eventuality.  The rank is
-      (occurrence bound left, position in the focused queue, scheduler phase).
-      Neither the heap nor the world appears in it. *)
-  Definition Ig (nlf nlg kb: nat) (m: nat * (nat * nat)) (n: nat) (s: SSig)
-    : Prop :=
-    exists nsf vsf nsg vsg df dg,
-      qrep fh nsf vsf (fst (fst s)) /\ qrep gh nsg vsg (fst (fst s)) /\ Disj fh nsf gh nsg
-      /\ find_index Nat.eqb nlf vsf = Some df /\ find_index Nat.eqb nlg vsg = Some dg
-      /\ m = (kb - csl_counter s, (df, if fturn n then 0 else 1)).
+  (** One turn of either slot: a focused turn hits the target or drops the
+      rank; a foreign turn drops the bound component or leaves the rank. *)
+  Lemma worker_fair_turns (tagf tagg nlf nlg kb: nat) (fi: Fin.t 2)
+      (ps: Vector.t (CProg unit) 2) (P: indexed (nat * nat) -> Prop) :
+    (ps $ fi) = worker tagf fh -> (forall j, j <> fi -> (ps $ j) = worker tagg gh) ->
+    (forall j, Nat.le kb j -> P (stamp (tagf, nlf) j)) ->
+    FairTurns sh (csl_pool ps) fi (Ifair nlf nlg kb) (fun g => g) lexnat (csl_indexed P).
+  Proof.
+    intros Hfi Hother HP g s j (nsf & vsf & nsg & vsg & dg & Hqf & Hqg & Hdj & Hff & Hfg & Hg).
+    destruct s as ((h, allocs), (ctx, c)); destruct g as (kc, d);
+      cbn in Hqf, Hqg, Hff, Hg; subst kc.
+    unfold csl_pool; rewrite (Vector.nth_map denote ps j j eq_refl).
+    destruct (Fin.eq_dec j fi) as [->|Hne].
+    - (* the FOCUSED queue's turn *)
+      rewrite Hfi.
+      destruct vsf as [| pv vsf']; [cbn in Hff; discriminate |].
+      destruct nsf as [| a nsf']; [apply qrep_len in Hqf; cbn in Hqf; discriminate |].
+      destruct (step_focus nsf' vsf' nsg vsg a pv h Hqf Hqg Hdj) as (Hqf' & Hqg' & Hdj').
+      pose proof (exact_worker_turn tagf fh a nsf' pv vsf' h allocs ctx c Hqf) as Hturn.
+      set (s' := ((rot_heap fh a (List.hd 0 nsf') (zof fh nsf') h, allocs), (ctx, S c))).
+      assert (Hinv : forall d', find_index Nat.eqb nlf (vsf' ++ [pv]) = Some d' ->
+        Ifair nlf nlg kb (kb - S c, d') s').
+      { intros d' Hd'; exists (nsf' ++ [a]), (vsf' ++ [pv]), nsg, vsg, dg; cbn.
+        split; [exact Hqf' |]; split; [exact Hqg' |]; split; [exact Hdj' |];
+          split; [exact Hd' |]; split; [exact Hfg | reflexivity]. }
+      destruct d as [| d0].
+      + (* the element is at the head: observe it, or get closer to the bound *)
+        pose proof (find_index_head Nat.eqb Nat.eqb_eq _ _ _ Hff) as Hv; subst pv.
+        destruct (find_index_last_ex Nat.eqb Nat.eqb_eq nlf vsf') as (d' & Hd').
+        exists (kb - S c, d'), s', (inr (stamp (tagf, nlf) c)).
+        split; [exact Hturn |]; split; [now apply Hinv |].
+        destruct (Nat.le_gt_cases kb c) as [Hle | Hgt].
+        * left; cbn; apply HP; exact Hle.
+        * right; left; left; cbn; lia.
+      + (* the element is deeper: rotate, its position falls *)
+        pose proof (find_index_rotl Nat.eqb nlf pv vsf' d0 Hff) as Hd0.
+        rewrite rotl_cons in Hd0.
+        exists (kb - S c, d0), s', (inr (stamp (tagf, pv) c)).
+        split; [exact Hturn |]; split; [now apply Hinv |].
+        right; left; destruct (Nat.le_gt_cases kb c) as [Hle | Hgt].
+        * right; cbn; split; lia.
+        * left; cbn; lia.
+    - (* the FOREIGN queue's turn *)
+      rewrite (Hother j Hne).
+      assert (Hnef: nsf <> []).
+      { intro Hnil; subst nsf.
+        assert (Hlen : length vsf = 0) by (apply qrep_len in Hqf; cbn in Hqf; lia).
+        pose proof (find_index_nonnil Nat.eqb nlf vsf d Hff) as Hnonempty.
+        destruct vsf; [apply Hnonempty; reflexivity|discriminate]. }
+      destruct vsg as [| pw vsg']; [cbn in Hfg; discriminate |].
+      destruct nsg as [| b nsg']; [apply qrep_len in Hqg; cbn in Hqg; discriminate |].
+      destruct (step_foreign nsf vsf nsg' vsg' b pw h Hqf Hnef Hqg Hdj) as (Hqf' & Hqg' & Hdj').
+      destruct (find_index_rotl_pres Nat.eqb Nat.eqb_eq _ _ _ _ Hfg) as (dg' & Hdg').
+      rewrite rotl_cons in Hdg'.
+      exists (kb - S c, d),
+        ((rot_heap gh b (List.hd 0 nsg') (zof gh nsg') h, allocs), (ctx, S c)),
+        (inr (stamp (tagg, pw) c)).
+      split; [exact (exact_worker_turn tagg gh b nsg' pw vsg' h allocs ctx c Hqg) |].
+      split.
+      { exists nsf, vsf, (nsg' ++ [b]), (vsg' ++ [pw]), dg'; cbn.
+        split; [exact Hqf' |]; split; [exact Hqg' |]; split; [exact Hdj' |];
+          split; [exact Hff |]; split; [exact Hdg' | reflexivity]. }
+      destruct (Nat.le_gt_cases kb c) as [Hle | Hgt].
+      + right; right; split; [exact Hne |]; f_equal; lia.
+      + right; left; left; cbn; lia.
+  Qed.
 
-  (** ** The inner eventuality: the focused queue pops its element again *)
-
-  Section Inner.
-    Context (nlf nlg kb: nat) (P: (indexed (nat * nat)) -> Prop)
-            (HP: forall j, Nat.le kb j -> P (stamp (fq,nlf) j)).
-
-    Lemma inner_af: forall n h allocs ctx c w,
-        not_done w ->
-        Iq nlf nlg h ->
-        <( {interp_state sh (sched u v n) ((h, allocs), (ctx, c))}, w |= AF visW {csl_indexed P} )>.
-    Proof.
-      intros n h allocs ctx c w Hd (nsf & vsf & nsg & vsg & df & dg & Hqf & Hqg & Hdj & Hff & Hfg).
-      unfold sched.
-      apply (aul_state_iter_ghost sh rank3 (Ig nlf nlg kb) (sbody u v) _ _
-               rank3_wf (kb - c, (df, if fturn n then 0 else 1)) n ((h, allocs), (ctx, c)) w Hd).
-      - exists nsf, vsf, nsg, vsg, df, dg; cbn.
-        split; [exact Hqf |]; split; [exact Hqg |]; split; [exact Hdj |];
-          split; [exact Hff |]; split; [exact Hfg | reflexivity].
-      - clear n h allocs ctx c w Hd nsf vsf nsg vsg df dg Hqf Hqg Hdj Hff Hfg.
-        intros m n s w Hd
-          (nsf & vsf & nsg & vsg & df & dg & Hqf & Hqg & Hdj & Hff & Hfg & Hm).
-        destruct s as ((h, allocs), (ctx, c)); cbn in Hqf, Hqg, Hm.
-        destruct (fturn n) eqn:Eph.
-        + (* --- the FOCUSED queue's turn --- *)
-          destruct vsf as [| pv vsf']; [cbn in Hff; discriminate |].
-          destruct nsf as [| a nsf'];
-            [apply qrep_len in Hqf; cbn in Hqf; discriminate |].
-          pose proof (sbody_spec u v n a nsf' pv vsf' h allocs ctx c) as Hspec.
-          rewrite (Hfh n Eph), (Hft n Eph) in Hspec.
-          specialize (Hspec Hqf).
-          destruct (step_focus nsf' vsf' nsg vsg a pv h Hqf Hqg Hdj)
-            as (Hqf' & Hqg' & Hdj').
-          assert (Hstep: forall df',
-                     find_index Nat.eqb nlf (vsf' ++ [pv]) = Some df' ->
-                     rank3 (kb - S c, (df', 1)) m ->
-                     (exists g' i' s' w',
-                         not_done w'
-                         /\ <[ {interp_state sh ((sbody u v) n) ((h, allocs), (ctx, c))}, w
-                               |= ⊤ AU AX done= {(s', @inl nat unit i')} w' ]>
-                         /\ Ig nlf nlg kb g' i' s'
-                         /\ rank3 g' m)).
-          { intros df' Hdf' Hlex.
-            exists (kb - S c, (df', 1)), (S n),
-              ((rot_heap fh a (List.hd 0 nsf') (zof fh nsf') h, allocs), (ctx, S c)),
-              (Obs (Log (inr (stamp (fq,pv) c) : CSLObs (nat * nat))) tt).
-            split; [constructor |].
-            split.
-            { rewrite Hspec; apply aur_log;
-                [apply aur_step; right; split;
-                 [apply ticll_top; constructor
-                 | cleft; apply axr_ret; [constructor | split; reflexivity]]
-                | apply ticll_top; assumption]. }
-            split; [| exact Hlex].
-            exists (nsf' ++ [a]), (vsf' ++ [pv]), nsg, vsg, df', dg; cbn.
-            split; [exact Hqf' |]; split; [exact Hqg' |]; split; [exact Hdj' |];
-              split; [exact Hdf' |]; split; [exact Hfg |].
-            rewrite (fturn_t n Eph); reflexivity. }
-          destruct df as [| d0].
-          * (* the element is at the head of the focused queue *)
-            pose proof (find_index_head Nat.eqb Nat.eqb_eq _ _ _ Hff) as Hv; subst pv.
-            destruct (Nat.le_gt_cases kb c) as [Hle | Hgt].
-            -- (* and the occurrence bound is met: observe it now *)
-               left.
-               rewrite Hspec.
-               apply afl_log; [assumption |].
-               cleft; apply ticll_vis; constructor; now apply HP.
-            -- (* the bound is not met yet: rotate, the bound gets closer *)
-               right.
-               destruct (find_index_last_ex Nat.eqb Nat.eqb_eq nlf vsf') as (df' & Hdf').
-               apply (Hstep df'); [exact Hdf' | rewrite Hm; apply rank3_bound; lia].
-          * (* the element is deeper: rotate, its position falls *)
-            right.
-            apply (Hstep d0).
-            -- rewrite <- rotl_cons; eapply find_index_rotl; exact Hff.
-            -- rewrite Hm; destruct (Nat.le_gt_cases kb c) as [Hle | Hgt].
-               ++ replace (kb - S c) with (kb - c) by lia.
-                  apply rank3_pos; lia.
-               ++ apply rank3_bound; lia.
-        + (* --- the FOREIGN queue's turn --- *)
-          assert (Hnef: nsf <> []) by (eapply qrep_find_nonnil; eassumption).
-          destruct vsg as [| pw vsg']; [cbn in Hfg; discriminate |].
-          destruct nsg as [| b nsg'];
-            [apply qrep_len in Hqg; cbn in Hqg; discriminate |].
-          pose proof (sbody_spec u v n b nsg' pw vsg' h allocs ctx c) as Hspec.
-          rewrite (Hgh n Eph) in Hspec.
-          specialize (Hspec Hqg).
-          destruct (step_foreign nsf vsf nsg' vsg' b pw h Hqf Hnef Hqg Hdj)
-            as (Hqf' & Hqg' & Hdj').
-          destruct (find_index_rotl_pres Nat.eqb Nat.eqb_eq _ _ _ _ Hfg) as (dg' & Hdg').
-          rewrite rotl_cons in Hdg'.
-          right.
-          exists (kb - S c, (df, 0)), (S n),
-            ((rot_heap gh b (List.hd 0 nsg') (zof gh nsg') h, allocs), (ctx, S c)),
-            (Obs (Log (inr (stamp ((tagof n),pw) c) : CSLObs (nat * nat))) tt).
-          split; [constructor |].
-          split.
-          { rewrite Hspec; apply aur_log;
-              [apply aur_step; right; split;
-               [apply ticll_top; constructor
-               | cleft; apply axr_ret; [constructor | split; reflexivity]]
-              | apply ticll_top; assumption]. }
-          split.
-          { exists nsf, vsf, (nsg' ++ [b]), (vsg' ++ [pw]), df, dg'; cbn.
-            split; [exact Hqf' |]; split; [exact Hqg' |]; split; [exact Hdj' |];
-              split; [exact Hff |]; split; [exact Hdg' |].
-            rewrite (fturn_f n Eph); reflexivity. }
-          rewrite Hm; destruct (Nat.le_gt_cases kb c) as [Hle | Hgt].
-          * replace (kb - S c) with (kb - c) by lia.
-            apply rank3_phase; lia.
-          * apply rank3_bound; lia.
-    Qed.
-
-    (** One scheduler turn from an invariant heap: one logged pop, the
-        invariant heap after it.  The focus/foreign case analysis of the
-        [AG] proof happens here, once. *)
-    Lemma sched_turn_spec: forall n h allocs ctx c,
-        Iq nlf nlg h ->
-        exists o h',
-          interp_state sh (turn (tagof n) (hdrof u v n)) ((h, allocs), (ctx, c))
-            ~ (log (inr o : CSLObs (nat * nat));; Ret (((h', allocs), (ctx, S c)), tt)
-               : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit))
-          /\ Iq nlf nlg h'.
-    Proof.
-      intros n h allocs ctx c
-        (nsf & vsf & nsg & vsg & df & dg & Hqf & Hqg & Hdj & Hff & Hfg).
-      destruct (fturn n) eqn:Eph.
-      - (* focused turn *)
-        destruct vsf as [| pv vsf']; [cbn in Hff; discriminate |].
-        destruct nsf as [| a nsf'];
-          [apply qrep_len in Hqf; cbn in Hqf; discriminate |].
-        destruct (step_focus nsf' vsf' nsg vsg a pv h Hqf Hqg Hdj)
-          as (Hqf' & Hqg' & Hdj').
-        destruct (find_index_rotl_pres Nat.eqb Nat.eqb_eq _ _ _ _ Hff) as (df' & Hdf').
-        rewrite rotl_cons in Hdf'.
-        exists (stamp (fq, pv) c), (rot_heap fh a (List.hd 0 nsf') (zof fh nsf') h).
-        split.
-        + rewrite (Hfh n Eph), (Hft n Eph); unfold turn.
-          rewrite (turnk_spec fq fh a nsf' pv vsf' h allocs ctx c (Ret tt) Hqf).
-          rewrite !log_vis; apply sb_vis; intros _.
-          rewrite interp_state_ret; reflexivity.
-        + exists (nsf' ++ [a]), (vsf' ++ [pv]), nsg, vsg, df', dg.
-          split; [exact Hqf' |]; split; [exact Hqg' |]; split; [exact Hdj' |];
-            split; [exact Hdf' | exact Hfg].
-      - (* foreign turn *)
-        assert (Hnef: nsf <> []) by (eapply qrep_find_nonnil; eassumption).
-        destruct vsg as [| pw vsg']; [cbn in Hfg; discriminate |].
-        destruct nsg as [| b nsg'];
-          [apply qrep_len in Hqg; cbn in Hqg; discriminate |].
-        destruct (step_foreign nsf vsf nsg' vsg' b pw h Hqf Hnef Hqg Hdj)
-          as (Hqf' & Hqg' & Hdj').
-        destruct (find_index_rotl_pres Nat.eqb Nat.eqb_eq _ _ _ _ Hfg) as (dg' & Hdg').
-        rewrite rotl_cons in Hdg'.
-        exists (stamp (tagof n, pw) c), (rot_heap gh b (List.hd 0 nsg') (zof gh nsg') h).
-        split.
-        + rewrite (Hgh n Eph); unfold turn.
-          rewrite (turnk_spec (tagof n) gh b nsg' pw vsg' h allocs ctx c (Ret tt) Hqg).
-          rewrite !log_vis; apply sb_vis; intros _.
-          rewrite interp_state_ret; reflexivity.
-        + exists nsf, vsf, (nsg' ++ [b]), (vsg' ++ [pw]), df, dg'.
-          split; [exact Hqf' |]; split; [exact Hqg' |]; split; [exact Hdj' |];
-            split; [exact Hff | exact Hdg'].
-    Qed.
-
-    (** ** The recurrence theorem for the focused queue.
-
-        Each turn of the reference scheduler ends with a visible [Step]
-        (the source scheduler's selection), so one loop iteration has TWO
-        visible transitions: the pop and the step.  [ag_state_iter] would
-        require [AF] of the body alone at the intermediate step state, which
-        does not hold; the eventuality there comes from the next loop head.
-        The coinduction is therefore spelled out: at every loop head [AF]
-        is [inner_af], and the step state inherits it through [aul_step]. *)
-    Theorem sched_agaf: forall n h allocs ctx c w,
-        not_done w ->
-        Iq nlf nlg h ->
-        <( {interp_state sh (sched u v n) ((h, allocs), (ctx, c))}, w |= AG (AF visW {csl_indexed P}) )>.
-    Proof.
-      intros n h allocs ctx c w Hd HI.
-      change (interp_state sh (sched u v n) ((h, allocs), (ctx, c)))
-        with (srun u v n ((h, allocs), (ctx, c))).
-      revert n h allocs ctx c w Hd HI.
-      coinduction_g R CIH; intros n h allocs ctx c w Hd HI.
-      destruct (sched_turn_spec n h allocs ctx c HI) as (o & h' & Hsp & HI').
-      assert (Hsb: srun u v n ((h, allocs), (ctx, c)) ~
-                Vis (Log (inr o : CSLObs (nat * nat)))
-                  (fun _ => Step (srun u v (S n) ((h', allocs), (ctx, S c))))).
-      { rewrite srun_turn, Hsp, log_vis, bind_vis.
-        apply sb_vis; intros _; rewrite bind_ret_l; reflexivity. }
-      split; [| split].
-      - apply inner_af; assumption.
-      - rewrite Hsb; apply (can_step_vis _ _ tt); assumption.
-      - intros t' w' TR.
-        destruct (ktrans_semiproper _ _ _ _ _ Hsb TR) as (u' & TR' & Hsb').
-        apply ktrans_vis in TR' as ([] & -> & Heq & _).
-        rewrite Hsb', <- Heq.
-        apply (b_chain R); split; [| split].
-        + apply aul_step; right; split; [apply ticll_top; constructor |].
-          apply inner_af; [constructor | exact HI'].
-        + apply can_step_step; constructor.
-        + intros t'' w'' TR''.
-          apply ktrans_step in TR'' as (Heq'' & <- & _).
-          rewrite Heq''.
-          apply CIH; [constructor | exact HI'].
-    Qed.
-  End Inner.
+  (** ** The recurrence theorem for the focused queue, for any fair policy. *)
+  Theorem fair_agaf_pool : forall (sch : Scheduler) `{FairScheduler sch} (tagf tagg : nat)
+      (fi : Fin.t 2) (ps : Vector.t (CProg unit) 2) nlf nlg kb (P : indexed (nat * nat) -> Prop),
+    (ps $ fi) = worker tagf fh -> (forall j, j <> fi -> (ps $ j) = worker tagg gh) ->
+    (forall j, Nat.le kb j -> P (stamp (tagf, nlf) j)) ->
+    forall focus st h allocs ctx c nsf vsf nsg vsg df dg,
+      qrep fh nsf vsf h -> qrep gh nsg vsg h -> Disj fh nsf gh nsg ->
+      find_index Nat.eqb nlf vsf = Some df -> find_index Nat.eqb nlg vsg = Some dg ->
+      <( {run_fair_pool sch ps focus st ((h,allocs),(ctx,c))}, Pure
+         |= AG (AF visW {fair_obs (csl_indexed P)}) )>.
+  Proof.
+    intros sch Hfair tagf tagg fi ps nlf nlg kb P Hfi Hother HP
+      focus st h allocs ctx c nsf vsf nsg vsg df dg Hqf Hqg Hdj Hff Hfg.
+    unfold run_fair_pool.
+    apply (agaf_fair_turns sh sch (csl_pool ps) fi (Ifair nlf nlg kb) (fun g => g) lexnat
+      (csl_indexed P) lexnat_wf (worker_fair_turns tagf tagg nlf nlg kb fi ps P Hfi Hother HP)
+      (kb - c, df)); [|constructor].
+    exists nsf, vsf, nsg, vsg, dg; cbn.
+    split; [exact Hqf |]; split; [exact Hqg |]; split; [exact Hdj |];
+      split; [exact Hff |]; split; [exact Hfg | reflexivity].
+  Qed.
 End Composition.
 
 (** ** The two per-queue theorems.
 
-    Both are instantiations of ONE proof: the focus is a parameter, and the
-    scheduler hypotheses are discharged by [Nat.even] and its negation.  Note
-    the quantification over the turn counter [n]: the theorems hold from
-    EITHER starting scheduler phase, and from any point of the schedule. *)
+    Both are instantiations of ONE proof: the focus is a parameter.  After the
+    fork of [parallel_queues u v] the pool is [worker 2 v; worker 1 u], so
+    queue 1 lives in slot [FS F1] and queue 2 in slot [F1].  The theorems hold
+    from any focus and any policy state. *)
 
+(** *** Queue 1 (slot [FS F1], tag 1) *)
 
-(** *** Queue 1 (the one the scheduler serves on even turns) *)
-
-Theorem sched_agaf_q1_gen: forall u v nl1 nl2 kb (P: (indexed (nat * nat)) -> Prop),
+Theorem fair_agaf_q1_gen (sch : Scheduler) `{FairScheduler sch} :
+  forall u v nl1 nl2 kb (P: (indexed (nat * nat)) -> Prop),
     (forall j, Nat.le kb j -> P (stamp (1,nl1) j)) ->
-    forall n h allocs ctx c ns1 vs1 ns2 vs2 d1 d2,
+    forall focus st h allocs ctx c ns1 vs1 ns2 vs2 d1 d2,
       qrep u ns1 vs1 h -> qrep v ns2 vs2 h -> Disj u ns1 v ns2 ->
       find_index Nat.eqb nl1 vs1 = Some d1 -> find_index Nat.eqb nl2 vs2 = Some d2 ->
-      <( {srun u v n ((h, allocs), (ctx, c))}, Pure |= AG (AF visW {csl_indexed P}) )>.
+      <( {run_fair_pool sch [worker 2 v; worker 1 u]%vector focus st ((h, allocs), (ctx, c))}, Pure
+         |= AG (AF visW {fair_obs (csl_indexed P)}) )>.
 Proof.
-  intros u v nl1 nl2 kb P HP n h allocs ctx c ns1 vs1 ns2 vs2 d1 d2 Hq1 Hq2 Hdj Hf1 Hf2.
-  unfold srun.
-  apply (sched_agaf u v 1 u v Nat.even
-           (fun n H => hdrof_even u v n H)
-           (fun n H => hdrof_odd u v n H)
-           (fun n H => tagof_even n H)
-           even_flip nl1 nl2 kb P HP n h allocs ctx c Pure);
-    [constructor |].
-  exists ns1, vs1, ns2, vs2, d1, d2.
-  split; [exact Hq1 |]; split; [exact Hq2 |]; split; [exact Hdj |];
-    split; [exact Hf1 | exact Hf2].
+  intros u v nl1 nl2 kb P HP focus st h allocs ctx c ns1 vs1 ns2 vs2 d1 d2 Hq1 Hq2 Hdj Hf1 Hf2.
+  assert (Hother : forall j : Fin.t 2, j <> Fin.FS Fin.F1 ->
+    ([worker 2 v; worker 1 u]%vector $ j) = worker 2 v).
+  { intro j; pattern j; apply Fin.caseS'; [intros _; reflexivity|].
+    intro k; pattern k; apply Fin.caseS'; [intro Hc; exfalso; apply Hc; reflexivity|].
+    intro z; inversion z. }
+  apply (fair_agaf_pool u v sch 1 2 (Fin.FS Fin.F1) [worker 2 v; worker 1 u]%vector nl1 nl2 kb P eq_refl
+    Hother
+    HP focus st h allocs ctx c ns1 vs1 ns2 vs2 d1 d2 Hq1 Hq2 Hdj Hf1 Hf2).
 Qed.
 
-Theorem sched_agaf_q1: forall u v nl1 nl2 n h allocs ctx c ns1 vs1 ns2 vs2 d1 d2,
-    qrep u ns1 vs1 h -> qrep v ns2 vs2 h -> Disj u ns1 v ns2 ->
-    find_index Nat.eqb nl1 vs1 = Some d1 -> find_index Nat.eqb nl2 vs2 = Some d2 ->
-    <( {srun u v n ((h, allocs), (ctx, c))}, Pure
-       |= AG (AF visW {csl_indexed (fun o => indexed_value o = (1,nl1))}) )>.
-Proof.
-  intros.
-  eapply (sched_agaf_q1_gen u v nl1 nl2 0 ((fun o => indexed_value o = (1,nl1))));
-    [intros j _; split; reflexivity | eassumption .. ].
-Qed.
+(** *** Queue 2 (slot [F1], tag 2) *)
 
-Theorem sched_agaf_q1_fresh: forall u v nl1 nl2 k n h allocs ctx c ns1 vs1 ns2 vs2 d1 d2,
-    qrep u ns1 vs1 h -> qrep v ns2 vs2 h -> Disj u ns1 v ns2 ->
-    find_index Nat.eqb nl1 vs1 = Some d1 -> find_index Nat.eqb nl2 vs2 = Some d2 ->
-    <( {srun u v n ((h, allocs), (ctx, c))}, Pure
-       |= AG (AF visW {csl_indexed (indexed_after (fun x => x = (1,nl1)) k)}) )>.
-Proof.
-  intros.
-  eapply (sched_agaf_q1_gen u v nl1 nl2 k ((indexed_after (fun x => x = (1,nl1)) k)));
-    [intros j Hj; split; [reflexivity | exact Hj]
-    | eassumption .. ].
-Qed.
-
-(** *** Queue 2 (the one the scheduler serves on odd turns) *)
-
-Theorem sched_agaf_q2_gen: forall u v nl1 nl2 kb (P: (indexed (nat * nat)) -> Prop),
+Theorem fair_agaf_q2_gen (sch : Scheduler) `{FairScheduler sch} :
+  forall u v nl1 nl2 kb (P: (indexed (nat * nat)) -> Prop),
     (forall j, Nat.le kb j -> P (stamp (2,nl2) j)) ->
-    forall n h allocs ctx c ns1 vs1 ns2 vs2 d1 d2,
+    forall focus st h allocs ctx c ns1 vs1 ns2 vs2 d1 d2,
       qrep u ns1 vs1 h -> qrep v ns2 vs2 h -> Disj u ns1 v ns2 ->
       find_index Nat.eqb nl1 vs1 = Some d1 -> find_index Nat.eqb nl2 vs2 = Some d2 ->
-      <( {srun u v n ((h, allocs), (ctx, c))}, Pure |= AG (AF visW {csl_indexed P}) )>.
+      <( {run_fair_pool sch [worker 2 v; worker 1 u]%vector focus st ((h, allocs), (ctx, c))}, Pure
+         |= AG (AF visW {fair_obs (csl_indexed P)}) )>.
 Proof.
-  intros u v nl1 nl2 kb P HP n h allocs ctx c ns1 vs1 ns2 vs2 d1 d2 Hq1 Hq2 Hdj Hf1 Hf2.
-  unfold srun.
-  apply (sched_agaf u v 2 v u (fun n => negb (Nat.even n))
-           (fun n H => hdrof_odd u v n (proj1 (negb_true_iff _) H))
-           (fun n H => hdrof_even u v n (proj1 (negb_false_iff _) H))
-           (fun n H => tagof_odd n (proj1 (negb_true_iff _) H))
-           (fun n => f_equal negb (even_flip n)) nl2 nl1 kb P HP n h allocs ctx c Pure);
-    [constructor |].
-  exists ns2, vs2, ns1, vs1, d2, d1.
-  split; [exact Hq2 |]; split; [exact Hq1 |];
-    split; [now apply Disj_sym | split; [exact Hf2 | exact Hf1]].
-Qed.
-
-Theorem sched_agaf_q2: forall u v nl1 nl2 n h allocs ctx c ns1 vs1 ns2 vs2 d1 d2,
-    qrep u ns1 vs1 h -> qrep v ns2 vs2 h -> Disj u ns1 v ns2 ->
-    find_index Nat.eqb nl1 vs1 = Some d1 -> find_index Nat.eqb nl2 vs2 = Some d2 ->
-    <( {srun u v n ((h, allocs), (ctx, c))}, Pure
-       |= AG (AF visW {csl_indexed (fun o => indexed_value o = (2,nl2))}) )>.
-Proof.
-  intros.
-  eapply (sched_agaf_q2_gen u v nl1 nl2 0 ((fun o => indexed_value o = (2,nl2))));
-    [intros j _; split; reflexivity | eassumption .. ].
-Qed.
-
-Theorem sched_agaf_q2_fresh: forall u v nl1 nl2 k n h allocs ctx c ns1 vs1 ns2 vs2 d1 d2,
-    qrep u ns1 vs1 h -> qrep v ns2 vs2 h -> Disj u ns1 v ns2 ->
-    find_index Nat.eqb nl1 vs1 = Some d1 -> find_index Nat.eqb nl2 vs2 = Some d2 ->
-    <( {srun u v n ((h, allocs), (ctx, c))}, Pure
-       |= AG (AF visW {csl_indexed (indexed_after (fun x => x = (2,nl2)) k)}) )>.
-Proof.
-  intros.
-  eapply (sched_agaf_q2_gen u v nl1 nl2 k ((indexed_after (fun x => x = (2,nl2)) k)));
-    [intros j Hj; split; [reflexivity | exact Hj]
-    | eassumption .. ].
+  intros u v nl1 nl2 kb P HP focus st h allocs ctx c ns1 vs1 ns2 vs2 d1 d2 Hq1 Hq2 Hdj Hf1 Hf2.
+  assert (Hother : forall j : Fin.t 2, j <> Fin.F1 ->
+    ([worker 2 v; worker 1 u]%vector $ j) = worker 1 u).
+  { intro j; pattern j; apply Fin.caseS'; [intro Hc; exfalso; apply Hc; reflexivity|].
+    intro k; pattern k; apply Fin.caseS'; [intros _; reflexivity|].
+    intro z; inversion z. }
+  apply (fair_agaf_pool v u sch 2 1 Fin.F1 [worker 2 v; worker 1 u]%vector nl2 nl1 kb P eq_refl
+    Hother
+    HP focus st h allocs ctx c ns2 vs2 ns1 vs1 d2 d1 Hq2 Hq1 (Disj_sym _ _ _ _ Hdj) Hf2 Hf1).
 Qed.

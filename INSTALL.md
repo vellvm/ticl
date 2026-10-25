@@ -47,25 +47,24 @@ opam install dune.3.23.1 rocq-prover.9.2.0 rocq-equations.1.3.2+9.2 \
 - `rocq-coinduction` (>= 1.22) provides the tower-based coinduction library
   (`Chain`, `tower`, `coinduction R CIH`); the companion API is not used.
 - `coq-itree`, `rocq-relation-algebra` and `coq-ext-lib` are needed by the
-  `ctrees` library.
+  `rocq-ctree` library.
 
-## The `ctrees` library (git submodule)
+## The `ctrees` library (`rocq-ctree`)
 
 Ticl's model of programs is the `ctree E B X` type of the `ctrees` library
-(https://github.com/vellvm/ctrees, branch `fix/universe-check`), vendored as a
-git submodule in `ctrees/` and built together with Ticl by dune. After cloning,
-fetch the submodule:
+(https://github.com/vellvm/ctrees). Ticl tracks its `fix/universe-check`
+branch, which is not published on the opam repository, so pin and install it:
 
 ```bash
-git clone --recurse-submodules https://github.com/vellvm/ticl
-# or, in an existing checkout:
-git submodule update --init
+opam pin add -y rocq-ctree git+https://github.com/vellvm/ctrees.git#fix/universe-check
 ```
+
+Equivalently, `opam install . --deps-only` from the repository root pins it
+through the `pin-depends` field of `rocq-ticl.opam`.
 
 ## Building and checking Ticl proofs and documentation
 
-To typecheck all proofs in TICL (and the vendored `ctrees` theories), from
-the repository root, run:
+To typecheck all proofs in TICL, from the repository root, run:
 
 ```bash
 dune build

@@ -670,6 +670,93 @@ Proof.
       destruct (Nat.eq_dec base x); [contradiction | reflexivity].
 Qed.
 
+(** ** Frame facts for [⊎]: reads, writes and frees on [m] agree with [m ⊎ fr] when [m # fr]. *)
+(** Reading an owned cell is unchanged by a disjoint frame. *)
+Lemma managed_read_pop : forall (m fr : ManagedHeap) a v,
+  m # fr -> fst m a = Some v -> fst (m ⊎ fr) a = Some v.
+Proof.
+  intros [h allocs] [hf af] a v [Dh Da] Ha; cbn in *.
+  exact (read_local h hf a v Dh Ha).
+Qed.
+
+(** Writing an owned cell preserves disjointness and commutes with framing up to [≈]. *)
+Lemma managed_write_pop : forall (m fr : ManagedHeap) a v,
+  m # fr -> fst m a <> None ->
+  (upd (fst m) a v, snd m) # fr /\
+  (upd (fst m) a v, snd m) ⊎ fr ≈
+    (upd (fst (m ⊎ fr)) a v, snd (m ⊎ fr)).
+Proof.
+  intros [h allocs] [hf af] a v [Dh Da] Ha; cbn in *.
+  split.
+  - split; [| exact Da].
+    destruct (h a) as [v0 |] eqn:Ea; [| contradiction].
+    eapply write_local_disj; eauto.
+  - split; [apply heq_sym, write_local_frame | apply heq_refl].
+Qed.
+
+(** Freeing a managed allocation preserves disjointness and commutes with framing up to [≈]. *)
+Lemma managed_free_pop : forall (m fr : ManagedHeap) base m',
+  m # fr -> managed_wf m -> managed_free m base = Some m' ->
+  (exists m'', managed_free (m ⊎ fr) base = Some m'' /\ m'' ≈ m' ⊎ fr) /\
+  m' # fr.
+Proof.
+  intros [h allocs] [hf af] base m' [Dh Da] [W D] Hf.
+  unfold managed_free in Hf; cbn [fst snd] in *.
+  destruct (Nat.eqb_spec base 0) as [-> | Hb0].
+  - injection Hf as <-; split.
+    + exists ((h, allocs) ⊎ (hf, af)); split.
+      * reflexivity.
+      * apply peq_refl.
+    + split; assumption.
+  - destruct (allocs base) as [[| n] |] eqn:Ea; try discriminate.
+    injection Hf as <-.
+    destruct (W base (S n) Ea) as (_ & _ & C).
+    split.
+    + exists (hfree_block base (S n) (hunion h hf),
+              hfree base (hunion allocs af)); split.
+      * change (managed_free (hunion h hf, hunion allocs af) base =
+                  Some (hfree_block base (S n) (hunion h hf),
+                        hfree base (hunion allocs af))).
+        unfold managed_free; cbn [fst snd].
+        destruct (Nat.eqb_spec base 0) as [E | _]; [contradiction |].
+        rewrite (hunion_some allocs af base (S n) Ea); reflexivity.
+      * cbn; split.
+        -- intro x; destruct (Nat.le_gt_cases base x) as [L | L];
+             [destruct (Nat.lt_ge_cases x (base + S n)) as [R | R] |].
+           ++ unfold hunion; rewrite !hfree_block_in by lia.
+              symmetry; destruct (Dh x) as [Hnone | Hnone].
+              ** exfalso; apply (C x); [lia | exact Hnone].
+              ** exact Hnone.
+           ++ unfold hunion; rewrite !hfree_block_out by lia; reflexivity.
+           ++ unfold hunion; rewrite !hfree_block_out by lia; reflexivity.
+        -- eapply free_local_frame; eauto.
+    + cbn; split.
+      * intro x; unfold hfree_block; destruct (andb _ _).
+        -- left; reflexivity.
+        -- apply Dh.
+      * apply free_local_disj, Da.
+Qed.
+
+
+(** Freeing respects componentwise managed-heap equivalence. *)
+Lemma managed_free_peq : forall (m m' : ManagedHeap) base m1,
+  m ≈ m' -> managed_free m base = Some m1 ->
+  exists m1', managed_free m' base = Some m1' /\ m1 ≈ m1'.
+Proof.
+  intros [h allocs] [h' allocs'] base m1 [Hh Ha] Hf.
+  unfold managed_free in Hf |- *; cbn [fst snd] in *.
+  destruct (Nat.eqb base 0).
+  - injection Hf as <-; exists (h', allocs'); split.
+    + reflexivity.
+    + split; assumption.
+  - rewrite <- (Ha base).
+    destruct (allocs base) as [[| n] |] eqn:Ea; try discriminate.
+    injection Hf as <-; eexists; split; [reflexivity |].
+    cbn; split; intro x.
+    + unfold hfree_block; destruct (andb _ _); [reflexivity | apply Hh].
+    + unfold hfree; destruct (Nat.eq_dec base x); [reflexivity | apply Ha].
+Qed.
+
 (** ** Stride-two node geometry.
 
     A node named [a] owns exactly two cells: [a] and [S a].  Stride two, null

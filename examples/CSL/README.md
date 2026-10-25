@@ -48,6 +48,17 @@ machines and their fairness/rank arguments, and regression consumers remain in
 segment judgments remain distinct; administrative guards are not replaced by
 visible scheduler steps.
 
+`examples.CSL.Allocator.Liveness.allocator_agaf_fair` proves `AG (AF _)`
+recurrence of every observation kind (`tag_alloc`, `tag_retire`, `tag_reclaim`)
+of `run_fair S (allocator_program capacity)` for every `FairScheduler S` and
+every `0 < capacity`, through `agaf_pool_simulation_fair` on the model's
+`PoolSimulation` certificate: the ghost is the model state with the ownership
+lists of `allocator_view`, the rank is (occurrence bound left, block-position
+potential, helpful distance) under `rank3`, and the helpful slot is the owner
+when it can move a block, else a remote that holds or owns one
+(`allocator_fair_turn`). It replaces the round-robin, capacity-2 demo
+recurrence.
+
 Operational consumers use the public checked-operation normal forms instead of
 local read/write/emit/allocation/CAS tactics. Temporal consumers use the source
 matrix, log-prefix rules, and state-iteration rules. Queue recurrence shares the
@@ -121,8 +132,11 @@ PCM-separated queues, an allocation table recording both actual blocks, and the
 original worker execution, at the same observation counter.
 It also covers empty input lists. No initialized heap is assumed.
 
-`examples.CSL.Queue.Ticl` exposes recurrence directly for
-`run_rr (allocated_parallel_queues values1 values2) (managed_empty,(ctx,c))`:
+`examples.CSL.Queue.Ticl` exposes recurrence for **every fair scheduling
+policy**: each theorem takes `(S : Scheduler) `{FairScheduler S}` and a policy
+state `st`, and runs `run_fair S (allocated_parallel_queues values1 values2) st
+(managed_empty,(ctx,c))` (`CTree.Interp.Yield.Fair`; `rr_scheduler` is a
+`FairScheduler` instance, `nd_scheduler` deliberately is not):
 
 - `rotate_agaf_pop_alloc`: queue 1 ordinary recurrence.
 - `rotate_agaf_pop_alloc_q2`: queue 2 ordinary recurrence.
@@ -131,18 +145,25 @@ It also covers empty input lists. No initialized heap is assumed.
 
 These four theorems require one successful `find_index Nat.eqb` premise per payload
 list, not representation, disjointness, or preallocated-heap premises. They
-transport the existing worker recurrence through the proved initialization
-bisimulation. The lower-level statements remain:
+transport the worker recurrence through the proved initialization bisimulation
+`run_fair_allocated_parallel`. The lower-level statements remain:
 
-- `rotate_agaf_pop_rr`: queue 1 ordinary recurrence.
-- `rotate_agaf_pop_rr_q2`: queue 2 ordinary recurrence.
-- `rotate_agaf_pop_rr_fresh`: queue 1 recurrence at every inclusive index bound.
-- `rotate_agaf_pop_rr_q2_fresh`: queue 2 recurrence at every inclusive index bound.
-- `rotate_agaf_pop_rr_owned`: queue 1 recurrence from actual PCM separation.
+- `rotate_agaf_pop_fair`: queue 1 ordinary recurrence.
+- `rotate_agaf_pop_fair_q2`: queue 2 ordinary recurrence.
+- `rotate_agaf_pop_fair_fresh`: queue 1 recurrence at every inclusive index bound.
+- `rotate_agaf_pop_fair_q2_fresh`: queue 2 recurrence at every inclusive index bound.
+- `rotate_agaf_pop_fair_owned`: queue 1 recurrence from actual PCM separation.
 
-Each lower-level conclusion is `AG (AF visW {...})` over
-`run_rr (parallel_queues u v) ((h,allocs),(ctx,c))` for an arbitrary extent table
-`allocs` and context `ctx`; the queue predicates are `csl_indexed P`.
+Each lower-level conclusion is `AG (AF visW {fair_obs (csl_indexed P)})` over
+`run_fair S (parallel_queues u v) st ((h,allocs),(ctx,c))` for an arbitrary extent
+table `allocs` and context `ctx`; `fair_obs` ignores the runner's own
+`Scheduled i` logs (`inr i`) and applies the queue predicate to program
+observations (`inl`). The proof is `Composition.fair_agaf_pool`, one instance of
+the fairness inversion rule `agaf_fair_turns`: the invariant is both queues
+represented and disjoint, the rank is (occurrence bound left, position of the
+element in the focused queue) under `lexnat`, and the helpful slot is the
+focused worker; a foreign turn leaves the rank alone and fairness of the policy
+supplies the focused turn.
 Both membership premises remain: both workers must be nonempty and productive
 for recurrence. The internal execution bisimulation also covers faulty heaps.
 Freshness is `indexed_after P k`: the payload satisfies `P` and its occurrence
@@ -160,11 +181,12 @@ return to the same worker. `shared_worker_turn` packages it with the standard
 invariant/position variant, for either worker, so the generic
 `ag_csl_{nd,rr}_invariance` and `aul_csl_{nd,rr}_eventually` rules apply with
 no fairness or phase argument. The public results are
-`shared_rotate_agaf_pop_{nd,rr}` and `_fresh` (from any represented queue
-containing the payload) and `shared_rotate_agaf_pop_alloc_{nd,rr}` and `_fresh`
-(from `managed_empty`, one `find_index` premise). The plain theorems reuse the
-fresh certificate at bound `0`. Under round robin worker 2 runs first, because
-the parent is gone and the cursor is still `0`.
+`shared_rotate_agaf_pop_{nd,rr,fair}` and `_fresh` (from any represented queue
+containing the payload) and `shared_rotate_agaf_pop_alloc_{nd,rr,fair}` and
+`_fresh` (from `managed_empty`, one `find_index` premise); the `fair` versions
+hold for every `FairScheduler` through `agaf_fair_turns`, since every slot is
+helpful. The plain theorems reuse the fresh certificate at bound `0`. Under round
+robin worker 2 runs first, because the parent is gone and the cursor is still `0`.
 
 The pool rules rely on `interp_schedule_{nd,rr}_guard_equ`: pools equal up to
 finitely many leading guards per slot are bisimilar for every focus, cursor and
@@ -280,6 +302,49 @@ bind and conditional rules `*_csl_flow_bind*`/`*_csl_flow_if`, and raw-event
 while rules `*_csl_raw_while*` over `World CEff`, which make no scheduled
 liveness claim.
 
+## Heap frame rules
+
+`From TICL Require Import Lang.CSL.Frame.` transports proved properties of a
+run to the same program on a heap extended by a disjoint `ManagedHeap` region
+`fr`. The chain is `Logic.Simulation` (Kripke-generic: a conditional
+simulation `csim` preserves every prefix formula and every `implr_free` suffix
+formula, with `done`/`ret` postconditions rewritten by `framer`) →
+`CTree.Logic.Sim` (`csim` on ctrees, `Framable okE` trees: no hidden `Br`
+whose branches are not guarded by a visible `Step`, and only `okE` events) →
+`CTree.Interp.CSL.Frame` (`csim_interp_sh_frame`: `interp_state sh u` is a
+conditional simulation between `s` and any `s'` with `frame_rel fr s s'`;
+`ticll_csl_frame`, `ticlr_csl_frame`, `a{n,u}r_csl_frame_done`) →
+`CTree.Interp.Yield.Frame` (both schedulers' erased trees of a `Framable`
+pool are `Framable`) → `Lang.CSL.Frame` (`run_{nd,rr}_framable`,
+`run_{nd,rr}_pool_framable`, `instr_flow_framable`, and `frame_post_iff`).
+Clients apply the four generic `CTree.Interp.CSL.Frame` rules directly with
+the runner's framability certificate and a `frame_rel` proof; there are no
+runner-specific frame-rule wrappers. Terminal consequence lemmas
+`done_impl_ticlr` and `aur_done_mono` live in `Logic.Congruence` and work for
+any Kripke model.
+
+`alloc_free p` is required: first-fit allocation is deterministic in the
+absolute heap, so `HAlloc` is excluded from `no_alloc_sE`
+(`~ Framable no_alloc_sE (heap_alloc 1)` in `examples/CSL/Frame/Single.v`).
+A framed `AF done P` becomes `AF done (frame_post fr P)`, which `frame_post_iff`
+unfolds to `exists m, m # fr /\ managed_wf m /\ M ≈ m ⊎ fr /\ P ((m, aux), x) w`.
+
+The shared walks `exp_ok okE` and `prog_ok okE` admit exactly the events of
+the expression or program. `alloc_free` specializes `prog_ok` to the lifted
+`no_alloc_sE` predicate; `yield_fork_free` specializes it to `user_only`.
+
+`Lang.CSL.Sequential` is the join principle for cooperative pools: a
+`yield_fork_free` segment of a focused slot runs exactly as its standalone
+erased run (`run_{nd,rr}_prefix`, from `interp_schedule_{nd,rr}_prefix_bind`
+over `Sequential` raw threads), with `instr_flow_head`, `instr_flow_read`,
+`instr_flow_write`, `instr_flow_write_single`, and `run_nd_fork_bind` equations.
+`Sequential t` is `BranchFree t /\ Framable user_only t`, reusing the two
+existing coinductive predicates; `sequential_inv` exposes its node shape.
+`examples/CSL/Frame/{Shared,AF,AN,AG}.v`
+combine both: two processes own cells `1` and `2`, each is verified on its own
+region, framed by the other's, and joined through the prefix equation for
+`run_rr` and `run_nd` (`af_two_procs_*`, `an_two_procs_*`, `ag_two_procs_*`).
+
 ## Runtime queue construction
 
 `new_queue values` allocates one block of `2 * S (length values)` cells, then
@@ -394,3 +459,16 @@ lifecycle consumer of the source language:
 The CSL development adds no `Axiom`, `Parameter`, `Admitted`, or `admit`. It
 uses no allocator-choice or finite-support oracle and assumes no initialization
 correctness, fairness, recurrence, or program bisimulation.
+
+The frame-rule and prefix-equation files add no new assumptions either. The
+scheduler stack they build on already depends on `Eqdep.Eq_rect_eq.eq_rect_eq`
+(via ctrees' `trans` wrapper, `trans_equ`) and on
+`FunctionalExtensionality.functional_extensionality_dep` (via the Equations
+unfolding lemmas of `vector_remove` in `Utils.Vectors`, reached through
+`schedule_pool_proper`); `Print Assumptions` of the frame theorems reports
+exactly those two, the same set as `interp_schedule_rr_user_bind` and
+`run_rr_fork_bind`. Within the new layers, `ticll_sim` and `framable_bind`
+are closed under the global context; `ticlr_sim` (worlds with
+`Finish`), `csim_structural` (ctrees' `trans`) and `framable_iter`
+(`unfold_iter`) inherit `eq_rect_eq` exactly as the baseline `axr_ret`,
+`ktrans_finish` and `unfold_iter` do.

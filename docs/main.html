@@ -125,27 +125,27 @@
     <h2 id="basic-definitions">Basic Definitions</h2>
     <p>This section outlines fundamental definition of a Choice Tree (ctree) in Figure 3 of the paper.</p>
     <ul>
-        <li><a href="ctrees/theories/CTree.html/CTree.Core.CTreeDefinitions.html#ctreeF">ctree</a>: The core Choice Tree (ctree) definition, from the <code>ctrees</code> library (vendored submodule). </li>
-        <li><a href="ctrees/theories/CTree.html/CTree.Core.CTreeDefinitions.html#CTree.bind">bind</a>: Definition of bind for ctree. </li>
-        <li><a href="ctrees/theories/CTree.html/CTree.Core.CTreeDefinitions.html#CTree.iter">iter</a>: Definition of iter for ctree. </li>
-        <li><a href="ctrees/theories/CTree.html/CTree.Core.CTreeDefinitions.html#StuckF">stuck</a>: The stuck node of ctree (a constructor). </li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Core/CTreeDefinitions.v">ctree</a>: The core Choice Tree (ctree) definition, from the <code>ctrees</code> library (opam package <code>rocq-ctree</code>, branch <code>fix/universe-check</code>). </li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Core/CTreeDefinitions.v">bind</a>: Definition of bind for ctree. </li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Core/CTreeDefinitions.v">iter</a>: Definition of iter for ctree. </li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Core/CTreeDefinitions.v">stuck</a>: The stuck node of ctree (a constructor). </li>
     </ul>
 
     <h2 id="strong-bisimulation">Up-to-tau equivalence (strong bisimulation)</h2>
     <p>A core result of Ticl is that Ticl formulas are invariant under up-to-tau equivalence of ctrees. We define up-to-tau equivalence (which we call strong bisimulation in the Rocq development) in the following definitions (Figure 5).</p>
     <ul>
-        <li><a href="ctrees/theories/CTree.html/CTree.Eq.SBisim.html#sbisim">Up-to-tau equivalence</a>: Definition of strong bisimulation (up-to-tau equivalence in the paper) for ctree. </li>
-        <li><a href="ctrees/theories/CTree.html/CTree.Eq.SBisim.html#Reflexive_sbisim">sb_refl</a>: Reflexivity of sbisim.</li>
-        <li><a href="ctrees/theories/CTree.html/CTree.Eq.SBisim.html#Symmetric_sbisim">sb_sym</a>: Symmetry of sbisim.</li>
-        <li><a href="ctrees/theories/CTree.html/CTree.Eq.SBisim.html#Transitive_sbisim">sb_trans</a>: Transitivity of sbisim.</li>
-        <li><a href="ctrees/theories/CTree.html/CTree.Eq.SBisim.html#sb_guard">sb_tau</a>: Up-to-tau (we use Guard instead of Tau in the Rocq development).</li>
-        <li><a href="ctrees/theories/CTree.html/CTree.Eq.SBisim.html#sbisim_clo_bind_eq">sb_bind</a>: Bind closure. </li>
-        <li><a href="ctrees/theories/CTree.html/CTree.Eq.Equ.html#bind_ret_l">sb_bind_l</a>: 1st monad law (for coinductive equality, a subrelation of sbisim).</li>
-        <li><a href="ctrees/theories/CTree.html/CTree.Eq.Equ.html#bind_ret_r">sb_bind_r</a>: 2nd monad law (for coinductive equality, a subrelation of sbisim).</li>
-        <li><a href="ctrees/theories/CTree.html/CTree.Eq.Equ.html#bind_bind">sb_bind_assoc</a>: Associativity of bind (for coinductive equality, a subrelation of sbisim).</li>
-        <li><a href="ctrees/theories/CTree.html/CTree.Eq.SBisim.html#sbisim_ret">sb_ret</a>: Ret node congruence. </li>
-        <li><a href="ctrees/theories/CTree.html/CTree.Eq.SBisim.html#sbisim_vis">sb_vis</a>: Vis node congruence. </li>
-        <li><a href="ctrees/theories/CTree.html/CTree.Eq.SBisim.html#sbisim_br">sb_br</a>: Br node congruence (we prove a stronger version in the Rocq development than in the paper). </li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/SBisim.v">Up-to-tau equivalence</a>: Definition of strong bisimulation (up-to-tau equivalence in the paper) for ctree. </li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/SBisim.v">sb_refl</a>: Reflexivity of sbisim.</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/SBisim.v">sb_sym</a>: Symmetry of sbisim.</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/SBisim.v">sb_trans</a>: Transitivity of sbisim.</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/SBisim.v">sb_tau</a>: Up-to-tau (we use Guard instead of Tau in the Rocq development).</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/SBisim.v">sb_bind</a>: Bind closure. </li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/Equ.v">sb_bind_l</a>: 1st monad law (for coinductive equality, a subrelation of sbisim).</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/Equ.v">sb_bind_r</a>: 2nd monad law (for coinductive equality, a subrelation of sbisim).</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/Equ.v">sb_bind_assoc</a>: Associativity of bind (for coinductive equality, a subrelation of sbisim).</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/SBisim.v">sb_ret</a>: Ret node congruence. </li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/SBisim.v">sb_vis</a>: Vis node congruence. </li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/SBisim.v">sb_br</a>: Br node congruence (we prove a stronger version in the Rocq development than in the paper). </li>
         <li><a href="theories/TICL.html/TICL.CTree.Logic.Trans.html#KripkeSetoidSBisim">KripkeSetoidSBisim</a>: This is the ExEquiv lemma that is used to prove that Ticl formulas are invariant under up-to-tau equivalence of ctrees (Lemma 3).</li>
         <li><a href="theories/TICL.html/TICL.Logic.Setoid.html#lab119">Kripke setoids preserve entailment</a>: Up-to-tau equivalence preserves formulas (Theorem 4).</li>
     </ul>
@@ -156,7 +156,7 @@
     <ul>
         <li><a href="theories/TICL.html/TICL.Events.WriterE.html#writerE">Log events</a>: Deterministic events that "remember" an interpreted event.</li>
         <li><a href="theories/TICL.html/TICL.CTree.Events.Writer.html#InstrM">Instrumentation monad</a>: An ctree as a state monad, leaving behind log events is an instrumentation monad.</li>
-        <li><a href="ctrees/theories/CTree.html/CTree.Interp.FoldStateT.html#interp_state">Instrumentation function</a>: The instr function in Figure 6 corresponds to instr_state in the Rocq development.</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Interp/FoldStateT.v">Instrumentation function</a>: The instr function in Figure 6 corresponds to instr_state in the Rocq development.</li>
 
         <li><a href="theories/TICL.html/TICL.CTree.Logic.Trans.html#ktrans_">ktrans</a>: Definition of ktrans (Kripke transition).</li>
         <li><a href="theories/TICL.html/TICL.CTree.Logic.Trans.html#ktrans_bind_l">ktrans_bind_l</a>: Lemmas connecting Kripke transitions to bind (Figure 9).</li>

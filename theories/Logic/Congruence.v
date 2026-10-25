@@ -343,6 +343,25 @@ Section EquivTiclrFormulas.
     - cinduction Hu; rewrite unfold_entailsR; [left; auto | right; split]; eauto.
   Qed.
 
+  (** Pointwise implication transports a terminal postcondition. *)
+  Lemma done_impl_ticlr (P Q : X -> World E -> Prop) :
+    (forall x w, P x w -> Q x w) -> impl_ticlr (CDone P) (CDone Q).
+  Proof.
+    intros HPQ t w H; rewrite unfold_entailsR in *.
+    destruct H; constructor; auto.
+  Qed.
+
+  (** Universal until is monotone in its terminal postcondition. *)
+  Lemma aur_done_mono (t : M E B X) w φ (P Q : X -> World E -> Prop) :
+    (forall x w, P x w -> Q x w) ->
+    <[ t, w |= φ AU done P ]> -> <[ t, w |= φ AU done Q ]>.
+  Proof.
+    intros HPQ H.
+    pose proof (impl_ticlr_until Q_A Q_A eq_refl φ φ (reflexivity _) _ _
+      (done_impl_ticlr P Q HPQ)) as HI.
+    exact (HI t w H).
+  Qed.
+
   Global Add Parametric Morphism: CuR
       with signature eq ==> equiv_ticll X ==> equiv_ticlr ==> equiv_ticlr as equiv_ticlr_until.
   Proof.

@@ -688,6 +688,193 @@ Proof.
     reflexivity.
 Qed.
 
+(** Silent initialization under any scheduling policy: the same chain on the
+    instrumented runner. *)
+
+Lemma interp_fair_fill_nodes sch n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  first values (K : option unit -> thread sE Bn) st h allocs ctx c :
+  (forall offset, Nat.lt offset (2 * length values) ->
+     h (first + offset)%nat <> None) ->
+  interp_schedule_fair sch sh (S n)
+    (ts @ i := (denote_flow (fill_nodes first values) >>= K)) (Some i) st ((h,allocs),(ctx,c)) ~
+  interp_schedule_fair sch sh (S n) (ts @ i := K (Some tt))
+    (Some i) st ((fill_nodes_heap first values h,allocs),(ctx,c)).
+Proof.
+  revert first h; induction values as [|value values IH]; intros first h Allocated.
+  - cbn [fill_nodes fill_nodes_heap]; rewrite interp_fair_ret; reflexivity.
+  - cbn [fill_nodes fill_nodes_heap]; rewrite interp_fair_bind.
+    etransitivity.
+    + apply interp_fair_write_present.
+      specialize (Allocated 0 ltac:(cbn; lia)); now rewrite Nat.add_0_r in Allocated.
+    + rewrite interp_fair_bind; etransitivity.
+      * apply interp_fair_write_present, upd_mono.
+        specialize (Allocated 1 ltac:(cbn; lia)).
+        replace (first + 1)%nat with (S first) in Allocated by lia; exact Allocated.
+      * apply IH; intros offset O; apply upd_mono, upd_mono.
+        replace (first + 2 + offset)%nat with (first + (2 + offset))%nat by lia.
+        apply Allocated; cbn; lia.
+Qed.
+
+Lemma interp_fair_init_queue sch n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  hdr values (K : option unit -> thread sE Bn) st h allocs ctx c :
+  (forall offset, Nat.lt offset (2 * S (length values)) ->
+     h (hdr + offset)%nat <> None) ->
+  interp_schedule_fair sch sh (S n)
+    (ts @ i := (denote_flow (init_queue hdr values) >>= K)) (Some i) st ((h,allocs),(ctx,c)) ~
+  interp_schedule_fair sch sh (S n) (ts @ i := K (Some tt))
+    (Some i) st ((init_queue_heap hdr values h,allocs),(ctx,c)).
+Proof.
+  intro Allocated; unfold init_queue, init_queue_heap; rewrite interp_fair_bind.
+  etransitivity.
+  - apply interp_fair_write_present.
+    specialize (Allocated 0 ltac:(lia)); now rewrite Nat.add_0_r in Allocated.
+  - rewrite interp_fair_bind; etransitivity.
+    + apply interp_fair_write_present, upd_mono.
+      specialize (Allocated 1 ltac:(lia)).
+      replace (hdr + 1)%nat with (S hdr) in Allocated by lia; exact Allocated.
+    + apply interp_fair_fill_nodes; intros offset O; apply upd_mono, upd_mono.
+      replace (hdr + 2 + offset)%nat with (hdr + (2 + offset))%nat by lia.
+      apply Allocated; lia.
+Qed.
+
+Lemma interp_fair_new_queue_first sch n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  values hdr (K : option nat -> thread sE Bn) st h allocs ctx c :
+  Nat.lt 0 hdr -> block_free h hdr (2 * S (length values)) ->
+  (forall j, Nat.lt 0 j -> Nat.lt j hdr ->
+    ~ block_free h j (2 * S (length values))) ->
+  interp_schedule_fair sch sh (S n)
+    (ts @ i := (denote_flow (new_queue values) >>= K)) (Some i) st ((h,allocs),(ctx,c)) ~
+  interp_schedule_fair sch sh (S n) (ts @ i := K (Some hdr))
+    (Some i) st ((new_queue_heap hdr values h,
+                  upd allocs hdr (2 * S (length values))),(ctx,c)).
+Proof.
+  intros Positive Free First.
+  unfold new_queue; rewrite interp_fair_bind.
+  rewrite interp_fair_alloc_first with (base:=hdr) by (try lia; assumption).
+  unfold managed_alloc; cbn [fst snd].
+  rewrite interp_fair_bind; etransitivity.
+  - apply interp_fair_init_queue; intros offset O.
+    unfold hunion; rewrite (hblock_in hdr (2 * S (length values)) offset O).
+    discriminate.
+  - rewrite interp_fair_ret; reflexivity.
+Qed.
+
+Lemma interp_fair_new_queue_empty sch n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  values (K : option nat -> thread sE Bn) st ctx c :
+  interp_schedule_fair sch sh (S n)
+    (ts @ i := (denote_flow (new_queue values) >>= K)) (Some i) st (managed_empty,(ctx,c)) ~
+  interp_schedule_fair sch sh (S n) (ts @ i := K (Some 1))
+    (Some i) st ((new_queue_heap 1 values hemp,
+                  upd hemp 1 (2 * S (length values))),(ctx,c)).
+Proof.
+  apply interp_fair_new_queue_first;
+    [lia | intros offset Hlt; reflexivity | intros j Hj Hfirst; lia].
+Qed.
+
+Lemma run_fair_allocated_shared_queue sch values st ctx c :
+  run_fair sch (allocated_shared_queue values) st (managed_empty,(ctx,c)) ~
+  run_fair sch (shared_queue 1) st
+    ((new_queue_heap 1 values hemp, upd hemp 1 (2 * S (length values))),(ctx,c)).
+Proof.
+  rewrite !run_fair_unfold; unfold allocated_shared_queue, denote.
+  change (interp_schedule_fair sch sh 1
+    ([Ret tt]%vector @ Fin.F1 :=
+      (denote_flow (CBind (new_queue values) shared_queue) >>= fun _ => Ret tt))
+    (Some Fin.F1) st (managed_empty,(ctx,c)) ~
+    interp_schedule_fair sch sh 1
+      ([Ret tt]%vector @ Fin.F1 :=
+        (denote_flow (shared_queue 1) >>= fun _ => Ret tt))
+      (Some Fin.F1) st
+      ((new_queue_heap 1 values hemp, upd hemp 1 (2 * S (length values))),(ctx,c))).
+  rewrite interp_fair_bind.
+  etransitivity; [apply interp_fair_new_queue_empty |].
+  reflexivity.
+Qed.
+
+Lemma interp_fair_new_queue sch n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  values (K : option nat -> thread sE Bn) st h allocs ctx c :
+  heap_finite h ->
+  exists hdr,
+    Nat.lt 0 hdr /\ block_free h hdr (2 * S (length values)) /\
+    heap_finite (new_queue_heap hdr values h) /\
+    asep (qrepX hdr (queue_nodes hdr (length values)) values)
+         (fun frame => heq frame h) (new_queue_heap hdr values h) /\
+    interp_schedule_fair sch sh (S n)
+      (ts @ i := (denote_flow (new_queue values) >>= K)) (Some i) st ((h,allocs),(ctx,c)) ~
+    interp_schedule_fair sch sh (S n) (ts @ i := K (Some hdr))
+      (Some i) st ((new_queue_heap hdr values h,
+                    upd allocs hdr (2 * S (length values))),(ctx,c)).
+Proof.
+  intro Finite.
+  destruct (heap_handler_alloc_finite (F:=writerE (CSLObs (nat * nat))) (B:=Bn)
+    h allocs (2 * S (length values)) (ctx,c) Finite ltac:(lia))
+    as (hdr & Positive & Free & First & _).
+  exists hdr; split; [exact Positive |]; split; [exact Free |]; split.
+  - now apply new_queue_heap_finite.
+  - split; [now apply new_queue_heap_owned |].
+    apply interp_fair_new_queue_first; assumption.
+Qed.
+
+Theorem run_fair_allocated_parallel sch : forall values1 values2 st ctx c,
+  exists u v h allocs,
+    heap_finite h /\
+    asep (qrepX u (queue_nodes u (length values1)) values1)
+         (qrepX v (queue_nodes v (length values2)) values2) h /\
+    run_fair sch (allocated_parallel_queues values1 values2) st (managed_empty,(ctx,c)) ~
+      run_fair sch (parallel_queues u v) st ((h,allocs),(ctx,c)).
+Proof.
+  intros values1 values2 st ctx c.
+  set (done := fun _ : option unit => (Ret tt : thread sE Bn)).
+  set (after1 := fun r : option nat =>
+    match r with
+    | None => done None
+    | Some u => denote_flow
+        (CBind (new_queue values2) (fun v => parallel_queues u v)) >>= done
+    end).
+  destruct (interp_fair_new_queue sch 0 [Ret tt]%vector Fin.F1 values1 after1 st hemp hemp ctx c
+    heap_finite_hemp) as (u & Upos & Ufree & Finite1 & Own1 & Run1).
+  set (h1 := new_queue_heap u values1 hemp).
+  set (allocs1 := upd hemp u (2 * S (length values1))).
+  set (after2 := fun r : option nat =>
+    match r with
+    | None => done None
+    | Some v => denote_flow (parallel_queues u v) >>= done
+    end).
+  destruct (interp_fair_new_queue sch 0 [Ret tt]%vector Fin.F1 values2 after2 st h1 allocs1 ctx c
+    Finite1) as (v & Vpos & Vfree & Finite2 & Own2 & Run2).
+  exists u, v, (new_queue_heap v values2 h1), (upd allocs1 v (2 * S (length values2))).
+  split; [exact Finite2 |]; split.
+  - set (q1 := qheap u (queue_nodes u (length values1)) values1).
+    set (q2 := qheap v (queue_nodes v (length values2)) values2).
+    assert (E1 : heq h1 q1).
+    { intro x; unfold h1.
+      rewrite (new_queue_heap_agrees u values1 hemp Upos Ufree x).
+      change (hunion q1 hemp x = q1 x).
+      unfold hunion, hemp; destruct (q1 x); reflexivity. }
+    assert (D21 : hdisj q2 q1).
+    { eapply hdisj_resp; [apply heq_refl | exact E1 |].
+      apply new_queue_heap_disjoint; exact Vfree. }
+    exists q1, q2; split; [apply hdisj_sym; exact D21 |]; split.
+    + eapply heq_trans; [apply new_queue_heap_agrees; eassumption |].
+      eapply heq_trans.
+      * apply hunion_resp; [apply heq_refl | exact E1].
+      * apply hunion_comm; exact D21.
+    + split; split; try apply qheap_qex; apply qheap_queue_nodes_rep; assumption.
+  - unfold allocated_parallel_queues.
+    change (interp_schedule_fair sch sh 1
+      ([Ret tt]%vector @ Fin.F1 :=
+        (denote_flow (CBind (new_queue values1) (fun u =>
+          CBind (new_queue values2) (fun v => parallel_queues u v))) >>= done))
+      (Some Fin.F1) st ((hemp,hemp),(ctx,c)) ~
+      run_fair sch (parallel_queues u v) st
+        ((new_queue_heap v values2 h1, upd allocs1 v (2 * S (length values2))),(ctx,c))).
+    rewrite interp_fair_bind.
+    etransitivity; [exact Run1 |].
+    cbn [after1]; rewrite interp_fair_bind.
+    etransitivity; [exact Run2 |].
+    reflexivity.
+Qed.
+
 (** An allocated empty first queue has head pointer [0], and the null cell is
     unallocated: the first source turn faults, whatever the second queue is. *)
 Lemma allocated_parallel_queues_empty_stuck values ctx c :

@@ -17,7 +17,8 @@ From TICL Require Export
   CTree.Interp.Yield.SBisim
   CTree.Interp.Yield.Observed
   CTree.Logic.Yield
-  CTree.Logic.SchedulerFairness.
+  CTree.Logic.SchedulerFairness
+  CTree.Interp.Yield.Fair.
 
 From Stdlib Require Import List Arith.PeanoNat Lia Fin Vector Strings.String
   Classes.Morphisms Classes.RelationClasses Program.Equality.
@@ -760,6 +761,93 @@ Proof.
   reflexivity.
 Qed.
 
+(** ** The scheduler-generic instrumented runner.
+
+    Scheduling picks are logged as [inr slot]; program observations are
+    relabelled [inl].  Only the equations the startup chains of the examples
+    need are ported from the round-robin set. *)
+Definition run_fair_pool (sch : Scheduler) {n} (ps : Vector.t (CProg unit) n)
+    (focus : option (Fin.t n)) (st : sched_state sch) (s : SSig)
+  : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit) :=
+  interp_schedule_fair sch sh n (csl_pool ps) focus st s.
+
+Definition run_fair (sch : Scheduler) (p : CProg unit) (st : sched_state sch) (s : SSig)
+  : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit) :=
+  run_fair_pool sch [p]%vector (Some Fin.F1) st s.
+
+Lemma run_fair_unfold sch (p : CProg unit) st (s : SSig) :
+  run_fair sch p st s = interp_schedule_fair sch sh 1 [denote p]%vector (Some Fin.F1) st s.
+Proof. reflexivity. Qed.
+
+Lemma interp_fair_bind sch {A B} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  (p : CProg A) (next : A -> CProg B) (K : option B -> thread sE Bn) st σ :
+  interp_schedule_fair sch sh (S n)
+    (ts @ i := (denote_flow (CBind p next) >>= K)) (Some i) st σ ≅
+  interp_schedule_fair sch sh (S n)
+    (ts @ i := (denote_flow p >>= fun r =>
+      match r with None => K None | Some x => denote_flow (next x) >>= K end))
+    (Some i) st σ.
+Proof.
+  apply interp_schedule_fair_equ, replace_pool_equ; [apply pool_equ_refl|].
+  apply source_raw_bind.
+Qed.
+
+Lemma interp_fair_ret sch {A} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  (x : A) (K : option A -> thread sE Bn) st σ :
+  interp_schedule_fair sch sh (S n) (ts @ i := (denote_flow (CRet x) >>= K)) (Some i) st σ ≅
+  interp_schedule_fair sch sh (S n) (ts @ i := K (Some x)) (Some i) st σ.
+Proof.
+  apply interp_schedule_fair_equ, replace_pool_equ; [apply pool_equ_refl|].
+  apply source_raw_ret.
+Qed.
+
+Lemma interp_fair_yield sch n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  (K : option unit -> thread sE Bn) st σ :
+  interp_schedule_fair sch sh (S n) (ts @ i := (denote_flow CYield >>= K)) (Some i) st σ ~
+  interp_schedule_fair sch sh (S n) (ts @ i := K (Some tt)) None st σ.
+Proof.
+  rewrite (interp_schedule_fair_equ sch sh (S n)
+    (ts @ i := (denote_flow CYield >>= K))
+    (ts @ i := Vis (inl1 Yield) (fun _ => K (Some tt)))
+    (Some i) st σ
+    (replace_pool_equ ts ts i _ _ (pool_equ_refl ts) (source_raw_yield_head K))).
+  erewrite interp_schedule_fair_yield by (rewrite Vector.nth_replace_eq; reflexivity).
+  rewrite Vector.replace_replace_eq; reflexivity.
+Qed.
+
+Lemma interp_fair_fork sch n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  (p : CProg unit) (K : option unit -> thread sE Bn) st σ :
+  interp_schedule_fair sch sh (S n) (ts @ i := (denote_flow (CFork p) >>= K)) (Some i) st σ ~
+  interp_schedule_fair sch sh (S (S n))
+    ((denote_flow p >>= fun _ => K None) :: (ts @ i := K (Some tt)))
+    (Some (Fin.FS i)) st σ.
+Proof.
+  rewrite (interp_schedule_fair_equ sch sh (S n)
+    (ts @ i := (denote_flow (CFork p) >>= K))
+    (ts @ i := Vis (inr1 (inl1 Fork))
+      (fun child : bool => if child
+        then denote_flow p >>= fun _ => K None else K (Some tt)))
+    (Some i) st σ
+    (replace_pool_equ ts ts i _ _ (pool_equ_refl ts) (source_raw_fork_head p K))).
+  erewrite interp_schedule_fair_fork by (rewrite Vector.nth_replace_eq; reflexivity).
+  rewrite Vector.replace_replace_eq; reflexivity.
+Qed.
+
+Lemma run_fair_fork_bind sch (p : CProg unit) (next : unit -> CProg unit) st (s : SSig) :
+  run_fair sch (CBind (CFork p) next) st s ~
+  interp_schedule_fair sch sh 2 [denote p; denote (next tt)]%vector
+    (Some (Fin.FS Fin.F1)) st s.
+Proof.
+  rewrite run_fair_unfold.
+  assert (Hpool : pool_equ [denote (CBind (CFork p) next)]%vector
+    [Vis (inr1 (inl1 Fork))
+      (fun child : bool => if child then denote p else denote (next tt))]%vector).
+  { apply cons_pool_equ; [apply denote_fork_bind|apply pool_equ_refl]. }
+  rewrite (interp_schedule_fair_equ sch sh 1 _ _ (Some Fin.F1) st s Hpool).
+  erewrite interp_schedule_fair_fork by reflexivity.
+  reflexivity.
+Qed.
+
 Lemma interp_nd_source_ret {A} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (x : A) (K : option A -> thread sE Bn) σ :
   interp_schedule_nd sh (S n) (ts @ i := (denote_flow (CRet x) >>= K)) (Some i) σ ≅
@@ -1106,6 +1194,44 @@ Proof.
   rewrite (heap_handler_alloc_first_guards h allocs size base (ctx,c) Pos Base Free First).
   rewrite !bind_guards, guards_sbisim.
   rewrite bind_ret_l, bind_guard, sb_guard, bind_ret_l; reflexivity.
+Qed.
+
+(** Focused heap primitives on the fair runner, directly from the handler
+    equations (all [≅], so they pass under the relabelling [translate]). *)
+Lemma interp_fair_write_present sch n
+  (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  a v (K : option unit -> thread sE Bn) st h allocs ctx c :
+  h a <> None ->
+  interp_schedule_fair sch sh (S n)
+    (ts @ i := (denote_flow (CWrite a v) >>= K)) (Some i) st ((h,allocs),(ctx,c)) ~
+  interp_schedule_fair sch sh (S n) (ts @ i := K (Some tt))
+    (Some i) st ((upd h a v,allocs),(ctx,c)).
+Proof.
+  intro Present.
+  destruct (h a) as [w|] eqn:Ha; [|contradiction].
+  rewrite (interp_schedule_fair_user_bind sch sh n ts i _ (inl1 (HWrite a v))
+    (fun _ => K (Some tt)) st _ (source_raw_write_head a v K)).
+  cbn [sh h_sum].
+  rewrite (heap_handler_wr_some a h allocs (ctx,c) v w Ha), translate_ret, bind_ret_l.
+  reflexivity.
+Qed.
+
+Lemma interp_fair_alloc_first sch n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+  size base (K : option nat -> thread sE Bn) st h allocs ctx c :
+  Nat.lt 0 size -> Nat.lt 0 base -> block_free h base size ->
+  (forall j, Nat.lt 0 j -> Nat.lt j base -> ~ block_free h j size) ->
+  interp_schedule_fair sch sh (S n)
+    (ts @ i := (denote_flow (CAlloc size) >>= K)) (Some i) st ((h,allocs),(ctx,c)) ~
+  interp_schedule_fair sch sh (S n)
+    (ts @ i := K (Some base)) (Some i) st (managed_alloc (h,allocs) base size,(ctx,c)).
+Proof.
+  intros Pos Base Free First.
+  rewrite (interp_schedule_fair_user_bind sch sh n ts i _ (inl1 (HAlloc size))
+    (fun base => K (Some base)) st _ (source_raw_alloc_head size K)).
+  cbn [sh h_sum].
+  rewrite (heap_handler_alloc_first_guards h allocs size base (ctx,c) Pos Base Free First).
+  rewrite translate_guards, translate_ret, bind_guards, guards_sbisim, bind_ret_l.
+  reflexivity.
 Qed.
 
 Lemma interp_rr_read_missing n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
@@ -4090,6 +4216,24 @@ Proof.
   rewrite replace_cons, interp_rr_bind, interp_rr_fork; cbv beta iota.
   rewrite replace_cons, interp_rr_ret; cbv beta iota.
   rewrite (interp_schedule_rr_ret sh 2 _ (Fin.FS (Fin.FS Fin.F1)) 0 s) by reflexivity.
+  cbn [Vector.replace Vector.caseS'].
+  rewrite !vector_remove_tail, vector_remove_head.
+  reflexivity.
+Qed.
+
+Lemma run_fair_two_forks sch (p q : CProg unit) st (s : SSig) :
+  run_fair sch (CBind (CFork p) (fun _ => CBind (CFork q) (fun _ => CRet tt))) st s ~
+  run_fair_pool sch [q; p]%vector None st s.
+Proof.
+  rewrite run_fair_unfold.
+  change (interp_schedule_fair sch sh 1
+    ([Ret tt]%vector @ Fin.F1 :=
+      (denote_flow (CBind (CFork p) (fun _ => CBind (CFork q) (fun _ => CRet tt)))
+         >>= fun _ => Ret tt)) (Some Fin.F1) st s ~ run_fair_pool sch [q; p]%vector None st s).
+  rewrite interp_fair_bind, interp_fair_fork; cbv beta iota.
+  rewrite replace_cons, interp_fair_bind, interp_fair_fork; cbv beta iota.
+  rewrite replace_cons, interp_fair_ret; cbv beta iota.
+  rewrite (interp_schedule_fair_ret sch sh 2 _ (Fin.FS (Fin.FS Fin.F1)) st s) by reflexivity.
   cbn [Vector.replace Vector.caseS'].
   rewrite !vector_remove_tail, vector_remove_head.
   reflexivity.
