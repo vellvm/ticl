@@ -307,7 +307,7 @@ liveness claim.
 `From TICL Require Import Lang.CSL.Frame.` transports proved properties of a
 run to the same program on a heap extended by a disjoint `ManagedHeap` region
 `fr`. The chain is `Logic.Simulation` (Kripke-generic: a conditional
-simulation `csim` preserves every prefix formula and every `implr_free` suffix
+simulation `csim` preserves every prefix formula and every suffix
 formula, with `done`/`ret` postconditions rewritten by `framer`) →
 `CTree.Logic.Sim` (`csim` on ctrees, `Framable okE` trees: no hidden `Br`
 whose branches are not guarded by a visible `Step`, and only `okE` events) →

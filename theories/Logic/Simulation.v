@@ -157,16 +157,6 @@ Section KripkeSim.
     | CxR q φ ψ => CxR q φ (framer ψ)
     | CAndR p q => CAndR (framer p) (framer q)
     | COrR p q => COrR (framer p) (framer q)
-    | CImplR p q => CImplR p (framer q)
-    end.
-
-  (** Suffix formulas without implication, whose antecedent would require converse transport. *)
-  Fixpoint implr_free (ψ: ticlr E X) : Prop :=
-    match ψ with
-    | CImplR _ _ => False
-    | CuR _ _ ψ | CxR _ _ ψ => implr_free ψ
-    | CAndR p q | COrR p q => implr_free p /\ implr_free q
-    | _ => True
     end.
 
   (** Prefix formulas transport unchanged along the simulation at equal worlds. *)
@@ -199,12 +189,12 @@ Section KripkeSim.
     intros HW HD; destruct HD; ddestruction HW; constructor; eauto.
   Qed.
 
-  (** Implication-free suffix formulas transport forward across related worlds with [framer]. *)
-  Theorem ticlr_sim : forall (ψ: ticlr E X), implr_free ψ ->
-    forall t t' w w', Fr t t' -> simW w w' ->
+  (** Suffix formulas transport forward across related worlds with [framer]. *)
+  Theorem ticlr_sim : forall (ψ: ticlr E X) t t' w w',
+    Fr t t' -> simW w w' ->
     <[ t, w |= ψ ]> -> <[ t', w' |= {framer ψ} ]>.
   Proof.
-    induction ψ; cbn [implr_free framer]; intros Hfree t t' w w' HF HW H;
+    induction ψ; cbn [framer]; intros t t' w w' HF HW H;
       rewrite unfold_entailsR in *.
     - eapply sim_done_with; eauto.
     - destruct H as (x & Hp & Hnd & Hcan & HN).
@@ -228,8 +218,7 @@ Section KripkeSim.
       + pose proof (simW_not_done _ _ HW (enc_not_done _ _ _ _ _ H)); subst w'.
         eapply sim_enc; [exact (ticll_sim φ)| |exact HF|exact H].
         intros; eapply IHψ; eauto.
-    - destruct Hfree, H; split; [eapply IHψ1|eapply IHψ2]; eauto.
-    - destruct Hfree, H; [left; eapply IHψ1|right; eapply IHψ2]; eauto.
-    - contradiction.
+    - destruct H; split; [eapply IHψ1|eapply IHψ2]; eauto.
+    - destruct H; [left; eapply IHψ1|right; eapply IHψ2]; eauto.
   Qed.
 End KripkeSim.

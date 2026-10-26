@@ -120,34 +120,35 @@
         <a href="#structural-lemmas">Structural Lemmas for ctree</a>
         <a href="#structural-lemmas-state">Structural Lemmas for ctree with State Events</a>
         <a href="#example-proof">Example proofs</a>
+        <a href="#formal-evidence">Formal evidence</a>
     </div>
 
     <h2 id="basic-definitions">Basic Definitions</h2>
     <p>This section outlines fundamental definition of a Choice Tree (ctree) in Figure 3 of the paper.</p>
     <ul>
-        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Core/CTreeDefinitions.v">ctree</a>: The core Choice Tree (ctree) definition, from the <code>ctrees</code> library (opam package <code>rocq-ctree</code>, branch <code>fix/universe-check</code>). </li>
-        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Core/CTreeDefinitions.v">bind</a>: Definition of bind for ctree. </li>
-        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Core/CTreeDefinitions.v">iter</a>: Definition of iter for ctree. </li>
-        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Core/CTreeDefinitions.v">stuck</a>: The stuck node of ctree (a constructor). </li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/1eebf6de298fee6f151b3d62180e5f8e08149cde/theories/Core/CTreeDefinitions.v">ctree</a>: The core Choice Tree definition at pinned CTree revision <code>1eebf6de298fee6f151b3d62180e5f8e08149cde</code>.</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/1eebf6de298fee6f151b3d62180e5f8e08149cde/theories/Core/CTreeDefinitions.v">bind</a>: Definition of bind for ctree.</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/1eebf6de298fee6f151b3d62180e5f8e08149cde/theories/Core/CTreeDefinitions.v">iter</a>: Guard-based iteration for ctree.</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/1eebf6de298fee6f151b3d62180e5f8e08149cde/theories/Core/CTreeDefinitions.v">Stuck</a>: The primitive stuck constructor.</li>
     </ul>
 
-    <h2 id="strong-bisimulation">Up-to-tau equivalence (strong bisimulation)</h2>
-    <p>A core result of Ticl is that Ticl formulas are invariant under up-to-tau equivalence of ctrees. We define up-to-tau equivalence (which we call strong bisimulation in the Rocq development) in the following definitions (Figure 5).</p>
+    <h2 id="strong-bisimulation">Strong bisimulation</h2>
+    <p>Strong bisimulation preserves prefix and suffix formulas at the same world. Guard nodes expose their continuation's transitions, whereas Step contributes a silent transition that must be matched.</p>
     <ul>
-        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/SBisim.v">Up-to-tau equivalence</a>: Definition of strong bisimulation (up-to-tau equivalence in the paper) for ctree. </li>
-        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/SBisim.v">sb_refl</a>: Reflexivity of sbisim.</li>
-        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/SBisim.v">sb_sym</a>: Symmetry of sbisim.</li>
-        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/SBisim.v">sb_trans</a>: Transitivity of sbisim.</li>
-        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/SBisim.v">sb_tau</a>: Up-to-tau (we use Guard instead of Tau in the Rocq development).</li>
-        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/SBisim.v">sb_bind</a>: Bind closure. </li>
-        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/Equ.v">sb_bind_l</a>: 1st monad law (for coinductive equality, a subrelation of sbisim).</li>
-        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/Equ.v">sb_bind_r</a>: 2nd monad law (for coinductive equality, a subrelation of sbisim).</li>
-        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/Equ.v">sb_bind_assoc</a>: Associativity of bind (for coinductive equality, a subrelation of sbisim).</li>
-        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/SBisim.v">sb_ret</a>: Ret node congruence. </li>
-        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/SBisim.v">sb_vis</a>: Vis node congruence. </li>
-        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Eq/SBisim.v">sb_br</a>: Br node congruence (we prove a stronger version in the Rocq development than in the paper). </li>
-        <li><a href="theories/TICL.html/TICL.CTree.Logic.Trans.html#KripkeSetoidSBisim">KripkeSetoidSBisim</a>: This is the ExEquiv lemma that is used to prove that Ticl formulas are invariant under up-to-tau equivalence of ctrees (Lemma 3).</li>
-        <li><a href="theories/TICL.html/TICL.Logic.Setoid.html#lab119">Kripke setoids preserve entailment</a>: Up-to-tau equivalence preserves formulas (Theorem 4).</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/1eebf6de298fee6f151b3d62180e5f8e08149cde/theories/Eq/SBisim.v">Strong bisimulation</a>: Matching labelled transitions in both directions.</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/1eebf6de298fee6f151b3d62180e5f8e08149cde/theories/Eq/SBisim.v">sb_refl</a>: Reflexivity of sbisim.</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/1eebf6de298fee6f151b3d62180e5f8e08149cde/theories/Eq/SBisim.v">sb_sym</a>: Symmetry of sbisim.</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/1eebf6de298fee6f151b3d62180e5f8e08149cde/theories/Eq/SBisim.v">sb_trans</a>: Transitivity of sbisim.</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/1eebf6de298fee6f151b3d62180e5f8e08149cde/theories/Eq/SBisim.v">sb_guard</a>: A finite leading Guard is invisible to strong bisimulation; a Step is not.</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/1eebf6de298fee6f151b3d62180e5f8e08149cde/theories/Eq/SBisim.v">sb_bind</a>: Bind congruence.</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/1eebf6de298fee6f151b3d62180e5f8e08149cde/theories/Eq/Equ.v">bind_ret_l</a>: Left identity up to structural equality.</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/1eebf6de298fee6f151b3d62180e5f8e08149cde/theories/Eq/Equ.v">bind_ret_r</a>: Right identity up to structural equality.</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/1eebf6de298fee6f151b3d62180e5f8e08149cde/theories/Eq/Equ.v">bind_bind</a>: Associativity up to structural equality.</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/1eebf6de298fee6f151b3d62180e5f8e08149cde/theories/Eq/SBisim.v">sb_ret</a>: Return congruence.</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/1eebf6de298fee6f151b3d62180e5f8e08149cde/theories/Eq/SBisim.v">sb_vis</a>: Observation congruence.</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/1eebf6de298fee6f151b3d62180e5f8e08149cde/theories/Eq/SBisim.v">sb_br</a>: Delayed-branch congruence.</li>
+        <li><a href="theories/TICL.html/TICL.CTree.Logic.Trans.html#KripkeSetoidSBisim">KripkeSetoidSBisim</a>: Strongly bisimilar trees induce equivalent temporal satisfaction at a fixed world.</li>
+        <li><a href="theories/TICL.html/TICL.Logic.Setoid.html">Kripke setoids preserve entailment</a>: Setoid-equivalent computations preserve prefix and suffix satisfaction.</li>
     </ul>
 
     <h2 id="ctree instrumentation and semantics">ctree instrumentation and semantics</h2>
@@ -156,12 +157,11 @@
     <ul>
         <li><a href="theories/TICL.html/TICL.Events.WriterE.html#writerE">Log events</a>: Deterministic events that "remember" an interpreted event.</li>
         <li><a href="theories/TICL.html/TICL.CTree.Events.Writer.html#InstrM">Instrumentation monad</a>: An ctree as a state monad, leaving behind log events is an instrumentation monad.</li>
-        <li><a href="https://github.com/vellvm/ctrees/blob/fix/universe-check/theories/Interp/FoldStateT.v">Instrumentation function</a>: The instr function in Figure 6 corresponds to instr_state in the Rocq development.</li>
+        <li><a href="https://github.com/vellvm/ctrees/blob/1eebf6de298fee6f151b3d62180e5f8e08149cde/theories/Interp/FoldStateT.v">State interpretation</a>: The instrumented interpreter uses state-first handler results.</li>
 
         <li><a href="theories/TICL.html/TICL.CTree.Logic.Trans.html#ktrans_">ktrans</a>: Definition of ktrans (Kripke transition).</li>
         <li><a href="theories/TICL.html/TICL.CTree.Logic.Trans.html#ktrans_bind_l">ktrans_bind_l</a>: Lemmas connecting Kripke transitions to bind (Figure 9).</li>
-        <li><a href="theories/TICL.html/TICL.CTree.Logic.Trans.html#ktrans_bind_r_done">ktrans_bind_r_done</a>: Lemmas connecting Kripke transitions to bind (Figure 9).</li>
-        <li><a href="theories/TICL.html/TICL.CTree.Logic.Trans.html#ktrans_bind_r_finish">ktrans_bind_r_finish</a>: Lemmas connecting Kripke transitions to bind (Figure 9).</li>
+        <li><a href="theories/TICL.html/TICL.CTree.Logic.Trans.html#ktrans_bind_r">ktrans_bind_r</a>: A returning prefix and a continuation transition induce a bind transition.</li>
     </ul>
 
     <h2 id="syntax-and-semantics">Ticl syntax and semantics</h2>
@@ -512,7 +512,7 @@
                 </td>
                 <td>-</td>
                 <td>
-                    <div class="theorem-link-group"><a href="theories/TICL.html/TICL.CTree.Logic.State.html#exr_state_ret">exr_state_ret</a></div>
+                    -
                 </td>
             </tr>
             <tr>
@@ -654,6 +654,209 @@
         <li><a href="examples/examples.html/examples.Sec.html#Sec.ag_safety_sec">Secure concurrent shared memory</a>: Proof of the safety of a concurrent shared memory with security labels.</li>
         <li><a href="examples/examples.html/examples.Election.html#Election3.election3_liveness">Election eventual consensus</a>: Proof of the liveness of a distributed election protocol.</li>
     </ul>
+    <h2 id="formal-evidence">Formal evidence: frames, fair turns, and clients</h2>
+    <p>This table follows <code>artifact/theorem-map.csv</code>. Each link names a
+    checked declaration, not a prose claim alias. The historical comparison is
+    the initial 2025 artifact release
+    <code>e8f801d21cf09f0f4e247a51c9a7726cd6d7dfc5</code>, not an asserted identical
+    copy of the final published artifact. Categories describe source-development
+    lineage, not priority against the literature. Newly checked regression
+    examples use <code>not-applicable</code> as their baseline.</p>
+    <p>The allocated passive-client recurrence uses generic temporal framing;
+    the source/RR equations reuse the existing queue invariant and rank proof.
+    Simulation and runner controls expose inherited logical assumptions but do
+    not claim that these exact declarations existed in the historical release.
+    See <code>examples.CSL.Evidence</code> for the complete query root.</p>
+    <p>Rocqdoc does not emit declaration anchors for the two parametric morphisms
+    <code>proper_entailsL_meq</code> and <code>proper_entailsR_meq</code>; those
+    links open their containing module, which displays both declarations.</p>
+    <table>
+        <thead>
+            <tr><th>Module and manuscript label</th><th>Declarations</th><th>Category / comparison</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>TICL.CTree.Interp.CSL.Frame</code><br /><code>s:pcm:transport</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="theories/TICL.html/TICL.CTree.Interp.CSL.Frame.html#csim_interp_sh_frame">csim_interp_sh_frame</a>
+                    <a href="theories/TICL.html/TICL.CTree.Interp.CSL.Frame.html#ticll_csl_frame">ticll_csl_frame</a>
+                    <a href="theories/TICL.html/TICL.CTree.Interp.CSL.Frame.html#ticlr_csl_frame">ticlr_csl_frame</a>
+                    <a href="theories/TICL.html/TICL.CTree.Interp.CSL.Frame.html#anr_csl_frame_done">anr_csl_frame_done</a>
+                    <a href="theories/TICL.html/TICL.CTree.Interp.CSL.Frame.html#aur_csl_frame_done">aur_csl_frame_done</a>
+                </div></td>
+                <td>new / initial 2025 release</td>
+            </tr>
+            <tr>
+                <td><code>TICL.CTree.Interp.Yield.Fair</code><br /><code>s:concurrency:fair</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="theories/TICL.html/TICL.CTree.Interp.Yield.Fair.html#rr_fair">rr_fair</a>
+                </div></td>
+                <td>new / initial 2025 release</td>
+            </tr>
+            <tr>
+                <td><code>TICL.CTree.Interp.Yield.Fair</code><br /><code>s:concurrency:liveness</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="theories/TICL.html/TICL.CTree.Interp.Yield.Fair.html#agaf_pool_fair">agaf_pool_fair</a>
+                    <a href="theories/TICL.html/TICL.CTree.Interp.Yield.Fair.html#agaf_pool_simulation_fair">agaf_pool_simulation_fair</a>
+                </div></td>
+                <td>new / initial 2025 release</td>
+            </tr>
+            <tr>
+                <td><code>TICL.CTree.Interp.Yield.Execution</code><br /><code>s:concurrency:liveness</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="theories/TICL.html/TICL.CTree.Interp.Yield.Execution.html#pool_simulation_rr_bisim">pool_simulation_rr_bisim</a>
+                    <a href="theories/TICL.html/TICL.CTree.Interp.Yield.Execution.html#source_execution_complete">source_execution_complete</a>
+                </div></td>
+                <td>new / initial 2025 release</td>
+            </tr>
+            <tr>
+                <td><code>examples.CSL.Queue.Shared</code><br /><code>s:case-studies:queue</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="examples/examples.html/examples.CSL.Queue.Shared.html#exact_worker_turn">exact_worker_turn</a>
+                    <a href="examples/examples.html/examples.CSL.Queue.Shared.html#shared_worker_turn">shared_worker_turn</a>
+                    <a href="examples/examples.html/examples.CSL.Queue.Shared.html#shared_rotate_agaf_pop_alloc_nd_fresh">shared_rotate_agaf_pop_alloc_nd_fresh</a>
+                    <a href="examples/examples.html/examples.CSL.Queue.Shared.html#shared_rotate_agaf_pop_alloc_rr_fresh">shared_rotate_agaf_pop_alloc_rr_fresh</a>
+                </div></td>
+                <td>extended / initial 2025 release</td>
+            </tr>
+            <tr>
+                <td><code>examples.CSL.Queue.Ticl</code><br /><code>s:case-studies:queue</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="examples/examples.html/examples.CSL.Queue.Ticl.html#rotate_agaf_pop_alloc_fresh">rotate_agaf_pop_alloc_fresh</a>
+                    <a href="examples/examples.html/examples.CSL.Queue.Ticl.html#rotate_agaf_pop_alloc_q2_fresh">rotate_agaf_pop_alloc_q2_fresh</a>
+                </div></td>
+                <td>extended / initial 2025 release</td>
+            </tr>
+            <tr>
+                <td><code>examples.CSL.Queue.Client</code><br /><code>s:case-studies:queue</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="examples/examples.html/examples.CSL.Queue.Client.html#allocated_shared_queue_passive_fresh_rr">allocated_shared_queue_passive_fresh_rr</a>
+                    <a href="examples/examples.html/examples.CSL.Queue.Client.html#allocated_shared_queue_split_passive_fresh_rr">allocated_shared_queue_split_passive_fresh_rr</a>
+                    <a href="examples/examples.html/examples.CSL.Queue.Client.html#allocated_shared_queue_rr_contract">allocated_shared_queue_rr_contract</a>
+                    <a href="examples/examples.html/examples.CSL.Queue.Client.html#rotate_once_split_cps">rotate_once_split_cps</a>
+                    <a href="examples/examples.html/examples.CSL.Queue.Client.html#denote_flow_worker_split">denote_flow_worker_split</a>
+                    <a href="examples/examples.html/examples.CSL.Queue.Client.html#denote_worker_split">denote_worker_split</a>
+                    <a href="examples/examples.html/examples.CSL.Queue.Client.html#worker_split_pool_rr">worker_split_pool_rr</a>
+                    <a href="examples/examples.html/examples.CSL.Queue.Client.html#shared_queue_split_rr">shared_queue_split_rr</a>
+                    <a href="examples/examples.html/examples.CSL.Queue.Client.html#allocated_shared_queue_split_rr">allocated_shared_queue_split_rr</a>
+                </div></td>
+                <td>new / initial 2025 release</td>
+            </tr>
+            <tr>
+                <td><code>examples.CSL.Queue.Client</code><br /><code>s:case-studies:queue</code> (concrete regressions)</td>
+                <td><div class="theorem-link-group">
+                    <a href="examples/examples.html/examples.CSL.Queue.Client.html#client_passive_10">client_passive_10</a>
+                    <a href="examples/examples.html/examples.CSL.Queue.Client.html#client_split_passive_10">client_split_passive_10</a>
+                    <a href="examples/examples.html/examples.CSL.Queue.Client.html#client_split_prefix3">client_split_prefix3</a>
+                    <a href="examples/examples.html/examples.CSL.Queue.Client.html#client_frame_preserved">client_frame_preserved</a>
+                    <a href="examples/examples.html/examples.CSL.Queue.Client.html#client_heap_cycle3">client_heap_cycle3</a>
+                </div></td>
+                <td>new / not-applicable</td>
+            </tr>
+            <tr>
+                <td><code>examples.CSL.Frame.Shared</code><br /><code>s:tisl:composition</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="examples/examples.html/examples.CSL.Frame.Shared.html#write_ret">write_ret</a>
+                </div></td>
+                <td>new / initial 2025 release</td>
+            </tr>
+            <tr>
+                <td><code>examples.CSL.Frame.Shared</code><br /><code>s:tisl:composition</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="examples/examples.html/examples.CSL.Frame.Shared.html#write_ax_framed">write_ax_framed</a>
+                </div></td>
+                <td>new / initial 2025 release</td>
+            </tr>
+            <tr>
+                <td><code>examples.CSL.Frame.AN</code><br /><code>s:tisl:composition</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="examples/examples.html/examples.CSL.Frame.AN.html#an_two_procs_nd">an_two_procs_nd</a>
+                    <a href="examples/examples.html/examples.CSL.Frame.AN.html#an_two_procs_rr">an_two_procs_rr</a>
+                </div></td>
+                <td>new / initial 2025 release</td>
+            </tr>
+            <tr>
+                <td><code>examples.CSL.Control</code><br /><code>s:tisl:semantics</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="examples/examples.html/examples.CSL.Control.html#captured_before_yield_rr">captured_before_yield_rr</a>
+                </div></td>
+                <td>new / not-applicable</td>
+            </tr>
+            <tr>
+                <td><code>examples.HiddenBr</code><br /><code>s:concurrency:execution</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="examples/examples.html/examples.HiddenBr.html#delayed_branch_permutation">delayed_branch_permutation</a>
+                    <a href="examples/examples.html/examples.HiddenBr.html#refine_rr_branch01_zero">refine_rr_branch01_zero</a>
+                    <a href="examples/examples.html/examples.HiddenBr.html#refine_rr_branch10_zero">refine_rr_branch10_zero</a>
+                    <a href="examples/examples.html/examples.HiddenBr.html#refine_rr_not_sbisim_congruent">refine_rr_not_sbisim_congruent</a>
+                </div></td>
+                <td>new / not-applicable</td>
+            </tr>
+            <tr>
+                <td><code>examples.CSL.Allocator.Execution</code><br /><code>s:case-studies:allocator</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="examples/examples.html/examples.CSL.Allocator.Execution.html#allocator_simulation">allocator_simulation</a>
+                </div></td>
+                <td>new / initial 2025 release</td>
+            </tr>
+            <tr>
+                <td><code>examples.CSL.Allocator.Liveness</code><br /><code>s:case-studies:allocator</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="examples/examples.html/examples.CSL.Allocator.Liveness.html#allocator_agaf_fair">allocator_agaf_fair</a>
+                    <a href="examples/examples.html/examples.CSL.Allocator.Liveness.html#source_remote_free_lockfree">source_remote_free_lockfree</a>
+                    <a href="examples/examples.html/examples.CSL.Allocator.Liveness.html#source_retired_eventually_reclaimed">source_retired_eventually_reclaimed</a>
+                </div></td>
+                <td>new / initial 2025 release</td>
+            </tr>
+            <tr>
+                <td><code>examples.CSL.Allocator.Counterexamples</code><br /><code>s:case-studies:allocator</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="examples/examples.html/examples.CSL.Allocator.Counterexamples.html#fair_starvation_exists">fair_starvation_exists</a>
+                    <a href="examples/examples.html/examples.CSL.Allocator.Counterexamples.html#owner_stall_prevents_reclamation">owner_stall_prevents_reclamation</a>
+                </div></td>
+                <td>new / initial 2025 release</td>
+            </tr>
+            <tr>
+                <td><code>TICL.Logic.Simulation</code><br /><code>s:pcm:transport</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="theories/TICL.html/TICL.Logic.Simulation.html#ticll_sim">ticll_sim</a>
+                    <a href="theories/TICL.html/TICL.Logic.Simulation.html#ticlr_sim">ticlr_sim</a>
+                </div></td>
+                <td>new / initial 2025 release</td>
+            </tr>
+            <tr>
+                <td><code>TICL.CTree.Interp.Yield.RoundRobin</code><br /><code>s:concurrency:execution</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="theories/TICL.html/TICL.CTree.Interp.Yield.RoundRobin.html#interp_schedule_rr_user_bind">interp_schedule_rr_user_bind</a>
+                </div></td>
+                <td>new / initial 2025 release</td>
+            </tr>
+            <tr>
+                <td><code>TICL.Lang.CSL.Mod</code><br /><code>s:tisl:semantics</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="theories/TICL.html/TICL.Lang.CSL.Mod.html#run_rr_fork_bind">run_rr_fork_bind</a>
+                </div></td>
+                <td>new / initial 2025 release</td>
+            </tr>
+            <tr>
+                <td><code>TICL.Logic.Setoid</code><br /><code>s:ticl:entails</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="theories/TICL.html/TICL.Logic.Setoid.html">proper_entailsL_meq</a>
+                    <a href="theories/TICL.html/TICL.Logic.Setoid.html">proper_entailsR_meq</a>
+                </div></td>
+                <td>inherited preservation principle / initial 2025 release</td>
+            </tr>
+            <tr>
+                <td><code>TICL.CTree.Logic.Iter</code>, <code>TICL.CTree.Logic.Bind</code><br /><code>s:background:structural</code></td>
+                <td><div class="theorem-link-group">
+                    <a href="theories/TICL.html/TICL.CTree.Logic.Iter.html#ag_iter">ag_iter</a>
+                    <a href="theories/TICL.html/TICL.CTree.Logic.Bind.html#aur_bind_r">aur_bind_r</a>
+                </div></td>
+                <td>ported/adapted, value-explicit return interface / initial 2025 release</td>
+            </tr>
+        </tbody>
+    </table>
+
 </div>
 
 </body>

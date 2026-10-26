@@ -118,8 +118,8 @@ Section ConditionalSimulation.
     <( t, w |= φ )> -> <( t', w |= φ )>.
   Proof. eapply ticll_sim; [apply csim_ktrans_l|apply csim_ktrans_r]. Qed.
 
-  (** Implication-free suffix formulas transport with [framer] across related worlds. *)
-  Theorem ticlr_csim RV (ψ: ticlr E X) : implr_free ψ -> forall t t' w w',
+  (** Suffix formulas transport with [framer] across related worlds. *)
+  Theorem ticlr_csim RV (ψ: ticlr E X) : forall t t' w w',
     csim RV t t' -> simW RV w w' -> <[ t, w |= ψ ]> -> <[ t', w' |= {framer RV ψ} ]>.
   Proof. eapply ticlr_sim; [apply csim_ktrans_l|apply csim_ktrans_r]. Qed.
 End ConditionalSimulation.

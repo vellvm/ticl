@@ -216,7 +216,6 @@ Section Entailment.
       | (CxR Q_E p q) => enc (entailsL X p) (entailsR q)
       | (CAndR p q) => fun t w => entailsR p t w /\ entailsR q t w
       | (COrR p q) => fun t w => entailsR p t w \/ entailsR q t w
-      | (CImplR p q) => fun t w => entailsL X p t w -> entailsR q t w
       end.
 
   (** ** Unfolding of [entailsL]. 
@@ -246,7 +245,6 @@ Section Entailment.
                        | (CxR Q_E p q) => enc (entailsL X p) (entailsR q) t w
                        | (CAndR p q) => entailsR p t w /\ entailsR q t w
                        | (COrR p q) => entailsR p t w \/ entailsR q t w
-                       | (CImplR p q) => entailsL X p t w -> entailsR q t w
                        end.
   Proof. intros; unfold entailsR; destruct φ; auto; destruct q; auto. Qed.
 
@@ -385,11 +383,6 @@ Lemma ticlr_or  `{KMS: Kripke M E B} X:
     <[ t, w |= p \/ q ]> <-> <[ t, w |= p ]> \/ <[ t, w |= q ]>.
 Proof. intros; rewrite unfold_entailsR; reflexivity. Qed.
 
-Lemma ticlr_impll  `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) (p: ticll E) (q: ticlr E X),
-    <[ t, w |= p -> q ]> <-> <( t, w |= p )> -> <[ t, w |= q ]>.
-Proof. intros t w p q; rewrite unfold_entailsR; intros [H H']; auto. Qed. 
-
 (** [AN φ] is stronger than [EN φ] *)
 Lemma ticll_an_en `{KMS: Kripke M E B} X:
   forall (t: M E B X) (w: World E) (p q: ticll E),
@@ -476,15 +469,6 @@ Qed.
 Lemma ticll_sound `{KMS: Kripke M E B} X: forall (t: M E B X) (w: World E),
     ~ <( t, w |= ⊥ )>.
 Proof. now intros * []. Qed. 
-
-(** Ex-falso *)
-Lemma ticlr_exfalso `{KMS: Kripke M E B} X: forall (t: M E B X) (w: World E) (p: ticlr E X),
-    <[ t, w |= ⊥ -> p ]>.
-Proof.
-  cbn.
-  intros; rewrite unfold_entailsR.
-  now intros [].
-Qed.
 
 (** There are two top statements, one for prefix and one for suffix. *)
 Lemma ticll_top `{KMS: Kripke M E B} X: forall (t: M E B X) (w: World E),

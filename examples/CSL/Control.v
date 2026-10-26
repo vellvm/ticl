@@ -142,6 +142,49 @@ Proof.
   apply interp_schedule_rr_empty.
 Qed.
 
+(** A successful variable read captures its value before yielding.  The
+    child overwrites the same shared variable, but the parent's resumed
+    continuation emits the captured value rather than reading it again. *)
+Definition captured_before_yield : CProg unit :=
+  CBind (CFork (CAssign "x" (CLit 1))) (fun _ =>
+  CBind (CEval (CVar "x")) (fun v => CEmit 9 v)).
+
+Theorem captured_before_yield_rr memory c :
+  let ctx0 := add "x"%string 0 List.nil in
+  let ctx1 := add "x"%string 1 ctx0 in
+  run_rr captured_before_yield (memory,(ctx0,c)) ~
+    Step (emit_list [inl ctx1]%list
+      (Step (emit_list [inr (stamp (9,0) c)]%list
+        (Ret ((memory,(ctx1,S c)),tt)
+          : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit))))).
+Proof.
+  intros ctx0 ctx1.
+  unfold captured_before_yield; rewrite run_rr_fork_bind.
+  unfold emit_list; cbn [List.fold_right].
+  (* Parent: capture x = 0, then clear the focus at the read's yield. *)
+  rr_focus.
+  rewrite interp_rr_bind.
+  rewrite (interp_schedule_rr_equ sh 2 _ _ (Some (Fin.FS Fin.F1)) 0 _
+    (replace_pool_equ _ _ (Fin.FS Fin.F1) _ _
+      (pool_equ_refl _) (source_raw_eval _ _))).
+  rewrite (interp_rr_var _ _ _ "x"%string 0) by reflexivity.
+  (* Cursor 0 selects the child, which stores x = 1 and terminates. *)
+  rr_select; rr_focus.
+  rewrite interp_rr_assign, interp_rr_lit; cbv beta.
+  rewrite interp_rr_get_ctx; cbv beta.
+  rewrite interp_rr_put_ctx.
+  rr_log.
+  cbv beta iota.
+  rr_finish_step.
+  (* The remaining parent emits the saved 0 in the updated context. *)
+  rr_select; rr_focus.
+  unfold csl_set_context, csl_context, csl_memory, csl_counter; cbn [fst snd].
+  rewrite interp_rr_emit_log.
+  rr_log.
+  rr_finish_step.
+  apply interp_schedule_rr_empty.
+Qed.
+
 (** ** Missing variables fault
 
     There is no default value: reading an unbound variable is stuck, so the

@@ -293,31 +293,6 @@ Section EquivTiclrFormulas.
     intros p q [pq qp] p' q' [pq' qp']; split; [rewrite pq', pq | rewrite qp, qp']; reflexivity.
   Qed.
 
-  Global Add Parametric Morphism: CImplR
-         with signature flip (impl_ticll X) ==> impl_ticlr ==> impl_ticlr
-           as impl_ticlr_equiv_implL.
-  Proof.
-    intros p q pq p' q' pq'; unfold impl_ticlr in *; intros.
-    rewrite unfold_entailsR in *; intro Ha; now apply pq', H, pq.
-  Qed.
-
-  Global Add Parametric Morphism: CImplR
-         with signature impl_ticll X ==> flip impl_ticlr ==> flip impl_ticlr
-           as impl_ticlr_equiv_implR.
-  Proof.
-    intros p q pq p' q' pq'; unfold impl_ticlr in *; intros.
-    rewrite unfold_entailsR in *; intro Ha; now apply pq', H, pq.
-  Qed.
-
-  Global Add Parametric Morphism: CImplR
-         with signature equiv_ticll X ==> equiv_ticlr ==> equiv_ticlr
-           as equiv_ticlr_equiv_implR.
-  Proof.
-    intros p q [pq qp] p' q' [pq' qp']; unfold equiv_ticlr; split.
-    - rewrite <- qp, pq'; reflexivity.
-    - rewrite <- pq, qp'; reflexivity.
-  Qed.
-
   Global Add Parametric Morphism: CxR
          with signature eq ==> impl_ticll X ==> impl_ticlr ==> impl_ticlr as impl_ticlr_next.
   Proof.
@@ -825,13 +800,6 @@ Section TiclrEquations.
     - apply equivr_eu_en, ticlr_or; right.
       apply ticlr_en; split; eauto.
   Qed.
-
-  (** Modus ponens *)
-  Lemma implr_modus: forall q q' (t: M E B X) w,
-      <[ t, w |= q -> q' ]> ->
-      <( t, w |= q )> ->
-      <[ t, w |= q' ]>.
-  Proof. eauto. Qed.
 
 End TiclrEquations.
 

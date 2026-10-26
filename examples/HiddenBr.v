@@ -9,6 +9,7 @@
     ever weakened to [AX done]. *)
 From Stdlib Require Import Fin Arith.PeanoNat Relations.Relation_Definitions Wellfounded Lia.
 From Coinduction Require Import all.
+From TICL Require Import CTree.Interp.Refine.
 
 From TICL Require Import
   CTree.Core
@@ -153,4 +154,57 @@ Proof.
         inv Hd; [| destruct e].
         apply ktrans_done in TR as (-> & _); cleft; csplit; cbn.
         split2; [constructor | exact I | lia].
+Qed.
+
+(** Delayed branching forgets branch order under strong bisimulation, but a
+    cursor-driven refinement observes that order.  Such a replacement does
+    not satisfy the guard-alignment premise of the runner congruences. *)
+Definition branch01 : ctree void1 Bn nat :=
+  Br (branchn 2)
+    (fun i => if Fin.eqb i (@Fin.F1 1) then Ret 0 else Ret 1).
+
+Definition branch10 : ctree void1 Bn nat :=
+  Br (branchn 2)
+    (fun i => if Fin.eqb i (@Fin.F1 1) then Ret 1 else Ret 0).
+
+Lemma delayed_branch_permutation : branch01 ~ branch10.
+Proof.
+  unfold branch01, branch10; apply sb_br.
+  - intro i; destruct (Fin.eqb i (@Fin.F1 1)).
+    + exists (Fin.FS (@Fin.F1 0)); reflexivity.
+    + exists (@Fin.F1 1); reflexivity.
+  - intro i; destruct (Fin.eqb i (@Fin.F1 1)).
+    + exists (Fin.FS (@Fin.F1 0)); reflexivity.
+    + exists (@Fin.F1 1); reflexivity.
+Qed.
+
+Lemma refine_rr_branch01_zero :
+  refine_rr branch01 0 ~ (Ret (0,1) : ctree void1 Bn (nat * nat)).
+Proof.
+  unfold branch01; rewrite unfold_refine_rr.
+  change (Guard (refine_rr (Ret 0 : ctree void1 Bn nat) 1) ~
+    (Ret (0,1) : ctree void1 Bn (nat * nat))).
+  rewrite sb_guard, unfold_refine_rr; reflexivity.
+Qed.
+
+Lemma refine_rr_branch10_zero :
+  refine_rr branch10 0 ~ (Ret (1,1) : ctree void1 Bn (nat * nat)).
+Proof.
+  unfold branch10; rewrite unfold_refine_rr.
+  change (Guard (refine_rr (Ret 1 : ctree void1 Bn nat) 1) ~
+    (Ret (1,1) : ctree void1 Bn (nat * nat))).
+  rewrite sb_guard, unfold_refine_rr; reflexivity.
+Qed.
+
+Lemma refine_rr_not_sbisim_congruent :
+  ~ (refine_rr branch01 0 ~ refine_rr branch10 0).
+Proof.
+  rewrite refine_rr_branch01_zero, refine_rr_branch10_zero.
+  intro Hsb.
+  assert (Hret : trans (val (0,1))
+    (Ret (0,1) : ctree void1 Bn (nat * nat)) Stuck) by apply trans_ret.
+  step in Hsb; destruct Hsb as [Hf _]; cbn in Hf.
+  destruct (Hf _ _ Hret) as (l & u & TR & _ & <-).
+  apply trans_ret_inv in TR as (_ & Hv).
+  apply val_eq_inv in Hv; discriminate.
 Qed.

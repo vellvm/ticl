@@ -44,8 +44,7 @@ Section TiclSyntax.
   | CxR (q: ticlq) (φ: ticll) (ψ: ticlr): ticlr
   (* Boolean combinators *)
   | CAndR (p: ticlr) (q: ticlr): ticlr
-  | COrR (p: ticlr) (q: ticlr): ticlr
-  | CImplR (p: ticll) (q: ticlr): ticlr.
+  | COrR (p: ticlr) (q: ticlr): ticlr.
 
   Arguments ticlr: clear implicits.
 
@@ -68,7 +67,6 @@ Section Contramap.
       | CxR q φ ψ => CxR q φ (F ψ)
       | CAndR φ ψ => CAndR (F φ) (F ψ)
       | COrR φ ψ => COrR (F φ) (F ψ)
-      | CImplR φ ψ => CImplR φ (F ψ)
       end.
 
 End Contramap.
@@ -197,6 +195,4 @@ Module TiclNotations.
                            (in custom ticlr at level 77, left associativity): ticl_scope.
   Notation "p '\/' q" := (COrR p q)
                            (in custom ticlr at level 77, left associativity): ticl_scope.
-  Notation "p '->' q" := (CImplR p q)
-                           (in custom ticlr at level 78, right associativity): ticl_scope.
 End TiclNotations.

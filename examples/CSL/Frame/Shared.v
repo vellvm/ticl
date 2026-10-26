@@ -142,13 +142,13 @@ Definition Qwrite (i : nat) (ctx : Ctx.Ctx) (c : nat) (w : World (writerE (CSLOb
   : SSig * option unit -> World (writerE (CSLObs (nat * nat))) -> Prop :=
   fun '(s', r) w' => r = Some tt /\ csl_memory s' ≈ region i 1 /\ snd s' = (ctx, c) /\ w' = w.
 
-(** Standalone writing satisfies universal next with [Qwrite]. *)
-Lemma write_ax i a ctx c w : not_done w ->
-  <[ {instr_flow_erased (CWrite i 1) (own i a ctx c)}, w |= AX done {Qwrite i ctx c w} ]>.
+(** Standalone writing returns [Qwrite] without an intervening transition. *)
+Lemma write_ret i a ctx c w : not_done w ->
+  <[ {instr_flow_erased (CWrite i 1) (own i a ctx c)}, w |= ret {Qwrite i ctx c w} ]>.
 Proof.
   intro Hw.
   rewrite instr_flow_write_single; [|cbn; rewrite hsingle_eq; discriminate].
-  apply axr_ret; [exact Hw|]; cbn.
+  apply ret_ret; [exact Hw|]; cbn.
   split; [reflexivity|split; [apply upd_region|split; reflexivity]].
 Qed.
 
@@ -175,8 +175,9 @@ Lemma write_ax_framed i j a b ctx c s' w : not_done w ->
   <[ {instr_flow_erased (CWrite i 1) s'}, w |= AX done {frame_post (region j b) (Qwrite i ctx c w)} ]>.
 Proof.
   intros Hw HR.
-  apply (anr_csl_frame_done (region j b) _ _ _
-    (instr_flow_framable (CWrite i 1) I) HR); [exact Hw|apply write_ax; exact Hw].
+  exact (ticlr_csl_frame (region j b) _ _ _
+    (instr_flow_framable (CWrite i 1) I) HR
+    <[ ret {Qwrite i ctx c w} ]> w Hw (write_ret i a ctx c w Hw)).
 Qed.
 
 (** Unpack the shared shape of the two framed process postconditions. *)

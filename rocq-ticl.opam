@@ -10,7 +10,8 @@ homepage: "https://github.com/vellvm/ticl"
 bug-reports: "https://github.com/vellvm/ticl/issues"
 depends: [
   "dune" {>= "3.23"}
-  "rocq-prover" {>= "9.2"}
+  "rocq-core" {>= "9.2"}
+  "rocq-stdlib" {>= "9.2"}
   "coq-ext-lib" {>= "0.11.3"}
   "rocq-coinduction" {>= "1.22"}
   "rocq-equations" {>= "1.3.1"}
@@ -36,5 +37,5 @@ build: [
 dev-repo: "git+https://github.com/vellvm/ticl.git"
 x-maintenance-intent: ["(latest)"]
 pin-depends: [
-  ["rocq-ctree.2.0-dev" "git+https://github.com/vellvm/ctrees.git#fix/universe-check"]
+  ["rocq-ctree.2.0-dev" "git+https://github.com/vellvm/ctrees.git#1eebf6de298fee6f151b3d62180e5f8e08149cde"]
 ]

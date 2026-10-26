@@ -325,9 +325,4 @@ Proof.
     + right; now rewrite <- (IHφ2 _ _ Heq).
     + left; now rewrite (IHφ1 _ _ Heq).
     + right; now rewrite (IHφ2 _ _ Heq).      
-  - (* -> *)
-    split; intros * H; rewrite unfold_entailsR in *; intro HI;
-      apply (IHφ _ _ Heq), H.
-    + now rewrite Heq.
-    + now rewrite <- Heq.
 Qed.

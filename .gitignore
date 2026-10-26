@@ -16,3 +16,9 @@ graphify-out
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
 /.graft/
+
+# Reproducible evidence sources are versioned; generated runs stay local.
+/_build-evidence-*/
+/artifact/results/
+/artifact/private-provenance.json
+/*.tar.gz

@@ -4,6 +4,15 @@
     and yields.  Writes are silent, so the only visible steps are the
     scheduler's; exactly three of them precede [done].  Each write is proved
     on the process's own region and framed by the other one. *)
+
+(** [run_rr_prefix]/[run_nd_prefix] expose the standalone write in a bind.
+    [write_ret] is transported by [ticlr_csl_frame] to [AX done (frame_post ...)],
+    not another [ret] atom.  The done-premised [anr_bind_r] consumes that
+    transformed suffix; [frame_post_write] recovers [Some tt], the joined
+    memory, unchanged context/counter, and the old world for the continuation.
+    [frame_rel_after_2] then supplies the other worker's owned/frame split.
+    Three scheduler picks and the final return account for the four [AX]
+    layers; the silent writes add no scheduler picks. *)
 From Stdlib Require Import Fin Vector.
 From Coinduction Require Import all.
 From examples Require Import CSL.Frame.Shared.

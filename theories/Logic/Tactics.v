@@ -132,9 +132,6 @@ end.
       rewrite ticll_or in H; destruct H as [H | H]
   | <[ ?t, ?w |= ?p \/ ?q ]> =>
       rewrite ticlr_or in H; destruct H as [H | H]
-  (* IMPL *)
-  | <[ ?t, ?w |= ?p -> ?q ]> =>
-      rewrite ticlr_impll in H
   (* X *)
   | @entailsL ?M ?E ?B ?KMS ?X (CxL Q_A ?p ?q) ?t ?w =>
       let Hs' := fresh "Hs" in

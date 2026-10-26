@@ -198,13 +198,13 @@ Section FrameLogic.
     <( {interp_state sh u s}, w |= φ )> -> <( {interp_state sh u s'}, w |= φ )>.
   Proof. apply (ticll_csim (frameRV fr)); now apply csim_interp_sh_frame. Qed.
 
-  (** Transport an implication-free suffix formula through heap framing. *)
+  (** Transport a suffix formula through heap framing. *)
   Theorem ticlr_csl_frame (ψ: ticlr (writerE (CSLObs (nat * nat))) (SSig * X)) w :
-    implr_free ψ -> not_done w ->
+    not_done w ->
     <[ {interp_state sh u s}, w |= ψ ]> ->
     <[ {interp_state sh u s'}, w |= {framer (frameRV fr) ψ} ]>.
   Proof.
-    intros Hfree Hnd; eapply ticlr_csim; [exact Hfree| |now apply simW_refl].
+    intros Hnd; eapply ticlr_csim; [|now apply simW_refl].
     now apply csim_interp_sh_frame.
   Qed.
 
@@ -212,13 +212,13 @@ Section FrameLogic.
   Corollary anr_csl_frame_done φ P w : not_done w ->
     <[ {interp_state sh u s}, w |= φ AN done P ]> ->
     <[ {interp_state sh u s'}, w |= φ AN done {frame_post fr P} ]>.
-  Proof. intros Hnd; apply (ticlr_csl_frame (CxR Q_A φ (CDone P))); exact I || exact Hnd. Qed.
+  Proof. intros Hnd; apply (ticlr_csl_frame (CxR Q_A φ (CDone P))); exact Hnd. Qed.
 
 
   (** Frame the terminal postcondition under universal until. *)
   Corollary aur_csl_frame_done φ P w : not_done w ->
     <[ {interp_state sh u s}, w |= φ AU done P ]> ->
     <[ {interp_state sh u s'}, w |= φ AU done {frame_post fr P} ]>.
-  Proof. intros Hnd; apply (ticlr_csl_frame (CuR Q_A φ (CDone P))); exact I || exact Hnd. Qed.
+  Proof. intros Hnd; apply (ticlr_csl_frame (CuR Q_A φ (CDone P))); exact Hnd. Qed.
 
 End FrameLogic.

@@ -15,7 +15,8 @@
  (synopsis "Library for structural temporal logic proofs over coinductive trees.")
  (version 0.1)
  (depends
-  (rocq-prover (>= 9.2))
+  (rocq-core (>= 9.2))
+  (rocq-stdlib (>= 9.2))
   (coq-ext-lib (>= 0.11.3))
   (rocq-coinduction (>= 1.22))
   (rocq-equations (>= 1.3.1))
