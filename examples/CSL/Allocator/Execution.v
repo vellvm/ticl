@@ -33,7 +33,7 @@ Definition remote_after_free base client (flow : option unit) : thread sE Bn :=
         client_next base client
   end.
 Definition remote_cas_tail base block old : CProg (option unit) :=
-  CBind (CCAS (remote_head base) old block) (fun success =>
+  CBind (CCAS (CLit (remote_head base)) (CLit old) (CLit block)) (fun success =>
     if success then
       CBind (CEmit tag_retire block) (fun _ => CRet (None : option unit))
     else
@@ -72,7 +72,7 @@ Definition owner_after_detach base (flow : option unit) : thread sE Bn :=
   | Some _ => denote_flow (CUntilNone (reclaim_step base)) >>= owner_after_collect base
   end.
 Definition detach_cas_tail base old : CProg (option unit) :=
-  CBind (CCAS (remote_head base) old 0) (fun success =>
+  CBind (CCAS (CLit (remote_head base)) (CLit old) (CLit 0)) (fun success =>
     if success then
       CBind (CWrite (drain_head base) old) (fun _ =>
       CBind CYield (fun _ => CRet (None : option unit)))
@@ -639,7 +639,7 @@ Ltac allocator_segment_steps :=
           eapply exact_source_write; [allocator_present|]
       | |- (segment_to sh csl_equ) (denote_flow (CEmit _ _) >>= _) _ _ _ _ =>
           apply exact_source_emit
-      | |- (segment_to sh csl_equ) (denote_flow (CCAS _ _ _) >>= _) _ _ _ _ =>
+      | |- (segment_to sh csl_equ) (denote_flow (CCAS (CLit _) (CLit _) (CLit _)) >>= _) _ _ _ _ =>
           first [eapply exact_source_cas_success; [congruence|] |
             eapply exact_source_cas_failure;
               [eassumption|apply Nat.eqb_neq; eassumption|]]

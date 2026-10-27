@@ -230,13 +230,25 @@ infinite heap with no suitable interval silently diverges, as proved by
 
 Reads and writes remain checked; writes never allocate implicitly. Emit records
 `inr (stamp (tag,value) c)`, preserves the managed memory and context, and
-increments the global observation counter. CAS faults on an absent cell, updates
-and returns `true` on a matching value, and otherwise returns `false` without
-changing the heap. It does not log. The scheduler cursor is separate. A
-variable read `CVar x` looks up the shared context, yields once on success and
+increments the global observation counter. The numeric `HCAS addr old value`
+(`heap_cas`) operation faults on an absent cell, updates and returns `true` on a
+matching value, and otherwise returns `false` without changing the heap. It
+neither logs nor yields. The scheduler cursor is separate. A variable read
+`CVar x` looks up the shared context, yields once on success and
 returns the captured value; an unbound variable is `stuck`. `CAssign x e`
 evaluates `e`, then reads the current context again and logs exactly
 `inl (add x v ctx)`; it does not change the counter. There is no lock.
+
+`CCAS a expected desired` takes three `CExp` operands. It evaluates each once
+through `denote_exp`, in address/expected/desired order, then performs the
+atomic numeric heap operation. Subtraction remains natural-number subtraction.
+Variable reads retain their capture-before-yield behavior, so operand evaluation
+can interleave with other threads; it does not use a frozen context. All three
+operands finish before the heap is inspected, including the desired operand
+when the eventual comparison fails. A missing variable faults before the heap
+event; a missing cell faults only after operand evaluation. Values captured by
+Rocq continuations use `CLit old`, not a new `CVar` read, preserving the
+allocator's existing yield boundaries.
 
 `CFree base` (`HFree base`) is whole-block free through `managed_free`: at a
 live recorded base it removes every cell of exactly that extent and its extent
@@ -293,6 +305,14 @@ memory'` and preserve focus, pool size, cursor, counter, and observation world.
 Fault rules compose with the generic stuck rules: strong AN and AG are false,
 while AU may match its target immediately.
 
+The immediate CAS rules apply to `CCAS (CLit a) (CLit expected) (CLit desired)`:
+`source_raw_cas_head`, the ND/RR scheduler and state rules, the success/failure
+segment rules, and all AN/AU/AG CAS rules retain natural-number parameters.
+For general expressions, `source_raw_cas`, `interp_rr_cas_exp`, and
+`interp_nd_cas_exp` expose operand evaluation inside the focused thread and
+leave a literal CAS tail to which those rules apply. Moving these evaluations
+outside the scheduler via `instr_exp_erased` would erase their yields.
+
 The Yield fragment is reasoned about through `scheduled_visible` (Spawn and
 Yield visible), the standalone erased views `instr_exp_erased` and
 `instr_flow_erased` (outer option flow exposed), and `run_nd`: expression rules
@@ -329,9 +349,14 @@ absolute heap, so `HAlloc` is excluded from `no_alloc_sE`
 A framed `AF done P` becomes `AF done (frame_post fr P)`, which `frame_post_iff`
 unfolds to `exists m, m # fr /\ managed_wf m /\ M ≈ m ⊎ fr /\ P ((m, aux), x) w`.
 
-The shared walks `exp_ok okE` and `prog_ok okE` admit exactly the events of
-the expression or program. `alloc_free` specializes `prog_ok` to the lifted
-`no_alloc_sE` predicate; `yield_fork_free` specializes it to `user_only`.
+The shared walks `exp_ok okE` and `prog_ok okE` structurally over-approximate
+the events of the expression or program. For CAS, `prog_ok` requires `exp_ok`
+for all three operands and admission of every `HCAS addr old value`, following
+the quantified-result convention of assignment rather than expression range
+analysis. `alloc_free` specializes `prog_ok` to the lifted `no_alloc_sE`
+predicate; `yield_fork_free` specializes it to `user_only`. Literal CAS is
+yield/fork-free; a `CVar` in any operand fails this gate because a successful
+variable read yields.
 
 `Lang.CSL.Sequential` is the join principle for cooperative pools: a
 `yield_fork_free` segment of a focused slot runs exactly as its standalone
@@ -440,6 +465,12 @@ lifecycle consumer of the source language:
   its body), `context_resume_preserves_updates` (one yield per variable read,
   late context read in assignment, separate counter), and
   `missing_variable_stuck`.
+  `cas_arithmetic_rr` checks pure arithmetic operands without a scheduling step;
+  `cas_interleaving_rr` checks four captured reads, the exact interleaved trace,
+  and a heap update after the desired value is captured but before comparison.
+  The four `cas_missing_*_rr` proofs check the exact operand and heap fault
+  boundaries. `cas_yield_fork_free_literals` and
+  `cas_var_operands_not_yield_fork_free` check all three admissibility conjuncts.
 - `examples/CSL/Queue/Shared.v`: `shared_queue_rr_prefix3` (the first three
   complete rotations of the allocated shared queue under round robin) and
   `allocated_shared_queue_empty_stuck`/`_no_ag`.

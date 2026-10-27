@@ -51,7 +51,9 @@ Fixpoint prog_ok (okE : forall Y, CEff Y -> Prop) {A} (p : CProg A) : Prop :=
   | CUntilNone body => prog_ok okE body
   | CAlloc size => okE _ (inr1 (inr1 (inl1 (HAlloc size))))
   | CFree base => okE _ (inr1 (inr1 (inl1 (HFree base))))
-  | CCAS a e d => okE _ (inr1 (inr1 (inl1 (HCAS a e d))))
+  | CCAS a expected desired =>
+      exp_ok okE a /\ exp_ok okE expected /\ exp_ok okE desired /\
+      forall addr old value, okE _ (inr1 (inr1 (inl1 (HCAS addr old value))))
   | CEval e => exp_ok okE e
   | CAssign _ e => exp_ok okE e /\ okE _ (inr1 (inr1 (inr1 (inl1 Get)))) /\
       forall ctx, okE _ (inr1 (inr1 (inr1 (inl1 (Put ctx)))))
@@ -105,7 +107,11 @@ Proof.
     intros [[x|]|]; apply fr_ret.
   - apply framable_bind; [fr_trigger Hp|intro a; apply fr_ret].
   - apply framable_bind; [fr_trigger Hp|intros []; apply fr_ret].
-  - apply framable_bind; [fr_trigger Hp|intro b; apply fr_ret].
+  - destruct Hp as [Ha [He [Hd HC]]].
+    apply framable_bind; [apply denote_exp_framable, Ha|intro addr].
+    apply framable_bind; [apply denote_exp_framable, He|intro old].
+    apply framable_bind; [apply denote_exp_framable, Hd|intro value].
+    apply framable_bind; [fr_trigger (HC addr old value)|intro b; apply fr_ret].
   - apply framable_bind; [apply denote_exp_framable, Hp|intro v; apply fr_ret].
   - destruct Hp as [He [HG HP]].
     apply framable_bind; [apply denote_exp_framable, He|intro v].

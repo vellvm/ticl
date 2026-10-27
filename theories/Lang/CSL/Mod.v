@@ -76,7 +76,7 @@ Module CSLSyntax.
   | CUntilNone {A : Type} (body : CProg (option A)) : CProg unit
   | CAlloc (size : nat) : CProg nat
   | CFree (base : nat) : CProg unit
-  | CCAS (a expected desired : nat) : CProg bool
+  | CCAS (a expected desired : CExp) : CProg bool
   | CEval (e : CExp) : CProg nat
   | CAssign (name : string) (e : CExp) : CProg unit
   | CIf {A : Type} (test : CExp) (yes no : CProg A) : CProg A
@@ -131,7 +131,11 @@ Fixpoint denote_flow {A : Type} (p : CProg A) : ctree CEff Bn (option A) :=
   | CAlloc size => a <- heap_alloc (E:=CEff) size;; Ret (Some a)
   | CFree base => heap_free (E:=CEff) base;; Ret (Some tt)
   | CCAS a expected desired =>
-      b <- heap_cas (E:=CEff) a expected desired;; Ret (Some b)
+      addr <- denote_exp a;;
+      old <- denote_exp expected;;
+      value <- denote_exp desired;;
+      b <- heap_cas (E:=CEff) addr old value;;
+      Ret (Some b)
   | CEval e => value <- denote_exp e;; Ret (Some value)
   | CAssign name e =>
       value <- denote_exp e;;
@@ -226,7 +230,10 @@ Proof.
   - apply branchfree_bind.
     + unfold heap_free, CTree.trigger; apply bf_vis; intros []; apply bf_ret.
     + intros []; apply bf_ret.
-  - apply branchfree_bind.
+  - apply branchfree_bind; [apply denote_exp_branchfree|intro addr].
+    apply branchfree_bind; [apply denote_exp_branchfree|intro old].
+    apply branchfree_bind; [apply denote_exp_branchfree|intro value].
+    apply branchfree_bind.
     + unfold heap_cas, CTree.trigger; apply bf_vis; intro b; apply bf_ret.
     + intro b; apply bf_ret.
   - apply branchfree_bind; [apply denote_exp_branchfree|intro v; apply bf_ret].
@@ -289,12 +296,33 @@ Proof.
   rewrite !bind_ret_l; reflexivity.
 Qed.
 
+(** Immediate CAS rules (raw head, scheduler, state, segment, and AN/AU/AG)
+    apply to literal operands.  General operands first evaluate with
+    [source_raw_cas]. *)
 Lemma source_raw_cas_head a old desired (K : option bool -> thread sE Bn) :
-  (denote_flow (CCAS a old desired) >>= K) ≅
+  (denote_flow (CCAS (CLit a) (CLit old) (CLit desired)) >>= K) ≅
     Vis (inr1 (inr1 (inl1 (HCAS a old desired)))) (fun b => K (Some b)).
 Proof.
-  cbn [denote_flow]; unfold heap_cas, CTree.trigger; rewrite !bind_bind, bind_vis.
+  cbn [denote_flow denote_exp]; rewrite !bind_ret_l.
+  unfold heap_cas, CTree.trigger; rewrite !bind_bind, bind_vis.
   step; constructor; intro x; rewrite !bind_ret_l; reflexivity.
+Qed.
+
+(** Evaluate operands once, in address/expected/desired order, before the
+    atomic heap operation.  Expression yields remain inside the thread. *)
+Lemma source_raw_cas (a expected desired : CExp)
+    (K : option bool -> thread sE Bn) :
+  (denote_flow (CCAS a expected desired) >>= K) ≅
+  (addr <- denote_exp a;;
+   old <- denote_exp expected;;
+   value <- denote_exp desired;;
+   denote_flow (CCAS (CLit addr) (CLit old) (CLit value)) >>= K).
+Proof.
+  cbn [denote_flow]; rewrite bind_bind.
+  apply equ_clo_bind_eq; intro addr; rewrite bind_bind.
+  apply equ_clo_bind_eq; intro old; rewrite bind_bind.
+  apply equ_clo_bind_eq; intro value.
+  cbn [denote_exp]; rewrite !bind_ret_l; reflexivity.
 Qed.
 
 Lemma source_raw_emit_head tag value (K : option unit -> thread sE Bn) :
@@ -557,6 +585,35 @@ Proof.
   apply source_raw_assign.
 Qed.
 
+(** Expand expression CAS inside the focused thread, retaining every yield
+    and the scheduler's interleavings before the literal heap operation. *)
+Lemma interp_rr_cas_exp n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+    (a expected desired : CExp) (K : option bool -> thread sE Bn)
+    m (s : SSig) :
+  interp_schedule_rr sh (S n)
+    (ts @ i := (denote_flow (CCAS a expected desired) >>= K)) (Some i) m s ≅
+  interp_schedule_rr sh (S n)
+    (ts @ i :=
+      (addr <- denote_exp a;; old <- denote_exp expected;; value <- denote_exp desired;;
+       denote_flow (CCAS (CLit addr) (CLit old) (CLit value)) >>= K)) (Some i) m s.
+Proof.
+  apply interp_schedule_rr_equ, replace_pool_equ; [apply pool_equ_refl|].
+  apply source_raw_cas.
+Qed.
+
+Lemma interp_nd_cas_exp n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
+    (a expected desired : CExp) (K : option bool -> thread sE Bn) (s : SSig) :
+  interp_schedule_nd sh (S n)
+    (ts @ i := (denote_flow (CCAS a expected desired) >>= K)) (Some i) s ≅
+  interp_schedule_nd sh (S n)
+    (ts @ i :=
+      (addr <- denote_exp a;; old <- denote_exp expected;; value <- denote_exp desired;;
+       denote_flow (CCAS (CLit addr) (CLit old) (CLit value)) >>= K)) (Some i) s.
+Proof.
+  apply (interp_schedule_nd_equ sh), replace_pool_equ; [apply pool_equ_refl|].
+  apply source_raw_cas.
+Qed.
+
 Lemma interp_rr_var n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   name value (K : nat -> thread sE Bn) m (s : SSig) :
   lookup name (csl_context s) = Some value ->
@@ -651,7 +708,7 @@ Qed.
 Lemma interp_rr_cas n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a expected desired (K : option bool -> thread sE Bn) m sigma :
   interp_schedule_rr sh (S n)
-    (ts @ i := (denote_flow (CCAS a expected desired) >>= K))
+    (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K))
     (Some i) m sigma ~
   (interp_state sh (heap_cas (E:=sE) (B:=Bn) a expected desired) sigma >>= fun '(sigma',b) =>
    interp_schedule_rr sh (S n) (ts @ i := K (Some b)) (Some i) m sigma').
@@ -883,7 +940,7 @@ Qed.
 Lemma interp_nd_source_cas n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a expected desired (K : option bool -> thread sE Bn) sigma :
   interp_schedule_nd sh (S n)
-    (ts @ i := (denote_flow (CCAS a expected desired) >>= K))
+    (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K))
     (Some i) sigma ~
   (interp_state sh (heap_cas (E:=sE) (B:=Bn) a expected desired) sigma >>= fun '(sigma',b) =>
    interp_schedule_nd sh (S n) (ts @ i := K (Some b)) (Some i) sigma').
@@ -1154,7 +1211,7 @@ Lemma interp_rr_cas_value n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a expected desired current (K : option bool -> thread sE Bn) m h allocs ctx c :
   h a = Some current ->
   interp_schedule_rr sh (S n)
-    (ts @ i := (denote_flow (CCAS a expected desired) >>= K)) (Some i) m ((h,allocs),(ctx,c)) ~
+    (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) m ((h,allocs),(ctx,c)) ~
   (if Nat.eqb current expected then
     interp_schedule_rr sh (S n)
     (ts @ i := K (Some true)) (Some i) m ((upd h a desired,allocs),(ctx,c))
@@ -1268,7 +1325,7 @@ Lemma interp_rr_cas_missing n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a expected desired (K : option bool -> thread sE Bn) m h allocs ctx c :
   h a = None ->
   interp_schedule_rr sh (S n)
-    (ts @ i := (denote_flow (CCAS a expected desired) >>= K)) (Some i) m ((h,allocs),(ctx,c)) ~
+    (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) m ((h,allocs),(ctx,c)) ~
   (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   intro Missing.
@@ -1302,7 +1359,7 @@ Lemma interp_nd_source_cas_value n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a expected desired current (K : option bool -> thread sE Bn) h allocs ctx c :
   h a = Some current ->
   interp_schedule_nd sh (S n)
-    (ts @ i := (denote_flow (CCAS a expected desired) >>= K)) (Some i) ((h,allocs),(ctx,c)) ~
+    (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) ((h,allocs),(ctx,c)) ~
   (if Nat.eqb current expected then
     interp_schedule_nd sh (S n)
     (ts @ i := K (Some true)) (Some i) ((upd h a desired,allocs),(ctx,c))
@@ -1377,7 +1434,7 @@ Lemma interp_nd_source_cas_missing n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a expected desired (K : option bool -> thread sE Bn) h allocs ctx c :
   h a = None ->
   interp_schedule_nd sh (S n)
-    (ts @ i := (denote_flow (CCAS a expected desired) >>= K)) (Some i) ((h,allocs),(ctx,c)) ~
+    (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) ((h,allocs),(ctx,c)) ~
   (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   intro Missing.
@@ -1554,7 +1611,7 @@ Lemma exact_source_cas_success a expected desired
   (K : option bool -> thread sE Bn) h allocs ctx c logs target sigma' :
   h a = Some expected ->
   segment_to sh csl_equ (K (Some true)) ((upd h a desired,allocs),(ctx,c)) logs target sigma' ->
-  segment_to sh csl_equ (denote_flow (CCAS a expected desired) >>= K)
+  segment_to sh csl_equ (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)
     ((h,allocs),(ctx,c)) logs target sigma'.
 Proof.
   intros Hr (residual & Hseg & Htail); exists residual; split; [|exact Htail].
@@ -1574,7 +1631,7 @@ Lemma exact_source_cas_failure a expected desired current
   (K : option bool -> thread sE Bn) h allocs ctx c logs target sigma' :
   h a = Some current -> current <> expected ->
   segment_to sh csl_equ (K (Some false)) ((h,allocs),(ctx,c)) logs target sigma' ->
-  segment_to sh csl_equ (denote_flow (CCAS a expected desired) >>= K)
+  segment_to sh csl_equ (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)
     ((h,allocs),(ctx,c)) logs target sigma'.
 Proof.
   intros Hr Hne (residual & Hseg & Htail); exists residual; split; [|exact Htail].
@@ -2188,7 +2245,7 @@ Lemma anl_csl_nd_cas n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (φ ψ : ticllW (CSLObs (nat * nat))) :
   h a = Some current ->
   (<( {interp_schedule_nd sh (S n)
-    (ts @ i := (denote_flow (CCAS a expected desired) >>= K)) (Some i) ((h,allocs),(ctx,c))}, {w} |= φ AN ψ )> <->
+    (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) ((h,allocs),(ctx,c))}, {w} |= φ AN ψ )> <->
    (<( {if Nat.eqb current expected then
     interp_schedule_nd sh (S n)
     (ts @ i := K (Some true)) (Some i) ((upd h a desired,allocs),(ctx,c))
@@ -2205,7 +2262,7 @@ Lemma anr_csl_nd_cas n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
   h a = Some current ->
   (<[ {interp_schedule_nd sh (S n)
-    (ts @ i := (denote_flow (CCAS a expected desired) >>= K)) (Some i) ((h,allocs),(ctx,c))}, {w} |= φ AN ψ ]> <->
+    (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) ((h,allocs),(ctx,c))}, {w} |= φ AN ψ ]> <->
    (<[ {if Nat.eqb current expected then
     interp_schedule_nd sh (S n)
     (ts @ i := K (Some true)) (Some i) ((upd h a desired,allocs),(ctx,c))
@@ -2222,7 +2279,7 @@ Lemma aul_csl_nd_cas n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (φ ψ : ticllW (CSLObs (nat * nat))) :
   h a = Some current ->
   (<( {interp_schedule_nd sh (S n)
-    (ts @ i := (denote_flow (CCAS a expected desired) >>= K)) (Some i) ((h,allocs),(ctx,c))}, {w} |= φ AU ψ )> <->
+    (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) ((h,allocs),(ctx,c))}, {w} |= φ AU ψ )> <->
    (<( {if Nat.eqb current expected then
     interp_schedule_nd sh (S n)
     (ts @ i := K (Some true)) (Some i) ((upd h a desired,allocs),(ctx,c))
@@ -2239,7 +2296,7 @@ Lemma aur_csl_nd_cas n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
   h a = Some current ->
   (<[ {interp_schedule_nd sh (S n)
-    (ts @ i := (denote_flow (CCAS a expected desired) >>= K)) (Some i) ((h,allocs),(ctx,c))}, {w} |= φ AU ψ ]> <->
+    (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) ((h,allocs),(ctx,c))}, {w} |= φ AU ψ ]> <->
    (<[ {if Nat.eqb current expected then
     interp_schedule_nd sh (S n)
     (ts @ i := K (Some true)) (Some i) ((upd h a desired,allocs),(ctx,c))
@@ -2256,7 +2313,7 @@ Lemma ag_csl_nd_cas n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (φ : ticllW (CSLObs (nat * nat))) :
   h a = Some current ->
   (<( {interp_schedule_nd sh (S n)
-    (ts @ i := (denote_flow (CCAS a expected desired) >>= K)) (Some i) ((h,allocs),(ctx,c))}, {w} |= AG φ )> <->
+    (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) ((h,allocs),(ctx,c))}, {w} |= AG φ )> <->
    (<( {if Nat.eqb current expected then
     interp_schedule_nd sh (S n)
     (ts @ i := K (Some true)) (Some i) ((upd h a desired,allocs),(ctx,c))
@@ -2273,7 +2330,7 @@ Lemma anl_csl_rr_cas n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (φ ψ : ticllW (CSLObs (nat * nat))) :
   h a = Some current ->
   (<( {interp_schedule_rr sh (S n)
-    (ts @ i := (denote_flow (CCAS a expected desired) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AN ψ )> <->
+    (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AN ψ )> <->
    (<( {if Nat.eqb current expected then
     interp_schedule_rr sh (S n)
     (ts @ i := K (Some true)) (Some i) m ((upd h a desired,allocs),(ctx,c))
@@ -2290,7 +2347,7 @@ Lemma anr_csl_rr_cas n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
   h a = Some current ->
   (<[ {interp_schedule_rr sh (S n)
-    (ts @ i := (denote_flow (CCAS a expected desired) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AN ψ ]> <->
+    (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AN ψ ]> <->
    (<[ {if Nat.eqb current expected then
     interp_schedule_rr sh (S n)
     (ts @ i := K (Some true)) (Some i) m ((upd h a desired,allocs),(ctx,c))
@@ -2307,7 +2364,7 @@ Lemma aul_csl_rr_cas n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (φ ψ : ticllW (CSLObs (nat * nat))) :
   h a = Some current ->
   (<( {interp_schedule_rr sh (S n)
-    (ts @ i := (denote_flow (CCAS a expected desired) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AU ψ )> <->
+    (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AU ψ )> <->
    (<( {if Nat.eqb current expected then
     interp_schedule_rr sh (S n)
     (ts @ i := K (Some true)) (Some i) m ((upd h a desired,allocs),(ctx,c))
@@ -2324,7 +2381,7 @@ Lemma aur_csl_rr_cas n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
   h a = Some current ->
   (<[ {interp_schedule_rr sh (S n)
-    (ts @ i := (denote_flow (CCAS a expected desired) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AU ψ ]> <->
+    (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AU ψ ]> <->
    (<[ {if Nat.eqb current expected then
     interp_schedule_rr sh (S n)
     (ts @ i := K (Some true)) (Some i) m ((upd h a desired,allocs),(ctx,c))
@@ -2341,7 +2398,7 @@ Lemma ag_csl_rr_cas n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (φ : ticllW (CSLObs (nat * nat))) :
   h a = Some current ->
   (<( {interp_schedule_rr sh (S n)
-    (ts @ i := (denote_flow (CCAS a expected desired) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= AG φ )> <->
+    (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= AG φ )> <->
    (<( {if Nat.eqb current expected then
     interp_schedule_rr sh (S n)
     (ts @ i := K (Some true)) (Some i) m ((upd h a desired,allocs),(ctx,c))

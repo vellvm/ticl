@@ -34,7 +34,7 @@ Definition remote_attempt (base block : nat) : CProg (option unit) :=
   CBind CYield (fun _ =>
   CBind (CWrite block old) (fun _ =>
   CBind CYield (fun _ =>
-  CBind (CCAS (remote_head base) old block) (fun success =>
+  CBind (CCAS (CLit (remote_head base)) (CLit old) (CLit block)) (fun success =>
     if success then
       CBind (CEmit tag_retire block) (fun _ =>
       CRet (None : option unit))
@@ -49,7 +49,7 @@ Definition remote_free (base block : nat) : CProg unit :=
 Definition detach_attempt (base : nat) : CProg (option unit) :=
   CBind (CRead (remote_head base)) (fun old =>
   CBind CYield (fun _ =>
-  CBind (CCAS (remote_head base) old 0) (fun success =>
+  CBind (CCAS (CLit (remote_head base)) (CLit old) (CLit 0)) (fun success =>
     if success then
       CBind (CWrite (drain_head base) old) (fun _ =>
       CBind CYield (fun _ =>

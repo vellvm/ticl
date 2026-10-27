@@ -4,8 +4,9 @@
     the scoped semantics of [CFork] (a child runs only its body), the single
     yield of a successful variable read together with the late context read of
     an assignment, the separation of context observations from the indexed
-    counter, and the fault on a missing variable.  Every round-robin
-    scheduling decision is one visible [Step]. *)
+    counter, and faults on missing variables or CAS cells.  CAS operands also
+    exercise capture-before-yield and late comparison across interleavings.
+    Every round-robin scheduling decision is one visible [Step]. *)
 
 From Stdlib Require Import List Lia Arith.PeanoNat Fin Vector Strings.String.
 From ExtLib Require Import Structures.Maps Data.Map.FMapAList Data.String.
@@ -18,6 +19,8 @@ From TICL Require Import
   CTree.Interp.Yield.RoundRobin
   CTree.Interp.Refine
   Lang.CSL.Mod
+  Lang.CSL.Frame
+  Lang.CSL.Sequential
   Utils.Vectors.
 
 Import CTreeNotations ListNotations VectorNotations.
@@ -199,4 +202,209 @@ Proof.
   rewrite (interp_schedule_rr_equ sh 1 _ _ (Some Fin.F1) 0 _
     (replace_pool_equ _ _ Fin.F1 _ _ (pool_equ_refl _) (source_raw_eval _ _))).
   apply interp_rr_var_missing; reflexivity.
+Qed.
+
+(** ** Expression-valued CAS
+
+    Pure arithmetic introduces no scheduling boundary. *)
+Definition cas_arithmetic : CProg unit :=
+  CBind
+    (CCAS (CPlus (CLit 1) (CLit 2))
+          (CMinus (CLit 9) (CLit 2))
+          (CMult (CLit 2) (CLit 4)))
+    (fun ok => CEmit 90 (if ok then 1 else 0)).
+
+Theorem cas_arithmetic_rr :
+  run_rr cas_arithmetic ((upd hemp 3 7, hemp), (List.nil, 0)) ~
+    emit_list [inr (stamp (90,1) 0)]%list
+      (Ret (((upd (upd hemp 3 7) 3 8, hemp), (List.nil, 1)), tt)
+        : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+Proof.
+  assert (Arithmetic : forall K : option bool -> thread sE Bn,
+    (denote_flow (CCAS (CPlus (CLit 1) (CLit 2))
+      (CMinus (CLit 9) (CLit 2)) (CMult (CLit 2) (CLit 4))) >>= K) ≅
+    (denote_flow (CCAS (CLit 3) (CLit 7) (CLit 8)) >>= K)).
+  { intro K; cbn [denote_flow denote_exp]; rewrite !bind_ret_l; reflexivity. }
+  rewrite run_rr_unfold; unfold cas_arithmetic.
+  unfold emit_list; cbn [List.fold_right].
+  rr_focus; rewrite interp_rr_bind.
+  rewrite (interp_schedule_rr_equ sh 1 _ _ (Some Fin.F1) 0 _
+    (replace_pool_equ _ _ Fin.F1 _ _ (pool_equ_refl _) (Arithmetic _))).
+  erewrite interp_rr_cas_value by reflexivity; cbn [Nat.eqb].
+  cbv beta iota; rewrite interp_rr_emit_log.
+  rr_log; rr_finish_step.
+  apply interp_schedule_rr_empty.
+Qed.
+
+(** The child changes the context between the parent's four reads, then
+    makes the heap comparison succeed only after the desired value is saved. *)
+Definition cas_interleaving_child : CProg unit :=
+  CBind (CAssign "x" (CLit 1)) (fun _ =>
+  CBind CYield (fun _ =>
+  CBind (CAssign "x" (CLit 7)) (fun _ =>
+  CBind CYield (fun _ =>
+  CBind (CAssign "x" (CLit 8)) (fun _ =>
+  CBind CYield (fun _ =>
+  CBind (CAssign "x" (CLit 9)) (fun _ =>
+  CWrite 3 7))))))).
+
+Definition cas_interleaving : CProg unit :=
+  CBind (CFork cas_interleaving_child) (fun _ =>
+  CBind (CCAS (CMinus (CVar "x") (CVar "x")) (CVar "x") (CVar "x"))
+    (fun ok => CEmit 90 (if ok then 1 else 0))).
+
+Theorem cas_interleaving_rr :
+  let h0 := upd hemp 3 99 in
+  let ctx0 := add "x"%string 4 List.nil in
+  let ctx1 := add "x"%string 1 ctx0 in
+  let ctx2 := add "x"%string 7 ctx1 in
+  let ctx3 := add "x"%string 8 ctx2 in
+  let ctx4 := add "x"%string 9 ctx3 in
+  run_rr cas_interleaving ((h0, hemp), (ctx0, 0)) ~
+    Step (emit_list [inl ctx1]%list
+      (Step (Step (emit_list [inl ctx2]%list
+        (Step (Step (emit_list [inl ctx3]%list
+          (Step (Step (emit_list [inl ctx4]%list
+            (Step (emit_list [inr (stamp (90,1) 0)]%list
+              (Ret (((upd (upd h0 3 7) 3 8, hemp), (ctx4, 1)), tt)
+                : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)))))))))))))).
+Proof.
+  intros h0 ctx0 ctx1 ctx2 ctx3 ctx4.
+  assert (Sub : forall K : nat -> thread sE Bn,
+    (denote_exp (CMinus (CVar "x") (CVar "x")) >>= K) ≅
+    (x <- denote_exp (CVar "x");; y <- denote_exp (CVar "x");; K (x - y)%nat)).
+  { intro K.
+    change (((x <- denote_exp (CVar "x");;
+      y <- denote_exp (CVar "x");; Ret (x - y)%nat) >>= K) ≅
+      (x <- denote_exp (CVar "x");; y <- denote_exp (CVar "x");; K (x - y)%nat)).
+    rewrite bind_bind; apply equ_clo_bind_eq; intro x.
+    rewrite bind_bind; apply equ_clo_bind_eq; intro y; apply bind_ret_l. }
+  unfold cas_interleaving; rewrite run_rr_fork_bind.
+  unfold emit_list; cbn [List.fold_right].
+  (* Parent: the first address read captures 4, then yields. *)
+  rr_focus; rewrite interp_rr_bind, interp_rr_cas_exp.
+  rewrite (interp_schedule_rr_equ sh 2 _ _ (Some (Fin.FS Fin.F1)) 0 _
+    (replace_pool_equ _ _ (Fin.FS Fin.F1) _ _ (pool_equ_refl _) (Sub _))).
+  rewrite (interp_rr_var _ _ _ "x"%string 4) by reflexivity.
+  (* Slot 0: x := 1, then yield. *)
+  rr_select; rr_focus; unfold cas_interleaving_child.
+  rewrite interp_rr_bind, interp_rr_assign, interp_rr_lit; cbv beta.
+  rewrite interp_rr_get_ctx; cbv beta; rewrite interp_rr_put_ctx.
+  rr_log; cbv beta iota; rewrite interp_rr_bind, interp_rr_yield.
+  (* Slot 1: the second address read captures 1, giving address 3. *)
+  rr_select; rr_focus.
+  rewrite (interp_rr_var _ _ _ "x"%string 1) by reflexivity.
+  (* Slot 0: x := 7, then yield. *)
+  rr_select; rr_focus.
+  rewrite interp_rr_bind, interp_rr_assign, interp_rr_lit; cbv beta.
+  rewrite interp_rr_get_ctx; cbv beta; rewrite interp_rr_put_ctx.
+  rr_log; cbv beta iota; rewrite interp_rr_bind, interp_rr_yield.
+  (* Slot 1: the expected operand captures 7. *)
+  rr_select; rr_focus.
+  rewrite (interp_rr_var _ _ _ "x"%string 7) by reflexivity.
+  (* Slot 0: x := 8, then yield. *)
+  rr_select; rr_focus.
+  rewrite interp_rr_bind, interp_rr_assign, interp_rr_lit; cbv beta.
+  rewrite interp_rr_get_ctx; cbv beta; rewrite interp_rr_put_ctx.
+  rr_log; cbv beta iota; rewrite interp_rr_bind, interp_rr_yield.
+  (* Slot 1: the desired operand captures 8 while the heap still holds 99. *)
+  rr_select; rr_focus.
+  rewrite (interp_rr_var _ _ _ "x"%string 8) by reflexivity.
+  (* Slot 0: x := 9, write 7 to the heap, then terminate. *)
+  rr_select; rr_focus.
+  rewrite interp_rr_bind, interp_rr_assign, interp_rr_lit; cbv beta.
+  rewrite interp_rr_get_ctx; cbv beta; rewrite interp_rr_put_ctx.
+  rr_log; cbv beta iota.
+  unfold csl_set_context, csl_context, csl_memory, csl_counter; cbn [fst snd].
+  rewrite interp_rr_write_present by (vm_compute; congruence).
+  rr_finish_step.
+  (* The singleton parent's saved operands perform CAS 3 7 8 and report true. *)
+  rr_select; rr_focus.
+  erewrite interp_rr_cas_value by reflexivity; cbn [Nat.eqb].
+  cbv beta iota; rewrite interp_rr_emit_log.
+  rr_log; rr_finish_step.
+  apply interp_schedule_rr_empty.
+Qed.
+
+(** ** Operand faults precede the heap event
+
+    No failed operand reaches the report.  In particular, the desired
+    operand is evaluated even when the current heap value does not match. *)
+Theorem cas_missing_address_rr :
+  run_rr
+    (CBind (CCAS (CVar "missing") (CVar "e") (CVar "d"))
+      (fun ok => CEmit 90 (if ok then 1 else 0)))
+    ((upd hemp 3 99, hemp),
+      (add "d"%string 8 (add "e"%string 7 (add "a"%string 3 List.nil)), 0)) ~
+    (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+Proof.
+  rewrite run_rr_unfold; rr_focus.
+  rewrite interp_rr_bind, interp_rr_cas_exp.
+  apply interp_rr_var_missing; reflexivity.
+Qed.
+
+Theorem cas_missing_expected_rr :
+  run_rr
+    (CBind (CCAS (CVar "a") (CVar "missing") (CVar "d"))
+      (fun ok => CEmit 90 (if ok then 1 else 0)))
+    ((upd hemp 3 99, hemp),
+      (add "d"%string 8 (add "e"%string 7 (add "a"%string 3 List.nil)), 0)) ~
+    Step (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+Proof.
+  rewrite run_rr_unfold; rr_focus.
+  rewrite interp_rr_bind, interp_rr_cas_exp.
+  rewrite (interp_rr_var _ _ _ "a"%string 3) by reflexivity.
+  rr_select; rr_focus.
+  apply interp_rr_var_missing; reflexivity.
+Qed.
+
+Theorem cas_missing_desired_rr :
+  run_rr
+    (CBind (CCAS (CVar "a") (CVar "e") (CVar "missing"))
+      (fun ok => CEmit 90 (if ok then 1 else 0)))
+    ((upd hemp 3 99, hemp),
+      (add "d"%string 8 (add "e"%string 7 (add "a"%string 3 List.nil)), 0)) ~
+    Step (Step (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit))).
+Proof.
+  rewrite run_rr_unfold; rr_focus.
+  rewrite interp_rr_bind, interp_rr_cas_exp.
+  rewrite (interp_rr_var _ _ _ "a"%string 3) by reflexivity.
+  rr_select; rr_focus.
+  rewrite (interp_rr_var _ _ _ "e"%string 7) by reflexivity.
+  rr_select; rr_focus.
+  apply interp_rr_var_missing; reflexivity.
+Qed.
+
+Theorem cas_missing_cell_rr :
+  run_rr
+    (CBind (CCAS (CVar "a") (CVar "e") (CVar "d"))
+      (fun ok => CEmit 90 (if ok then 1 else 0)))
+    (managed_empty,
+      (add "d"%string 8 (add "e"%string 7 (add "a"%string 3 List.nil)), 0)) ~
+    Step (Step (Step (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)))).
+Proof.
+  rewrite run_rr_unfold; rr_focus.
+  rewrite interp_rr_bind, interp_rr_cas_exp.
+  rewrite (interp_rr_var _ _ _ "a"%string 3) by reflexivity.
+  rr_select; rr_focus.
+  rewrite (interp_rr_var _ _ _ "e"%string 7) by reflexivity.
+  rr_select; rr_focus.
+  rewrite (interp_rr_var _ _ _ "d"%string 8) by reflexivity.
+  rr_select; rr_focus.
+  apply interp_rr_cas_missing; reflexivity.
+Qed.
+
+(** ** The sequential-fragment boundary includes every operand *)
+Theorem cas_yield_fork_free_literals :
+  yield_fork_free (CCAS (CLit 3) (CLit 7) (CLit 8)).
+Proof.
+  cbn [yield_fork_free prog_ok exp_ok user_only]; repeat split; intros; exact I.
+Qed.
+
+Theorem cas_var_operands_not_yield_fork_free :
+  ~ yield_fork_free (CCAS (CVar "x") (CLit 7) (CLit 8)) /\
+  ~ yield_fork_free (CCAS (CLit 3) (CVar "x") (CLit 8)) /\
+  ~ yield_fork_free (CCAS (CLit 3) (CLit 7) (CVar "x")).
+Proof.
+  cbn [yield_fork_free prog_ok exp_ok user_only]; tauto.
 Qed.

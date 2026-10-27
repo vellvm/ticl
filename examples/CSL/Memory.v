@@ -29,8 +29,8 @@ Definition lifecycle : CProg unit :=
   CBind (CWrite first 7) (fun _ =>
   CBind (CWrite (first + 2) 9) (fun _ =>
   CBind (CWrite second 11) (fun _ =>
-  CBind (CCAS first 7 8) (fun succeeded =>
-  CBind (CCAS first 7 99) (fun failed =>
+  CBind (CCAS (CLit first) (CLit 7) (CLit 8)) (fun succeeded =>
+  CBind (CCAS (CLit first) (CLit 7) (CLit 99)) (fun failed =>
   CBind (CEmit 80 (if succeeded then 1 else 0)) (fun _ =>
   CBind (CEmit 81 (if failed then 1 else 0)) (fun _ =>
   CBind (CFree first) (fun _ =>
@@ -62,7 +62,7 @@ Definition use_after_free_write : CProg unit :=
 Definition use_after_free_cas : CProg unit :=
   CBind (CAlloc 3) (fun base =>
   CBind (CFree base) (fun _ =>
-  CBind (CCAS (base + 2) 0 17) (fun _ => CRet tt))).
+  CBind (CCAS (CLit (base + 2)) (CLit 0) (CLit 17)) (fun _ => CRet tt))).
 
 (** ** Driving the single-thread round-robin run
 
@@ -102,7 +102,7 @@ Ltac rr_step :=
       rewrite interp_rr_write_present by (vm_compute; congruence)
   | |- interp_schedule_rr _ _ (_ @ _ := (denote_flow (CRead _) >>= _)) _ _ _ ~ _ =>
       erewrite interp_rr_read_value by reflexivity
-  | |- interp_schedule_rr _ _ (_ @ _ := (denote_flow (CCAS _ _ _) >>= _)) _ _ _ ~ _ =>
+  | |- interp_schedule_rr _ _ (_ @ _ := (denote_flow (CCAS (CLit _) (CLit _) (CLit _)) >>= _)) _ _ _ ~ _ =>
       erewrite interp_rr_cas_value by reflexivity; cbn [Nat.eqb]
   | |- interp_schedule_rr _ _ (_ @ _ := (denote_flow (CFree _) >>= _)) _ _ _ ~ _ =>
       erewrite interp_rr_free by reflexivity
