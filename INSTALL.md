@@ -72,6 +72,10 @@ changing the caller's shell environment.
 Rocq core and Stdlib are separate packages: `rocq-prover.9.2.0` is not the
 package used here. Equations resolves the compatibility package `coq-core`
 at version 9.2.0; the frozen export records the complete resolved closure.
+Hosted CI runs on `lang/yield` and removes the Rocq container's older Stdlib
+pin before resolving dependencies, so the manifest's `rocq-stdlib >= 9.2`
+requirement is honored alongside Dune 3.23.1.
+
 The `rocq-coinduction` package provides the tower-based coinduction library;
 `coq-itree`, `rocq-relation-algebra`, and `coq-ext-lib` support CTree. The
 canonical CTree pin is in `rocq-ticl.opam.template`; Dune generates

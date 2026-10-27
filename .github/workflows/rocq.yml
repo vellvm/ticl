@@ -30,8 +30,9 @@ jobs:
           coq_version: ${{ matrix.rocq_version }}
           ocaml_version: ${{ matrix.ocaml_version }}
           before_install: |
-            startGroup "Upgrade dune"
-              opam pin add dune 3.23.1 -y
+            startGroup "Configure toolchain"
+              opam pin remove -n -y rocq-stdlib
+              opam pin add -n -y dune 3.23.1
             endGroup
           export: 'OPAMWITHTEST'
         env:
