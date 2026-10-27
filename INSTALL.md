@@ -4,8 +4,10 @@ Installation instructions
 These instructions build the Tisl proof development on Linux or macOS using
 the dedicated `tisl-review-9.2` opam switch. The checked development uses OCaml
 5.3.0, Dune 3.23.1, Rocq core and Stdlib 9.2.0, and the immutable CTree revision
-`1eebf6de298fee6f151b3d62180e5f8e08149cde`. Dependency downloads require network
-access; this is a source artifact, not an offline environment image.
+`7470697761fdba323348e8b97e0870ac1ce1cbae` from
+[`elefthei/ctrees`](https://github.com/elefthei/ctrees/tree/dev). Dependency
+downloads require network access; this is a source artifact, not an offline
+environment image.
 
 `dune build` only builds; it does not download opam dependencies. For a
 standalone development checkout in the existing default switch, the canonical
@@ -58,7 +60,7 @@ opam install --switch "$SW" -y dune.3.23.1 rocq-core.9.2.0 rocq-stdlib.9.2.0 \
   rocq-equations.1.3.2+9.2 coq-ext-lib.0.13.2 rocq-coinduction.1.22 \
   rocq-relation-algebra.1.9.1 coq-itree.5.2.1 odoc.3.2.1
 opam pin add --switch "$SW" -y rocq-ctree.2.0-dev \
-  git+https://github.com/vellvm/ctrees.git#1eebf6de298fee6f151b3d62180e5f8e08149cde
+  git+https://github.com/elefthei/ctrees.git#7470697761fdba323348e8b97e0870ac1ce1cbae
 opam exec --switch "$SW" -- dune build -j 1
 ```
 

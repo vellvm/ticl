@@ -23,8 +23,8 @@ Rocq opam repository; they are not git submodules.
 
 ## Standalone checkout
 
-This canonical path uses the immutable remote CTree revision recorded in the
-checked-in manifest:
+This canonical path pins [`elefthei/ctrees`](https://github.com/elefthei/ctrees/tree/dev)
+at the immutable revision documented in `INSTALL.md` and the checked-in manifest:
 
 ```sh
 opam repository add rocq-released https://rocq-prover.org/opam/released --switch default
@@ -39,7 +39,8 @@ Rocq 9.2 dependencies.
 
 ## Paired local CTree and TICL checkouts
 
-Install the working trees in dependency order:
+Use a sibling checkout of `elefthei/ctrees` on `dev`, then install the working
+trees in dependency order:
 
 ```sh
 # From the CTree checkout

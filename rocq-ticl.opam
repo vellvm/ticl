@@ -37,5 +37,5 @@ build: [
 dev-repo: "git+https://github.com/vellvm/ticl.git"
 x-maintenance-intent: ["(latest)"]
 pin-depends: [
-  ["rocq-ctree.2.0-dev" "git+https://github.com/vellvm/ctrees.git#1eebf6de298fee6f151b3d62180e5f8e08149cde"]
+  ["rocq-ctree.2.0-dev" "git+https://github.com/elefthei/ctrees.git#7470697761fdba323348e8b97e0870ac1ce1cbae"]
 ]

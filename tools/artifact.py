@@ -26,8 +26,8 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = "e8f801d21cf09f0f4e247a51c9a7726cd6d7dfc5"
-CTREE = "1eebf6de298fee6f151b3d62180e5f8e08149cde"
-CTREE_URL = "https://github.com/vellvm/ctrees.git"
+CTREE = "7470697761fdba323348e8b97e0870ac1ce1cbae"
+CTREE_URL = "https://github.com/elefthei/ctrees.git"
 FORMAT = 1
 COLUMNS = ["claim_id", "section", "module", "declaration", "category", "baseline"]
 IDENT = r"[A-Za-z_][A-Za-z0-9_']*"
