@@ -56,6 +56,12 @@ Proof.
 Qed.
 Global Hint Resolve can_step_not_done: ticl.
 
+(** [kripke_step next current] is [ktrans] with the successor first, the
+    orientation [Acc]/[well_founded] expect. *)
+Definition kripke_step `{Kripke M E B} {X}
+    (next current : M E B X * World E) : Prop :=
+  ktrans (fst current) (snd current) (fst next) (snd next).
+
 Ltac world_inv :=
   match goal with
   | [H: @Obs ?E ?Y ?e ?x = ?w |- _] =>

@@ -208,3 +208,78 @@ Proof.
   apply trans_ret_inv in TR as (_ & Hv).
   apply val_eq_inv in Hv; discriminate.
 Qed.
+
+(** Visible iteration of the same body: every continuing round is a [Step]
+    and the hidden choice still lowers the index, so all paths end
+    ([afr_iterS_done]). *)
+Lemma iterS_body_af : <[ {CTree.iterS body 3}, Pure |= AF done= 7 Pure ]>.
+Proof.
+  apply afr_iterS_done with
+    (Rv := fun p q : nat * World void1 => fst p < fst q)
+    (Ri := fun _ _ => True).
+  - apply (wf_inverse_image _ _ lt fst); apply Nat.lt_wf_0.
+  - constructor.
+  - exact I.
+  - intros n w Hd _.
+    unfold body.
+    destruct (Nat.eqb n 0) eqn:Hn.
+    + cright; csplit.
+      * csplit; auto.
+      * apply can_step_ret; auto.
+      * intros t' w' TR.
+        inv Hd; [| destruct e].
+        apply ktrans_done in TR as (-> & _); cleft; csplit; cbn.
+        split2; [constructor | reflexivity | reflexivity].
+    + cright; csplit.
+      * csplit; auto.
+      * apply can_step_br; exists Fin.F1; apply can_step_ret; auto.
+      * intros t' w' TR.
+        apply ktrans_br in TR as (i & TR).
+        apply Nat.eqb_neq in Hn.
+        inv Hd; [| destruct e].
+        apply ktrans_done in TR as (-> & _); cleft; csplit; cbn.
+        split2; [constructor | exact I | lia].
+Qed.
+
+Lemma iterS_body_acc : Acc kripke_step (CTree.iterS body 3, Pure).
+Proof. exact (af_done_accessible _ _ _ iterS_body_af). Qed.
+
+Lemma acc_self_loop {A} (R : A -> A -> Prop) (x : A) : R x x -> ~ Acc R x.
+Proof.
+  intros Hxx Hacc; revert Hxx; induction Hacc as [x _ IH]; intros Hxx.
+  exact (IH x Hxx Hxx).
+Qed.
+
+(** Negative: a visible self-loop steps forever, so no [AF done] holds. *)
+Definition self_loop : ctree void1 Bn nat :=
+  CTree.iterS (fun u : unit => Ret (inl u)) tt.
+
+Lemma self_loop_not_af : forall R, ~ <[ self_loop, Pure |= AF done R ]>.
+Proof.
+  intros R H%af_done_accessible.
+  assert (Hunf: self_loop ≅ Step self_loop).
+  { unfold self_loop.
+    transitivity (lr <- (Ret (inl tt) : ctree void1 Bn (unit + nat));;
+                  match lr with
+                  | inl l => Step (CTree.iterS (fun u : unit => Ret (inl u)) l)
+                  | inr r => Ret r
+                  end).
+    - now step.
+    - now rewrite bind_ret_l. }
+  assert (TR: |self_loop, Pure| ↦ |self_loop, Pure|).
+  { rewrite Hunf at 1; apply ktrans_step; split2; [reflexivity | reflexivity | constructor]. }
+  exact (acc_self_loop kripke_step (self_loop, Pure) TR H).
+Qed.
+
+(** Negative: an empty hidden choice has no transition, so [AF] cannot
+    pass vacuously. *)
+Definition empty_choice : ctree void1 Bn nat := brn (fun _ : fin 0 => Ret 0).
+
+Lemma empty_choice_not_af : forall R, ~ <[ empty_choice, Pure |= AF done R ]>.
+Proof.
+  intros R H.
+  rewrite unfold_entailsR in H.
+  inversion H as [t w Hdone | t w (_ & (t' & w' & TR) & _)]; subst.
+  - rewrite unfold_entailsR in Hdone; inversion Hdone.
+  - apply ktrans_br in TR as (i & _); inversion i.
+Qed.

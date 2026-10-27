@@ -675,6 +675,47 @@ Section IterLemmas.
     intros; cright; eapply aur_iter_done; eauto.
   Qed.
 
+  (** Visible iteration ([iterS]: each continuing round is a [Step]) whose body
+      returns through hidden branching. Every continuing index decreases along
+      the well-founded [Rv]; every exit value satisfies [Post]. *)
+  Lemma afr_iterS_done{X I} (Ri: I -> World E -> Prop) (Rv: relation (I * World E))
+    (i: I) (w: World E) (k: I -> ctree E B (I + X)) (Post: X -> World E -> Prop):
+    well_founded Rv ->
+    not_done w ->
+    Ri i w ->
+    (forall (i: I) w,
+        not_done w ->
+        Ri i w ->
+        <[ {k i}, w |= AF done
+                    {fun (lr: I + X) (w': World E) =>
+                       match lr with
+                       | inl i' => not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)
+                       | inr r => not_done w' /\ Post r w'
+                       end} ]>) ->
+    <[ {CTree.iterS k i}, w |= AF done Post ]>.
+  Proof.
+    intros WfR Hd Hi H.
+    remember (i, w) as P eqn:HeqP.
+    replace i with (fst P) in Hi |- * by now subst.
+    replace w with (snd P) in Hd, Hi |- * by now subst.
+    clear HeqP i w.
+    revert Hd Hi; pattern P; apply (well_founded_ind WfR); clear P.
+    intros [i w] HindWf Hd Hi; cbn in *.
+    assert (Hunf: CTree.iterS k i ≅
+                    (lr <- k i;; match lr with
+                                 | inl l => Step (CTree.iterS k l)
+                                 | inr r => Ret r
+                                 end)) by now step.
+    rewrite Hunf; cright.
+    eapply aur_bind_r_done; [exact Hd | exact (H i w Hd Hi) |].
+    intros [i' | r] w'.
+    - intros (Hd' & Hi' & Hv).
+      apply anr_step; split; [csplit; auto with ticl|].
+      exact (HindWf (i', w') Hv Hd' Hi').
+    - intros (Hd' & HPost).
+      now apply anr_au, axr_ret.
+  Qed.
+
   Lemma eur_iter_done{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E B (I + X)) (φ: ticll E) (ψ: ticlr E X):
     well_founded Rv ->
     not_done w ->

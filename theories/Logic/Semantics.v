@@ -530,6 +530,21 @@ Proof.
   contradiction.
 Qed.
 
+(** [AF done R] rules out infinite paths: every [ktrans] path from [t, w] is
+    finite, whatever branch is taken. *)
+Theorem af_done_accessible `{Kripke M E B} {X}
+    (R : X -> World E -> Prop) (t : M E B X) (w : World E) :
+  <[ t, w |= AF done R ]> -> Acc kripke_step (t, w).
+Proof.
+  rewrite unfold_entailsR; revert t w.
+  apply (auc_ind (fun t w => Acc kripke_step (t, w))).
+  - intros t w Hdone; constructor; intros [u w'] TR; cbn in TR.
+    rewrite unfold_entailsR in Hdone.
+    apply ktrans_not_done in TR; inversion Hdone; subst; inversion TR.
+  - intros t w _ (_ & _ & IH); constructor; intros [u w'] TR.
+    exact (IH u w' TR).
+Qed.
+
 Lemma anc_not_done `{KMS: Kripke M E B} X: forall (t: M E B X) (w: World E) p q,
     anc p q t w ->
     not_done w.
