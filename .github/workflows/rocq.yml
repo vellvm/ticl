@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - main
+      - lang/yield
   pull_request:
     branches:
       - '**'

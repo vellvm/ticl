@@ -7,6 +7,41 @@ the dedicated `tisl-review-9.2` opam switch. The checked development uses OCaml
 `1eebf6de298fee6f151b3d62180e5f8e08149cde`. Dependency downloads require network
 access; this is a source artifact, not an offline environment image.
 
+`dune build` only builds; it does not download opam dependencies. For a
+standalone development checkout in the existing default switch, the canonical
+path uses the immutable remote CTree pin from the checked-in manifest:
+
+```sh
+opam repository add rocq-released https://rocq-prover.org/opam/released --switch default
+opam install --switch default --deps-only .
+opam exec --switch default -- dune build
+```
+
+Use `opam install --switch default .` instead to install TICL itself. The old
+`elefthei/rocq-ext-lib` fork is intentionally not pinned because it requires
+Rocq 9.1.1; this development uses the released `coq-ext-lib` package. Likewise,
+the official `rocq-coinduction.1.22` release from `damien-pous/coinduction`
+provides `Coinduction.all` and the tower API.
+
+For paired local CTree and TICL checkouts, install the working trees in
+dependency order:
+
+```sh
+# cwd: /path/to/ctrees
+opam install --switch default --working-dir -y .
+# cwd: /path/to/ticl
+opam pin add --switch default --working-dir --ignore-pin-depends --no-action -y rocq-ticl.0.1 .
+opam install --switch default --working-dir --ignore-pin-depends -y .
+```
+
+The explicit pin refresh updates metadata even when TICL is already locally
+pinned; `opam install` alone can otherwise retain its old dependency constraint.
+
+`--working-dir` includes uncommitted changes. TICL's `--ignore-pin-depends`
+keeps its immutable remote pin from replacing the local CTree checkout. This
+local pin is non-portable developer state, not a frozen artifact; the isolated
+and artifact workflows below retain the public immutable CTree revision.
+
 # Prerequisites and dedicated switch
 
 Install opam 2.3.0 or later, GNU Make, Python 3, Git, and the system prerequisites

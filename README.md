@@ -18,18 +18,45 @@ secure memory, and distributed consensus.
 
 # Building
 
-The model of programs is the `ctree E B X` type of the [ctrees](https://github.com/vellvm/ctrees) library, consumed as the opam package `rocq-ctree` pinned to its `fix/universe-check` branch (see `INSTALL.md`).
+TICL targets Rocq 9.2. Its proof-library dependencies are published in the
+Rocq opam repository; they are not git submodules.
 
-Dependencies (all from opam, see `INSTALL.md` for pinned versions) are
-- Rocq 9.2
-- dune (>= 3.23)
-- rocq-equations
-- coq-ext-lib
-- rocq-coinduction (>= 1.22, tower-based)
-- rocq-relation-algebra, coq-itree (needed by ctrees)
-- rocq-ctree (vellvm/ctrees, branch fix/universe-check; opam pin, see INSTALL.md)
+## Standalone checkout
 
-Then use `make` in the root directory to build `TICL` and `make install` to install it.
+This canonical path uses the immutable remote CTree revision recorded in the
+checked-in manifest:
+
+```sh
+opam repository add rocq-released https://rocq-prover.org/opam/released --switch default
+opam install --switch default --deps-only .
+opam exec --switch default -- dune build
+```
+
+`opam install --switch default .` installs TICL itself as well. In particular,
+do not pin the old `elefthei/rocq-ext-lib` fork: it requires Rocq 9.1.1. The
+released `coq-ext-lib` and official `rocq-coinduction.1.22` packages are the
+Rocq 9.2 dependencies.
+
+## Paired local CTree and TICL checkouts
+
+Install the working trees in dependency order:
+
+```sh
+# From the CTree checkout
+opam install --switch default --working-dir -y .
+# From the TICL checkout
+opam pin add --switch default --working-dir --ignore-pin-depends --no-action -y rocq-ticl.0.1 .
+opam install --switch default --working-dir --ignore-pin-depends -y .
+```
+
+`--working-dir` includes uncommitted changes. TICL's `--ignore-pin-depends`
+keeps its immutable remote pin from replacing the local CTree checkout.
+The explicit pin refresh also updates metadata when TICL is already locally
+pinned; `opam install` alone can otherwise leave its old dependency constraint.
+
+See `INSTALL.md` for the canonical isolated-switch recipe and the distinction
+between local developer pins and portable frozen artifacts. After installing
+dependencies, `make` builds `TICL` and `make install` installs it.
 
 # Documentation
 
