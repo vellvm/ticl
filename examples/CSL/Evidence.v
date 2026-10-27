@@ -9,7 +9,7 @@ From TICL Require Import
   CTree.Interp.Yield.Execution
   Logic.Simulation
   CTree.Interp.Yield.RoundRobin
-  Lang.CSL.Mod.
+  Lang.CoCSL.Mod.
 From TICL Require Import Logic.Setoid CTree.Logic.Iter CTree.Logic.Bind.
 
 From examples Require Import
@@ -168,8 +168,8 @@ Print Assumptions TICL.Logic.Simulation.ticlr_sim.
 Check TICL.CTree.Interp.Yield.RoundRobin.interp_schedule_rr_user_bind.
 Print Assumptions TICL.CTree.Interp.Yield.RoundRobin.interp_schedule_rr_user_bind.
 
-Check TICL.Lang.CSL.Mod.run_rr_fork_bind.
-Print Assumptions TICL.Lang.CSL.Mod.run_rr_fork_bind.
+Check TICL.Lang.CoCSL.Mod.run_rr_fork_bind.
+Print Assumptions TICL.Lang.CoCSL.Mod.run_rr_fork_bind.
 
 Check TICL.Logic.Setoid.proper_entailsL_meq.
 Print Assumptions TICL.Logic.Setoid.proper_entailsL_meq.

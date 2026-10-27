@@ -22,9 +22,9 @@ From TICL Require Export
   CTree.Interp.CSL.Mod
   CTree.Interp.Refine
   Logic.Core
-  Lang.CSL.Mod
-  Lang.CSL.Frame
-  Lang.CSL.Sequential
+  Lang.CoCSL.Mod
+  Lang.CoCSL.Frame
+  Lang.CoCSL.Sequential
   Utils.Pcm.
 
 Export CTreeNotations TiclNotations VectorNotations.

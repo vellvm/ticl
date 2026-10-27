@@ -4,7 +4,7 @@ From TICL Require Import CTree.Interp.Yield.Execution.
 From TICL Require Import Utils.Execution.
 From Stdlib Require Import Classes.Morphisms.
 From TICL Require Import
-  Lang.CSL.Mod
+  Lang.CoCSL.Mod
   CTree.Core
   CTree.Events.Writer
   CTree.Events.Yield
@@ -554,7 +554,7 @@ Qed.
 
 From Stdlib Require Import List Program.Equality Classes.RelationClasses.
 From TICL Require Import
-  Lang.CSL.Mod
+  Lang.CoCSL.Mod
   CTree.Core
   CTree.Events.Writer
   CTree.Events.Yield

@@ -1,6 +1,6 @@
 # Cooperative heap queues
 
-`TICL.Lang.CSL.Mod` is a typed cooperative fork/yield language over a disjoint heap
+`TICL.Lang.CoCSL.Mod` is a typed cooperative fork/yield language over a disjoint heap
 PCM and a shared variable context: heap commands and Yield-style expressions,
 assignment, conditionals and loops live in one `CProg` AST. `examples.CSL.Queue.Shared`
 verifies one heap queue rotated forever by two spawned workers (see below).
@@ -17,7 +17,7 @@ state `SSig`, the observation sum `CSLObs`, the payload-polymorphic handler
 `sh` (heap, context and indexed-emission handlers), thread effects, the
 context get/put laws, the raw physical-free laws, and the effect-level
 select/heap-free Ticl rules. It imports no language or example.
-`Lang.CSL.Mod` is the one CSL language: `CExp`, `CProg`, their denotation,
+`Lang.CoCSL.Mod` is the one CSL language: `CExp`, `CProg`, their denotation,
 source execution equations, exact first-yield segment rules, the structural
 Ticl matrix, the Yield-fragment rules, and the source-pool rules; it
 re-exports the interpreter and the generic Yield scheduler/logic layers. Import
@@ -40,7 +40,7 @@ retained as compatibility re-export files.
 | `ICTree.Interp.Yield.SBisim` | Guard alignment (`galigned`), its preservation by erasure/state/round-robin interpretation, guard-equivalent pool congruence |
 | `ICTree.Logic.Yield` | Thread rules over arbitrary handlers; `ClosedTurns`/`RankedTurns` pool invariance and eventuality rules (ND and RR) |
 | `Utils.Maps` | The variable context `Ctx.Ctx` shared by languages and the CSL interpreter |
-| `Lang.CSL.Mod` | CSL syntax, denotation, source execution equations, source segment rules, structural matrix, Yield-fragment and source-pool rules |
+| `Lang.CoCSL.Mod` | CSL syntax, denotation, source execution equations, source segment rules, structural matrix, Yield-fragment and source-pool rules |
 
 Concrete address layouts, overlap counterexamples, allocator-specific state
 machines and their fairness/rank arguments, and regression consumers remain in
@@ -97,7 +97,7 @@ raw source denotations
 `BranchFree` predicate and closure proofs, and parity picker facts.
 `ICTree.Interp.Yield.RoundRobin` owns the handler-parametric pool interpreter and
 its eight execution equations. Neither module imports a language or example.
-`Lang.CSL.Mod` instantiates that API with `sh`; it owns source-constructor
+`Lang.CoCSL.Mod` instantiates that API with `sh`; it owns source-constructor
 execution equations and scoped-fork startup. No example-local pool interpreter
 or bridge module is used.
 
@@ -280,7 +280,7 @@ functions by Leibniz equality.
 
 ## Structural temporal interface
 
-`From TICL Require Import Lang.CSL.Mod.` exports the full matrix. Its 110
+`From TICL Require Import Lang.CoCSL.Mod.` exports the full matrix. Its 110
 source rules are the name product
 `{anl,anr,aul,aur,ag}_csl_{nd,rr}_{read,write,emit,yield,fork,ret,bind,until_none,alloc,cas,free}`.
 They apply to arbitrary nonempty focused pools and continuations, not only queue
@@ -297,7 +297,7 @@ until preserve the pool and the outer `None` halt flow. These rules assert no
 fairness or unconditional loop termination.
 
 `interp_nd_source_` and `interp_rr_` expose the checked success and fault normal
-forms in `Lang.CSL.Mod`, including `*_free`/`*_free_invalid` and the
+forms in `Lang.CoCSL.Mod`, including `*_free`/`*_free_invalid` and the
 read/write/CAS `*_missing` faults. Finite-allocation rules quantify over the
 first-fit witness supplied by `heap_finite`, rather than requiring a
 caller-chosen address. Free rules require `managed_free memory base = Some
@@ -324,7 +324,7 @@ liveness claim.
 
 ## Heap frame rules
 
-`From TICL Require Import Lang.CSL.Frame.` transports proved properties of a
+`From TICL Require Import Lang.CoCSL.Frame.` transports proved properties of a
 run to the same program on a heap extended by a disjoint `ManagedHeap` region
 `fr`. The chain is `Logic.Simulation` (Kripke-generic: a conditional
 simulation `csim` preserves every prefix formula and every suffix
@@ -335,7 +335,7 @@ whose branches are not guarded by a visible `Step`, and only `okE` events) →
 conditional simulation between `s` and any `s'` with `frame_rel fr s s'`;
 `ticll_csl_frame`, `ticlr_csl_frame`, `a{n,u}r_csl_frame_done`) →
 `CTree.Interp.Yield.Frame` (both schedulers' erased trees of a `Framable`
-pool are `Framable`) → `Lang.CSL.Frame` (`run_{nd,rr}_framable`,
+pool are `Framable`) → `Lang.CoCSL.Frame` (`run_{nd,rr}_framable`,
 `run_{nd,rr}_pool_framable`, `instr_flow_framable`, and `frame_post_iff`).
 Clients apply the four generic `CTree.Interp.CSL.Frame` rules directly with
 the runner's framability certificate and a `frame_rel` proof; there are no
@@ -358,7 +358,7 @@ predicate; `yield_fork_free` specializes it to `user_only`. Literal CAS is
 yield/fork-free; a `CVar` in any operand fails this gate because a successful
 variable read yields.
 
-`Lang.CSL.Sequential` is the join principle for cooperative pools: a
+`Lang.CoCSL.Sequential` is the join principle for cooperative pools: a
 `yield_fork_free` segment of a focused slot runs exactly as its standalone
 erased run (`run_{nd,rr}_prefix`, from `interp_schedule_{nd,rr}_prefix_bind`
 over `Sequential` raw threads), with `instr_flow_head`, `instr_flow_read`,
@@ -454,7 +454,7 @@ lifecycle consumer of the source language:
   a mismatching CAS does not.
 - `ICTree.Eq.Bind.equ_guard_stuck`: a tree raw-equivalent to its own guard is
   raw-equivalent to `stuck`.
-- `Lang.CSL.Mod`: `run_{nd,rr}_emit_loop_ag` (a productive `CUntilNone` loop
+- `Lang.CoCSL.Mod`: `run_{nd,rr}_emit_loop_ag` (a productive `CUntilNone` loop
   satisfies `AG ⊤` in every not-done world) and `run_{nd,rr}_silent_loop_no_ag`
   (a silent loop is `stuck`, hence fails `AG ⊤`), beside the structural matrix.
 - `examples/CSL/Memory.v`: `lifecycle_scope` (both CAS outcomes, adjacent

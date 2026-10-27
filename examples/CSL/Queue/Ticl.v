@@ -1,7 +1,7 @@
 From Stdlib Require Import List Fin Vector.
 From Coinduction Require Import all.
 From TICL Require Import
-  Lang.CSL.Mod
+  Lang.CoCSL.Mod
   CTree.Core
   CTree.Events.Writer
   CTree.Interp.Yield.Fair

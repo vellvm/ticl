@@ -18,9 +18,9 @@ From TICL Require Import
   CTree.Interp.Yield.Mod
   CTree.Interp.Yield.RoundRobin
   CTree.Interp.Refine
-  Lang.CSL.Mod
-  Lang.CSL.Frame
-  Lang.CSL.Sequential
+  Lang.CoCSL.Mod
+  Lang.CoCSL.Frame
+  Lang.CoCSL.Sequential
   Utils.Vectors.
 
 Import CTreeNotations ListNotations VectorNotations.
@@ -30,7 +30,7 @@ Local Open Scope fin_vector_scope.
 (** ** Driving the round-robin run *)
 
 (** Expose the focused slot as an explicit replacement, so that the source
-    execution laws of [Lang.CSL.Mod] apply to it. *)
+    execution laws of [Lang.CoCSL.Mod] apply to it. *)
 Ltac rr_focus :=
   lazymatch goal with
   | |- interp_schedule_rr ?h ?N ?P (Some ?i) ?m ?s ~ _ =>

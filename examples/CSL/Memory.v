@@ -14,7 +14,7 @@ From TICL Require Import
   CTree.Events.Yield
   CTree.Interp.Yield.Mod
   CTree.Interp.Yield.RoundRobin
-  Lang.CSL.Mod
+  Lang.CoCSL.Mod
   Utils.Vectors.
 
 Import CTreeNotations ListNotations VectorNotations.
@@ -66,7 +66,7 @@ Definition use_after_free_cas : CProg unit :=
 
 (** ** Driving the single-thread round-robin run
 
-    Each step applies one source execution rule of [Lang.CSL.Mod] at the
+    Each step applies one source execution rule of [Lang.CoCSL.Mod] at the
     focused thread; concrete heap facts are discharged by computation. *)
 
 Lemma run_rr_focus p (s : SSig) :

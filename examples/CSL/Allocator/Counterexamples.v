@@ -18,7 +18,7 @@ From Stdlib Require Import List Lia Arith.PeanoNat.
 From examples Require Import CSL.Allocator.Layout CSL.Allocator.Program
   CSL.Allocator.Model CSL.Allocator.Execution CSL.Allocator.Liveness.
 From TICL Require Import
-  Lang.CSL.Mod
+  Lang.CoCSL.Mod
   CTree.Core
   CTree.Trace
   CTree.Interp.Yield.Execution.

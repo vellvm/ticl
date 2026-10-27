@@ -1,16 +1,16 @@
-(** * Cooperative prefixes of CSL source programs.
+(** * Cooperative prefixes of CoCSL source programs.
 
     A yield/fork-free program runs in a pool exactly as its standalone erased
     run [instr_flow_erased], then rejoins the pool with the resulting state.
     This is the join principle that lets per-process facts, framed by the
     other process's region, compose into pool-level facts. *)
 
-From TICL Require Export Lang.CSL.Mod CTree.Interp.Yield.Sequential.
+From TICL Require Export Lang.CoCSL.Mod CTree.Interp.Yield.Sequential.
 From Stdlib Require Import Fin Vector.
 From ExtLib Require Import Structures.Maps Data.Map.FMapAList.
 From Coinduction Require Import all.
 From TICL Require Import
-  Lang.CSL.Frame
+  Lang.CoCSL.Frame
   CTree.Core
   CTree.Events.Heap
   CTree.Events.Writer

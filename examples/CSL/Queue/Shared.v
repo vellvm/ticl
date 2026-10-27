@@ -13,7 +13,7 @@ From TICL Require Import
   CTree.Events.Writer
   Events.WriterE
   CTree.Interp.Yield.Segments
-  Lang.CSL.Mod
+  Lang.CoCSL.Mod
   Utils.Lists
   Utils.Relations
   CTree.Logic.Yield

@@ -35,7 +35,7 @@ From TICL Require Import
   CTree.Core
   CTree.Events.Writer
   CTree.Interp.Yield.Fair
-  Lang.CSL.Mod
+  Lang.CoCSL.Mod
   CTree.Logic.State
   Logic.Core
   Utils.Relations

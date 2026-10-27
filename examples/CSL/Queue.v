@@ -1,4 +1,4 @@
-From TICL Require Export Lang.CSL.Mod.
+From TICL Require Export Lang.CoCSL.Mod.
 From examples Require Export
   CSL.Queue.Representation CSL.Queue.Layout CSL.Queue.Operations
   CSL.Queue.Sequential CSL.Queue.Recurrence CSL.Queue.Trace

@@ -1,4 +1,4 @@
-(** * The canonical CSL source language.
+(** * The canonical CoCSL (cooperative CSL) source language.
 
     Syntax ([CExp], [CProg]), its denotation into threads over the CSL
     effects, the source-instruction execution equations under both
@@ -56,7 +56,7 @@ Local Open Scope fin_vector_scope.
 
 (** ** Syntax *)
 
-Module CSLSyntax.
+Module CoCSLSyntax.
   (** Natural-number expressions over the shared variable context. *)
   Inductive CExp : Type :=
   | CVar (name : string)
@@ -84,8 +84,8 @@ Module CSLSyntax.
 
   (** Any non-zero natural is true. *)
   Definition is_true (v : nat) : bool := negb (Nat.eqb v 0).
-End CSLSyntax.
-Export CSLSyntax.
+End CoCSLSyntax.
+Export CoCSLSyntax.
 
 (** ** Denotation *)
 
@@ -144,12 +144,12 @@ Fixpoint denote_flow {A : Type} (p : CProg A) : ctree CEff Bn (option A) :=
       Ret (Some tt)
   | CIf test yes no =>
       value <- denote_exp test;;
-      if CSLSyntax.is_true value then denote_flow yes else denote_flow no
+      if CoCSLSyntax.is_true value then denote_flow yes else denote_flow no
   | CWhile test body =>
       CTree.iter
         (fun _ : unit =>
           value <- denote_exp test;;
-          if CSLSyntax.is_true value then
+          if CoCSLSyntax.is_true value then
             flow <- denote_flow body;;
             match flow with
             | Some _ => Ret (inl tt)
@@ -163,7 +163,7 @@ Fixpoint denote_flow {A : Type} (p : CProg A) : ctree CEff Bn (option A) :=
 Definition cwhile_iteration (test : CExp) (body : CProg unit) (_ : unit)
   : ctree CEff Bn (unit + option unit) :=
   value <- denote_exp test;;
-  if CSLSyntax.is_true value then
+  if CoCSLSyntax.is_true value then
     flow <- denote_flow body;;
     match flow with
     | Some _ => Ret (inl tt)
@@ -244,10 +244,10 @@ Proof.
       * unfold source_put, CTree.trigger; apply bf_vis; intros []; apply bf_ret.
       * intros []; apply bf_ret.
   - apply branchfree_bind; [apply denote_exp_branchfree|intro v].
-    destruct (CSLSyntax.is_true v); assumption.
+    destruct (CoCSLSyntax.is_true v); assumption.
   - apply branchfree_iter; intros [].
     apply branchfree_bind; [apply denote_exp_branchfree|intro v].
-    destruct (CSLSyntax.is_true v); [|apply bf_ret].
+    destruct (CoCSLSyntax.is_true v); [|apply bf_ret].
     apply branchfree_bind; [exact IH|].
     intros [[]|]; apply bf_ret.
 Qed.
@@ -466,11 +466,11 @@ Lemma source_raw_if {A} (test : CExp) (yes no : CProg A)
     (K : option A -> thread sE Bn) :
   (denote_flow (CIf test yes no) >>= K) ≅
   (value <- denote_exp test;;
-   if CSLSyntax.is_true value then denote_flow yes >>= K
+   if CoCSLSyntax.is_true value then denote_flow yes >>= K
    else denote_flow no >>= K).
 Proof.
   cbn [denote_flow]; rewrite bind_bind.
-  apply equ_clo_bind_eq; intro value; destruct (CSLSyntax.is_true value); reflexivity.
+  apply equ_clo_bind_eq; intro value; destruct (CoCSLSyntax.is_true value); reflexivity.
 Qed.
 
 Lemma source_raw_while (test : CExp) (body : CProg unit)
@@ -3614,7 +3614,7 @@ Proof. reflexivity. Qed.
 Lemma denote_flow_cif {A} test (yes no : CProg A) :
   denote_flow (CIf test yes no) =
     (value <- denote_exp test;;
-     if CSLSyntax.is_true value then denote_flow yes else denote_flow no).
+     if CoCSLSyntax.is_true value then denote_flow yes else denote_flow no).
 Proof. reflexivity. Qed.
 
 Lemma denote_flow_cret_unit : denote_flow (CRet tt) = Ret (Some tt).
@@ -3917,7 +3917,7 @@ Qed.
 
 Lemma aul_csl_flow_if {A} : forall test (yes no : CProg A) condition s w φ ψ,
     <[ {instr_exp_erased test s}, w |= AX done= {(s, condition)} w ]> ->
-    (if CSLSyntax.is_true condition then
+    (if CoCSLSyntax.is_true condition then
        <( {instr_flow_erased yes s}, w |= φ AU ψ )>
      else
        <( {instr_flow_erased no s}, w |= φ AU ψ )>) ->
@@ -3927,12 +3927,12 @@ Proof.
   unfold instr_flow_erased, instr_exp_erased in *.
   rewrite denote_flow_cif.
   eapply aul_ithread_bind_r_eq; [cleft; exact Htest | cbv beta].
-  destruct (CSLSyntax.is_true condition); exact Hbranch.
+  destruct (CoCSLSyntax.is_true condition); exact Hbranch.
 Qed.
 
 Lemma aur_csl_flow_if {A} : forall test (yes no : CProg A) condition s w φ ψ,
     <[ {instr_exp_erased test s}, w |= AX done= {(s, condition)} w ]> ->
-    (if CSLSyntax.is_true condition then
+    (if CoCSLSyntax.is_true condition then
        <[ {instr_flow_erased yes s}, w |= φ AU ψ ]>
      else
        <[ {instr_flow_erased no s}, w |= φ AU ψ ]>) ->
@@ -3942,7 +3942,7 @@ Proof.
   unfold instr_flow_erased, instr_exp_erased in *.
   rewrite denote_flow_cif.
   eapply aur_ithread_bind_r_eq; [cleft; exact Htest | cbv beta].
-  destruct (CSLSyntax.is_true condition); exact Hbranch.
+  destruct (CoCSLSyntax.is_true condition); exact Hbranch.
 Qed.
 
 (** *** Raw source-flow while rules
@@ -3952,7 +3952,7 @@ Qed.
 
 Lemma aul_csl_raw_while : forall test body condition w w' φ ψ,
     <[ {denote_exp test}, w |= φ AU AX done= condition w ]> ->
-    CSLSyntax.is_true condition = true ->
+    CoCSLSyntax.is_true condition = true ->
     <[ {denote_flow body}, w |= φ AU AX done= {Some tt} w' ]> ->
     not_done w' ->
     <( {denote_flow (CWhile test body)}, w' |= φ AU ψ )> ->
@@ -3972,7 +3972,7 @@ Qed.
 
 Lemma aul_csl_raw_while_false : forall test body condition w φ ψ,
     <[ {denote_exp test}, w |= φ AU AX done= condition w ]> ->
-    CSLSyntax.is_true condition = false ->
+    CoCSLSyntax.is_true condition = false ->
     <( {Ret (Some tt) : ctree CEff Bn (option unit)}, w |= ψ )> ->
     <( {denote_flow (CWhile test body)}, w |= φ AU ψ )>.
 Proof.
@@ -3990,7 +3990,7 @@ Qed.
 
 Lemma aul_csl_raw_while_halt : forall test body condition w w' φ ψ,
     <[ {denote_exp test}, w |= φ AU AX done= condition w ]> ->
-    CSLSyntax.is_true condition = true ->
+    CoCSLSyntax.is_true condition = true ->
     <[ {denote_flow body}, w |= φ AU AX done= {None} w' ]> ->
     not_done w' ->
     <( {Ret None : ctree CEff Bn (option unit)}, w' |= ψ )> ->
@@ -4009,7 +4009,7 @@ Qed.
 
 Lemma aur_csl_raw_while : forall test body condition w w' φ ψ,
     <[ {denote_exp test}, w |= φ AU AX done= condition w ]> ->
-    CSLSyntax.is_true condition = true ->
+    CoCSLSyntax.is_true condition = true ->
     <[ {denote_flow body}, w |= φ AU AX done= {Some tt} w' ]> ->
     not_done w' ->
     <[ {denote_flow (CWhile test body)}, w' |= φ AU AX ψ ]> ->
@@ -4029,7 +4029,7 @@ Qed.
 
 Lemma aur_csl_raw_while_false : forall test body condition w φ ψ,
     <[ {denote_exp test}, w |= φ AU AX done= condition w ]> ->
-    CSLSyntax.is_true condition = false ->
+    CoCSLSyntax.is_true condition = false ->
     <[ {Ret (Some tt) : ctree CEff Bn (option unit)}, w |= AX ψ ]> ->
     <[ {denote_flow (CWhile test body)}, w |= φ AU AX ψ ]>.
 Proof.

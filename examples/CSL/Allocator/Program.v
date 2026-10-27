@@ -1,5 +1,5 @@
 From Stdlib Require Import Arith.PeanoNat.
-From TICL Require Import Lang.CSL.Mod.
+From TICL Require Import Lang.CoCSL.Mod.
 From examples Require Import CSL.Allocator.Layout.
 
 (* Link-first remote frees and owner collection, scoped from mimalloc v2.5.2:

@@ -1,4 +1,4 @@
-(** * Heap frame rules for CSL source programs.
+(** * Heap frame rules for CoCSL source programs.
 
     A framed run is the same program on a heap extended by a disjoint
     [ManagedHeap] region; every proved prefix property survives and every
@@ -6,7 +6,7 @@
     excluded ([alloc_free]) because first-fit allocation is deterministic in
     the absolute heap. *)
 
-From TICL Require Export Lang.CSL.Mod CTree.Interp.CSL.Frame CTree.Interp.Yield.Frame.
+From TICL Require Export Lang.CoCSL.Mod CTree.Interp.CSL.Frame CTree.Interp.Yield.Frame.
 From Stdlib Require Import Fin Vector Strings.String.
 From ExtLib Require Import Structures.Maps Data.Map.FMapAList Data.String.
 From TICL Require Import
@@ -46,7 +46,7 @@ Fixpoint prog_ok (okE : forall Y, CEff Y -> Prop) {A} (p : CProg A) : Prop :=
   | CEmit tag v => okE _ (inr1 (inr1 (inr1 (inr1 (Log (tag, v))))))
   | CYield => okE _ (inl1 Yield)
   | CFork body => okE _ (inr1 (inl1 Fork)) /\ prog_ok okE body
-  | CSLSyntax.CRet _ => True
+  | CoCSLSyntax.CRet _ => True
   | CBind body next => prog_ok okE body /\ forall a, prog_ok okE (next a)
   | CUntilNone body => prog_ok okE body
   | CAlloc size => okE _ (inr1 (inr1 (inl1 (HAlloc size))))
@@ -119,10 +119,10 @@ Proof.
     intro ctx; apply framable_bind; [fr_trigger (HP (add name v ctx))|intros []; apply fr_ret].
   - destruct Hp as [He [Hy Hn]].
     apply framable_bind; [apply denote_exp_framable, He|intro v].
-    destruct (CSLSyntax.is_true v); auto.
+    destruct (CoCSLSyntax.is_true v); auto.
   - destruct Hp as [He Hb]; apply framable_iter; intros [].
     apply framable_bind; [apply denote_exp_framable, He|intro v].
-    destruct (CSLSyntax.is_true v); [|apply fr_ret].
+    destruct (CoCSLSyntax.is_true v); [|apply fr_ret].
     apply framable_bind; [exact (IH Hb)|].
     intros [[]|]; apply fr_ret.
 Qed.

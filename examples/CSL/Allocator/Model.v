@@ -3,7 +3,7 @@ From Coinduction Require Import all.
 From TICL Require Import Utils.Execution.
 From TICL Require Import CTree.Interp.Yield.Execution.
 From TICL Require Import
-  Lang.CSL.Mod
+  Lang.CoCSL.Mod
   CTree.Core
   CTree.Events.Writer
   CTree.Interp.Refine.
@@ -238,7 +238,7 @@ From Stdlib Require Import List Lia Arith.PeanoNat Fin
   Classes.RelationClasses Classes.RelationPairs Program.Equality.
 From ExtLib Require Import Data.Option.
 From TICL Require Import
-  Lang.CSL.Mod
+  Lang.CoCSL.Mod
   CTree.Core
   CTree.Events.Writer
   CTree.Interp.Refine.
@@ -342,7 +342,7 @@ Proof.
 Qed.
 
 From Stdlib Require Import List Lia Arith.PeanoNat Sorting.Permutation.
-From TICL Require Import Lang.CSL.Mod.
+From TICL Require Import Lang.CoCSL.Mod.
 From examples Require Import CSL.Queue.Representation.
 From examples Require Import CSL.Allocator.Layout.
 

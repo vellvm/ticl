@@ -3,7 +3,7 @@ From Coinduction Require Import all.
 From TICL Require Import
   CTree.Core
   CTree.Events.Yield
-  Lang.CSL.Mod
+  Lang.CoCSL.Mod
   CTree.Events.Writer
   CTree.Interp.State.Mod
   CTree.Interp.Yield.RoundRobin

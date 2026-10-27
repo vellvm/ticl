@@ -3,7 +3,7 @@ From Coinduction Require Import all.
 From TICL Require Import CTree.Interp.Yield.Execution.
 From TICL Require Import Utils.Execution.
 From TICL Require Import
-  Lang.CSL.Mod
+  Lang.CoCSL.Mod
   CTree.Core
   CTree.Events.Writer
   CTree.Events.Yield
@@ -51,7 +51,7 @@ Proof.
 Qed.
 
 From Stdlib Require Import List Lia Arith.PeanoNat.
-From TICL Require Import Lang.CSL.Mod.
+From TICL Require Import Lang.CoCSL.Mod.
 From examples Require Import CSL.Queue.Representation.
 From examples Require Import CSL.Allocator.Layout CSL.Allocator.Model.
 
@@ -343,7 +343,7 @@ Qed.
 
 From Stdlib Require Import List Lia Arith.PeanoNat Fin Vector Program.Equality.
 From TICL Require Import
-  Lang.CSL.Mod
+  Lang.CoCSL.Mod
   CTree.Core
   CTree.Events.Writer
   CTree.Events.Yield
@@ -618,7 +618,7 @@ Proof.
 Qed.
 
 From Stdlib Require Import List Lia Arith.PeanoNat Sorting.Permutation.
-From TICL Require Import Lang.CSL.Mod.
+From TICL Require Import Lang.CoCSL.Mod.
 From examples Require Import CSL.Queue.Representation.
 From examples Require Import CSL.Allocator.Layout CSL.Allocator.Model
   CSL.Allocator.Execution.
@@ -1121,7 +1121,7 @@ Qed.
 From Stdlib Require Import List Lia Arith.PeanoNat Fin Sorting.Permutation.
 From Coinduction Require Import all.
 From TICL Require Import
-  Lang.CSL.Mod
+  Lang.CoCSL.Mod
   CTree.Core
   CTree.Events.Writer
   CTree.Interp.Yield.Fair

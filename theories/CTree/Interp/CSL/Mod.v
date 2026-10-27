@@ -5,7 +5,7 @@
     the shared variable context (with context-update observations) and the
     shared indexing writer.  Everything here is stated over effects and
     trees: it does not mention CSL syntax.  The source language
-    ([Lang.CSL.Mod]) specializes these laws to its denotation.
+    ([Lang.CoCSL.Mod]) specializes these laws to its denotation.
 
     Generic checked heap access, allocation search, indexed observation and
     the scheduler/segment machinery live one layer further down and are

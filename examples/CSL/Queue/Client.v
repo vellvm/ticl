@@ -8,7 +8,7 @@
 From Stdlib Require Import Arith.PeanoNat Fin Vector List Lia.
 From Coinduction Require Import all.
 From CTree Require Import Eq.IterFacts.
-From TICL Require Import CTree.Core CTree.Events.Writer Logic.Core Lang.CSL.Frame
+From TICL Require Import CTree.Core CTree.Events.Writer Logic.Core Lang.CoCSL.Frame
   CTree.Interp.Yield.RoundRobin CTree.Interp.Yield.SBisim.
 From examples Require Import CSL.Queue.Program CSL.Queue.Shared
   CSL.Queue.Representation CSL.Queue.Frame CSL.Queue.Layout CSL.Queue.Trace

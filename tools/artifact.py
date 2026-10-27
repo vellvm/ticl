@@ -280,7 +280,7 @@ def inventory(root: Path, baseline: dict[str, Any], results: Path) -> dict[str, 
         prior = baseline["files"].get(rel)
         status = "new" if prior is None else ("unchanged" if prior["sha256"] == digest(data) else "changed")
         counts = count_source(text)
-        support = (rel.startswith("examples/CSL/Queue/") or rel.startswith("theories/CTree/Interp/Yield/") or rel in {"theories/CTree/Interp/CSL/Frame.v", "theories/Lang/CSL/Frame.v"})
+        support = (rel.startswith("examples/CSL/Queue/") or rel.startswith("theories/CTree/Interp/Yield/") or rel in {"theories/CTree/Interp/CSL/Frame.v", "theories/Lang/CoCSL/Frame.v"})
         file_rows.append({"file": rel, "sha256": digest(data), "lines": len(text.splitlines()), "baseline_status": status, "worked_client_support": support, **counts})
         for kind, pattern in patterns:
             for match in re.finditer(pattern, masked):
