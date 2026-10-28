@@ -455,7 +455,7 @@ Qed.
 
 (** ** Finite modalities on the global clock *)
 
-Local Lemma hTrue_proper : hproper hTrue.
+Lemma hTrue_proper : hproper hTrue.
 Proof. intros c d _; reflexivity. Qed.
 
 Lemma global_hau_project i P Q c :
@@ -1067,12 +1067,11 @@ Corollary fork_hax_split child k h h' ctx base Q Q' :
   hAX owned_next Q' (init_local Parent (k tt) h' ctx base true).
 Proof.
   intros Hadm HQ HQ' HsQ HsQ' HX.
-  assert (HT : hproper hTrue) by (intros ? ? _; split; intros; exact I).
   destruct (global_hax_split Q Q' _ (coupled_init _ _ _ _ _ _ Hadm) HQ HQ'
     ltac:(cbn; lia) ltac:(cbn; lia) HsQ HsQ' HX) as [HC HPa]; split.
-  - exact (hproper_transport _ _ _ (hAN_proper hTrue Q HT HQ)
+  - exact (hproper_transport _ _ _ (hAN_proper hTrue Q hTrue_proper HQ)
       (project_init_child child (k tt) h h' ctx base) HC).
-  - exact (hproper_transport _ _ _ (hAN_proper hTrue Q' HT HQ')
+  - exact (hproper_transport _ _ _ (hAN_proper hTrue Q' hTrue_proper HQ')
       (project_init_parent child (k tt) h h' ctx base) HPa).
 Qed.
 

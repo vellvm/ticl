@@ -33,12 +33,9 @@ Global Open Scope ticl_scope.
 Global Open Scope fin_vector_scope.
 Global Open Scope pcm_scope.
 
-(** Close a returning [AU done] or [AX done] goal at a [not_done] world. *)
+(** Close a returning [AF done] goal at a [not_done] world. *)
 Ltac close_ret :=
-  cright; csplit; [csplit; auto with ticl | apply can_step_ret; auto with ticl |];
-  intros ?t' ?w' ?TR;
-  first [apply ktrans_done in TR as (-> & _) | apply ktrans_finish in TR as (-> & _)];
-  cleft; csplit; cbn.
+  apply aur_ret; cright; apply axr_ret; [auto with ticl|].
 (** Run the focused slot's yield-free head standalone after exposing its replacement. *)
 Ltac rr_prefix free := rewrite interp_rr_bind; rewrite run_rr_prefix by apply free.
 (** Run the nondeterministic focused slot's yield-free head standalone. *)

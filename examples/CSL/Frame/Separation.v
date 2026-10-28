@@ -44,9 +44,6 @@ Proof. apply view_pred_proper, cell_view. Qed.
 Lemma cell_stable i a v : SelectionStable (cell i a v).
 Proof. apply view_selection_stable, cell_view. Qed.
 
-Lemma hTrue_proper : hproper hTrue.
-Proof. intros c d _; reflexivity. Qed.
-
 Lemma Fnone_proper : hproper Fnone.
 Proof.
   intros c d ((_ & Hf) & _); unfold Fnone, focus_nat in *.
@@ -471,27 +468,17 @@ Local Open Scope pcm_scope.
 
 Definition reach : relation OwnedCfg := clos_refl_trans _ owned_next.
 
-Lemma owned_step_focused c n v g j a c' :
-  oc_pool c = mk_pool (S n) v g (Some j) ->
-  owned_step c a c' <-> focus_step c n v g j a c'.
-Proof. intros H; unfold owned_step; rewrite H; reflexivity. Qed.
-
-Lemma owned_step_unfocused c n v g a c' :
-  oc_pool c = mk_pool (S n) v g None ->
-  owned_step c a c' <-> sel_step c n v g a c'.
-Proof. intros H; unfold owned_step; rewrite H; reflexivity. Qed.
-
 Lemma ostep_select c n v g j :
   oc_pool c = mk_pool (S n) v g None ->
   owned_step c (act (g $ j) OASelect) (set_pool c (mk_pool (S n) v g (Some j))).
-Proof. intros H; apply (owned_step_unfocused _ _ _ _ _ _ H); exists j; split; reflexivity. Qed.
+Proof. intros H; apply (owned_step_sel _ _ _ _ _ _ H); exists j; split; reflexivity. Qed.
 
 Lemma ostep_yield c n v g j k v' :
   oc_pool c = mk_pool (S n) v g (Some j) ->
   (v $ j) ≅ Vis (inl1 Yield : CEff unit) k -> (v @ j := k tt) = v' ->
   owned_step c (act (g $ j) OAYield) (set_pool c (mk_pool (S n) v' g None)).
 Proof.
-  intros H Hh <-; apply (owned_step_focused _ _ _ _ _ _ _ H).
+  intros H Hh <-; apply (owned_step_focus _ _ _ _ _ _ _ H).
   right; left; exists k; split; [exists 0; exact Hh|split; reflexivity].
 Qed.
 
@@ -501,7 +488,7 @@ Lemma ostep_fork c n v g j k v' :
   owned_step c (act (g $ j) OAFork)
     (set_pool c (mk_pool (S (S n)) (k true :: v') ((g $ j) :: g) (Some (Fin.FS j)))).
 Proof.
-  intros H Hh <-; apply (owned_step_focused _ _ _ _ _ _ _ H).
+  intros H Hh <-; apply (owned_step_focus _ _ _ _ _ _ _ H).
   right; right; left; exists k; split; [exists 0; exact Hh|split; reflexivity].
 Qed.
 
@@ -510,7 +497,7 @@ Lemma ostep_ret c n v g j v' g' :
   (v $ j) ≅ Ret tt -> (v -- j) = v' -> (g -- j) = g' ->
   owned_step c (act (g $ j) OAReturn) (set_pool c (mk_pool n v' g' None)).
 Proof.
-  intros H Hh <- <-; apply (owned_step_focused _ _ _ _ _ _ _ H).
+  intros H Hh <- <-; apply (owned_step_focus _ _ _ _ _ _ _ H).
   right; right; right; left; split; [exists 0; exact Hh|split; reflexivity].
 Qed.
 
@@ -520,7 +507,7 @@ Lemma ostep_prim c n v g j Y (e : sE Y) k kind y c1 v' :
   prim_step (g $ j) c e = Some (kind, y, c1) -> (v @ j := k y) = v' ->
   owned_step c (act (g $ j) kind) (set_pool c1 (mk_pool (S n) v' g (Some j))).
 Proof.
-  intros H Hh Hp <-; apply (owned_step_focused _ _ _ _ _ _ _ H).
+  intros H Hh Hp <-; apply (owned_step_focus _ _ _ _ _ _ _ H).
   right; right; right; right.
   exists Y, e, k, kind, y, c1; split; [exists 0; exact Hh|auto].
 Qed.
@@ -651,7 +638,7 @@ Lemma nested_fork_insert a c' :
   owned_equ (project Parent c') (project Parent n_fork).
 Proof.
   intros H.
-  apply (owned_step_focused _ 0 [denote nchild] [Child] Fin.F1) in H; [|reflexivity].
+  apply (owned_step_focus _ 0 [denote nchild] [Child] Fin.F1) in H; [|reflexivity].
   apply (focus_step_head_fork n_fork 0 [denote nchild] [Child] Fin.F1 _ 0 _ _ (denote_fork_bind _ _)) in H.
   destruct H as (k & Hk & -> & ->).
   split; [reflexivity|]; split; [exists k; split; [exact Hk|reflexivity]|].
@@ -681,7 +668,7 @@ Lemma nested_schedules a c' :
                             (Some (Fin.FS Fin.F1)))).
 Proof.
   intros H.
-  apply (owned_step_unfocused _ 1 [denote (CWrite 1 1); denote (CWrite 1 2)] [Child; Child]) in H;
+  apply (owned_step_sel _ 1 [denote (CWrite 1 1); denote (CWrite 1 2)] [Child; Child]) in H;
     [|reflexivity].
   destruct H as (j & -> & ->).
   dependent destruction j; [split; [reflexivity|left; reflexivity]|].
@@ -706,7 +693,7 @@ Lemma nested_remove a c' :
   owned_equ (project Parent c') (project Parent n_fork).
 Proof.
   intros H.
-  apply (owned_step_focused _ 1 [Ret tt; denote (CWrite 1 2)] [Child; Child] Fin.F1) in H;
+  apply (owned_step_focus _ 1 [Ret tt; denote (CWrite 1 2)] [Child; Child] Fin.F1) in H;
     [|reflexivity].
   apply (focus_step_head_ret n_remove 1 [Ret tt; denote (CWrite 1 2)] [Child; Child] Fin.F1 0 _ _ (reflexivity _)) in H.
   destruct H as [-> ->].
@@ -810,7 +797,7 @@ Lemma cas_success_step a c' :
   snd (oc_heap c' Child) = snd bC /\ oc_heap c' Parent = bP.
 Proof.
   intros H.
-  apply (owned_step_focused _ 1 [denote pcas_ok; Ret tt] [Child; Parent] Fin.F1) in H; [|reflexivity].
+  apply (owned_step_focus _ 1 [denote pcas_ok; Ret tt] [Child; Parent] Fin.F1) in H; [|reflexivity].
   apply (focus_step_head_prim (bfocus pcas_ok) 1 [denote pcas_ok; Ret tt] [Child; Parent] Fin.F1
            _ _ 0 _ _ (denote_cas_bind_head 1 0 5 _)) in H.
   destruct H as (k & kind & y & c1 & Hk & Hp & -> & ->).
@@ -834,7 +821,7 @@ Lemma cas_failure_step a c' :
   oc_heap c' Child = bC /\ oc_heap c' Parent = bP.
 Proof.
   intros H.
-  apply (owned_step_focused _ 1 [denote pcas_fail; Ret tt] [Child; Parent] Fin.F1) in H; [|reflexivity].
+  apply (owned_step_focus _ 1 [denote pcas_fail; Ret tt] [Child; Parent] Fin.F1) in H; [|reflexivity].
   apply (focus_step_head_prim (bfocus pcas_fail) 1 [denote pcas_fail; Ret tt] [Child; Parent] Fin.F1
            _ _ 0 _ _ (denote_cas_bind_head 1 3 5 _)) in H.
   destruct H as (k & kind & y & c1 & Hk & Hp & -> & ->).
@@ -875,7 +862,7 @@ Lemma free_step (next : unit -> CProg unit) a c' :
   oc_heap c' Child = freed /\ oc_heap c' Parent = bP.
 Proof.
   intros H.
-  apply (owned_step_focused _ 1 [denote (CBind (CFree 1) next); Ret tt] [Child; Parent] Fin.F1) in H;
+  apply (owned_step_focus _ 1 [denote (CBind (CFree 1) next); Ret tt] [Child; Parent] Fin.F1) in H;
     [|reflexivity].
   apply (focus_step_head_prim _ 1 [denote (CBind (CFree 1) next); Ret tt] [Child; Parent] Fin.F1
            _ _ 0 _ _ (denote_free_bind_head 1 next)) in H.
@@ -931,12 +918,12 @@ Proof.
       etransitivity; [exact Ht|apply source_raw_bind]. }
   split; [|split; [|split; [exact Hrun|exact (erased_stuck _ Hc Hrun)]]].
   - intros a' c'' H'.
-    apply (owned_step_focused _ 1 [t; Ret tt] [Child; Parent] Fin.F1) in H'; [|reflexivity].
+    apply (owned_step_focus _ 1 [t; Ret tt] [Child; Parent] Fin.F1) in H'; [|reflexivity].
     apply (focus_step_head_prim _ 1 [t; Ret tt] [Child; Parent] Fin.F1 _ _ 0 _ _ Hh) in H'.
     destruct H' as (k & kind & y & c1 & _ & Hp & _).
     rewrite prim_read_none in Hp; [discriminate|reflexivity].
   - intros a' c'' H'.
-    apply (owned_step_focused _ 0 [t] [Child] Fin.F1) in H'; [|reflexivity].
+    apply (owned_step_focus _ 0 [t] [Child] Fin.F1) in H'; [|reflexivity].
     apply (focus_step_head_prim _ 0 [t] [Child] Fin.F1 _ _ 0 _ _ Hh) in H'.
     destruct H' as (k & kind & y & c1 & _ & Hp & _).
     rewrite prim_read_none in Hp; [discriminate|reflexivity].
@@ -968,12 +955,12 @@ Proof.
     - intros i; dependent destruction i; [exact Ht|reflexivity]. }
   split; [|split; [|split; [exact Hrun|exact (erased_stuck _ Hc Hrun)]]].
   - intros a' c'' H'.
-    apply (owned_step_focused _ 1 [t; Ret tt] [Child; Parent] Fin.F1) in H'; [|reflexivity].
+    apply (owned_step_focus _ 1 [t; Ret tt] [Child; Parent] Fin.F1) in H'; [|reflexivity].
     apply (focus_step_head_prim _ 1 [t; Ret tt] [Child; Parent] Fin.F1 _ _ 0 _ _ Hh) in H'.
     destruct H' as (k & kind & y & c1 & _ & Hp & _).
     rewrite prim_free_none in Hp; [discriminate|reflexivity].
   - intros a' c'' H'.
-    apply (owned_step_focused _ 0 [t] [Child] Fin.F1) in H'; [|reflexivity].
+    apply (owned_step_focus _ 0 [t] [Child] Fin.F1) in H'; [|reflexivity].
     apply (focus_step_head_prim _ 0 [t] [Child] Fin.F1 _ _ 0 _ _ Hh) in H'.
     destruct H' as (k & kind & y & c1 & _ & Hp & _).
     rewrite prim_free_none in Hp; [discriminate|reflexivity].
@@ -988,7 +975,7 @@ Proof.
   split.
   - eexists; eexists; eapply ostep_prim; [reflexivity|head|reflexivity|reflexivity].
   - intros a c' H.
-    apply (owned_step_focused _ 1 [denote pfree0; Ret tt] [Child; Parent] Fin.F1) in H; [|reflexivity].
+    apply (owned_step_focus _ 1 [denote pfree0; Ret tt] [Child; Parent] Fin.F1) in H; [|reflexivity].
     apply (focus_step_head_prim _ 1 [denote pfree0; Ret tt] [Child; Parent] Fin.F1
              _ _ 0 _ _ (denote_free_head 0)) in H.
     destruct H as (k & kind & y & c1 & _ & Hp & -> & ->).
@@ -1053,12 +1040,6 @@ Local Open Scope pcm_scope.
 
 (** ** Threads *)
 
-Lemma vis_cong {X} (e : CEff X) (k k' : X -> thread sE Bn) :
-  (forall x, k x ≅ k' x) -> Vis e k ≅ Vis e k'.
-Proof. intro H; step; constructor; exact H. Qed.
-
-Lemma guard_cong (t u : thread sE Bn) : t ≅ u -> Guard t ≅ Guard u.
-Proof. intro H; step; constructor; exact H. Qed.
 
 (** Each lineage loops: write its cell with the value it already holds, emit,
     yield. *)
@@ -1079,11 +1060,11 @@ Lemma cloop_unfold a v tag : denote (cloop a v tag) ≅ tW a v tag.
 Proof.
   unfold denote at 1, cloop; rewrite source_raw_until; unfold body.
   rewrite source_raw_bind, source_raw_write_head.
-  unfold tW; apply vis_cong; intros [].
+  unfold tW; apply vis_equ_node; intros [].
   rewrite source_raw_bind, source_raw_emit_head.
-  unfold tE; apply vis_cong; intros [].
+  unfold tE; apply vis_equ_node; intros [].
   rewrite source_raw_bind, source_raw_yield_head.
-  unfold tY; apply vis_cong; intros [].
+  unfold tY; apply vis_equ_node; intros [].
   rewrite source_raw_ret; reflexivity.
 Qed.
 
@@ -1119,7 +1100,7 @@ Lemma phase_thread_in a v tag ph t :
   t ≅ phase_thread a v tag ph -> in_phase a v tag (phase_succ ph) t.
 Proof.
   destruct ph; cbn; intro H; [exact H|exact H|].
-  exists 1; cbn; rewrite H; apply guard_cong, cloop_unfold.
+  exists 1; cbn; rewrite H; apply guard_equ_node, cloop_unfold.
 Qed.
 
 Lemma tE_in a v tag : in_phase a v tag PE (tE a v tag).
@@ -1232,11 +1213,6 @@ Proof.
     [destruct (side_eqb j i)|]; lia.
 Qed.
 
-Lemma focus_step_owner c n v g j a c' : focus_step c n v g j a c' -> owner a = (g $ j).
-Proof.
-  intros [(? & ? & -> & ?)|[(? & ? & -> & ?)|[(? & ? & -> & ?)|[(? & -> & ?)
-    |(? & ? & ? & ? & ? & ? & ? & ? & -> & ?)]]]]; reflexivity.
-Qed.
 
 (** Every action from a focused configuration belongs to the focused lineage. *)
 Lemma owned_step_owner d a d' t j :
@@ -1428,16 +1404,6 @@ Proof.
     (Inv_release Child) (Inv_release Parent) loops_global_hag).
 Qed.
 
-(** Peeling the projected child's selection uses AG successor closure, not
-    selection stability. *)
-#[universes(polymorphic)]
-Lemma peel_select i p h ctx base (P : hprop) :
-  hAG owned_next P (init_local i p h ctx base false) ->
-  hAG owned_next P (init_local i p h ctx base true).
-Proof.
-  intro H; apply hAG_unfold in H as (_ & _ & Hall).
-  apply Hall; exists (act i OASelect); apply init_local_select; split; reflexivity.
-Qed.
 
 Theorem loops_global_hag_split :
   hAG owned_next cellC (project Child c0) /\ hAG owned_next cellP (project Parent c0) /\
@@ -1450,7 +1416,7 @@ Proof.
     (Inv_release Child) (Inv_release Parent) loops_global_hag) as [HC HP].
   assert (HC' : hAG owned_next cellC (init_local Child pc hC ctx0 0 false)).
   { exact (proj1 (hAG_proper cellC cellC_proper _ _ (project_init_child pc pp hC hP ctx0 0)) HC). }
-  split; [exact HC|split; [exact HP|split; [exact HC'|split; [apply peel_select, HC'|]]]].
+  split; [exact HC|split; [exact HP|split; [exact HC'|split; [apply hAG_select_strip, HC'|]]]].
   exact (proj1 (hAG_proper cellP cellP_proper _ _ (project_init_parent pc pp hC hP ctx0 0)) HP).
 Qed.
 
@@ -1540,8 +1506,8 @@ Proof.
   unfold owned_step; rewrite Hpool.
   assert (HWc : thC PW (denote pc)) by (exists 0; apply cloop_unfold).
   assert (HWp : thP PW (denote pp)) by (exists 0; apply cloop_unfold).
-  assert (HGc : thC PW GLc) by (exists 1; apply guard_cong, cloop_unfold).
-  assert (HGp : thP PW GLp) by (exists 1; apply guard_cong, cloop_unfold).
+  assert (HGc : thC PW GLc) by (exists 1; apply guard_equ_node, cloop_unfold).
+  assert (HGp : thP PW GLp) by (exists 1; apply guard_equ_node, cloop_unfold).
   destruct p; cbn [pool_of mk_pool next_pos pos_owner pos_kind pos_cfg pos_phase side_cell].
   - exact (phase_step_intro c 1 [denote pc; denote pp] [Child; Parent] (Fin.FS Fin.F1) 2 8 0 PW HWp Hp).
   - exact (phase_step_intro c 1 [denote pc; tE 2 8 0] [Child; Parent] (Fin.FS Fin.F1) 2 8 0 PE (tE_in _ _ _) Hp).
@@ -1630,14 +1596,14 @@ Lemma bparent_unfold : denote bparent ≅ tM.
 Proof.
   unfold denote at 1, bparent; rewrite source_raw_until.
   rewrite source_raw_bind, source_raw_emit_head.
-  unfold tM; apply vis_cong; intros [].
+  unfold tM; apply vis_equ_node; intros [].
   rewrite source_raw_ret; reflexivity.
 Qed.
 
 Lemma bchild_unfold : denote bchild ≅ tWc.
 Proof.
   unfold denote, bchild; rewrite source_raw_write_head.
-  apply vis_cong; intros []; reflexivity.
+  apply vis_equ_node; intros []; reflexivity.
 Qed.
 
 Definition BInv (d : OwnedCfg) : Prop :=
@@ -1670,7 +1636,7 @@ Proof.
   cbn in Hprim; injection Hprim as <- <- <-.
   split; [exact Hwf'|split; [exact Hc|]].
   exists (k tt); split; [reflexivity|].
-  exists 1; cbn; rewrite (Hk tt); apply guard_cong, bparent_unfold.
+  exists 1; cbn; rewrite (Hk tt); apply guard_equ_node, bparent_unfold.
 Qed.
 
 Lemma BInv_can d : BInv d -> exists d', owned_next d d' /\ BInv d'.
@@ -1765,7 +1731,7 @@ Proof.
     (fun _ _ _ => iff_refl True) HI Hcl HrC HrP boundary_global_hag) as [HC _].
   apply (hAG_proper cell0 (cell_proper Child 1 0) _ _ (project_init_child bchild bparent bC hP ctx0 0))
     in HC.
-  exact (boundary_local_no_hag (peel_select _ _ _ _ _ _ HC)).
+  exact (boundary_local_no_hag (hAG_select_strip _ _ _ _ _ _ HC)).
 Qed.
 
 (** ** A guard-only divergent thread has no action *)
@@ -2801,7 +2767,7 @@ Lemma read_loop_unfold : denote read_loop ≅ read_head.
 Proof.
   unfold denote at 1, read_loop; rewrite source_raw_until, source_raw_bind,
     source_raw_read_head.
-  unfold read_head; apply AlwaysRegression.vis_cong; intro x.
+  unfold read_head; apply vis_equ_node; intro x.
   rewrite source_raw_ret; reflexivity.
 Qed.
 
@@ -2854,7 +2820,7 @@ Proof.
   split; [exact Hcell|].
   exists n, (v @ j := k 8), g, j; split; [reflexivity|split; [exact Hg|]].
   rewrite Vector.nth_replace_eq; exists 1; cbn.
-  rewrite (Hk 8); apply AlwaysRegression.guard_cong, read_loop_unfold.
+  rewrite (Hk 8); apply guard_equ_node, read_loop_unfold.
 Qed.
 
 Lemma read_Inv_can d : read_Inv d -> exists d', owned_step d (act Parent OARead) d'.
@@ -2958,7 +2924,7 @@ Proof.
     [denote (CoCSLSyntax.CRet tt); Guard (denote read_loop)] [Child; Parent]
     (Fin.FS Fin.F1) (act Parent OARead) read_again).
   assert (H : Guard (denote read_loop) ≅ guards 1 read_head).
-  { apply AlwaysRegression.guard_cong, read_loop_unfold. }
+  { apply guard_equ_node, read_loop_unfold. }
   apply (focus_step_head_prim read_again 1
     [denote (CoCSLSyntax.CRet tt); Guard (denote read_loop)] [Child; Parent]
     (Fin.FS Fin.F1) _ _ 1 _ _ H).

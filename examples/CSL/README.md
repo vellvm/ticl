@@ -368,9 +368,9 @@ over `Sequential` raw threads), with `instr_flow_head`, `instr_flow_read`,
 `Sequential t` is `BranchFree t /\ Framable user_only t`, reusing the two
 existing coinductive predicates; `sequential_inv` exposes its node shape.
 `examples/CSL/Frame/{Shared,AF,AN,AG}.v` keep the original TICL contracts
-(`af_two_procs_*`, `an_two_procs_*`, `ag_two_procs_*`). Their ND proofs use the
-owned machine: AF proves finite action progress, AN preserves four raw steps,
-and AG uses separate ranks for lineage release and raw visibility.
+(`af_two_procs_*`, `an_two_procs_*`, `ag_two_procs_*`). Their ND proofs use
+framed prefixes and TICL rules directly. Shared `close_ret` closes returning
+`AF done` goals at any `not_done` world through `aur_ret` and `axr_ret`.
 
 ## Splitting forked programs
 
@@ -385,6 +385,9 @@ labelled action of its owner, so this clock is finer than raw interpreted TICL.
 the projection (`owned_step_own`) and a foreign one leaves it unchanged
 (`owned_step_foreign`). `weak_next i` (foreign actions, then one own action) is
 the lineage's own-action clock.
+The exported pool-shape facts `owned_step_sel` and `owned_step_focus` expose
+selection and focused steps without unfolding the machine. The regression
+fixtures reuse them and Separation's `hTrue_proper` rather than duplicate proofs.
 
 `admissible child parent h h' ctx base` requires well-formed disjoint heaps,
 no allocation or context writes (`component_ok`), and every reachable pending

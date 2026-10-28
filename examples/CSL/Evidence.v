@@ -131,6 +131,9 @@ Print Assumptions examples.CSL.Frame.AN.an_two_procs_nd.
 Check examples.CSL.Frame.AN.an_two_procs_rr.
 Print Assumptions examples.CSL.Frame.AN.an_two_procs_rr.
 
+Check examples.CSL.Frame.AN.wproc_own_2_no_ax4_nd.
+Print Assumptions examples.CSL.Frame.AN.wproc_own_2_no_ax4_nd.
+
 Check examples.CSL.Control.captured_before_yield_rr.
 Print Assumptions examples.CSL.Control.captured_before_yield_rr.
 

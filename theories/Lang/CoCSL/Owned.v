@@ -2923,19 +2923,21 @@ Qed.
 Local Lemma headed_guard t t' u : t ≅ Guard t' -> headed t' u -> headed t u.
 Proof. intros E [n Hn]; exists (S n); cbn [guards]; rewrite E; apply guard_equ_node, Hn. Qed.
 
+Local Lemma prim_step_set_pool i c p {Y} (e : sE Y) :
+  prim_step i (set_pool c p) e =
+  option_map (fun r => (fst (fst r), snd (fst r), set_pool (snd r) p)) (prim_step i c e).
+Proof.
+  destruct e as [he|[se|we]]; [destruct he|destruct se|destruct we]; cbn;
+    repeat match goal with |- context [match ?x with _ => _ end] => destruct x end;
+    reflexivity.
+Qed.
 Local Lemma prim_step_repool i c p q {Y} (e : sE Y) kind y c1 :
   prim_step i (set_pool c p) e = Some (kind, y, c1) ->
   prim_step i (set_pool c q) e = Some (kind, y, set_pool c1 q).
 Proof.
-  destruct e as [he|[se|we]]; [destruct he as [a|a v|size|b|a ex de]|destruct se|destruct we];
-    cbn; intro H; try discriminate.
-  - destruct (fst (oc_heap c i) a); [|discriminate]; injection H as <- <- <-; reflexivity.
-  - destruct (fst (oc_heap c i) a); [|discriminate]; injection H as <- <- <-; reflexivity.
-  - destruct (managed_free (oc_heap c i) b); [|discriminate]; injection H as <- <- <-; reflexivity.
-  - destruct (fst (oc_heap c i) a); [|discriminate].
-    destruct (Nat.eqb _ ex); injection H as <- <- <-; reflexivity.
-  - injection H as <- <- <-; reflexivity.
-  - injection H as <- <- <-; reflexivity.
+  rewrite !prim_step_set_pool.
+  destruct (prim_step i c e) as [[[kind' y'] c']|]; cbn; [|discriminate].
+  intro H; injection H as <- <- <-; reflexivity.
 Qed.
 
 (** Forgetting a leading guard of the focused slot keeps every action. *)
@@ -3238,9 +3240,6 @@ Local Definition shape {E B X} (o : ctree' E B X) : nat :=
 Local Lemma equ_shape {E B X} (t u : ctree E B X) : t ≅ u -> shape (observe t) = shape (observe u).
 Proof. intros H. __step_in_equ H. destruct H; reflexivity. Qed.
 
-Local Lemma eta_obs {E B X} (t : ctree E B X) o : observe t = o -> t ≅ go o.
-Proof. intros H. apply observe_equ_eq. exact H. Qed.
-
 Local Lemma headed_shape t u :
   headed t u -> (forall t', observe t <> GuardF t') -> shape (observe t) = shape (observe u).
 Proof.
@@ -3260,54 +3259,19 @@ Proof.
   - exists m. apply equ_guard_inv. rewrite <- Ht. exact Hm.
 Qed.
 
-Local Lemma headed_add t t' u : t ≅ Guard t' -> headed t' u -> headed t u.
-Proof.
-  intros Ht [m Hm]. exists (S m). rewrite Ht. exact (guards_equ 1 _ _ Hm).
-Qed.
 
 (** ** Vectors and configurations *)
 
-Local Lemma remove_replace {A n} (v : Vector.t A (S n)) (j : Fin.t (S n)) x :
-  ((v @ j := x) -- j) = (v -- j).
-Proof.
-  revert v j; induction n; intros v j; dependent destruction v; dependent destruction j.
-  - cbn. rewrite !vector_remove_head. reflexivity.
-  - inversion j.
-  - cbn. rewrite !vector_remove_head. reflexivity.
-  - cbn. rewrite !vector_remove_tail, IHn. reflexivity.
-Qed.
 
-Local Lemma set_pool_twice c p q : set_pool (set_pool c p) q = set_pool c q.
-Proof. reflexivity. Qed.
 
-Local Lemma prim_step_set_pool i c p {Y} (e : sE Y) :
-  prim_step i (set_pool c p) e =
-  option_map (fun r => (fst (fst r), snd (fst r), set_pool (snd r) p)) (prim_step i c e).
-Proof.
-  destruct e as [he|[se|we]]; [destruct he|destruct se|destruct we]; cbn;
-    repeat match goal with |- context [match ?x with _ => _ end] => destruct x end;
-    reflexivity.
-Qed.
 
-Local Lemma forall2_slots m (v1 v2 : pool sE Bn m) (g : Vector.t side m) :
-  (forall i, (v1 $ i) ≅ (v2 $ i)) ->
-  List.Forall2 slot_equ (List.combine (Vector.to_list v1) (Vector.to_list g))
-    (List.combine (Vector.to_list v2) (Vector.to_list g)).
-Proof.
-  revert v1 v2 g; induction m; intros v1 v2 g H;
-    dependent destruction v1; dependent destruction v2; dependent destruction g.
-  - constructor.
-  - rewrite !Vector.to_list_cons. cbn [List.combine]. constructor.
-    + split; [exact (H Fin.F1)|reflexivity].
-    + apply IHm. intros i. exact (H (Fin.FS i)).
-Qed.
 
 Local Lemma owned_equ_pool c m (v1 v2 : pool sE Bn m) g f :
   (forall i, (v1 $ i) ≅ (v2 $ i)) ->
   owned_equ (set_pool c (mk_pool m v1 g f)) (set_pool c (mk_pool m v2 g f)).
 Proof.
-  intros H. split; [split; [apply forall2_slots, H|reflexivity]|].
-  cbn. repeat split; intros; reflexivity.
+  intro H; apply set_pool_equ; [reflexivity|apply tp_equ_mk].
+  split; [exact H|split; reflexivity].
 Qed.
 
 Local Lemma replace_pointwise {n} (v : pool sE Bn n) j (x y : thread sE Bn) :
@@ -3396,11 +3360,11 @@ Proof. intros Hp E P. instr_unfold c Hp. rewrite E, P. reflexivity. Qed.
 Local Lemma owned_step_nil c v g f a c' : oc_pool c = mk_pool 0 v g f -> ~ owned_step c a c'.
 Proof. intros Hp. unfold owned_step. rewrite Hp. cbn. tauto. Qed.
 
-Local Lemma owned_step_sel c n v g a c' :
+Lemma owned_step_sel c n v g a c' :
   oc_pool c = mk_pool (S n) v g None -> owned_step c a c' <-> sel_step c n v g a c'.
 Proof. intros Hp. unfold owned_step. rewrite Hp. reflexivity. Qed.
 
-Local Lemma owned_step_focus c n v g j a c' :
+Lemma owned_step_focus c n v g j a c' :
   oc_pool c = mk_pool (S n) v g (Some j) -> owned_step c a c' <-> focus_step c n v g j a c'.
 Proof. intros Hp. unfold owned_step. rewrite Hp. reflexivity. Qed.
 
@@ -3419,10 +3383,10 @@ Local Lemma focus_step_guard c n v g j t a c' :
   focus_step c n v g j a c' <->
   focus_step (set_pool c (mk_pool (S n) (v @ j := t) g (Some j))) n (v @ j := t) g j a c'.
 Proof.
-  intros E. pose proof (eta_obs _ _ E) as Hv.
+  intros E. pose proof (observe_equ_go _ _ E) as Hv.
   assert (Hok : forall u, shape (observe u) = 0 \/ shape (observe u) = 2 \/ shape (observe u) = 4 -> head_ok u)
     by (intros; assumption).
-  unfold focus_step. rewrite Vector.nth_replace_eq, remove_replace.
+  unfold focus_step. rewrite Vector.nth_replace_eq, vector_remove_replace.
   split.
   - intros [[t' [Hh [-> ->]]]|[[k [Hh [-> ->]]]|[[k [Hh [-> ->]]]|[[Hh [-> ->]]|
             [Y [e [k [kind [y [c1 [Hh [P [-> ->]]]]]]]]]]]]].
@@ -3441,15 +3405,15 @@ Proof.
   - intros [[t' [Hh [-> ->]]]|[[k [Hh [-> ->]]]|[[k [Hh [-> ->]]]|[[Hh [-> ->]]|
             [Y [e [k [kind [y [c1 [Hh [P [-> ->]]]]]]]]]]]]];
       try rewrite Vector.replace_replace_eq.
-    + left. exists t'. split; [eapply headed_add; eauto|split; reflexivity].
-    + right; left. exists k. split; [eapply headed_add; eauto|split; reflexivity].
-    + right; right; left. exists k. split; [eapply headed_add; eauto|split; reflexivity].
-    + right; right; right; left. split; [eapply headed_add; eauto|split; reflexivity].
+    + left. exists t'. split; [eapply headed_guard; eauto|split; reflexivity].
+    + right; left. exists k. split; [eapply headed_guard; eauto|split; reflexivity].
+    + right; right; left. exists k. split; [eapply headed_guard; eauto|split; reflexivity].
+    + right; right; right; left. split; [eapply headed_guard; eauto|split; reflexivity].
     + right; right; right; right.
       rewrite prim_step_set_pool in P.
       destruct (prim_step (g $ j) c e) as [[[kind' y'] c1']|] eqn:P'; cbn in P; inversion P; subst.
       exists Y, e, k, kind, y, c1'.
-      split; [eapply headed_add; eauto|split; [exact P'|split; reflexivity]].
+      split; [eapply headed_guard; eauto|split; [exact P'|split; reflexivity]].
 Qed.
 
 (** A focused slot whose head is not a guard: one logged action or stuck. *)
@@ -3463,41 +3427,41 @@ Local Lemma head_char c n v g j :
 Proof.
   intros Hp Hng. destruct (observe (v $ j)) eqn:E.
   - destruct r. left. eexists _, _. split; [exact (instr_ret _ _ _ _ _ _ Hp E)|].
-    split; [apply (focus_step_head_ret c n v g j 0 _ _ (eta_obs _ _ E)); auto|].
-    intros a c' Hs. apply (focus_step_head_ret c n v g j 0 a c' (eta_obs _ _ E)) in Hs as [-> ->].
+    split; [apply (focus_step_head_ret c n v g j 0 _ _ (observe_equ_go _ _ E)); auto|].
+    intros a c' Hs. apply (focus_step_head_ret c n v g j 0 a c' (observe_equ_go _ _ E)) in Hs as [-> ->].
     split; reflexivity.
   - right. split; [exact (instr_stuck _ _ _ _ _ Hp E)|].
-    intros a c'. exact (focus_step_head_stuck c n v g j 0 a c' (eta_obs _ _ E)).
+    intros a c'. exact (focus_step_head_stuck c n v g j 0 a c' (observe_equ_go _ _ E)).
   - left. eexists _, _. split; [exact (instr_step _ _ _ _ _ _ Hp E)|].
-    split; [apply (focus_step_head_step c n v g j t 0 _ _ (eta_obs _ _ E)); eauto|].
-    intros a c' Hs. apply (focus_step_head_step c n v g j t 0 a c' (eta_obs _ _ E)) in Hs
+    split; [apply (focus_step_head_step c n v g j t 0 _ _ (observe_equ_go _ _ E)); eauto|].
+    intros a c' Hs. apply (focus_step_head_step c n v g j t 0 a c' (observe_equ_go _ _ E)) in Hs
       as [t' [Ht [-> ->]]].
     split; [reflexivity|apply owned_equ_pool, replace_pointwise, Ht].
   - exfalso. exact (Hng _ eq_refl).
   - destruct e as [y|[fk|e']].
     + destruct y. left. eexists _, _. split; [exact (instr_yield _ _ _ _ _ _ Hp E)|].
-      split; [apply (focus_step_head_yield c n v g j k 0 _ _ (eta_obs _ _ E));
+      split; [apply (focus_step_head_yield c n v g j k 0 _ _ (observe_equ_go _ _ E));
               exists k; split; [reflexivity|split; reflexivity]|].
-      intros a c' Hs. apply (focus_step_head_yield c n v g j k 0 a c' (eta_obs _ _ E)) in Hs
+      intros a c' Hs. apply (focus_step_head_yield c n v g j k 0 a c' (observe_equ_go _ _ E)) in Hs
         as [k' [Hk [-> ->]]].
       split; [reflexivity|apply owned_equ_pool, replace_pointwise, Hk].
     + destruct fk. left. eexists _, _. split; [exact (instr_fork _ _ _ _ _ _ Hp E)|].
-      split; [apply (focus_step_head_fork c n v g j k 0 _ _ (eta_obs _ _ E));
+      split; [apply (focus_step_head_fork c n v g j k 0 _ _ (observe_equ_go _ _ E));
               exists k; split; [reflexivity|split; reflexivity]|].
-      intros a c' Hs. apply (focus_step_head_fork c n v g j k 0 a c' (eta_obs _ _ E)) in Hs
+      intros a c' Hs. apply (focus_step_head_fork c n v g j k 0 a c' (observe_equ_go _ _ E)) in Hs
         as [k' [Hk [-> ->]]].
       split; [reflexivity|apply owned_equ_pool, vector_cons_pointwise; [apply Hk|]].
       apply replace_pointwise, Hk.
     + destruct (prim_step (g $ j) c e') as [[[kind y] c1]|] eqn:P.
       * left. eexists _, _. split; [exact (instr_prim _ _ _ _ _ _ _ _ _ _ _ Hp E P)|].
-        split; [apply (focus_step_head_prim c n v g j e' k 0 _ _ (eta_obs _ _ E));
+        split; [apply (focus_step_head_prim c n v g j e' k 0 _ _ (observe_equ_go _ _ E));
                 exists k, kind, y, c1; split; [reflexivity|split; [exact P|split; reflexivity]]|].
-        intros a c' Hs. apply (focus_step_head_prim c n v g j e' k 0 a c' (eta_obs _ _ E)) in Hs
+        intros a c' Hs. apply (focus_step_head_prim c n v g j e' k 0 a c' (observe_equ_go _ _ E)) in Hs
           as [k' [kind' [y' [c1' [Hk [P' [-> ->]]]]]]].
         rewrite P in P'. inversion P'; subst.
         split; [reflexivity|apply owned_equ_pool, replace_pointwise, Hk].
       * right. split; [exact (instr_prim_none _ _ _ _ _ _ _ _ Hp E P)|].
-        intros a c' Hs. apply (focus_step_head_prim c n v g j e' k 0 a c' (eta_obs _ _ E)) in Hs
+        intros a c' Hs. apply (focus_step_head_prim c n v g j e' k 0 a c' (observe_equ_go _ _ E)) in Hs
           as [k' [kind' [y' [c1' [Hk [P' _]]]]]].
         rewrite P in P'. discriminate.
   - right. split; [exact (instr_br _ _ _ _ _ _ _ _ Hp E)|].
@@ -3523,7 +3487,7 @@ Proof.
       exact (trans_vis (Log a0) tt (fun _ => instrument_owned d0)).
     + exfalso. exact (Hno _ _ Hs).
   - cbn [guards] in Hm. destruct (guard_dec (observe (v $ j))) as [[t E]|Hng].
-    + pose proof (eta_obs _ _ E) as Hv. cbn in Hv.
+    + pose proof (observe_equ_go _ _ E) as Hv. cbn in Hv.
       assert (Ht : t ≅ guards m u) by (apply equ_guard_inv; rewrite <- Hv; exact Hm).
       apply (focus_step_guard _ _ _ _ _ _ _ _ E) in Hs.
       destruct (IHm (set_pool c (mk_pool (S n) (v @ j := t) g (Some j))) n (v @ j := t) g j u a c' eq_refl Hu ltac:(rewrite Vector.nth_replace_eq; exact Ht) Hs)
@@ -3683,10 +3647,6 @@ Proof.
     rewrite Vector.replace_replace_eq; reflexivity.
 Qed.
 
-Local Lemma ei_guards_sb m (t : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)) :
-  guards m t ~ t.
-Proof. induction m; cbn [guards]; [reflexivity|rewrite sb_guard; exact IHm]. Qed.
-
 (** A single owned action, with its exact operational response, rather than a
     resource-equivalent replacement configuration. *)
 Local Lemma erase_owned_action c a d : owned_step c a d ->
@@ -3715,19 +3675,19 @@ Proof.
       eexists; split; [rewrite E; apply guards_trans, trans_step|apply sb_guard].
     + rewrite (ei_yield c n (v @ j := Vis (inl1 Yield : CEff unit) k) g j k
         ltac:(rewrite Vector.nth_replace_eq; reflexivity)), Vector.replace_replace_eq in E.
-      split; [intro; rewrite E, ei_guards_sb, sb_guard; reflexivity|discriminate].
+      split; [intro; rewrite E, guards_sbisim, sb_guard; reflexivity|discriminate].
     + rewrite (ei_fork c n (v @ j := Vis (inr1 (inl1 Fork) : CEff bool) k) g j k
         ltac:(rewrite Vector.nth_replace_eq; reflexivity)), Vector.replace_replace_eq in E.
-      split; [intro; rewrite E, ei_guards_sb, sb_guard; reflexivity|discriminate].
+      split; [intro; rewrite E, guards_sbisim, sb_guard; reflexivity|discriminate].
     + rewrite (ei_ret c n (v @ j := Ret tt) g j
-        ltac:(rewrite Vector.nth_replace_eq; reflexivity)), remove_replace in E.
-      split; [intro; rewrite E, ei_guards_sb, sb_guard; reflexivity|discriminate].
+        ltac:(rewrite Vector.nth_replace_eq; reflexivity)), vector_remove_replace in E.
+      split; [intro; rewrite E, guards_sbisim, sb_guard; reflexivity|discriminate].
     + rewrite (ei_prim c n (v @ j := Vis (inr1 (inr1 e) : CEff Y) k) g j e k
         ltac:(rewrite Vector.nth_replace_eq; reflexivity)) in E.
       rewrite (prim_step_repool _ _ _ _ _ _ _ _ P), erase_owned_log,
         Vector.replace_replace_eq in E.
       destruct kind; cbn [erase_action_label act action_kind] in *;
-        try solve [split; [intro; rewrite E, ei_guards_sb, sb_guard; reflexivity|discriminate]].
+        try solve [split; [intro; rewrite E, guards_sbisim, sb_guard; reflexivity|discriminate]].
       * exfalso; destruct e as [he|[se|we]]; [destruct he|destruct se|destruct we];
           cbn [prim_step heap_prim ctx_prim emit_prim] in P;
           repeat match type of P with context [match ?x with _ => _ end] => destruct x end;
@@ -3742,7 +3702,7 @@ Proof.
     eexists; split.
     + rewrite (ei_none c n v g).
       eapply trans_br; [apply trans_guard, trans_step|reflexivity].
-    + apply ei_guards_sb.
+    + apply guards_sbisim.
 Qed.
 
 Local Definition erase_forward_result c l
@@ -3880,7 +3840,7 @@ Proof.
       eapply erase_result_visible with (a := act (g $ j) OASelect).
       * exists j; split; reflexivity.
       * cbn [erase_action_label act action_kind]; now rewrite Hl.
-      * rewrite ET; apply ei_guards_sb.
+      * rewrite ET; apply guards_sbisim.
 Qed.
 
 Local Lemma erase_owned_trans_aux l ot oT : trans_ l ot oT ->
@@ -3961,7 +3921,7 @@ Lemma erase_owned_select c n v g :
   brS (branchn (S n)) (fun j => EI (set_pool c (mk_pool (S n) v g (Some j)))).
 Proof.
   rewrite ei_none.
-  apply sbisim_br_id; intro j; rewrite sb_guard; apply sb_step, ei_guards_sb.
+  apply sbisim_br_id; intro j; rewrite sb_guard; apply sb_step, guards_sbisim.
 Qed.
 
 Lemma erase_owned_terminal c :
