@@ -367,10 +367,10 @@ over `Sequential` raw threads), with `instr_flow_head`, `instr_flow_read`,
 `instr_flow_write`, `instr_flow_write_single`, and `run_nd_fork_bind` equations.
 `Sequential t` is `BranchFree t /\ Framable user_only t`, reusing the two
 existing coinductive predicates; `sequential_inv` exposes its node shape.
-`examples/CSL/Frame/{Shared,AF,AN,AG}.v`
-combine both: two processes own cells `1` and `2`, each is verified on its own
-region, framed by the other's, and joined through the prefix equation for
-`run_rr` and `run_nd` (`af_two_procs_*`, `an_two_procs_*`, `ag_two_procs_*`).
+`examples/CSL/Frame/{Shared,AF,AN,AG}.v` keep the original TICL contracts
+(`af_two_procs_*`, `an_two_procs_*`, `ag_two_procs_*`). Their ND proofs use the
+owned machine: AF proves finite action progress, AN preserves four raw steps,
+and AG uses separate ranks for lineage release and raw visibility.
 
 ## Splitting forked programs
 
