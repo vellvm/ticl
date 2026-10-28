@@ -1,6 +1,6 @@
 (** * Formal-evidence roots.
 
-    One [Check] and [Print Assumptions] pair per theorem-map row, in CSV order.
+    Each proof root has a [Check] and [Print Assumptions] pair.
     The evidence driver supplies query-output delimiters externally.
     Assumption controls are not claims of identical historical source code. *)
 From TICL Require Import
@@ -19,6 +19,8 @@ From examples Require Import
   CSL.Queue.Ticl
   CSL.Queue.Client
   CSL.Frame.Shared
+  CSL.Frame.AF
+  CSL.Frame.AG
   CSL.Frame.AN
   CSL.Control
   HiddenBr
@@ -266,3 +268,129 @@ Print Assumptions TICL.Lang.CoCSL.Separation.fork_heg_fair_split.
 
 Check examples.CSL.Frame.Separation.FiniteRegression.fork_run_nd_trace.
 Print Assumptions examples.CSL.Frame.Separation.FiniteRegression.fork_run_nd_trace.
+
+Check TICL.CTree.Logic.Sim.sbisim_csim.
+Print Assumptions TICL.CTree.Logic.Sim.sbisim_csim.
+
+Check TICL.Lang.CoCSL.Owned.erase_owned_trans_forward.
+Print Assumptions TICL.Lang.CoCSL.Owned.erase_owned_trans_forward.
+
+Check TICL.Lang.CoCSL.Owned.erase_owned_visible_trans.
+Print Assumptions TICL.Lang.CoCSL.Owned.erase_owned_visible_trans.
+
+Check TICL.Lang.CoCSL.Owned.erase_owned_terminal_trans.
+Print Assumptions TICL.Lang.CoCSL.Owned.erase_owned_terminal_trans.
+
+Check TICL.Lang.CoCSL.Owned.erase_owned_silent_path.
+Print Assumptions TICL.Lang.CoCSL.Owned.erase_owned_silent_path.
+
+Check TICL.Lang.CoCSL.Owned.erase_owned_select.
+Print Assumptions TICL.Lang.CoCSL.Owned.erase_owned_select.
+
+Check TICL.Lang.CoCSL.Owned.erase_owned_terminal.
+Print Assumptions TICL.Lang.CoCSL.Owned.erase_owned_terminal.
+
+Check TICL.Lang.CoCSL.Separation.owned_ticll_erasure.
+Print Assumptions TICL.Lang.CoCSL.Separation.owned_ticll_erasure.
+
+Check TICL.Lang.CoCSL.Separation.owned_ticlr_erasure.
+Print Assumptions TICL.Lang.CoCSL.Separation.owned_ticlr_erasure.
+
+Check TICL.Lang.CoCSL.Separation.fork_ticll_erasure.
+Print Assumptions TICL.Lang.CoCSL.Separation.fork_ticll_erasure.
+
+Check TICL.Lang.CoCSL.Separation.fork_ticlr_erasure.
+Print Assumptions TICL.Lang.CoCSL.Separation.fork_ticlr_erasure.
+
+Check TICL.Lang.CoCSL.Separation.owned_haf_done_ticl.
+Print Assumptions TICL.Lang.CoCSL.Separation.owned_haf_done_ticl.
+
+Check TICL.Lang.CoCSL.Separation.owned_hef_done_ticl.
+Print Assumptions TICL.Lang.CoCSL.Separation.owned_hef_done_ticl.
+
+Check TICL.Lang.CoCSL.Separation.owned_hag_ticl.
+Print Assumptions TICL.Lang.CoCSL.Separation.owned_hag_ticl.
+
+Check TICL.Lang.CoCSL.Separation.owned_heg_ticl.
+Print Assumptions TICL.Lang.CoCSL.Separation.owned_heg_ticl.
+
+Check TICL.Lang.CoCSL.Separation.fork_haf_done_ticl.
+Print Assumptions TICL.Lang.CoCSL.Separation.fork_haf_done_ticl.
+
+Check TICL.Lang.CoCSL.Separation.fork_hef_done_ticl.
+Print Assumptions TICL.Lang.CoCSL.Separation.fork_hef_done_ticl.
+
+Check TICL.Lang.CoCSL.Separation.fork_hag_ticl.
+Print Assumptions TICL.Lang.CoCSL.Separation.fork_hag_ticl.
+
+Check TICL.Lang.CoCSL.Separation.fork_heg_ticl.
+Print Assumptions TICL.Lang.CoCSL.Separation.fork_heg_ticl.
+
+Check examples.CSL.Frame.Separation.FiniteTiclRegression.finite_raw_af_done.
+Print Assumptions examples.CSL.Frame.Separation.FiniteTiclRegression.finite_raw_af_done.
+
+Check examples.CSL.Frame.Separation.FiniteTiclRegression.finite_raw_ef_done.
+Print Assumptions examples.CSL.Frame.Separation.FiniteTiclRegression.finite_raw_ef_done.
+
+Check examples.CSL.Frame.Separation.FiniteTiclRegression.terminal_zero_owned_actions.
+Print Assumptions examples.CSL.Frame.Separation.FiniteTiclRegression.terminal_zero_owned_actions.
+
+Check examples.CSL.Frame.Separation.FiniteTiclRegression.terminal_raw_value_transition.
+Print Assumptions examples.CSL.Frame.Separation.FiniteTiclRegression.terminal_raw_value_transition.
+
+Check examples.CSL.Frame.Separation.FiniteTiclRegression.terminal_not_raw_done.
+Print Assumptions examples.CSL.Frame.Separation.FiniteTiclRegression.terminal_not_raw_done.
+
+Check examples.CSL.Frame.Separation.FiniteTiclRegression.terminal_raw_af_done.
+Print Assumptions examples.CSL.Frame.Separation.FiniteTiclRegression.terminal_raw_af_done.
+
+Check examples.CSL.Frame.Separation.AlwaysTiclRegression.loops_raw_ag.
+Print Assumptions examples.CSL.Frame.Separation.AlwaysTiclRegression.loops_raw_ag.
+
+Check examples.CSL.Frame.Separation.AlwaysTiclRegression.loops_raw_eg.
+Print Assumptions examples.CSL.Frame.Separation.AlwaysTiclRegression.loops_raw_eg.
+
+Check examples.CSL.Frame.Separation.AlwaysTiclRegression.fair_exec_infinitely_visible.
+Print Assumptions examples.CSL.Frame.Separation.AlwaysTiclRegression.fair_exec_infinitely_visible.
+
+Check examples.CSL.Frame.Separation.SilentReadTiclRegression.read_admissible.
+Print Assumptions examples.CSL.Frame.Separation.SilentReadTiclRegression.read_admissible.
+
+Check examples.CSL.Frame.Separation.SilentReadTiclRegression.read_loop_owned_hag.
+Print Assumptions examples.CSL.Frame.Separation.SilentReadTiclRegression.read_loop_owned_hag.
+
+Check examples.CSL.Frame.Separation.SilentReadTiclRegression.read_loop_focused_owned_hag.
+Print Assumptions examples.CSL.Frame.Separation.SilentReadTiclRegression.read_loop_focused_owned_hag.
+
+Check examples.CSL.Frame.Separation.SilentReadTiclRegression.read_loop_erasure_stuck.
+Print Assumptions examples.CSL.Frame.Separation.SilentReadTiclRegression.read_loop_erasure_stuck.
+
+Check examples.CSL.Frame.Separation.SilentReadTiclRegression.read_loop_erasure_no_ag.
+Print Assumptions examples.CSL.Frame.Separation.SilentReadTiclRegression.read_loop_erasure_no_ag.
+
+Check examples.CSL.Frame.Separation.SilentReadTiclRegression.read_loop_original_stuck.
+Print Assumptions examples.CSL.Frame.Separation.SilentReadTiclRegression.read_loop_original_stuck.
+
+Check examples.CSL.Frame.Separation.SilentReadTiclRegression.read_loop_original_no_ag.
+Print Assumptions examples.CSL.Frame.Separation.SilentReadTiclRegression.read_loop_original_no_ag.
+
+Check examples.CSL.Frame.Separation.SilentReadTiclRegression.read_forever_run.
+Print Assumptions examples.CSL.Frame.Separation.SilentReadTiclRegression.read_forever_run.
+
+Check examples.CSL.Frame.Separation.SilentReadTiclRegression.read_forever_infinitely_reads.
+Print Assumptions examples.CSL.Frame.Separation.SilentReadTiclRegression.read_forever_infinitely_reads.
+
+Check examples.CSL.Frame.Separation.SilentReadTiclRegression.read_forever_not_infinitely_visible.
+Print Assumptions examples.CSL.Frame.Separation.SilentReadTiclRegression.read_forever_not_infinitely_visible.
+
+Check examples.CSL.Frame.AF.af_two_procs_rr.
+Print Assumptions examples.CSL.Frame.AF.af_two_procs_rr.
+
+Check examples.CSL.Frame.AF.af_two_procs_nd.
+Print Assumptions examples.CSL.Frame.AF.af_two_procs_nd.
+
+Check examples.CSL.Frame.AG.ag_two_procs_rr.
+Print Assumptions examples.CSL.Frame.AG.ag_two_procs_rr.
+
+Check examples.CSL.Frame.AG.ag_two_procs_nd.
+Print Assumptions examples.CSL.Frame.AG.ag_two_procs_nd.

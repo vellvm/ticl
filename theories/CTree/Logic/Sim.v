@@ -124,6 +124,21 @@ Section ConditionalSimulation.
   Proof. eapply ticlr_sim; [apply csim_ktrans_l|apply csim_ktrans_r]. Qed.
 End ConditionalSimulation.
 
+(** Unconditional bisimulation supplies both conditional simulation matches. *)
+Theorem sbisim_csim {E B X} (RV : X -> X -> Prop)
+    (t u : ctree E B X) :
+  sbisim (simL RV) t u -> csim RV t u.
+Proof.
+  revert t u; unfold csim; coinduction R IH.
+  intros t u H; step in H; destruct H as [Hf Hb]; split.
+  - intros l t' HT.
+    destruct (Hf _ _ HT) as (l' & u' & HU & HR & HL).
+    exists l', u'; split; [exact HU|split; [exact HL|now apply IH]].
+  - intros _ l' u' HU.
+    destruct (Hb _ _ HU) as (l & t' & HT & HR & HL).
+    exists l, t'; split; [exact HT|split; [exact HL|now apply IH]].
+Qed.
+
 (** A finite chain of [Guard]s ending in a visible [Step]: a hidden branch visible to [trans]. *)
 Inductive guards_to_step {E B X} : ctree E B X -> Prop :=
 | GtsStep t u : observe t = StepF u -> guards_to_step t

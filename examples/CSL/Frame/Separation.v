@@ -13,7 +13,7 @@
 
 From Stdlib Require Import List Lia Fin Vector Relations Program.Equality.
 From CTree Require Import CTree Eq.
-From TICL Require Import Lang.CoCSL.Separation.
+From TICL Require Import Lang.CoCSL.Separation Logic.Tactics.
 From TICL Require Import CTree.Interp.Yield.SBisim Utils.Vectors Utils.Pcm Events.HeapModel.
 
 (** ** Next: the direct AN split, its clocks, and its boundaries *)
@@ -2560,3 +2560,429 @@ Proof.
 Qed.
 
 End FiniteRegression.
+
+(** * Original-TICL bridge regressions: the owned and raw clocks differ. *)
+From TICL Require Import CTree.Logic.AG CTree.Logic.Trans CTree.Logic.CanStep.
+
+Module FiniteTiclRegression.
+#[local] Unset Universe Polymorphism.
+Import FiniteRegression CTreeNotations TICL.Logic.Semantics
+  TICL.Logic.Syntax.TiclNotations VectorNotations CoCSLSyntax.
+Local Open Scope ctree_scope.
+Local Open Scope ticl_scope.
+Local Open Scope fin_vector_scope.
+Local Open Scope pcm_scope.
+
+Definition final_cells (r : SSig * unit) : Prop :=
+  fst (csl_memory (fst r)) 1 = Some 1 /\
+  fst (csl_memory (fst r)) 2 = Some 8.
+
+Lemma final_cells_proper : Proper (owned_result_rel ==> iff) final_cells.
+Proof.
+  intros [s x] [s' x'] (_ & _ & [HD _]).
+  unfold final_cells; cbn; rewrite (HD 1), (HD 2); reflexivity.
+Qed.
+
+Lemma separated_done_joined d :
+  hsep done_C done_P d ->
+  hDone (fun d => final_cells (joined_state d, tt)) d.
+Proof.
+  intros (W & [HCt HC] & [HPt HP]); split.
+  - unfold terminal in HCt, HPt |- *.
+    pose proof (project_size_partition d); lia.
+  - change (fst (oc_heap d Child) 1 = Some 1) in HC.
+    change (fst (oc_heap d Parent) 2 = Some 8) in HP.
+    change (hunion (fst (oc_heap d Child)) (fst (oc_heap d Parent)) 1 = Some 1 /\
+      hunion (fst (oc_heap d Child)) (fst (oc_heap d Parent)) 2 = Some 8).
+    split; [apply hunion_some, HC|].
+    destruct W as (_ & _ & _ & _ & _ & _ & _ & [HD _]).
+    destruct (HD 2) as [Hnone|Hnone]; [rewrite hunion_none by exact Hnone; exact HP|congruence].
+Qed.
+
+Lemma finite_owned_haf :
+  hAF owned_next (hDone (fun d => final_cells (joined_state d, tt))) s0.
+Proof.
+  eapply hAU_mono; [intros; exact I|apply separated_done_joined|exact fglobal_hau].
+Qed.
+
+Lemma finite_owned_hef :
+  hEF owned_next (hDone (fun d => final_cells (joined_state d, tt))) s0.
+Proof.
+  eapply hEU_mono; [intros; exact I|apply separated_done_joined|exact fglobal_heu].
+Qed.
+
+Theorem finite_raw_af_done :
+  <[ {run_nd (CBind (CFork fchild) fk) (hC ⊎ hP, (ctx0, 0))}, World.Pure |=
+    AF done {fun r _ => final_cells r} ]>.
+Proof.
+  exact (fork_haf_done_ticl fchild fk hC hP ctx0 0 final_cells
+    fadmissible final_cells_proper finite_owned_haf).
+Qed.
+
+Theorem finite_raw_ef_done :
+  <[ {run_nd (CBind (CFork fchild) fk) (hC ⊎ hP, (ctx0, 0))}, World.Pure |=
+    EF done {fun r _ => final_cells r} ]>.
+Proof.
+  exact (fork_hef_done_ticl fchild fk hC hP ctx0 0 final_cells
+    fadmissible final_cells_proper finite_owned_hef).
+Qed.
+
+Lemma det_erasable s a s' : det_act s a s' -> erasable s -> erasable s'.
+Proof.
+  intros [(d & Hs & E) _] H.
+  exact (erasable_equ d s' E (erasable_step s a d H Hs)).
+Qed.
+
+Lemma finite_terminal_erasable : erasable s9.
+Proof.
+  apply (det_erasable _ _ _ det89), (det_erasable _ _ _ det78),
+    (det_erasable _ _ _ det67), (det_erasable _ _ _ det56),
+    (det_erasable _ _ _ det45), (det_erasable _ _ _ det34),
+    (det_erasable _ _ _ det23), (det_erasable _ _ _ det12),
+    (det_erasable _ _ _ det01).
+  exact (admissible_erasable _ _ _ _ _ _ fadmissible).
+Qed.
+
+Theorem terminal_zero_owned_actions : terminal s9 /\ ~ hcan_step owned_next s9.
+Proof. split; [reflexivity|intros (d & a & Hs); exact Hs]. Qed.
+
+Theorem terminal_raw_value_transition :
+  exists T,
+    ktrans_ (erase_owned (instrument_owned s9)) World.Pure
+      T (World.Done (joined_state s9, tt)) /\
+        T ~ (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+Proof.
+  destruct (erase_owned_terminal_trans s9 s9 finite_terminal_erasable
+    (rt_refl _ _ _) eq_refl) as (T & Ht & Hs).
+  exists T; split; [apply KtransDone; exact Ht|exact Hs].
+Qed.
+
+Theorem terminal_not_raw_done :
+  ~ <[ {erase_owned (instrument_owned s9)}, World.Pure |=
+    done {fun r _ => final_cells r} ]>.
+Proof. rewrite ticlr_done; intro H; inversion H. Qed.
+
+Theorem terminal_raw_af_done :
+  <[ {erase_owned (instrument_owned s9)}, World.Pure |=
+    AF done {fun r _ => final_cells r} ]>.
+Proof.
+  apply (owned_haf_done_ticl final_cells s9 World.Pure);
+    [exact finite_terminal_erasable|constructor|exact final_cells_proper|].
+  apply hAU_now; split; [reflexivity|split; reflexivity].
+Qed.
+
+End FiniteTiclRegression.
+
+Module AlwaysTiclRegression.
+#[local] Unset Universe Polymorphism.
+Import AlwaysRegression CTreeNotations TICL.Logic.Semantics
+  TICL.Logic.Syntax.TiclNotations VectorNotations CoCSLSyntax.
+Local Open Scope ctree_scope.
+Local Open Scope ticl_scope.
+Local Open Scope fin_vector_scope.
+Local Open Scope pcm_scope.
+
+Lemma phase_rank_equ c d : owned_equ c d -> rank c = rank d.
+Proof.
+  intros (Ep & _); pose proof (proj2 Ep) as Ef.
+  destruct (tp_focus (oc_pool c)) as [j|] eqn:Ec;
+    destruct (tp_focus (oc_pool d)) as [k|] eqn:Ed.
+  - destruct (tp_equ_slot _ _ k Ep) as (j0 & Hn & Et & _).
+    unfold focus_nat in Ef; rewrite Ec, Ed in Ef; cbn in Ef; injection Ef as Ef.
+    assert (j0 = j) as ->.
+    { apply Fin.to_nat_inj; unfold fin_nat in *; congruence. }
+    unfold rank, focused_thread; rewrite Ec, Ed; cbn.
+    apply head_rank_equ, Et.
+  - unfold focus_nat in Ef; rewrite Ec, Ed in Ef; discriminate.
+  - unfold focus_nat in Ef; rewrite Ec, Ed in Ef; discriminate.
+  - unfold rank, focused_thread; rewrite Ec, Ed; reflexivity.
+Qed.
+
+(** This is the focused phase rank, not either lineage's release rank:
+    selection and emission already provide raw progress. *)
+Definition raw_silence_rank (d : OwnedCfg) : nat := rank d.
+
+Lemma phase_silent_decreases d a d' :
+  Inv d -> owned_step d a d' -> erase_action_label a = None ->
+  raw_silence_rank d' < raw_silence_rank d.
+Proof.
+  intros HI Hs He; destruct (Inv_step d a d' HI Hs) as [_ [Hf|Hr]]; [|exact Hr].
+  destruct HI as (_ & _ & _ & tc & tp & f & Hpool & _).
+  unfold focused_thread in Hf; rewrite Hpool in Hf; destruct f; [discriminate|].
+  unfold owned_step in Hs; rewrite Hpool in Hs; cbn in Hs.
+  destruct Hs as (j & -> & _); discriminate.
+Qed.
+
+(** Saturating the existing phase invariant only makes its setoid
+    properness explicit; its operational cases are still [Inv_step]. *)
+Definition raw_Inv (d : OwnedCfg) : Prop := exists q, Inv q /\ owned_equ q d.
+
+Lemma raw_Inv_proper : hproper raw_Inv.
+Proof.
+  intros c d E; split.
+  - intros (q & HI & Eq); exists q; split; [exact HI|].
+    etransitivity; [exact Eq|exact E].
+  - intros (q & HI & Eq); exists q; split; [exact HI|].
+    etransitivity; [exact Eq|symmetry; exact E].
+Qed.
+
+Lemma raw_Inv_silent_decreases d a d' :
+  raw_Inv d -> owned_step d a d' -> erase_action_label a = None ->
+  raw_silence_rank d' < raw_silence_rank d.
+Proof.
+  intros (q & HI & E) Hs He.
+  destruct (owned_step_equ d q a d' (symmetry E) Hs) as (q' & Hq & E').
+  unfold raw_silence_rank; rewrite (phase_rank_equ d' q' E'), <- (phase_rank_equ q d E).
+  exact (phase_silent_decreases q a q' HI Hq He).
+Qed.
+
+Lemma loops_raw_invariant_hag : hAG owned_next raw_Inv c0.
+Proof.
+  apply (hAG_coind _ _ Inv); [|exact Inv_c0].
+  intros d HI; split; [exists d; split; [exact HI|reflexivity]|].
+  split; [apply Inv_can, HI|].
+  intros d' [a Hs]; exact (Inv_closed d a d' HI Hs).
+Qed.
+
+Theorem loops_raw_ag :
+  <( {run_nd (CBind (CFork pc) (fun _ => pp)) (hC ⊎ hP, (ctx0, 0))},
+    World.Pure |= AG ⊤ )>.
+Proof.
+  exact (fork_hag_ticl pc (fun _ => pp) hC hP ctx0 0 raw_Inv raw_silence_rank
+    loops_admissible raw_Inv_proper raw_Inv_silent_decreases loops_raw_invariant_hag).
+Qed.
+
+(** Visibility is proved from this execution's actual emit positions, not
+    from the independent facts that both owners occur infinitely often. *)
+Lemma fair_exec_infinitely_visible :
+  infinitely (fun n => erase_action_label (selected fair_exec n) <> None).
+Proof.
+  intro n.
+  assert (H : exists k, forall d,
+    erase_action_label (act (pos_owner (Nat.iter k next_pos (fst (run n))))
+      (pos_kind (Nat.iter k next_pos (fst (run n))) d)) <> None).
+  { destruct (fst (run n));
+      solve [exists 0; intro; discriminate | exists 1; intro; discriminate
+            | exists 2; intro; discriminate | exists 3; intro; discriminate]. }
+  destruct H as [k Hk]; exists (k + n); split; [lia|].
+  cbn [selected fair_exec]; rewrite run_pos_add; apply Hk.
+Qed.
+
+Theorem loops_raw_eg :
+  <( {run_nd (CBind (CFork pc) (fun _ => pp)) (hC ⊎ hP, (ctx0, 0))},
+    World.Pure |= EG ⊤ )>.
+Proof.
+  exact (fork_heg_ticl pc (fun _ => pp) hC hP ctx0 0 fair_exec
+    loops_admissible eq_refl fair_exec_run fair_exec_infinitely_visible).
+Qed.
+
+End AlwaysTiclRegression.
+
+Module SilentReadTiclRegression.
+#[local] Unset Universe Polymorphism.
+Import CTreeNotations TICL.Logic.Semantics TICL.Logic.Syntax.TiclNotations
+  VectorNotations CoCSLSyntax.
+Local Open Scope ctree_scope.
+Local Open Scope ticl_scope.
+Local Open Scope fin_vector_scope.
+Local Open Scope pcm_scope.
+
+Definition read_loop : CProg unit :=
+  CUntilNone (CBind (CRead 2) (fun _ => CoCSLSyntax.CRet (Some tt : option unit))).
+Definition read_heap : ManagedHeap := (hsingle 2 8, hemp).
+Definition read_initial : OwnedCfg :=
+  init_owned (CoCSLSyntax.CRet tt) read_loop managed_empty read_heap List.nil 0.
+Definition read_alone : OwnedCfg := init_local Parent read_loop read_heap List.nil 0 true.
+Definition read_head : thread sE Bn :=
+  Vis (inr1 (inr1 (inl1 (HRead 2))) : CEff nat)
+    (fun _ => Guard (denote read_loop)).
+
+Lemma read_loop_unfold : denote read_loop ≅ read_head.
+Proof.
+  unfold denote at 1, read_loop; rewrite source_raw_until, source_raw_bind,
+    source_raw_read_head.
+  unfold read_head; apply AlwaysRegression.vis_cong; intro x.
+  rewrite source_raw_ret; reflexivity.
+Qed.
+
+Lemma read_admissible :
+  admissible (CoCSLSyntax.CRet tt) read_loop managed_empty read_heap List.nil 0.
+Proof.
+  apply admissible_intro.
+  - apply managed_wf_empty.
+  - apply managed_wf_preallocated.
+  - split; intro a; left; reflexivity.
+  - exact I.
+  - cbn; split; [exact I|intro; exact I].
+  - exact I.
+  - cbn; split; [discriminate|intro; exact I].
+Qed.
+
+(** A successful read retains focus, heap, counter and observations; the
+    continuation is a guard back to the same source loop. *)
+Definition read_Inv (d : OwnedCfg) : Prop :=
+  fst (oc_heap d Parent) 2 = Some 8 /\
+  exists n (v : pool sE Bn (S n)) (g : Vector.t side (S n)) j,
+    oc_pool d = mk_pool (S n) v g (Some j) /\ (g $ j) = Parent /\
+    exists m, (v $ j) ≅ guards m read_head.
+
+Lemma read_initial_Inv : read_Inv read_initial.
+Proof.
+  split; [reflexivity|].
+  exists 1, [denote (CoCSLSyntax.CRet tt); denote read_loop],
+    [Child; Parent], (Fin.FS Fin.F1).
+  split; [reflexivity|split; [reflexivity|exists 0; apply read_loop_unfold]].
+Qed.
+
+Lemma read_alone_Inv : read_Inv read_alone.
+Proof.
+  split; [reflexivity|].
+  exists 0, [denote read_loop], [Parent], Fin.F1.
+  split; [reflexivity|split; [reflexivity|exists 0; apply read_loop_unfold]].
+Qed.
+
+Lemma read_Inv_step d a d' :
+  read_Inv d -> owned_step d a d' -> a = act Parent OARead /\ read_Inv d'.
+Proof.
+  intros (Hcell & n & v & g & j & Hpool & Hg & m & Hm) Hs.
+  unfold owned_step in Hs; rewrite Hpool in Hs; cbn -[focus_step] in Hs.
+  unfold read_head in Hm.
+  apply (focus_step_head_prim d n v g j _ _ m _ _ Hm) in Hs
+    as (k & kind & y & c1 & Hk & Hprim & -> & ->).
+  rewrite Hg in Hprim; cbn in Hprim; rewrite Hcell in Hprim.
+  injection Hprim as <- <- <-; rewrite Hg; split; [reflexivity|].
+  split; [exact Hcell|].
+  exists n, (v @ j := k 8), g, j; split; [reflexivity|split; [exact Hg|]].
+  rewrite Vector.nth_replace_eq; exists 1; cbn.
+  rewrite (Hk 8); apply AlwaysRegression.guard_cong, read_loop_unfold.
+Qed.
+
+Lemma read_Inv_can d : read_Inv d -> exists d', owned_step d (act Parent OARead) d'.
+Proof.
+  intros (Hcell & n & v & g & j & Hpool & Hg & m & Hm).
+  unfold read_head in Hm; eexists; unfold owned_step; rewrite Hpool; cbn -[focus_step].
+  apply (focus_step_head_prim d n v g j _ _ m _ _ Hm).
+  exists (fun _ => Guard (denote read_loop)), OARead, 8, d.
+  split; [intro; reflexivity|split].
+  - rewrite Hg; cbn; rewrite Hcell; reflexivity.
+  - split; [rewrite Hg; reflexivity|reflexivity].
+Qed.
+
+Lemma read_infinite_owned c : read_Inv c -> hAG owned_next hTrue c.
+Proof.
+  intro Hc; apply (hAG_coind _ _ read_Inv); [|exact Hc].
+  intros d HI; split; [exact I|split].
+  - destruct (read_Inv_can d HI) as [d' Hs]; exists d', (act Parent OARead); exact Hs.
+  - intros d' [a Hs]; exact (proj2 (read_Inv_step d a d' HI Hs)).
+Qed.
+
+Theorem read_loop_owned_hag : hAG owned_next hTrue read_initial.
+Proof. apply read_infinite_owned, read_initial_Inv. Qed.
+
+Theorem read_loop_focused_owned_hag : hAG owned_next hTrue read_alone.
+Proof. apply read_infinite_owned, read_alone_Inv. Qed.
+
+Theorem read_loop_projection : owned_equ (project Parent read_initial) read_alone.
+Proof. apply project_init_parent. Qed.
+
+Lemma read_Inv_silent_reach c d :
+  read_Inv c -> clos_refl_trans _ silent_next c d -> read_Inv d.
+Proof.
+  intros HI H; revert HI.
+  induction H as [c d [a [Hs _]]|c|c d e _ IH1 _ IH2]; intro HI.
+  - exact (proj2 (read_Inv_step c a d HI Hs)).
+  - exact HI.
+  - apply IH2, IH1, HI.
+Qed.
+
+Lemma read_Inv_nonterminal d : read_Inv d -> tp_size (oc_pool d) <> 0.
+Proof. intros (_ & n & v & g & j & Hp & _); rewrite Hp; cbn; lia. Qed.
+
+Theorem read_loop_erasure_stuck : is_stuck (erase_owned (instrument_owned read_initial)).
+Proof.
+  intros l T Ht.
+  destruct (erase_owned_trans_forward read_initial l T
+    (admissible_erasable (CoCSLSyntax.CRet tt) read_loop
+      managed_empty read_heap List.nil 0 read_admissible) Ht)
+    as (d & Hd & [(a & d' & Hs & Hl & _)|(Hz & _)]).
+  - pose proof (read_Inv_silent_reach _ _ read_initial_Inv Hd) as HI.
+    destruct (read_Inv_step d a d' HI Hs) as [-> _]; discriminate.
+  - exact (read_Inv_nonterminal d (read_Inv_silent_reach _ _ read_initial_Inv Hd) Hz).
+Qed.
+
+Theorem read_loop_erasure_no_ag :
+  ~ <( {erase_owned (instrument_owned read_initial)}, World.Pure |= AG ⊤ )>.
+Proof.
+  intro H; cdestruct H; destruct Hs as (T & w & Ht).
+  apply ktrans_trans in Ht as (l & Ht & _); exact (read_loop_erasure_stuck l T Ht).
+Qed.
+
+Theorem read_loop_original_stuck :
+  is_stuck (run_nd (CBind (CFork (CoCSLSyntax.CRet tt)) (fun _ => read_loop))
+    (managed_empty ⊎ read_heap, (List.nil, 0))).
+Proof.
+  pose proof (owned_fork_erasure (CoCSLSyntax.CRet tt) (fun _ => read_loop)
+    managed_empty read_heap List.nil 0 read_admissible) as Hsb.
+  step in Hsb; destruct Hsb as [_ Hb]; cbn in Hb.
+  intros l T Ht; destruct (Hb l T Ht) as (l' & T' & Ht' & _ & _).
+  exact (read_loop_erasure_stuck l' T' Ht').
+Qed.
+
+Theorem read_loop_original_no_ag :
+  ~ <( {run_nd (CBind (CFork (CoCSLSyntax.CRet tt)) (fun _ => read_loop))
+    (managed_empty ⊎ read_heap, (List.nil, 0))}, World.Pure |= AG ⊤ )>.
+Proof.
+  intro H; cdestruct H; destruct Hs as (T & w & Ht).
+  apply ktrans_trans in Ht as (l & Ht & _); exact (read_loop_original_stuck l T Ht).
+Qed.
+
+Definition read_again : OwnedCfg := set_pool read_initial
+  (mk_pool 2 [denote (CoCSLSyntax.CRet tt); Guard (denote read_loop)]
+    [Child; Parent] (Some (Fin.FS Fin.F1))).
+
+Lemma read_first_step : owned_step read_initial (act Parent OARead) read_again.
+Proof.
+  change (focus_step read_initial 1
+    [denote (CoCSLSyntax.CRet tt); denote read_loop] [Child; Parent]
+    (Fin.FS Fin.F1) (act Parent OARead) read_again).
+  apply (focus_step_head_prim read_initial 1
+    [denote (CoCSLSyntax.CRet tt); denote read_loop] [Child; Parent]
+    (Fin.FS Fin.F1) _ _ 0 _ _ read_loop_unfold).
+  exists (fun _ => Guard (denote read_loop)), OARead, 8, read_initial.
+  split; [intro; reflexivity|split; [reflexivity|split; reflexivity]].
+Qed.
+
+Lemma read_again_step : owned_step read_again (act Parent OARead) read_again.
+Proof.
+  change (focus_step read_again 1
+    [denote (CoCSLSyntax.CRet tt); Guard (denote read_loop)] [Child; Parent]
+    (Fin.FS Fin.F1) (act Parent OARead) read_again).
+  assert (H : Guard (denote read_loop) ≅ guards 1 read_head).
+  { apply AlwaysRegression.guard_cong, read_loop_unfold. }
+  apply (focus_step_head_prim read_again 1
+    [denote (CoCSLSyntax.CRet tt); Guard (denote read_loop)] [Child; Parent]
+    (Fin.FS Fin.F1) _ _ 1 _ _ H).
+  exists (fun _ => Guard (denote read_loop)), OARead, 8, read_again.
+  split; [intro; reflexivity|split; [reflexivity|split; reflexivity]].
+Qed.
+
+Definition read_forever : Execution OwnedCfg OwnedAction unit :=
+  {| states := fun n => match n with 0 => read_initial | S _ => read_again end;
+     selected := fun _ => act Parent OARead;
+     emitted := fun _ => tt |}.
+
+Theorem read_forever_run : states read_forever 0 = read_initial /\ owned_run read_forever.
+Proof.
+  split; [reflexivity|intros [|n]; cbn [states selected read_forever];
+    [apply read_first_step|apply read_again_step]].
+Qed.
+
+Theorem read_forever_infinitely_reads :
+  infinitely (fun n => selected read_forever n = act Parent OARead).
+Proof. intro n; exists n; split; [lia|reflexivity]. Qed.
+
+Theorem read_forever_not_infinitely_visible :
+  ~ infinitely (fun n => erase_action_label (selected read_forever n) <> None).
+Proof. intro H; destruct (H 0) as (n & _ & Hn); apply Hn; reflexivity. Qed.
+
+End SilentReadTiclRegression.

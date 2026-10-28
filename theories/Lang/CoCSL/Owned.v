@@ -118,6 +118,16 @@ Record OwnedAction := { owner : side; action_kind : OwnedKind }.
 
 Definition act (i : side) (k : OwnedKind) : OwnedAction := {| owner := i; action_kind := k |}.
 
+(** Selection contributes its pre-log scheduler step; its log is erased. *)
+Definition erase_action_label (a : OwnedAction)
+    : option (@label (writerE (CSLObs (nat * nat)))) :=
+  match action_kind a with
+  | OASelect | OAStep => Some τ
+  | OAEmit p n =>
+      Some (obs (Log (inr (stamp p n) : CSLObs (nat * nat))) tt)
+  | _ => None
+  end.
+
 (** A thread reaches the non-guard head [u] after finitely many guards. *)
 Definition headed (t u : thread sE Bn) : Prop := exists n, t ≅ guards n u.
 
@@ -202,6 +212,9 @@ Definition owned_step (c : OwnedCfg) (a : OwnedAction) (c' : OwnedCfg) : Prop :=
   end.
 
 Definition owned_next (c c' : OwnedCfg) : Prop := exists a, owned_step c a c'.
+
+Definition silent_next (c d : OwnedCfg) : Prop :=
+  exists a, owned_step c a d /\ erase_action_label a = None.
 
 (** Progress for an arbitrary transition relation (not the world-indexed
     Kripke [can_step]). *)
@@ -3586,3 +3599,372 @@ Proof.
         eexists _, _. split; [apply (owned_step_sel _ _ _ _ _ _ Hp); exists j; split; reflexivity|].
         split; [reflexivity|exact HT].
 Qed.
+
+(** ** Concrete raw transitions of erasure *)
+
+(** Only the pool's trees vary here: heaps, counters and every returned field
+    are literally the same.  This is deliberately stronger than [owned_equ]. *)
+Local Lemma instrument_owned_slots c n (v w : pool sE Bn n) g f :
+  (forall j, (v $ j) ≅ (w $ j)) ->
+  instrument_owned (set_pool c (mk_pool n v g f)) ≅
+  instrument_owned (set_pool c (mk_pool n w g f)).
+Proof.
+  revert c n v w g f; unfold equ at 2; coinduction R IH.
+  intros c n v w g f Hvw.
+  change (equb eq (elem R)
+    (observe (instrument_owned (set_pool c (mk_pool n v g f))))
+    (observe (instrument_owned (set_pool c (mk_pool n w g f))))).
+  destruct n as [|n].
+  - dependent destruction v; dependent destruction w;
+      cbn [observe instrument_owned _observe set_pool mk_pool oc_pool];
+      constructor; reflexivity.
+  - destruct f as [j|].
+    + pose proof (Hvw j) as Hslot; __step_in_equ Hslot.
+      change (equb eq (equ eq) (observe (v $ j)) (observe (w $ j))) in Hslot.
+      remember (observe (v $ j)) as ov eqn:Hv in Hslot.
+      remember (observe (w $ j)) as ow eqn:Hw in Hslot.
+      destruct Hslot;
+        lazy [observe instrument_owned _observe set_pool mk_pool oc_pool];
+        change (_observe (v $ j)) with (observe (v $ j));
+        change (_observe (w $ j)) with (observe (w $ j));
+        rewrite <- Hv, <- Hw; cbn -[prim_step].
+      * destruct x, y; constructor; intros []; apply IH.
+        apply vector_remove_pointwise; intros; apply Hvw.
+      * constructor.
+      * constructor; apply IH; apply vector_replace_pointwise;
+          [intros; apply Hvw|exact REL].
+      * constructor; intros []; apply IH; apply vector_replace_pointwise;
+          [intros; apply Hvw|exact REL].
+      * destruct e as [ye|[fe|pe]].
+        -- destruct ye; constructor; intros []; apply IH.
+           apply vector_replace_pointwise; [intros; apply Hvw|apply REL].
+        -- destruct fe; constructor; intros []; apply IH.
+           apply vector_cons_pointwise; [apply REL|].
+           apply vector_replace_pointwise; [intros; apply Hvw|apply REL].
+        -- fold (mk_pool (S n) v g (Some j)) (mk_pool (S n) w g (Some j)).
+           fold (set_pool c (mk_pool (S n) v g (Some j)))
+             (set_pool c (mk_pool (S n) w g (Some j))).
+           rewrite (prim_step_set_pool (g $ j) c (mk_pool (S n) v g (Some j)) pe),
+             (prim_step_set_pool (g $ j) c (mk_pool (S n) w g (Some j)) pe).
+           destruct (prim_step (g $ j) c pe) as [[[kind y] c1]|]; cbn;
+             [constructor; intros []; apply IH; apply vector_replace_pointwise;
+               [intros; apply Hvw|apply REL]|constructor].
+      * constructor.
+    + cbn [observe instrument_owned _observe set_pool mk_pool oc_pool].
+      constructor; intro j; step; cbn; constructor; step; cbn; constructor.
+      intros []; cbn [set_pool]; apply (IH c); exact Hvw.
+Qed.
+
+Local Lemma ei_slots c n (v w : pool sE Bn n) g f :
+  (forall j, (v $ j) ≅ (w $ j)) ->
+  EI (set_pool c (mk_pool n v g f)) ≅
+  EI (set_pool c (mk_pool n w g f)).
+Proof. intro H; apply erase_owned_equ, instrument_owned_slots, H. Qed.
+
+Local Lemma ei_focus_guards c n v g j m u :
+  (v $ j) ≅ guards m u ->
+  EI (set_pool c (mk_pool (S n) v g (Some j))) ≅
+  guards m (EI (set_pool c (mk_pool (S n) (v @ j := u) g (Some j)))).
+Proof.
+  revert c v; induction m as [|m IH]; intros c v H.
+  - cbn [guards] in *; apply ei_slots; intro k.
+    destruct (Fin.eq_dec j k) as [->|Hjk].
+    + rewrite Vector.nth_replace_eq; exact H.
+    + rewrite Vector.nth_replace_neq by congruence; reflexivity.
+  - assert (E : EI (set_pool c (mk_pool (S n) v g (Some j))) ≅
+        EI (set_pool c (mk_pool (S n) (v @ j := guards (S m) u) g (Some j)))).
+    { apply ei_slots; intro k; destruct (Fin.eq_dec j k) as [->|Hjk].
+      - rewrite Vector.nth_replace_eq; exact H.
+      - rewrite Vector.nth_replace_neq by congruence; reflexivity. }
+    rewrite E, (ei_guard c n (v @ j := guards (S m) u) g j (guards m u)
+      ltac:(rewrite Vector.nth_replace_eq; reflexivity)).
+    rewrite Vector.replace_replace_eq; apply guard_equ_node.
+    rewrite (IH c (v @ j := guards m u) ltac:(rewrite Vector.nth_replace_eq; reflexivity)).
+    rewrite Vector.replace_replace_eq; reflexivity.
+Qed.
+
+Local Lemma ei_guards_sb m (t : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)) :
+  guards m t ~ t.
+Proof. induction m; cbn [guards]; [reflexivity|rewrite sb_guard; exact IHm]. Qed.
+
+(** A single owned action, with its exact operational response, rather than a
+    resource-equivalent replacement configuration. *)
+Local Lemma erase_owned_action c a d : owned_step c a d ->
+  (erase_action_label a = None -> EI c ~ EI d) /\
+  (forall l, erase_action_label a = Some l ->
+    exists T, trans l (EI c) T /\ T ~ EI d).
+Proof.
+  destruct c as [[sz v g f] an hp ctx bs cnt last]; destruct sz as [|n];
+    intro Hs; cbn in Hs; [contradiction|].
+  set (c := Build_OwnedCfg (mk_pool (S n) v g f) an hp ctx bs cnt last) in *.
+  change (owned_step c a d) in Hs.
+  change ((erase_action_label a = None ->
+    EI (set_pool c (mk_pool (S n) v g f)) ~ EI d) /\
+    (forall l, erase_action_label a = Some l ->
+      exists T, trans l (EI (set_pool c (mk_pool (S n) v g f))) T /\ T ~ EI d)).
+  destruct f as [j|].
+  - change (focus_step c n v g j a d) in Hs.
+    destruct Hs as [(t & [m Hh] & -> & ->)|[(k & [m Hh] & -> & ->)
+      |[(k & [m Hh] & -> & ->)|[([m Hh] & -> & ->)
+      |(Y & e & k & kind & y & c1 & [m Hh] & P & -> & ->)]]]];
+      pose proof (ei_focus_guards c n v g j m _ Hh) as E.
+    + rewrite (ei_step c n (v @ j := Step t) g j t
+        ltac:(rewrite Vector.nth_replace_eq; reflexivity)),
+        Vector.replace_replace_eq in E.
+      split; [discriminate|]; intros l H; inversion H; subst.
+      eexists; split; [rewrite E; apply guards_trans, trans_step|apply sb_guard].
+    + rewrite (ei_yield c n (v @ j := Vis (inl1 Yield : CEff unit) k) g j k
+        ltac:(rewrite Vector.nth_replace_eq; reflexivity)), Vector.replace_replace_eq in E.
+      split; [intro; rewrite E, ei_guards_sb, sb_guard; reflexivity|discriminate].
+    + rewrite (ei_fork c n (v @ j := Vis (inr1 (inl1 Fork) : CEff bool) k) g j k
+        ltac:(rewrite Vector.nth_replace_eq; reflexivity)), Vector.replace_replace_eq in E.
+      split; [intro; rewrite E, ei_guards_sb, sb_guard; reflexivity|discriminate].
+    + rewrite (ei_ret c n (v @ j := Ret tt) g j
+        ltac:(rewrite Vector.nth_replace_eq; reflexivity)), remove_replace in E.
+      split; [intro; rewrite E, ei_guards_sb, sb_guard; reflexivity|discriminate].
+    + rewrite (ei_prim c n (v @ j := Vis (inr1 (inr1 e) : CEff Y) k) g j e k
+        ltac:(rewrite Vector.nth_replace_eq; reflexivity)) in E.
+      rewrite (prim_step_repool _ _ _ _ _ _ _ _ P), erase_owned_log,
+        Vector.replace_replace_eq in E.
+      destruct kind; cbn [erase_action_label act action_kind] in *;
+        try solve [split; [intro; rewrite E, ei_guards_sb, sb_guard; reflexivity|discriminate]].
+      * exfalso; destruct e as [he|[se|we]]; [destruct he|destruct se|destruct we];
+          cbn [prim_step heap_prim ctx_prim emit_prim] in P;
+          repeat match type of P with context [match ?x with _ => _ end] => destruct x end;
+          discriminate.
+      * split; [discriminate|]; intros l H; inversion H; subst.
+        eexists; split; [rewrite E; apply guards_trans, trans_step|apply sb_guard].
+      * split; [discriminate|]; intros l H; inversion H; subst.
+        eexists; split; [rewrite E; apply guards_trans, trans_vis|apply sb_guard].
+  - change (sel_step c n v g a d) in Hs.
+    destruct Hs as (j & -> & ->).
+    split; [discriminate|]; intros l H; inversion H; subst.
+    eexists; split.
+    + rewrite (ei_none c n v g).
+      eapply trans_br; [apply trans_guard, trans_step|reflexivity].
+    + apply ei_guards_sb.
+Qed.
+
+Local Definition erase_forward_result c l
+    (T : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)) : Prop :=
+  exists d, clos_refl_trans OwnedCfg silent_next c d /\
+    ((exists a d', owned_step d a d' /\ erase_action_label a = Some l /\ T ~ EI d') \/
+     (tp_size (oc_pool d) = 0 /\ l = val (joined_state d, tt) /\
+        T ~ (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)))).
+
+Local Lemma erase_result_visible c a d l T :
+  owned_step c a d -> erase_action_label a = Some l -> T ~ EI d ->
+  erase_forward_result c l T.
+Proof.
+  intros Hs Hl HT; exists c; split; [apply rt_refl|left; exists a, d; auto].
+Qed.
+
+Local Lemma erase_result_silent c a d l T :
+  owned_step c a d -> erase_action_label a = None ->
+  erase_forward_result d l T -> erase_forward_result c l T.
+Proof.
+  intros Hs Hl (out & Hpath & Hout); exists out; split; [|exact Hout].
+  eapply rt_trans.
+  - apply rt_step; exists a; split; [exact Hs|exact Hl].
+  - exact Hpath.
+Qed.
+
+(** Removing a source Guard is not an owned action.  Lift the first action
+    of the finite answer back to the original focused slot instead. *)
+Local Lemma erase_result_guard c n v g j t l T :
+  observe (v $ j) = GuardF t ->
+  erase_forward_result (set_pool c (mk_pool (S n) (v @ j := t) g (Some j))) l T ->
+  erase_forward_result (set_pool c (mk_pool (S n) v g (Some j))) l T.
+Proof.
+  intros Hg (d & Hpath & Hout); apply clos_rt_rt1n in Hpath.
+  destruct Hpath as [|mid out [a [Hs Hl]] Hrest].
+  - destruct Hout as [(a & d' & Hs & Hl & HT)|(Hz & _)]; [|discriminate Hz].
+    eapply erase_result_visible; [eapply strip_step; eassumption|exact Hl|exact HT].
+  - exists out; split; [|exact Hout].
+    eapply rt_trans.
+    + apply rt_step; exists a; split; [eapply strip_step; eassumption|exact Hl].
+    + apply clos_rt1n_rt, Hrest.
+Qed.
+
+Local Lemma ei_terminal c : tp_size (oc_pool c) = 0 -> EI c ≅ Ret (joined_state c, tt).
+Proof.
+  intro Hz; destruct (oc_pool c) as [n v g f] eqn:Hp; cbn in Hz; subst n.
+  rewrite (instr_nil c v g f Hp), erase_owned_ret; reflexivity.
+Qed.
+
+(** Every non-immediate erasure head is one concrete silent action or one
+    source Guard.  In both cases the raw interpreter exposes one Guard. *)
+Local Lemma erase_owned_head c :
+  (forall l T, trans l (EI c) T -> erase_forward_result c l T) \/
+  exists d, EI c ≅ Guard (EI d) /\
+    (erasable c -> erasable d /\
+      forall l T, erase_forward_result d l T -> erase_forward_result c l T).
+Proof.
+  rewrite <- (set_pool_eta c).
+  destruct (oc_pool c) as [[|n] v g f] eqn:Hp.
+  - left; intros l T HT; rewrite (ei_terminal (set_pool c (mk_pool 0 v g f)) eq_refl) in HT.
+    apply trans_ret_inv in HT as [ET Hl].
+    exists (set_pool c (mk_pool 0 v g f)); split; [apply rt_refl|right].
+    split; [reflexivity|split; [exact Hl|rewrite ET; reflexivity]].
+  - destruct f as [j|].
+    + destruct (observe (v $ j)) as [r| |t|t|Y e k|Y b k] eqn:H.
+      * destruct r; right.
+        exists (set_pool c (mk_pool n (v -- j) (g -- j) None)); split; [apply ei_ret, H|].
+        assert (Hs : owned_step (set_pool c (mk_pool (S n) v g (Some j)))
+          (act (g $ j) OAReturn) (set_pool c (mk_pool n (v -- j) (g -- j) None))).
+        { right; right; right; left; split; [exact (headed_obs _ _ H)|split; reflexivity]. }
+        intro He; split; [exact (erasable_step _ _ _ He Hs)|].
+        intros; eapply erase_result_silent; [exact Hs|reflexivity|eassumption].
+      * left; intros l T HT; rewrite (ei_stuck c n v g j H) in HT.
+        exfalso; exact (trans_stuck_inv HT).
+      * left; intros l T HT; rewrite (ei_step c n v g j t H) in HT.
+        apply trans_step_inv in HT as [ET Hl].
+        eapply erase_result_visible with (a := act (g $ j) OAStep).
+        -- left; exists t; split; [exact (headed_obs _ _ H)|split; reflexivity].
+        -- cbn [erase_action_label act action_kind]; now rewrite Hl.
+        -- rewrite ET, sb_guard; reflexivity.
+      * right; exists (set_pool c (mk_pool (S n) (v @ j := t) g (Some j))).
+        split; [apply ei_guard, H|]; intro He; split.
+        -- exact (erasable_guard _ _ _ _ _ _ H He).
+        -- intros; eapply erase_result_guard; eassumption.
+      * destruct e as [ye|[fe|pe]].
+        -- destruct ye; right.
+           exists (set_pool c (mk_pool (S n) (v @ j := k tt) g None)); split; [apply ei_yield, H|].
+           assert (Hs : owned_step (set_pool c (mk_pool (S n) v g (Some j)))
+             (act (g $ j) OAYield) (set_pool c (mk_pool (S n) (v @ j := k tt) g None))).
+           { right; left; exists k; split; [exact (headed_obs _ _ H)|split; reflexivity]. }
+           intro He; split; [exact (erasable_step _ _ _ He Hs)|].
+           intros; eapply erase_result_silent; [exact Hs|reflexivity|eassumption].
+        -- destruct fe; right.
+           exists (set_pool c (mk_pool (S (S n)) (k true :: (v @ j := k false))
+             ((g $ j) :: g) (Some (Fin.FS j)))); split; [apply ei_fork, H|].
+           assert (Hs : owned_step (set_pool c (mk_pool (S n) v g (Some j)))
+             (act (g $ j) OAFork) (set_pool c (mk_pool (S (S n))
+               (k true :: (v @ j := k false)) ((g $ j) :: g) (Some (Fin.FS j))))).
+           { right; right; left; exists k; split; [exact (headed_obs _ _ H)|split; reflexivity]. }
+           intro He; split; [exact (erasable_step _ _ _ He Hs)|].
+           intros; eapply erase_result_silent; [exact Hs|reflexivity|eassumption].
+        -- pose proof (ei_prim c n v g j pe k H) as E.
+           destruct (prim_step (g $ j) (set_pool c (mk_pool (S n) v g (Some j))) pe)
+             as [[[kind y] c1]|] eqn:P.
+           ++ rewrite erase_owned_log in E.
+              assert (Hs : owned_step (set_pool c (mk_pool (S n) v g (Some j)))
+                (act (g $ j) kind) (set_pool c1 (mk_pool (S n) (v @ j := k y) g (Some j)))).
+              { right; right; right; right; exists Y, pe, k, kind, y, c1.
+                split; [exact (headed_obs _ _ H)|split; [exact P|split; reflexivity]]. }
+              destruct kind; cbn [act action_kind] in E.
+              all: try solve [right; eexists; split; [exact E|]; intro He;
+                split; [exact (erasable_step _ _ _ He Hs)|]; intros;
+                eapply erase_result_silent; [exact Hs|reflexivity|eassumption]].
+              ** exfalso; destruct pe as [he|[se|we]]; [destruct he|destruct se|destruct we];
+                   cbn [prim_step heap_prim ctx_prim emit_prim] in P;
+                   repeat match type of P with context [match ?x with _ => _ end] => destruct x end;
+                   discriminate.
+              ** left; intros l T HT; rewrite E in HT; apply trans_step_inv in HT as [ET Hl].
+                 eapply erase_result_visible; [exact Hs|cbn; now rewrite Hl|].
+                 rewrite ET, sb_guard; reflexivity.
+              ** left; intros l T HT; rewrite E in HT.
+                 apply trans_vis_inv in HT as [[] [ET Hl]].
+                 eapply erase_result_visible; [exact Hs|cbn; now rewrite Hl|].
+                 rewrite ET, sb_guard; reflexivity.
+           ++ left; intros l T HT; rewrite E, erase_owned_stuck in HT.
+              exfalso; exact (trans_stuck_inv HT).
+      * left; intros l T HT.
+        rewrite (erase_owned_equ _ _ (instr_br
+          (set_pool c (mk_pool (S n) v g (Some j))) n v g j Y b k eq_refl H)),
+          erase_owned_stuck in HT.
+        exfalso; exact (trans_stuck_inv HT).
+    + left; intros l T HT; rewrite (ei_none c n v g) in HT.
+      apply trans_br_inv in HT as (j & HT).
+      apply trans_guard_inv in HT; apply trans_step_inv in HT as [ET Hl].
+      eapply erase_result_visible with (a := act (g $ j) OASelect).
+      * exists j; split; reflexivity.
+      * cbn [erase_action_label act action_kind]; now rewrite Hl.
+      * rewrite ET; apply ei_guards_sb.
+Qed.
+
+Local Lemma erase_owned_trans_aux l ot oT : trans_ l ot oT ->
+  forall c, erasable c -> go ot ≅ EI c -> erase_forward_result c l (go oT).
+Proof.
+  intro HT; pose proof HT as Horiginal; induction HT; intros cfg He Et;
+    destruct (erase_owned_head cfg) as [Hnow|(d & Ehead & Hnext)].
+  all: try solve [apply Hnow; rewrite <- Et; exact Horiginal].
+  all: pose proof Et as Eg; rewrite Ehead in Eg; __step_in_equ Eg;
+    lazy [observe _observe] in Eg;
+    try solve [inversion Eg].
+  inversion Eg; subst.
+  destruct (Hnext He) as [Hd Hlift]; apply Hlift.
+  eapply IHHT; [exact HT|exact Hd|].
+  transitivity t; [symmetry; apply ctree_eta|exact REL].
+Qed.
+
+Theorem erase_owned_trans_forward c l T :
+  erasable c -> trans l (erase_owned (instrument_owned c)) T ->
+  exists d, clos_refl_trans OwnedCfg silent_next c d /\
+    ((exists a d', owned_step d a d' /\
+        erase_action_label a = Some l /\ T ~ erase_owned (instrument_owned d')) \/
+     (tp_size (oc_pool d) = 0 /\
+        l = val (joined_state d, tt) /\
+        T ~ (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)))).
+Proof.
+  intros He HT; pose proof (erase_owned_trans_aux _ _ _ HT c He
+    ltac:(rewrite <- ctree_eta; reflexivity)) as H.
+  unfold erase_forward_result in H.
+  destruct H as (d & Hp & [(a & d' & Hs & Hl & HB)|(Hz & Hl & HB)]).
+  - exists d; split; [exact Hp|left; exists a, d'; split; [exact Hs|split; [exact Hl|]]].
+    transitivity (go (observe T));
+      [apply equ_sbisim_subrelation; [typeclasses eauto|apply ctree_eta]|exact HB].
+  - exists d; split; [exact Hp|right; split; [exact Hz|split; [exact Hl|]]].
+    transitivity (go (observe T));
+      [apply equ_sbisim_subrelation; [typeclasses eauto|apply ctree_eta]|exact HB].
+Qed.
+
+Lemma erase_owned_silent_path c d :
+  clos_refl_trans OwnedCfg silent_next c d -> EI c ~ EI d.
+Proof.
+  intro H; induction H as [c d [a [Hs Hl]]|c|c d e _ IH1 _ IH2].
+  - exact (proj1 (erase_owned_action c a d Hs) Hl).
+  - reflexivity.
+  - etransitivity; eassumption.
+Qed.
+
+Theorem erase_owned_visible_trans c d a d' l :
+  erasable c -> clos_refl_trans OwnedCfg silent_next c d ->
+  owned_step d a d' -> erase_action_label a = Some l ->
+  exists T, trans l (erase_owned (instrument_owned c)) T /\
+    T ~ erase_owned (instrument_owned d').
+Proof.
+  intros _ Hpath Hs Hl.
+  destruct (proj2 (erase_owned_action d a d' Hs) l Hl) as (U & HU & EU).
+  assert (Eback : EI d ~ EI c) by (symmetry; exact (erase_owned_silent_path c d Hpath)).
+  destruct (sbisim_trans_l _ _ _ _ Eback HU) as (T & HT & ET).
+  exists T; split; [exact HT|symmetry in ET; etransitivity; eassumption].
+Qed.
+
+Theorem erase_owned_terminal_trans c d :
+  erasable c -> clos_refl_trans OwnedCfg silent_next c d ->
+  tp_size (oc_pool d) = 0 ->
+  exists T, trans (val (joined_state d, tt)) (erase_owned (instrument_owned c)) T /\
+    T ~ (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+Proof.
+  intros _ Hpath Hz.
+  assert (HT : trans (val (joined_state d, tt)) (EI d) Stuck).
+  { rewrite (ei_terminal d Hz); apply trans_ret. }
+  assert (Eback : EI d ~ EI c) by (symmetry; exact (erase_owned_silent_path c d Hpath)).
+  destruct (sbisim_trans_l _ _ _ _ Eback HT) as (T & HC & ET).
+  exists T; split; [exact HC|now symmetry].
+Qed.
+
+(** Selection contributes one raw step; finite erased actions contribute none. *)
+Lemma erase_owned_select c n v g :
+  EI (set_pool c (mk_pool (S n) v g None)) ~
+  brS (branchn (S n)) (fun j => EI (set_pool c (mk_pool (S n) v g (Some j)))).
+Proof.
+  rewrite ei_none.
+  apply sbisim_br_id; intro j; rewrite sb_guard; apply sb_step, ei_guards_sb.
+Qed.
+
+Lemma erase_owned_terminal c :
+  tp_size (oc_pool c) = 0 ->
+  EI c ~ (Ret (joined_state c, tt) : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+Proof. intro Hz; rewrite (ei_terminal c Hz); reflexivity. Qed.

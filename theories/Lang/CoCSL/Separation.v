@@ -7,9 +7,11 @@
     own-action clock [weak_next] transports every modality. *)
 From TICL Require Export Lang.CoCSL.Owned.
 From Stdlib Require Import List Lia Arith.PeanoNat Fin Vector Relations
-  Classes.Morphisms Classes.RelationClasses Program.Equality.
+  Classes.Morphisms Classes.RelationClasses Program.Equality
+  Wellfounded.Transitive_Closure.
 From Coinduction Require Import all.
 From TICL Require Import Logic.Kripke Logic.Semantics Logic.Setoid
+  Logic.Simulation Logic.Congruence CTree.Logic.Sim CTree.Logic.Trans
   Utils.Relations Utils.Execution Utils.Pcm.
 
 Import VectorNotations.
@@ -1113,3 +1115,450 @@ Proof.
   - exact (hproper_transport _ _ _ (hEG_proper P' HP')
       (project_init_parent child (k tt) h h' ctx base) HPa).
 Qed.
+
+(** ** Original TICL judgments and the erased action clock *)
+
+Import CTreeNotations TiclNotations.
+Local Open Scope ctree_scope.
+Local Open Scope ticl_scope.
+Local Open Scope nat_scope.
+
+Theorem owned_ticll_erasure c (φ : ticll (writerE (CSLObs (nat * nat)))) w :
+  erasable c -> <( {erase_owned (instrument_owned c)}, w |= φ )> ->
+  <( {interp_schedule_nd sh (tp_size (oc_pool c))
+       (tp_threads (oc_pool c)) (tp_focus (oc_pool c))
+       (joined_state c)}, w |= φ )>.
+Proof.
+  intros He Hφ; eapply ticll_csim; [apply sbisim_csim, owned_erasure, He|exact Hφ].
+Qed.
+
+Theorem owned_ticlr_erasure c
+    (ψ : ticlr (writerE (CSLObs (nat * nat))) (SSig * unit)) w w' :
+  erasable c -> simW owned_result_rel w w' ->
+  <[ {erase_owned (instrument_owned c)}, w |= ψ ]> ->
+  <[ {interp_schedule_nd sh (tp_size (oc_pool c))
+       (tp_threads (oc_pool c)) (tp_focus (oc_pool c))
+       (joined_state c)}, w' |= {framer owned_result_rel ψ} ]>.
+Proof.
+  intros He HW Hψ; eapply ticlr_csim;
+    [apply sbisim_csim, owned_erasure, He|exact HW|exact Hψ].
+Qed.
+
+Local Lemma silent_owned_reach c d :
+  clos_refl_trans _ silent_next c d -> clos_refl_trans _ owned_next c d.
+Proof.
+  induction 1 as [c d (a & Hs & _)|c|c d e _ IH1 _ IH2].
+  - apply rt_step; exists a; exact Hs.
+  - apply rt_refl.
+  - eapply rt_trans; eassumption.
+Qed.
+
+Local Lemma owned_reach_before c d e :
+  clos_refl_trans _ owned_next c d ->
+  clos_trans _ (fun y x => owned_next x y) e d ->
+  clos_trans _ (fun y x => owned_next x y) e c.
+Proof.
+  induction 1 as [c d Hs|c|c d f _ IH1 _ IH2]; intro H.
+  - eapply t_trans; [exact H|now apply t_step].
+  - exact H.
+  - apply IH1, IH2, H.
+Qed.
+
+Local Lemma erased_visible_world a l
+    (t u : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)) w :
+  erase_action_label a = Some l -> not_done w -> trans l t u ->
+  exists w', |t, w| ↦ |u, w'| /\ not_done w'.
+Proof.
+  intros HL Hw HT; destruct a as [i kind]; destruct kind; cbn in HL;
+    try discriminate; injection HL as <-.
+  - exists w; split; [now apply KtransTau|exact Hw].
+  - exists w; split; [now apply KtransTau|exact Hw].
+  - exists (World.Obs (Log (inr (stamp payload global_index) : CSLObs (nat * nat))) tt).
+    split; [now apply KtransObs|constructor].
+Qed.
+
+(** Inversion keeps exact configurations; only the computed residual uses
+    ordinary bisimulation.  In particular this does not use [owned_equ]. *)
+Local Lemma erased_ktrans_forward c w T w' :
+  erasable c -> |erase_owned (instrument_owned c), w| ↦ |T, w'| ->
+  exists d, clos_refl_trans _ silent_next c d /\
+    ((exists a d', owned_step d a d' /\
+        T ~ erase_owned (instrument_owned d') /\ not_done w') \/
+     (terminal d /\ done_with (fun r _ => r = (joined_state d, tt)) w')).
+Proof.
+  intros He HT.
+  change (ktrans_ (erase_owned (instrument_owned c)) w T w') in HT.
+  dependent destruction HT;
+    destruct (erase_owned_trans_forward c _ _ He ltac:(eassumption))
+      as (d & Hp & [(a & d' & Hs & HL & HB)|(Ht & HL & HB)]);
+    try discriminate;
+    try solve [exfalso; destruct a as [i kind]; destruct kind; cbn in HL; discriminate].
+  - exists d; split; [exact Hp|left; exists a, d'; auto].
+  - exists d; split; [exact Hp|left; exists a, d'; repeat split; auto; constructor].
+  - dependent destruction HL; exists d; split; [exact Hp|].
+    right; split; [exact Ht|constructor; reflexivity].
+  - dependent destruction HL; exists d; split; [exact Hp|right; split; [exact Ht|constructor; reflexivity]].
+Qed.
+
+Local Lemma erased_terminal_world
+    (t u : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)) (r : SSig * unit) w :
+  not_done w -> trans (val r) t u ->
+  exists w', |t, w| ↦ |u, w'| /\ done_with (fun r' _ => r' = r) w'.
+Proof.
+  intros Hw HT; destruct Hw as [|Y e v].
+  - exists (Done r); split; [now apply KtransDone|constructor; reflexivity].
+  - exists (Finish e v r); split; [now apply KtransFinish|constructor; reflexivity].
+Qed.
+
+Local Lemma haf_done_next Q c d :
+  hAF owned_next (hDone Q) c -> owned_next c d -> hAF owned_next (hDone Q) d.
+Proof.
+  revert c; apply (hAU_ind owned_next hTrue (hDone Q)
+    (fun c => owned_next c d -> hAF owned_next (hDone Q) d));
+    [intros c [Ht _] [a Hs]; exfalso; exact (owned_step_empty c a d Ht Hs)
+    |intros c _ _ H _ Hs; exact (H d Hs)].
+Qed.
+
+Local Lemma haf_done_reach Q c d :
+  clos_refl_trans _ owned_next c d ->
+  hAF owned_next (hDone Q) c -> hAF owned_next (hDone Q) d.
+Proof.
+  induction 1 as [c d Hs|c|c d e _ IH1 _ IH2]; intro H;
+    [exact (haf_done_next Q c d H Hs)|exact H|exact (IH2 (IH1 H))].
+Qed.
+
+Local Lemma haf_done_terminal Q c :
+  hAF owned_next (hDone Q) c -> terminal c -> Q c.
+Proof.
+  revert c; apply (hAU_ind owned_next hTrue (hDone Q) (fun c => terminal c -> Q c)).
+  - intros c [_ HQ] _; exact HQ.
+  - intros c _ [d [a Hs]] _ _ Ht; exfalso; exact (owned_step_empty c a d Ht Hs).
+Qed.
+
+Local Lemma haf_done_acc Q c :
+  hAF owned_next (hDone Q) c -> Acc (fun d c => owned_next c d) c.
+Proof.
+  revert c; apply (hAU_ind owned_next hTrue (hDone Q)
+    (fun c => Acc (fun d c => owned_next c d) c)).
+  - intros c [Ht _]; constructor; intros d [a Hs]; exfalso;
+      exact (owned_step_empty c a d Ht Hs).
+  - intros c _ _ _ IH; constructor; exact IH.
+Qed.
+
+(** A finite owned proof supplies a raw frontier, even when its endpoint
+    is already terminal: the latter still performs the raw value step. *)
+Local Lemma haf_done_frontier Q c :
+  hAF owned_next (hDone Q) c ->
+  exists d, clos_refl_trans _ silent_next c d /\
+    (terminal d \/ exists a d' l, owned_step d a d' /\ erase_action_label a = Some l).
+Proof.
+  revert c; apply (hAU_ind owned_next hTrue (hDone Q)
+    (fun c => exists d, clos_refl_trans _ silent_next c d /\
+      (terminal d \/ exists a d' l, owned_step d a d' /\ erase_action_label a = Some l))).
+  - intros c [Ht _]; exists c; split; [apply rt_refl|now left].
+  - intros c _ [d [a Hs]] _ IH.
+    destruct (erase_action_label a) as [l|] eqn:HL.
+    + exists c; split; [apply rt_refl|right; exists a, d, l; now split].
+    + destruct (IH d (ex_intro _ a Hs)) as (e & Hp & Hf).
+      exists e; split; [|exact Hf].
+      eapply rt_trans with (y := d); [apply rt_step; exists a; now split|exact Hp].
+Qed.
+
+Local Lemma haf_done_can_raw Q c w :
+  erasable c -> not_done w -> hAF owned_next (hDone Q) c ->
+  can_step (erase_owned (instrument_owned c)) w.
+Proof.
+  intros He Hw HA; destruct (haf_done_frontier Q c HA) as (d & Hp & [Ht|(a & d' & l & Hs & HL)]).
+  - destruct (erase_owned_terminal_trans c d He Hp Ht) as (T & HT & _).
+    destruct (erased_terminal_world _ _ _ _ Hw HT) as (w' & HW & _); now exists T, w'.
+  - destruct (erase_owned_visible_trans c d a d' l He Hp Hs HL) as (T & HT & _).
+    destruct (erased_visible_world a l _ _ _ HL Hw HT) as (w' & HW & _); now exists T, w'.
+Qed.
+
+Theorem owned_haf_done_ticl (Q : SSig * unit -> Prop) c w :
+  erasable c -> not_done w -> Proper (owned_result_rel ==> iff) Q ->
+  hAF owned_next (hDone (fun d => Q (joined_state d, tt))) c ->
+  <[ {erase_owned (instrument_owned c)}, w |= AF done {fun r _ => Q r} ]>.
+Proof.
+  intros He Hw _ HA.
+  pose proof (Acc_clos_trans _ _ _ (haf_done_acc _ c HA)) as Hacc.
+  assert (H : forall d, Acc (clos_trans _ (fun y x => owned_next x y)) d ->
+      forall (t : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)) z,
+      t ~ erase_owned (instrument_owned d) -> erasable d -> not_done z ->
+      hAF owned_next (hDone (fun d => Q (joined_state d, tt))) d ->
+      auc (entailsL (SSig * unit) (CNow (fun _ => True)))
+        (entailsR (CDone (fun r _ => Q r))) t z).
+  { intros d Hacc0; induction Hacc0 as [d _ IH]; intros t z HB He0 Hz HA0.
+    apply StepA; split; [split; [exact I|exact Hz]|split].
+    - pose proof (haf_done_can_raw _ d z He0 Hz HA0) as HC; now rewrite HB.
+    - intros T z' HT.
+      destruct (ktrans_semiproper _ _ _ _ _ HB HT) as (U & HU & HTU).
+      destruct (erased_ktrans_forward d z U z' He0 HU)
+        as (f & Hp & [(a & f' & Hs & HUf & Hz')|(Ht & HD)]).
+      + assert (Hr : clos_refl_trans _ owned_next d f) by now apply silent_owned_reach.
+        apply (IH f'); [eapply owned_reach_before; [exact Hr|apply t_step; exists a; exact Hs]| | |exact Hz'|].
+        * etransitivity; eassumption.
+        * eapply erasable_step; [exact (erasable_reach d f He0 Hr)|exact Hs].
+        * eapply haf_done_next; [exact (haf_done_reach _ d f Hr HA0)|exists a; exact Hs].
+      + assert (HQf : Q (joined_state f, tt)).
+        { exact (haf_done_terminal _ f
+            (haf_done_reach _ d f (silent_owned_reach d f Hp) HA0) Ht). }
+        apply MatchA; rewrite ticlr_done; destruct HD; constructor; subst; exact HQf. }
+  rewrite unfold_entailsR; exact (H c Hacc _ w (reflexivity _) He Hw HA).
+Qed.
+
+Theorem owned_hef_done_ticl (Q : SSig * unit -> Prop) c w :
+  erasable c -> not_done w -> Proper (owned_result_rel ==> iff) Q ->
+  hEF owned_next (hDone (fun d => Q (joined_state d, tt))) c ->
+  <[ {erase_owned (instrument_owned c)}, w |= EF done {fun r _ => Q r} ]>.
+Proof.
+  intros He Hw _ HE.
+  rewrite unfold_entailsR.
+  refine ((hEU_ind owned_next hTrue (hDone (fun d => Q (joined_state d, tt)))
+    (fun d => forall start, erasable start -> clos_refl_trans _ silent_next start d ->
+      forall w, not_done w ->
+      euc (entailsL (SSig * unit) (CNow (fun _ => True)))
+        (entailsR (CDone (fun r _ => Q r))) (erase_owned (instrument_owned start)) w)
+    _ _ c HE) c He (rt_refl _ _ c) w Hw).
+  - intros d [Ht HQ] start He0 Hp z Hz.
+    destruct (erase_owned_terminal_trans start d He0 Hp Ht) as (T & HT & _).
+    destruct (erased_terminal_world _ _ _ _ Hz HT) as (z' & HW & HD).
+    apply StepE; split; [now split|exists T, z'; split; [exact HW|]].
+    apply MatchE; rewrite ticlr_done; destruct HD; constructor; subst; exact HQ.
+  - intros d d' _ [a Hs] _ IH start He0 Hp z Hz.
+    destruct (erase_action_label a) as [l|] eqn:HL.
+    + destruct (erase_owned_visible_trans start d a d' l He0 Hp Hs HL) as (T & HT & HB).
+      destruct (erased_visible_world a l _ _ _ HL Hz HT) as (z' & HW & Hz').
+      apply StepE; split; [now split|exists T, z'; split; [exact HW|]].
+      rewrite HB; apply (IH d'); [|apply rt_refl|exact Hz'].
+      eapply erasable_step; [apply (erasable_reach start d He0), silent_owned_reach, Hp|exact Hs].
+    + apply (IH start He0); [|exact Hz].
+      eapply rt_trans; [exact Hp|apply rt_step; exists a; auto].
+Qed.
+
+Local Lemma hag_owned_reach I c d :
+  clos_refl_trans _ owned_next c d -> hAG owned_next I c -> hAG owned_next I d.
+Proof.
+  induction 1 as [c d Hs|c|c d e _ IH1 _ IH2]; intro HG.
+  - apply hAG_unfold in HG as (_ & _ & HN); exact (HN d Hs).
+  - exact HG.
+  - exact (IH2 (IH1 HG)).
+Qed.
+
+Local Lemma hag_visible_frontier I rank :
+  (forall d a d', I d -> owned_step d a d' ->
+    erase_action_label a = None -> rank d' < rank d) ->
+  forall c, hAG owned_next I c ->
+  exists d a d' l, clos_refl_trans _ silent_next c d /\
+    owned_step d a d' /\ erase_action_label a = Some l.
+Proof.
+  intros Hrank.
+  assert (H : forall bound c, rank c < bound -> hAG owned_next I c ->
+    exists d a d' l, clos_refl_trans _ silent_next c d /\
+      owned_step d a d' /\ erase_action_label a = Some l).
+  { induction bound as [|bound IH]; intros c Hbound HG; [lia|].
+    apply hAG_unfold in HG as (HI & [d [a Hs]] & HN).
+    destruct (erase_action_label a) as [l|] eqn:HL.
+    - exists c, a, d, l; split; [apply rt_refl|auto].
+    - destruct (IH d ltac:(pose proof (Hrank c a d HI Hs HL); lia)
+        (HN d (ex_intro _ a Hs))) as (f & b & f' & l & Hp & Hb & Hbl).
+      exists f, b, f', l; split; [|auto].
+      eapply rt_trans with (y := d); [apply rt_step; exists a; now split|exact Hp]. }
+  intros c HG; apply (H (S (rank c)) c); [lia|exact HG].
+Qed.
+
+Theorem owned_hag_ticl (I : hprop) (rank : OwnedCfg -> nat) c w :
+  erasable c -> not_done w -> hproper I ->
+  (forall d a d', I d -> owned_step d a d' ->
+     erase_action_label a = None -> rank d' < rank d) ->
+  hAG owned_next I c -> <( {erase_owned (instrument_owned c)}, w |= AG ⊤ )>.
+Proof.
+  intros He Hw _ Hrank HG.
+  set (Z := fun (t : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit))
+    (z : World (writerE (CSLObs (nat * nat)))) =>
+    not_done z /\ exists d, erasable d /\ hAG owned_next I d /\
+      t ~ erase_owned (instrument_owned d)).
+  rewrite unfold_entailsL.
+  apply (leq_gfp (agcF (entailsL (SSig * unit) (CNow (fun _ => True)))) Z).
+  - intros t z (Hz & d & He0 & HG0 & HB).
+    change ((True /\ not_done z) /\ can_step t z /\
+      forall T z', |t, z| ↦ |T, z'| -> Z T z').
+    split; [now split|split].
+    + destruct (hag_visible_frontier I rank Hrank d HG0) as (f & a & f' & l & Hp & Hs & HL).
+      destruct (erase_owned_visible_trans d f a f' l He0 Hp Hs HL) as (T & HT & _).
+      destruct (erased_visible_world a l _ _ _ HL Hz HT) as (z' & HW & _).
+      destruct (ktrans_semiproper _ _ _ _ _ (symmetry HB) HW) as (U & HU & _).
+      now exists U, z'.
+    + intros T z' HT.
+      destruct (ktrans_semiproper _ _ _ _ _ HB HT) as (U & HU & HTU).
+      destruct (erased_ktrans_forward d z U z' He0 HU)
+        as (f & Hp & [(a & f' & Hs & HUf & Hz')|(Ht & _) ]).
+      * split; [exact Hz'|exists f']; split; [|split].
+        -- eapply erasable_step; [apply (erasable_reach d f He0), silent_owned_reach, Hp|exact Hs].
+        -- pose proof (hag_owned_reach I d f (silent_owned_reach d f Hp) HG0) as HGf.
+           apply hAG_unfold in HGf as (_ & _ & HN).
+           exact (HN f' (ex_intro _ a Hs)).
+        -- etransitivity; eassumption.
+      * pose proof (hag_owned_reach I d f (silent_owned_reach d f Hp) HG0) as HGf.
+        apply hAG_unfold in HGf as (_ & [f' [a Hs]] & _).
+        exfalso; exact (owned_step_empty f a f' Ht Hs).
+  - split; [exact Hw|exists c; split; [exact He|split; [exact HG|reflexivity]]].
+Qed.
+
+Local Lemma owned_run_interval (e : Execution OwnedCfg OwnedAction unit) :
+  owned_run e -> forall n len,
+  clos_refl_trans _ owned_next (states e n) (states e (n + len)).
+Proof.
+  intros Hrun n len; induction len as [|len IH].
+  - rewrite Nat.add_0_r; apply rt_refl.
+  - eapply rt_trans; [exact IH|].
+    replace (n + S len) with (S (n + len)) by lia.
+    apply rt_step; exists (selected e (n + len)); apply Hrun.
+Qed.
+
+Local Lemma owned_run_silent_interval (e : Execution OwnedCfg OwnedAction unit) :
+  owned_run e -> forall n len,
+  (forall j, n <= j < n + len -> erase_action_label (selected e j) = None) ->
+  clos_refl_trans _ silent_next (states e n) (states e (n + len)).
+Proof.
+  intros Hrun n len; induction len as [|len IH]; intro Hall.
+  - rewrite Nat.add_0_r; apply rt_refl.
+  - eapply rt_trans; [apply IH; intros; apply Hall; lia|].
+    replace (n + S len) with (S (n + len)) by lia.
+    apply rt_step; exists (selected e (n + len)); split; [apply Hrun|apply Hall; lia].
+Qed.
+
+Local Lemma owned_run_visible_frontier (e : Execution OwnedCfg OwnedAction unit) :
+  owned_run e -> infinitely (fun n => erase_action_label (selected e n) <> None) ->
+  forall n, exists m l, n <= m /\ erase_action_label (selected e m) = Some l /\
+    clos_refl_trans _ silent_next (states e n) (states e m).
+Proof.
+  intros Hrun Hinf n.
+  assert (dec : forall j,
+    {erase_action_label (selected e j) <> None} +
+    {~ erase_action_label (selected e j) <> None}).
+  { intro j; destruct (erase_action_label (selected e j));
+      [left; discriminate|right; tauto]. }
+  destruct (Hinf n) as (bound & Hbound & Hvis).
+  destruct (finite_first (fun j => erase_action_label (selected e j) <> None)
+    dec n (S bound - n)) as [Hnone|(m & Hm & Hvisible & Hfirst)].
+  - exfalso; apply (Hnone bound); [lia|exact Hvis].
+  - destruct (erase_action_label (selected e m)) as [l|] eqn:HL; [|contradiction].
+    exists m, l; split; [lia|split; [exact HL|]].
+    replace m with (n + (m - n)) by lia.
+    apply owned_run_silent_interval; [exact Hrun|].
+    intros j Hj; destruct (erase_action_label (selected e j)) eqn:HJ; [|reflexivity].
+    exfalso; apply (Hfirst j); [lia|rewrite HJ; discriminate].
+Qed.
+
+Theorem owned_heg_ticl c w (e : Execution OwnedCfg OwnedAction unit) :
+  erasable c -> not_done w -> states e 0 = c -> owned_run e ->
+  infinitely (fun n => erase_action_label (selected e n) <> None) ->
+  <( {erase_owned (instrument_owned c)}, w |= EG ⊤ )>.
+Proof.
+  intros He Hw H0 Hrun Hinf; subst c.
+  assert (Herasable : forall n, erasable (states e n)).
+  { intro n; apply (erasable_reach (states e 0) _ He).
+    pose proof (owned_run_interval e Hrun 0 n) as Hr; cbn in Hr; exact Hr. }
+  set (Z := fun (t : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit))
+    (z : World (writerE (CSLObs (nat * nat)))) =>
+    not_done z /\ exists n, t ~ erase_owned (instrument_owned (states e n))).
+  rewrite unfold_entailsL.
+  apply (leq_gfp (egcF (entailsL (SSig * unit) (CNow (fun _ => True)))) Z).
+  - intros t z (Hz & n & HB).
+    change ((True /\ not_done z) /\
+      exists T z', |t, z| ↦ |T, z'| /\ Z T z').
+    split; [now split|].
+    destruct (owned_run_visible_frontier e Hrun Hinf n) as (m & l & Hm & HL & Hp).
+    destruct (erase_owned_visible_trans _ _ _ _ l (Herasable n) Hp (Hrun m) HL)
+      as (T & HT & HTm).
+    destruct (erased_visible_world _ l _ _ _ HL Hz HT) as (z' & HW & Hz').
+    destruct (ktrans_semiproper _ _ _ _ _ (symmetry HB) HW) as (U & HU & HTU).
+    exists U, z'; split; [exact HU|split; [exact Hz'|exists (S m)]].
+    etransitivity; [symmetry; exact HTU|exact HTm].
+  - split; [exact Hw|exists 0; reflexivity].
+Qed.
+
+Section ForkTiclBridges.
+  Context (child : CProg unit) (k : unit -> CProg unit)
+    (h h' : ManagedHeap) (ctx : Ctx.Ctx) (base : nat).
+  Let c0 := init_owned child (k tt) h h' ctx base.
+  Let rawFork := run_nd (CBind (CFork child) k) (h ⊎ h', (ctx, base)).
+
+  Theorem fork_ticll_erasure (φ : ticll (writerE (CSLObs (nat * nat)))) :
+    admissible child (k tt) h h' ctx base ->
+    <( {erase_owned (instrument_owned c0)}, Pure |= φ )> ->
+    <( rawFork, Pure |= φ )>.
+  Proof.
+    intros Hadm Hφ; eapply ticll_csim;
+      [apply sbisim_csim, owned_fork_erasure, Hadm|exact Hφ].
+  Qed.
+
+  Theorem fork_ticlr_erasure
+      (ψ : ticlr (writerE (CSLObs (nat * nat))) (SSig * unit)) :
+    admissible child (k tt) h h' ctx base ->
+    <[ {erase_owned (instrument_owned c0)}, Pure |= ψ ]> ->
+    <[ rawFork, Pure |= {framer owned_result_rel ψ} ]>.
+  Proof.
+    intros Hadm Hψ; eapply ticlr_csim;
+      [apply sbisim_csim, owned_fork_erasure, Hadm|constructor|exact Hψ].
+  Qed.
+
+  Theorem fork_haf_done_ticl (Q : SSig * unit -> Prop) :
+    admissible child (k tt) h h' ctx base ->
+    Proper (owned_result_rel ==> iff) Q ->
+    hAF owned_next (hDone (fun d => Q (joined_state d, tt))) c0 ->
+    <[ rawFork, Pure |= AF done {fun r _ => Q r} ]>.
+  Proof.
+    intros Hadm HQ HA.
+    pose proof (owned_haf_done_ticl Q c0 Pure
+      (admissible_erasable _ _ _ _ _ _ Hadm) (NotDonePure) HQ HA) as Hraw.
+    pose proof (fork_ticlr_erasure _ Hadm Hraw) as Hframed.
+    eapply aur_done_mono; [|exact Hframed].
+    intros r w (r0 & HR & Hq); exact (proj1 (HQ r0 r HR) Hq).
+  Qed.
+
+  Theorem fork_hef_done_ticl (Q : SSig * unit -> Prop) :
+    admissible child (k tt) h h' ctx base ->
+    Proper (owned_result_rel ==> iff) Q ->
+    hEF owned_next (hDone (fun d => Q (joined_state d, tt))) c0 ->
+    <[ rawFork, Pure |= EF done {fun r _ => Q r} ]>.
+  Proof.
+    intros Hadm HQ HE.
+    pose proof (owned_hef_done_ticl Q c0 Pure
+      (admissible_erasable _ _ _ _ _ _ Hadm) (NotDonePure) HQ HE) as Hraw.
+    pose proof (fork_ticlr_erasure _ Hadm Hraw) as Hframed.
+    pose proof (impl_ticlr_until (M := ctree) (E := writerE (CSLObs (nat * nat)))
+      (B := Bn) Q_E Q_E eq_refl
+      (CNow (fun _ => True)) (CNow (fun _ => True)) (reflexivity _)
+      (CDone (fun r _ => exists r0, owned_result_rel r0 r /\ Q r0))
+      (CDone (fun r _ => Q r))
+      (done_impl_ticlr
+        (fun r _ => exists r0, owned_result_rel r0 r /\ Q r0)
+        (fun r _ => Q r)
+        ltac:(intros r w (r0 & HR & Hq); exact (proj1 (HQ r0 r HR) Hq)))) as Hmono.
+    exact (Hmono rawFork Pure Hframed).
+  Qed.
+
+  Theorem fork_hag_ticl (I : hprop) (rank : OwnedCfg -> nat) :
+    admissible child (k tt) h h' ctx base -> hproper I ->
+    (forall d a d', I d -> owned_step d a d' ->
+       erase_action_label a = None -> rank d' < rank d) ->
+    hAG owned_next I c0 -> <( rawFork, Pure |= AG ⊤ )>.
+  Proof.
+    intros Hadm HI Hrank HG; apply fork_ticll_erasure; [exact Hadm|].
+    exact (owned_hag_ticl I rank c0 Pure
+      (admissible_erasable _ _ _ _ _ _ Hadm) NotDonePure HI Hrank HG).
+  Qed.
+
+  Theorem fork_heg_ticl (e : Execution OwnedCfg OwnedAction unit) :
+    admissible child (k tt) h h' ctx base ->
+    states e 0 = c0 -> owned_run e ->
+    infinitely (fun n => erase_action_label (selected e n) <> None) ->
+    <( rawFork, Pure |= EG ⊤ )>.
+  Proof.
+    intros Hadm H0 Hrun Hinf; apply fork_ticll_erasure; [exact Hadm|].
+    exact (owned_heg_ticl c0 Pure e
+      (admissible_erasable _ _ _ _ _ _ Hadm) NotDonePure H0 Hrun Hinf).
+  Qed.
+End ForkTiclBridges.

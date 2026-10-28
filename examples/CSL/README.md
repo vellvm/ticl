@@ -400,7 +400,7 @@ fragment.
 `Lang.CoCSL.Separation` reads the shallow TICL operators over any transition
 relation (`hAN`…`hEG`, `hDone`, `hRet`) and defines the anchored split
 `hsep P Q`, which keeps the fork's split instead of choosing a fresh one.
-It proves the splitting family:
+The generic AU/EU/AN/AG/EG splits require `coupled` and proper assertions:
 
 | Global premise | Component conclusion | Extra hypothesis |
 | --- | --- | --- |
@@ -416,6 +416,15 @@ projection starts unfocused, and its initial selection is stripped for AG/EG
 (successor closure) and for heap-view predicates (`fork_h{au,eu}_split_view`),
 never for AN. `examples/CSL/Frame/Separation.v` checks every rule and its
 boundaries on concrete programs.
+
+`owned_ticll_erasure` and `fork_ticll_erasure` transfer original TICL prefix
+formulas to the ND runner unchanged. Suffix bridges retain
+`framer owned_result_rel`; the AF/EF done corollaries discharge it for proper
+result predicates. `erase_owned_silent_path` removes finite erased-silent
+action paths, `erase_owned_select` keeps one scheduler tick, and
+`erase_owned_terminal` keeps the final-value transition. `owned_hag_ticl`
+requires a decreasing silent-action rank separate from lineage release;
+`owned_heg_ticl` requires infinitely many visible actions in its execution.
 
 ## Runtime queue construction
 
