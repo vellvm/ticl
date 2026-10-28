@@ -9,7 +9,9 @@ From TICL Require Import
   CTree.Interp.Yield.Execution
   Logic.Simulation
   CTree.Interp.Yield.RoundRobin
-  Lang.CoCSL.Mod.
+  Lang.CoCSL.Mod
+  Lang.CoCSL.Owned
+  Lang.CoCSL.Separation.
 From TICL Require Import Logic.Setoid CTree.Logic.Iter CTree.Logic.Bind.
 
 From examples Require Import
@@ -22,7 +24,8 @@ From examples Require Import
   HiddenBr
   CSL.Allocator.Execution
   CSL.Allocator.Liveness
-  CSL.Allocator.Counterexamples.
+  CSL.Allocator.Counterexamples
+  CSL.Frame.Separation.
 
 Check TICL.CTree.Interp.CSL.Frame.csim_interp_sh_frame.
 Print Assumptions TICL.CTree.Interp.CSL.Frame.csim_interp_sh_frame.
@@ -182,3 +185,84 @@ Print Assumptions TICL.CTree.Logic.Iter.ag_iter.
 
 Check TICL.CTree.Logic.Bind.aur_bind_r.
 Print Assumptions TICL.CTree.Logic.Bind.aur_bind_r.
+
+Check TICL.Lang.CoCSL.Owned.owned_erasure.
+Print Assumptions TICL.Lang.CoCSL.Owned.owned_erasure.
+
+Check TICL.Lang.CoCSL.Owned.owned_fork_erasure.
+Print Assumptions TICL.Lang.CoCSL.Owned.owned_fork_erasure.
+
+Check TICL.Lang.CoCSL.Owned.instrument_owned_adequate.
+Print Assumptions TICL.Lang.CoCSL.Owned.instrument_owned_adequate.
+
+Check TICL.Lang.CoCSL.Separation.global_hau_split.
+Print Assumptions TICL.Lang.CoCSL.Separation.global_hau_split.
+
+Check TICL.Lang.CoCSL.Separation.global_heu_split.
+Print Assumptions TICL.Lang.CoCSL.Separation.global_heu_split.
+
+Check TICL.Lang.CoCSL.Separation.global_han_split.
+Print Assumptions TICL.Lang.CoCSL.Separation.global_han_split.
+
+Check TICL.Lang.CoCSL.Separation.global_hag_split.
+Print Assumptions TICL.Lang.CoCSL.Separation.global_hag_split.
+
+Check TICL.Lang.CoCSL.Separation.global_heg_fair_split.
+Print Assumptions TICL.Lang.CoCSL.Separation.global_heg_fair_split.
+
+Check TICL.Lang.CoCSL.Separation.global_heg_fair_one.
+Print Assumptions TICL.Lang.CoCSL.Separation.global_heg_fair_one.
+
+Check TICL.Lang.CoCSL.Separation.global_hdone_split.
+Print Assumptions TICL.Lang.CoCSL.Separation.global_hdone_split.
+
+Check TICL.Lang.CoCSL.Separation.global_hret_split.
+Print Assumptions TICL.Lang.CoCSL.Separation.global_hret_split.
+
+Check TICL.Lang.CoCSL.Separation.global_han_owned.
+Print Assumptions TICL.Lang.CoCSL.Separation.global_han_owned.
+
+Check TICL.Lang.CoCSL.Separation.global_hen_owned.
+Print Assumptions TICL.Lang.CoCSL.Separation.global_hen_owned.
+
+Check TICL.Lang.CoCSL.Separation.weak_han_to_local.
+Print Assumptions TICL.Lang.CoCSL.Separation.weak_han_to_local.
+
+Check TICL.Lang.CoCSL.Separation.weak_hen_to_local.
+Print Assumptions TICL.Lang.CoCSL.Separation.weak_hen_to_local.
+
+Check TICL.Lang.CoCSL.Separation.weak_hau_to_local.
+Print Assumptions TICL.Lang.CoCSL.Separation.weak_hau_to_local.
+
+Check TICL.Lang.CoCSL.Separation.weak_heu_to_local.
+Print Assumptions TICL.Lang.CoCSL.Separation.weak_heu_to_local.
+
+Check TICL.Lang.CoCSL.Separation.weak_hag_to_local.
+Print Assumptions TICL.Lang.CoCSL.Separation.weak_hag_to_local.
+
+Check TICL.Lang.CoCSL.Separation.weak_heg_to_local.
+Print Assumptions TICL.Lang.CoCSL.Separation.weak_heg_to_local.
+
+Check TICL.Lang.CoCSL.Separation.weak_hret_to_local.
+Print Assumptions TICL.Lang.CoCSL.Separation.weak_hret_to_local.
+
+Check TICL.Lang.CoCSL.Separation.fork_hau_split.
+Print Assumptions TICL.Lang.CoCSL.Separation.fork_hau_split.
+
+Check TICL.Lang.CoCSL.Separation.fork_heu_split.
+Print Assumptions TICL.Lang.CoCSL.Separation.fork_heu_split.
+
+Check TICL.Lang.CoCSL.Separation.fork_hau_split_view.
+Print Assumptions TICL.Lang.CoCSL.Separation.fork_hau_split_view.
+
+Check TICL.Lang.CoCSL.Separation.fork_han_split.
+Print Assumptions TICL.Lang.CoCSL.Separation.fork_han_split.
+
+Check TICL.Lang.CoCSL.Separation.fork_hag_split.
+Print Assumptions TICL.Lang.CoCSL.Separation.fork_hag_split.
+
+Check TICL.Lang.CoCSL.Separation.fork_heg_fair_split.
+Print Assumptions TICL.Lang.CoCSL.Separation.fork_heg_fair_split.
+
+Check examples.CSL.Frame.Separation.FiniteRegression.fork_run_nd_trace.
+Print Assumptions examples.CSL.Frame.Separation.FiniteRegression.fork_run_nd_trace.

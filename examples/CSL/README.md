@@ -17,7 +17,7 @@ state `SSig`, the observation sum `CSLObs`, the payload-polymorphic handler
 `sh` (heap, context and indexed-emission handlers), thread effects, the
 context get/put laws, the raw physical-free laws, and the effect-level
 select/heap-free Ticl rules. It imports no language or example.
-`Lang.CoCSL.Mod` is the one CSL language: `CExp`, `CProg`, their denotation,
+`Lang.CoCSL.Mod` is the one CoCSL source language: `CExp`, `CProg`, their denotation,
 source execution equations, exact first-yield segment rules, the structural
 Ticl matrix, the Yield-fragment rules, and the source-pool rules; it
 re-exports the interpreter and the generic Yield scheduler/logic layers. Import
@@ -40,7 +40,9 @@ retained as compatibility re-export files.
 | `ICTree.Interp.Yield.SBisim` | Guard alignment (`galigned`), its preservation by erasure/state/round-robin interpretation, guard-equivalent pool congruence |
 | `ICTree.Logic.Yield` | Thread rules over arbitrary handlers; `ClosedTurns`/`RankedTurns` pool invariance and eventuality rules (ND and RR) |
 | `Utils.Maps` | The variable context `Ctx.Ctx` shared by languages and the CSL interpreter |
-| `Lang.CoCSL.Mod` | CSL syntax, denotation, source execution equations, source segment rules, structural matrix, Yield-fragment and source-pool rules |
+| `Lang.CoCSL.Mod` | CoCSL syntax, denotation, source execution equations, source segment rules, structural matrix, Yield-fragment and source-pool rules |
+| `Lang.CoCSL.Owned` | Lineage-tagged action machine, indexed projection, admission/confinement, runner erasure, and logged-action adequacy |
+| `Lang.CoCSL.Separation` | Shallow TICL over owned clocks, anchored `hsep`, and the AU/EU/AN/AG/EG/Done/Ret splitting family |
 
 Concrete address layouts, overlap counterexamples, allocator-specific state
 machines and their fairness/rank arguments, and regression consumers remain in
@@ -369,6 +371,51 @@ existing coinductive predicates; `sequential_inv` exposes its node shape.
 combine both: two processes own cells `1` and `2`, each is verified on its own
 region, framed by the other's, and joined through the prefix equation for
 `run_rr` and `run_nd` (`af_two_procs_*`, `an_two_procs_*`, `ag_two_procs_*`).
+
+## Splitting forked programs
+
+`Lang.CoCSL.Owned` runs a program after its outer fork as an owned action
+machine: every pool slot is tagged with the lineage (`Child`/`Parent`) that
+owns it, and each lineage owns a disjoint `ManagedHeap` reserved at the fork
+(`oc_anchor`), its current heap, emission count, and last local stamp; the
+context is read-only. `owned_step` mirrors the ND scheduler but makes every
+selection, source step, yield, fork, return, and successful primitive one
+labelled action of its owner, so this clock is finer than raw interpreted TICL.
+`project i` keeps one lineage in order; an owned action is one local action of
+the projection (`owned_step_own`) and a foreign one leaves it unchanged
+(`owned_step_foreign`). `weak_next i` (foreign actions, then one own action) is
+the lineage's own-action clock.
+
+`admissible child parent h h' ctx base` requires well-formed disjoint heaps,
+no allocation or context writes (`component_ok`), and every reachable pending
+primitive inside its owner's reservation (`confined`; `addr_ok` is a static
+sufficient condition for literal addresses). Under it,
+`Owned.owned_fork_erasure` relates the erased instrumented machine to
+`run_nd (CBind (CFork child) k)` on the joined heap by
+`sbisim (simL owned_result_rel)`: observations and steps are exact, returned
+heaps agree up to `≈`. Free, CAS, `CVar`, nested forks, and faults are
+reflected in both directions; allocation and `CAssign` stay outside this
+fragment.
+
+`Lang.CoCSL.Separation` reads the shallow TICL operators over any transition
+relation (`hAN`…`hEG`, `hDone`, `hRet`) and defines the anchored split
+`hsep P Q`, which keeps the fork's split instead of choosing a fresh one.
+It proves the splitting family:
+
+| Global premise | Component conclusion | Extra hypothesis |
+| --- | --- | --- |
+| `hAU`/`hEU`/`hAF`/`hEF` of `hsep` | both projections | none |
+| `hAN`/`hAX` of `hsep` | both projections | `SelectionStable` targets, nonempty projections |
+| `hAG` of `hsep` | both projections | `step_closed` invariant with `finite_release` ranks |
+| `hEG` of `hsep` along one execution | both projections | the execution is fair to both lineages |
+| `hDone`/`hRet` of `hsep` | `hDone` both / last-finisher `hRet` disjunction | none |
+| any operator over `weak_next i` | same operator on `project i` | none |
+
+`fork_h{au,eu,an,ax,ag,eg_fair}_split` state these at the outer fork; the child's
+projection starts unfocused, and its initial selection is stripped for AG/EG
+(successor closure) and for heap-view predicates (`fork_h{au,eu}_split_view`),
+never for AN. `examples/CSL/Frame/Separation.v` checks every rule and its
+boundaries on concrete programs.
 
 ## Runtime queue construction
 
