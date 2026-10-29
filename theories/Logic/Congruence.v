@@ -4,12 +4,10 @@ From Stdlib Require Import
   Classes.SetoidClass
   Classes.Morphisms.
 
-From Coinduction Require Import
-  coinduction lattice tactics.
+From Coinduction Require Import all.
 
 From TICL Require Import
   Utils.Utils
-  Events.Core
   Logic.Semantics
   Logic.Kripke
   Logic.Setoid.
@@ -21,31 +19,31 @@ Generalizable All Variables.
 
 (** * Semantic implication of ticll formulas [p ⪟ q] *)
 (** We define a partial order of Ticl formulas (prefix and suffix). This is prefix implication. *)
-Definition impl_ticll {M} `{HE: Encode E} {K: Kripke M E} (X: Type): relation (ticll E) :=
-  fun p q => forall (t: M E HE X) (w: World E), entailsL X p t w -> entailsL X q t w.
+Definition impl_ticll {M} {E B} {K: Kripke M E B} (X: Type): relation (ticll E) :=
+  fun p q => forall (t: M E B X) (w: World E), entailsL X p t w -> entailsL X q t w.
 
 (** * Semantic implication of ticlr formulas [p ⪟ q] *)
 (** We define a partial order of Ticl formulas (prefix and suffix). This is suffix implication. *)
-Definition impl_ticlr {M} `{HE: Encode E} {K: Kripke M E} (X: Type): relation (ticlr E X) :=
-  fun p q => forall (t: M E HE X) (w: World E), entailsR p t w -> entailsR q t w.
+Definition impl_ticlr {M} {E B} {K: Kripke M E B} (X: Type): relation (ticlr E X) :=
+  fun p q => forall (t: M E B X) (w: World E), entailsR p t w -> entailsR q t w.
 
 (** * Semantic equivalence of ticll formulas [p ≃ q] *)
 (** We define a partial order of Ticl formulas (prefix and suffix). This is prefix equivalence. *)
-Definition equiv_ticll {M} `{HE: Encode E} {K: Kripke M E} (X: Type): relation (ticll E) :=
+Definition equiv_ticll {M} {E B} {K: Kripke M E B} (X: Type): relation (ticll E) :=
   fun p q => impl_ticll X p q /\ impl_ticll X q p.
 
 (** * Semantic equivalence of ticlr formulas [p ≃ q] *)
 (** We define a partial order of Ticl formulas (prefix and suffix). This is suffix equivalence. *)
-Definition equiv_ticlr {M} `{HE: Encode E} {K: Kripke M E} (X: Type): relation (ticlr E X) :=
+Definition equiv_ticlr {M} {E B} {K: Kripke M E B} (X: Type): relation (ticlr E X) :=
   fun p q => impl_ticlr X p q /\ impl_ticlr X q p.
 
 (** * Now we develop the equational theory of Ticl formulas. *)
 Section EquivTiclEquivalences.
-  Context `{K: Kripke M E} {X: Type}.
-  Notation impl_ticll := (@impl_ticll M E HE K X).
-  Notation impl_ticlr := (@impl_ticlr M E HE K X).
-  Notation equiv_ticll := (@equiv_ticll M E HE K X).
-  Notation equiv_ticlr := (@equiv_ticlr M E HE K X).
+  Context `{K: Kripke M E B} {X: Type}.
+  Abbreviation impl_ticll := (@impl_ticll M E B K X).
+  Abbreviation impl_ticlr := (@impl_ticlr M E B K X).
+  Abbreviation equiv_ticll := (@equiv_ticll M E B K X).
+  Abbreviation equiv_ticlr := (@equiv_ticlr M E B K X).
 
   (** Implications are a partial order. *)
   Global Instance Reflexive_impl_ticll:
@@ -132,11 +130,11 @@ End EquivTiclEquivalences.
 
 (** * Equations of TICL (prefix versions) *)
 Section EquivTicllFormulas.
-  Context `{KMS: Kripke M E} {X: Type}.
-  Notation MS := (M E HE X).
-  Notation MP := (MS -> World E -> Prop).
-  Notation impl_ticll := (@impl_ticll M E HE KMS X).
-  Notation equiv_ticll := (@equiv_ticll M E HE KMS X).
+  Context `{KMS: Kripke M E B} {X: Type}.
+  Abbreviation MS := (M E B X).
+  Abbreviation MP := (MS -> World E -> Prop).
+  Abbreviation impl_ticll := (@impl_ticll M E B KMS X).
+  Abbreviation equiv_ticll := (@equiv_ticll M E B KMS X).
 
   Arguments impl /.
   (** Rewriting [equiv_ticl] over [entailsF] *)
@@ -224,18 +222,14 @@ Section EquivTicllFormulas.
          with signature (eq ==> impl_ticll ==> impl_ticll)
            as impl_ticll_global.
   Proof.
-    intros [] p q Heq; unfold impl_ticll;
-      coinduction R CIH; intros; step in H.
-    - destruct H as (Hy & Hs & Htr); constructor.
-      + now rewrite Heq in Hy.
-      + rewrite Heq in Hy.
-        split; auto.
-        intros t' w' TR.
-        apply CIH.
-        rewrite unfold_entailsL; auto.
-    - destruct H as (Hy & t' & w' & TR & ?); constructor.
-      + now rewrite Heq in Hy.
-      + exists t', w'; split; auto.
+    intros [] p q Heq; unfold impl_ticll; intros t w; rewrite 2 unfold_entailsL.
+    - assert (H: agcF (entailsL X p) <= agcF (entailsL X q)).
+      { intros R t' w' (Hy & Hs & Htr); split2; auto. }
+      pose proof (@gfp_leq _ _ _ _ H) as G; cbn in G; apply G.
+    - assert (H: egcF (entailsL X p) <= egcF (entailsL X q)).
+      { intros R t' w' (Hy & t_ & w_ & TR & ?); split; auto.
+        exists t_, w_; split; auto. }
+      pose proof (@gfp_leq _ _ _ _ H) as G; cbn in G; apply G.
   Qed.
 
   Global Add Parametric Morphism: Cg
@@ -248,11 +242,11 @@ Section EquivTicllFormulas.
 End EquivTicllFormulas.
 
 Section EquivTiclrFormulas.
-  Context `{KMS: Kripke M E} {X: Type}.
-  Notation MS := (M E HE X).
-  Notation MP := (MS -> World E -> Prop).
-  Notation impl_ticlr := (@impl_ticlr M E HE KMS X).
-  Notation equiv_ticlr := (@equiv_ticlr M E HE KMS X).
+  Context `{KMS: Kripke M E B} {X: Type}.
+  Abbreviation MS := (M E B X).
+  Abbreviation MP := (MS -> World E -> Prop).
+  Abbreviation impl_ticlr := (@impl_ticlr M E B KMS X).
+  Abbreviation equiv_ticlr := (@equiv_ticlr M E B KMS X).
 
   (** Rewriting [impl_ticl], [equiv_ticl] over [entailsR] *)
   Arguments impl /.
@@ -299,40 +293,15 @@ Section EquivTiclrFormulas.
     intros p q [pq qp] p' q' [pq' qp']; split; [rewrite pq', pq | rewrite qp, qp']; reflexivity.
   Qed.
 
-  Global Add Parametric Morphism: CImplR
-         with signature flip (impl_ticll X) ==> impl_ticlr ==> impl_ticlr
-           as impl_ticlr_equiv_implL.
-  Proof.
-    intros p q pq p' q' pq'; unfold impl_ticlr in *; intros.
-    rewrite unfold_entailsR in *; intro Ha; now apply pq', H, pq.
-  Qed.
-
-  Global Add Parametric Morphism: CImplR
-         with signature impl_ticll X ==> flip impl_ticlr ==> flip impl_ticlr
-           as impl_ticlr_equiv_implR.
-  Proof.
-    intros p q pq p' q' pq'; unfold impl_ticlr in *; intros.
-    rewrite unfold_entailsR in *; intro Ha; now apply pq', H, pq.
-  Qed.
-
-  Global Add Parametric Morphism: CImplR
-         with signature equiv_ticll X ==> equiv_ticlr ==> equiv_ticlr
-           as equiv_ticlr_equiv_implR.
-  Proof.
-    intros p q [pq qp] p' q' [pq' qp']; unfold equiv_ticlr; split.
-    - rewrite <- qp, pq'; reflexivity.
-    - rewrite <- pq, qp'; reflexivity.
-  Qed.
-
   Global Add Parametric Morphism: CxR
          with signature eq ==> impl_ticll X ==> impl_ticlr ==> impl_ticlr as impl_ticlr_next.
   Proof.
-    intros [] p q pq p' q' pq'; unfold impl_ticlr; intros.
+    intros [] p q pq p' q' pq'; unfold impl_ticlr; intros t w H; rewrite unfold_entailsR in H |- *.
     - destruct H as (Hp & Hs & H).
-      split2; auto; intros * TR; intuition.
+      split2; auto.
     - destruct H as (Hp & t' & w' & TR & ?).
       split; auto.
-      exists t', w'; intuition.
+      exists t', w'; split; auto.
   Qed.
 
   Global Add Parametric Morphism: CxR
@@ -349,6 +318,39 @@ Section EquivTiclrFormulas.
     - cinduction Hu; rewrite unfold_entailsR; [left; auto | right; split]; eauto.
   Qed.
 
+  (** Pointwise implication transports a native return postcondition. *)
+  Lemma ret_impl_ticlr (P Q : X -> World E -> Prop) :
+    (forall x w, P x w -> Q x w) -> impl_ticlr (CRet P) (CRet Q).
+  Proof.
+    intros HPQ t w H.
+    apply ticlr_ret in H as (x & HR & Hd & Hs & Htr).
+    apply ticlr_ret; exists x; split.
+    - now apply HPQ.
+    - exact (conj Hd (conj Hs Htr)).
+  Qed.
+
+  (** Universal until is monotone in its native return postcondition. *)
+  Lemma aur_ret_mono (t : M E B X) w φ (P Q : X -> World E -> Prop) :
+    (forall x w, P x w -> Q x w) ->
+    <[ t, w |= φ AU ret P ]> -> <[ t, w |= φ AU ret Q ]>.
+  Proof.
+    intros HPQ H.
+    pose proof (impl_ticlr_until Q_A Q_A eq_refl φ φ (reflexivity _) _ _
+      (ret_impl_ticlr P Q HPQ)) as HI.
+    exact (HI t w H).
+  Qed.
+
+  (** Universal termination is monotone in its terminal postcondition. *)
+  Lemma aur_done_mono (t : M E B X) w φ (P Q : X -> World E -> Prop) :
+    (forall x w, P x w -> Q x w) ->
+    auc (entailsL X φ) (fun _ wd => done_with P wd) t w ->
+    auc (entailsL X φ) (fun _ wd => done_with Q wd) t w.
+  Proof.
+    intros HPQ H.
+    eapply auc_mono_r; [|exact H].
+    intros t' wd Hd; exact (done_with_mono P Q HPQ wd Hd).
+  Qed.
+
   Global Add Parametric Morphism: CuR
       with signature eq ==> equiv_ticll X ==> equiv_ticlr ==> equiv_ticlr as equiv_ticlr_until.
   Proof.
@@ -358,21 +360,21 @@ End EquivTiclrFormulas.
 
 (** * Equations of TICL prefix formulas [ticll] *)
 Section TicllEquations.
-  Context `{KMS: Kripke M E} {X: Type}.
-  Notation MS := (M E HE X).
-  Notation MP := (MS -> World E -> Prop).
+  Context `{KMS: Kripke M E B} {X: Type}.
+  Abbreviation MS := (M E B X).
+  Abbreviation MP := (MS -> World E -> Prop).
   Infix "⋖" := (impl_ticll X (K:=KMS)) (at level 58, left associativity).
   Infix "⩸" := (equiv_ticll X (K:=KMS)) (at level 58, left associativity).
 
   (** Unfold a [vis] formula into a [now] formula *)
   Lemma equivl_vis_now: forall φ,
-      <( vis φ )> ⩸ <( now {fun w => exists (e: E) (v: encode e), w = Obs e v /\ φ e v} )>.
+      <( vis φ )> ⩸ <( now {fun w => exists Y (e: E Y) (v: Y), w = Obs e v /\ φ Y e v} )>.
   Proof.
     intros; split; unfold impl_ticll; rewrite ?unfold_entailsF.
     - intros * [[] Hd]; ddestruction Hd.
       split; [|constructor].
-      exists e, v; auto.
-    - intros * [(e & v & -> & Hφ) Hd]; split; auto with ticl.
+      exists Y, e, v; auto.
+    - intros * [(Y & e & v & -> & Hφ) Hd]; split; auto with ticl.
   Qed.
 
   (** [AU] either [q] holds or [p] holds and [p AU q] holds next *)
@@ -563,28 +565,20 @@ Section TicllEquations.
   (** [AG (p /\ q)] is equivalent to [AG p /\ AG q]. *)
   Lemma equivl_and_ag: forall p q,
       <( AG (p /\ q) )> ⩸ <( AG p /\ AG q )>.
-  Proof with eauto.
-    split.
-    - unfold impl_ticll; intros; apply ticll_and; split.
-      + generalize dependent t.
-        generalize dependent w.
-        coinduction R CIH; intros.
-        apply equivl_ag_an, ticll_an in H as (Hp & Hs & Hg).
-        split2...
-        now apply ticll_and in Hp as (Hp & Hq).
-      + generalize dependent t.
-        generalize dependent w.
-        coinduction R CIH; intros.
-        apply equivl_ag_an, ticll_an in H as (Hp & Hs & Hg).
-        split2...
-        now apply ticll_and in Hp as (Hp & Hq).
+  Proof.
+    intros p q; split.
+    - intros t w H; apply ticll_and; split.
+      + eapply impl_ticll_global; [reflexivity | | exact H].
+        intros t' w' Hpq; apply ticll_and in Hpq; exact (proj1 Hpq).
+      + eapply impl_ticll_global; [reflexivity | | exact H].
+        intros t' w' Hpq; apply ticll_and in Hpq; exact (proj2 Hpq).
     - unfold impl_ticll; intros; revert H; revert t w.
       coinduction R CIH; intros.
       destruct H as (Hp & Hq).
       apply equivl_ag_an, ticll_an in Hp as (Hp & Hs & Hgp).
       apply equivl_ag_an, ticll_an in Hq as (Hq & _ & Hgq).
-      split2...
-      apply ticll_and...
+      split2; eauto.
+      apply ticll_and; eauto.
   Qed.
 
   (** [EG (p /\ q)] implies [EG p /\ EG q] but is not equivalent like [AG].
@@ -593,20 +587,12 @@ Section TicllEquations.
   *)
   Lemma impll_and_eg: forall p q,
       <( EG (p /\ q) )> ⋖ <( EG p /\ EG q )>.
-  Proof with eauto.
-    unfold impl_ticll; intros; apply ticll_and; split.
-    + generalize dependent t.
-      generalize dependent w.
-      coinduction R CIH; intros.
-      apply equivl_eg_en, ticll_en in H as (Hp & t' & w' & TR & Hg).
-      split...
-      now apply ticll_and in Hp as (Hp & Hq).
-    + generalize dependent t.
-      generalize dependent w.
-      coinduction R CIH; intros.
-      apply equivl_eg_en, ticll_en in H as (Hp & t' & w' & TR & Hg).
-      split...
-      now apply ticll_and in Hp as (Hp & Hq).
+  Proof.
+    intros p q t w H; apply ticll_and; split.
+    - eapply impl_ticll_global; [reflexivity | | exact H].
+      intros t' w' Hpq; apply ticll_and in Hpq; exact (proj1 Hpq).
+    - eapply impl_ticll_global; [reflexivity | | exact H].
+      intros t' w' Hpq; apply ticll_and in Hpq; exact (proj2 Hpq).
   Qed.
 
   (** [AG (p \/ q)] implies [AG p \/ AG q].
@@ -615,20 +601,12 @@ Section TicllEquations.
   *)
   Lemma impll_or_ag: forall p q,
       <( AG p \/ AG q )> ⋖ <( AG (p \/ q) )>.
-  Proof with eauto.
-    unfold impl_ticll; intros; apply ticll_or in H as [H|H]. 
-    + generalize dependent t.
-      generalize dependent w.
-      coinduction R CIH; intros.
-      apply equivl_ag_an, ticll_an in H as (Hp & Hs & Hg).
-      split2...
-      apply ticll_or; now left. 
-    + generalize dependent t.
-      generalize dependent w.
-      coinduction R CIH; intros.
-      apply equivl_ag_an, ticll_an in H as (Hp & Hs & Hg).
-      split2...
-      apply ticll_or; now right.
+  Proof.
+    intros p q t w H; apply ticll_or in H as [H | H].
+    - eapply impl_ticll_global; [reflexivity | | exact H].
+      intros t' w' Hp; apply ticll_or; left; exact Hp.
+    - eapply impl_ticll_global; [reflexivity | | exact H].
+      intros t' w' Hp; apply ticll_or; right; exact Hp.
   Qed.
 
   (** [EG (p \/ q)] implies [EG p \/ EG q].
@@ -637,44 +615,23 @@ Section TicllEquations.
   *)
   Lemma impll_or_eg: forall p q,
       <( EG p \/ EG q )> ⋖ <( EG (p \/ q) )>.
-  Proof with eauto.
-    unfold impl_ticll; intros; apply ticll_or in H as [H|H]. 
-    + generalize dependent t.
-      generalize dependent w.
-      coinduction R CIH; intros.
-      apply equivl_eg_en, ticll_en in H as (Hp & t' & w' & TR & Hg).
-      split...
-      apply ticll_or; now left.
-    + generalize dependent t.
-      generalize dependent w.
-      coinduction R CIH; intros.
-      apply equivl_eg_en, ticll_en in H as (Hp & t' & w' & TR & Hg).
-      split...
-      apply ticll_or; now right.
+  Proof.
+    intros p q t w H; apply ticll_or in H as [H | H].
+    - eapply impl_ticll_global; [reflexivity | | exact H].
+      intros t' w' Hp; apply ticll_or; left; exact Hp.
+    - eapply impl_ticll_global; [reflexivity | | exact H].
+      intros t' w' Hp; apply ticll_or; right; exact Hp.
   Qed.
 
 End TicllEquations.
 
 (** * Equations of TICL suffix formulas [ticlr] *)
 Section TiclrEquations.
-  Context `{KMS: Kripke M E} {X: Type}.
-  Notation MS := (M E HE X).
-  Notation MP := (MS -> World E -> Prop).
-  Infix "⋖" := (@impl_ticlr M E HE KMS X) (at level 58, left associativity).
-  Infix "⩸" := (@equiv_ticlr M E HE KMS X) (at level 58, left associativity).
-
-  Lemma equivr_finish_done: forall (φ: X -> forall e, encode e -> Prop),
-      <[ finish φ ]> ⩸ <[ done {fun x w =>
-                                  exists (e: E) (v: encode e), w = Obs e v /\ φ x e v} ]>.
-  Proof with eauto with ticl.
-    intros; split; intros t w Hinv.
-    - apply ticlr_done.
-      apply ticlr_finish in Hinv; inv Hinv; constructor;
-        destruct H as (e' & v' & Hinv & ?); ddestruction Hinv...
-    - apply ticlr_finish.
-      apply ticlr_finish in Hinv; inv Hinv; constructor;
-        destruct H as (e' & v' & Hinv & ?); ddestruction Hinv...
-  Qed.
+  Context `{KMS: Kripke M E B} {X: Type}.
+  Abbreviation MS := (M E B X).
+  Abbreviation MP := (MS -> World E -> Prop).
+  Infix "⋖" := (@impl_ticlr M E B KMS X) (at level 58, left associativity).
+  Infix "⩸" := (@equiv_ticlr M E B KMS X) (at level 58, left associativity).
 
   (** Left injection of [p] into [p \/ q] *)
   Lemma equivr_or_injL: forall (p q: ticlr E X),
@@ -726,28 +683,28 @@ Section TiclrEquations.
   *)
   Lemma implr_an_or: forall p q r,
       <[ p AN q \/ p AN r ]> ⋖ <[ p AN (q \/ r) ]>.
-  Proof with auto with ticl.
+  Proof.
     unfold impl_ticlr.
     intros p q r t' w' Hn.
     apply ticlr_or in Hn as [Hn | Hn].
     - apply ticlr_an; 
-        apply ticlr_an in Hn as (Hp & Hs & H); split2...
+        apply ticlr_an in Hn as (Hp & Hs & H); split2; auto with ticl.
       intros t_ w_ TR_.
-      apply ticlr_or; left...
+      apply ticlr_or; left; auto with ticl.
     - apply ticlr_an; 
-        apply ticlr_an in Hn as (Hp & Hs & H); split2...
+        apply ticlr_an in Hn as (Hp & Hs & H); split2; auto with ticl.
       intros t_ w_ TR_.
-      apply ticlr_or; right...
+      apply ticlr_or; right; auto with ticl.
   Qed.
   
   (** [p AU q] is equivalent to [q] or [p] holds now and [p AU q] holds next. *)
   Lemma equivr_au_an: forall (p: ticll E) (q: ticlr E X),
       <[ p AU q ]> ⩸ <[ q \/ (p AN (p AU q)) ]>.
-  Proof with auto with ticl.
+  Proof.
     intros p q; split; intros t w Hind.
     - cinduction Hind.
       + now left.
-      + right; split...
+      + right; split; auto with ticl.
     - apply ticlr_or in Hind as [Hind | Hind].
       + now left.
       + rewrite unfold_entailsR.
@@ -774,7 +731,7 @@ Section TiclrEquations.
       Intuitively, we move the [AN] from the end to the beginning. *)
   Lemma implr_auan_anau: forall (p: ticll E) (q: ticlr E X),
       <[ p AU (p AN q) ]> ⋖ <[ p AN (p AU q) ]>.
-  Proof with auto with ticl.
+  Proof.
     intros p q t w H.
     cinduction H.
     - apply ticlr_an in Hp as (? & ? & ?).
@@ -796,22 +753,22 @@ Section TiclrEquations.
       Intuitively, we move the [EN] from the end to the beginning. *)
   Lemma implr_euen_eneu: forall (p: ticll E) (q: ticlr E X),
       <[ p EU (p EN q) ]> ⋖ <[ p EN (p EU q) ]>.
-  Proof with auto with ticl.
+  Proof.
     intros p q t w H.
     cinduction H.
     - apply ticlr_en in Hp as (? & t' & w' & TR & ?).
       rewrite unfold_entailsR.
-      split...
+      split; auto with ticl.
       exists t', w'.
-      split...
+      split; auto with ticl.
       rewrite equivr_eu_en, ticlr_or.
       now left.
     - rewrite ticlr_en.
-      split...
+      split; auto with ticl.
       exists t0, w0.
-      split...
+      split; auto with ticl.
       rewrite equivr_eu_en, ticlr_or.
-      right...
+      right; auto with ticl.
   Qed.
 
   (** [p AU q] is idempotent. *)
@@ -844,13 +801,6 @@ Section TiclrEquations.
     - apply equivr_eu_en, ticlr_or; right.
       apply ticlr_en; split; eauto.
   Qed.
-
-  (** Modus ponens *)
-  Lemma implr_modus: forall q q' (t: M E HE X) w,
-      <[ t, w |= q -> q' ]> ->
-      <( t, w |= q )> ->
-      <[ t, w |= q' ]>.
-  Proof. eauto. Qed.
 
 End TiclrEquations.
 

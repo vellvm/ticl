@@ -1,0 +1,3 @@
+pin-depends: [
+  ["rocq-ctree.2.0-dev" "git+https://github.com/elefthei/ctrees.git#7470697761fdba323348e8b97e0870ac1ce1cbae"]
+]

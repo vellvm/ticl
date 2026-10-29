@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - main
+      - lang/yield
   pull_request:
     branches:
       - '**'
@@ -15,7 +16,7 @@ jobs:
     strategy:
       matrix:
         rocq_version:
-          - '9.1'
+          - '9.2'
         ocaml_version:
           - '4.14-flambda'
       max-parallel: 4
@@ -29,14 +30,9 @@ jobs:
           coq_version: ${{ matrix.rocq_version }}
           ocaml_version: ${{ matrix.ocaml_version }}
           before_install: |
-            startGroup "Upgrade dune"
-              opam pin add dune 3.21.1 -y
-            endGroup
-            startGroup "Pin coinduction"
-              opam pin add rocq-coinduction https://github.com/elefthei/coinduction.git -y
-            endGroup
-            startGroup "Pin ext-lib"
-              opam pin add rocq-ext-lib https://github.com/elefthei/rocq-ext-lib.git -y
+            startGroup "Configure toolchain"
+              opam pin remove -n -y rocq-stdlib
+              opam pin add -n -y dune 3.23.1
             endGroup
           export: 'OPAMWITHTEST'
         env:

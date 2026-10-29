@@ -1,17 +1,16 @@
 From TICL Require Import
-  ICTree.Core
+  CTree.Core
   Logic.Core
   Utils.Vectors
-  ICTree.Equ
-  ICTree.SBisim
-  ICTree.Logic.AG
-  ICTree.Logic.AF
-  ICTree.Logic.AX
-  ICTree.Logic.State
-  ICTree.Logic.Iter
-  ICTree.Logic.Bind
-  ICTree.Interp.State
-  ICTree.Events.Writer.
+  CTree.Logic.AG
+  CTree.Logic.AF
+  CTree.Logic.AX
+  CTree.Logic.CanStep
+  CTree.Logic.State
+  CTree.Logic.Iter
+  CTree.Logic.Bind
+  CTree.Interp.State.Mod
+  CTree.Events.Writer.
 
 From Stdlib Require Import
   Lia
@@ -19,15 +18,12 @@ From Stdlib Require Import
   Vector
   Classes.SetoidClass.
 
-From ExtLib Require Import
-  Data.Monads.StateMonad.
-
 From Equations Require Import Equations.
 
 Set Implicit Arguments.
 
-Import TiclNotations ICTreeNotations ICtree.
-Local Open Scope ictree_scope.
+Import TiclNotations CTreeNotations CTree.
+Local Open Scope ctree_scope.
 Local Open Scope fin_vector_scope.
 Local Open Scope ticl_scope.
 
@@ -37,81 +33,74 @@ End Cyclic.
 
 Module ElectionDefs(C: Cyclic).
   Import C.
-  Notation Id := (fin' n). 
+  Abbreviation Id := (fin' n). 
   
   (*| Message passing in unidirectional ring |*)
   Variant msg :=
     | Candidate (u: Id)
     | Elected   (u: Id).
 
-  Notation Mails := (vec' n msg).
+  Abbreviation Mails := (vec' n msg).
   
-  Variant netE: Type :=
-    | Recv (from: Id)
-    | Send (from: Id) (m: msg).
+  Variant netE: Type -> Type :=
+    | Recv (from: Id): netE msg
+    | Send (from: Id) (m: msg): netE unit.
 
-  Global Instance encode_netE: Encode netE :=
-    fun e => match e with
-          | Recv _ => msg
-          | Send _ _ => unit
-          end.
+  (** The scheduler's initial pick is a visible finite choice, so the branch signature is [Bn]. *)
+  Definition send: Id -> msg -> ctree netE Bn unit :=
+    fun i p => CTree.trigger (Send i p).
 
-  Definition send: Id -> msg -> ictree netE unit :=
-    fun i p => trigger (Send i p).
-
-  Definition recv: Id -> ictree netE msg :=
-    fun i => trigger (Recv i).
+  Definition recv: Id -> ctree netE Bn msg :=
+    fun i => CTree.trigger (Recv i).
 
   (* Local network instrumented semantics, instrument [Send] *)
   Definition h_netE
-    : netE ~> stateT Mails (ictreeW msg) :=
-    fun e =>
-      mkStateT
-        (fun mails =>
-           match e return ictreeW msg (encode e * Mails) with
-           | Send id msg =>
-               let next := next id in
-               Ret (tt, mails @ next := msg)
-           | Recv id =>
-               let msg := mails $ id in
-               log msg ;;
-               Ret (msg, mails)
-           end).
+    : netE ~> stateT Mails (ctreeW msg Bn) :=
+    fun _ e mails =>
+      match e in netE X return ctreeW msg Bn (Mails * X) with
+      | Send id msg =>
+          let next := next id in
+          Ret (mails @ next := msg, tt)
+      | Recv id =>
+          let msg := mails $ id in
+          log msg ;;
+          Ret (mails, msg)
+      end.
   
   Lemma aur_recv: forall (x: Id) (ms: Mails) w,
       not_done w ->
       <[ {interp_state h_netE (recv x) ms}, w |=
-           AF (AX (done= {(ms $ x, ms)} {Obs (Log (ms $ x)) tt})) ]>.
-  Proof with eauto with ticl.
+           AF (ret= {(ms, ms $ x)} {Obs (Log (ms $ x)) tt}) ]>.
+  Proof.
     intros.
-    unfold recv, trigger.
-    rewrite interp_state_vis; cbn.
+    unfold recv.
+    rewrite interp_state_trigger; cbn.
     rewrite bind_bind.
     apply aur_log.
-    - rewrite bind_ret_l, sb_guard, interp_state_ret.
+    - rewrite bind_ret_l, sb_guard.
       cleft.
-      apply axr_ret...
-    - csplit...
+      apply ret_ret; eauto with ticl.
+    - csplit; eauto with ticl.
   Qed.
 
   Lemma aur_send: forall (x: Id) (ms: Mails) (m: msg) w,
     not_done w ->
      <[ {interp_state h_netE (send x m) ms}, w |=
-         AF (AX (done= {(tt, ms @ (next x) := m)} w)) ]>.
-  Proof with eauto with ticl.
+         AF (ret= {(ms @ (next x) := m, tt)} w) ]>.
+  Proof.
     intros.
-    unfold send, trigger.
-    rewrite interp_state_vis; cbn.
-    rewrite bind_ret_l, sb_guard, interp_state_ret.
+    unfold send.
+    rewrite interp_state_trigger; cbn.
+    rewrite bind_ret_l, sb_guard.
     cleft.
-    apply axr_ret...
+    apply ret_ret; eauto with ticl.
   Qed.
   
   (* Always terminates, conditional on receiving either:
      1. (Candidate candidate), where candidate = id -- I received my own [id] back
      2. (Elected leader) -- Someone else was elected [leader]
    *)
-  Definition elect(id: Id): ictree netE unit :=
+  Definition elect(id: Id): ctree netE Bn unit :=
     m <- recv id ;;
     match m with
     | Candidate candidate =>
@@ -128,9 +117,9 @@ Module ElectionDefs(C: Cyclic).
         send id (Elected leader)
     end.
 
-  (* Uniring scheduler, picks initial [i] nondeterministically, then runs forever *)
-  Definition elect_sched: ictree netE void :=
-    i <- branch n ;;
+  (* Uniring scheduler, picks initial [i] nondeterministically (visible choice), then runs forever *)
+  Definition elect_sched: ctree netE Bn void :=
+    i <- branchS (branchn (S n)) ;;
     iter (fun i =>
             elect i ;;
             Ret (inl (next i))
@@ -155,9 +144,9 @@ Module Election3.
   Module E := ElectionDefs(Cyclic3).
   Import E Cyclic3.
 
-  Notation id1 := Fin.F1.
-  Notation id2 := (Fin.FS (Fin.F1)).
-  Notation id3 := (Fin.FS (Fin.FS (Fin.F1))).
+  Abbreviation id1 := Fin.F1.
+  Abbreviation id2 := (Fin.FS (Fin.F1)).
+  Abbreviation id3 := (Fin.FS (Fin.FS (Fin.F1))).
 
   Notation "{{ a , b , c }}" :=
     (Vector.cons _ a _
@@ -198,38 +187,40 @@ Module Election3.
         end
     | Elected leader => m' = (m @ (next i) := (Elected leader))
     end ->
-    <[ {interp_state h_netE (elect i) m}, {w} |= AF (AX (done= {(tt, m')} {Obs (Log (m $ i)) tt})) ]>.
-  Proof with eauto with ticl.
+    <[ {interp_state h_netE (elect i) m}, {w} |= AF (ret= {(m', tt)} {Obs (Log (m $ i)) tt}) ]>.
+  Proof.
     intros.
     unfold elect.
     eapply aur_state_bind_r_eq.
-    - eapply aur_recv...
+    - eapply aur_recv; eauto with ticl.
     - destruct (m $ i) eqn:Hm.
       + destruct (Fin_compare u i) eqn:Hcomp; subst.
-        * apply aur_send...
+        * apply aur_send; eauto with ticl.
         * cleft.
-          apply axr_state_ret...
-        * apply aur_send...
+          rewrite interp_state_ret.
+          apply ret_ret; eauto with ticl.
+        * apply aur_send; eauto with ticl.
       + subst.
-        apply aur_send...
+        apply aur_send; eauto with ticl.
   Qed.
 
   Ltac vroom :=
     eapply aur_state_bind_r_eq;
     [apply aur_elect; eauto with ticl; try exact mailboxes 
-    | cleft; apply axr_state_ret; eauto with ticl; eexists; intuition; simp next; eauto with ticl].
+    | cleft; first [apply axr_state_ret | rewrite interp_state_ret; apply ret_ret];
+      eauto with ticl; try eexists; intuition; try simp next; eauto with ticl].
 
   Lemma election3_liveness:
     <( {interp_state h_netE elect_sched mailboxes}, Pure |= AF visW {fun msg => msg = Elected id3} )>.
-  Proof with eauto with ticl.
+  Proof.
     intros.
     unfold elect_sched, mailboxes.
     eapply aul_state_bind_r with (R:=fun _ σ' w' => σ' = mailboxes /\ w' = Pure).
     - cright.
-    apply anr_state_br; split.
-      + csplit...
+      unfold branchS; apply anr_state_brS with (y:=Fin.F1); split.
+      + csplit; eauto with ticl.
       + intros.
-        apply aur_state_ret...
+        apply aur_state_ret; eauto with ticl.
     - intros * (-> & ->).
       unfold mailboxes.
       (* iter loop *)
@@ -250,7 +241,7 @@ Module Election3.
                        end eq_refl eq_refl
                    | _ => False
                    end)
-           (f:=fun id ms _ => ranking id ms)...
+           (f:=fun id ms _ => ranking id ms); eauto with ticl.
     + (* Prove it gets to the intermediate state *)
       intros; intuition; subst.
       rename σ into m.
@@ -274,10 +265,10 @@ Module Election3.
         -- right. vroom.
     + (* At checkpoint, now everything is deterministic *)
       intros i w m _ (-> & ? & ->); subst.
-      eapply aul_state_iter_next_eq...
+      eapply aul_state_iter_next_eq; eauto with ticl.
       * vroom.
       * do 2 (eapply aul_state_iter_next_eq; eauto with ticl; [vroom|simp next; cbn]).
-        cleft. csplit...
+        cleft. csplit; eauto with ticl.
   Qed.
   Print Assumptions election3_liveness.
 End Election3.
