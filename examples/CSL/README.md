@@ -318,8 +318,8 @@ outside the scheduler via `instr_exp_erased` would erase their yields.
 The Yield fragment is reasoned about through `scheduled_visible` (Spawn and
 Yield visible), the standalone erased views `instr_exp_erased` and
 `instr_flow_erased` (outer option flow exposed), and `run_nd`: expression rules
-`axr_csl_exp_*`, singleton rules `axr_csl_nd_skip`, `axax_csl_nd_yield` (the
-`AX AX` count is ND-specific), assignment rules `a{u,l}r_csl_{flow,nd}_assign*`,
+`axr_csl_exp_*`, singleton rules `axr_csl_nd_skip` and `axr_csl_nd_yield`
+(the latter retains one real scheduling `AX` before `ret`), assignment rules `a{u,l}r_csl_{flow,nd}_assign*`,
 bind and conditional rules `*_csl_flow_bind*`/`*_csl_flow_if`, and raw-event
 while rules `*_csl_raw_while*` over `World CEff`, which make no scheduled
 liveness claim.
@@ -329,27 +329,34 @@ liveness claim.
 `From TICL Require Import Lang.CoCSL.Frame.` transports proved properties of a
 run to the same program on a heap extended by a disjoint `ManagedHeap` region
 `fr`. The chain is `Logic.Simulation` (Kripke-generic: a conditional
-simulation `csim` preserves every prefix formula and every suffix
-formula, with `done`/`ret` postconditions rewritten by `framer`) →
+simulation `csim` preserves every prefix formula; right-unique return relations
+preserve suffix formulas, with native `ret` postconditions rewritten by `framer`) →
 `CTree.Logic.Sim` (`csim` on ctrees, `Framable okE` trees: no hidden `Br`
 whose branches are not guarded by a visible `Step`, and only `okE` events) →
 `CTree.Interp.CSL.Frame` (`csim_interp_sh_frame`: `interp_state sh u` is a
 conditional simulation between `s` and any `s'` with `frame_rel fr s s'`;
-`ticll_csl_frame`, `ticlr_csl_frame`, `a{n,u}r_csl_frame_done`) →
+`ticll_csl_frame`, `ticlr_csl_frame`, `a{n,u}r_csl_frame_ret`, and semantic `a{n,u}r_csl_frame_done`) →
 `CTree.Interp.Yield.Frame` (both schedulers' erased trees of a `Framable`
 pool are `Framable`) → `Lang.CoCSL.Frame` (`run_{nd,rr}_framable`,
 `run_{nd,rr}_pool_framable`, `instr_flow_framable`, and `frame_post_iff`).
-Clients apply the four generic `CTree.Interp.CSL.Frame` rules directly with
+Clients apply the generic `CTree.Interp.CSL.Frame` rules directly with
 the runner's framability certificate and a `frame_rel` proof; there are no
-runner-specific frame-rule wrappers. Terminal consequence lemmas
-`done_impl_ticlr` and `aur_done_mono` live in `Logic.Congruence` and work for
-any Kripke model.
+runner-specific frame-rule wrappers. Native consequence lemmas
+`ret_impl_ticlr` and `aur_ret_mono` live in `Logic.Congruence`.
+`aur_done_mono` retains the more general semantic terminal-postcondition domain.
 
 `alloc_free p` is required: first-fit allocation is deterministic in the
 absolute heap, so `HAlloc` is excluded from `no_alloc_sE`
 (`~ Framable no_alloc_sE (heap_alloc 1)` in `examples/CSL/Frame/Single.v`).
-A framed `AF done P` becomes `AF done (frame_post fr P)`, which `frame_post_iff`
+A framed `AF ret P` becomes `AF ret (frame_post fr P)`, which `frame_post_iff`
 unfolds to `exists m, m # fr /\ managed_wf m /\ M ≈ m ⊎ fr /\ P ((m, aux), x) w`.
+Suffix syntax has no `done` or `finish` atom: `ret P` holds before the final
+value transition and requires one common return value across every successor.
+Original terminal claims remain explicit `anc`/`auc`/`euc` propositions ending
+in `done_with P`; `ret_done_next`, `af_ret_done`, and `ef_ret_done` recover them
+without changing their final transition. Only fixed-result universal next is
+equivalent to native return (`ret_done_eq_iff`); arbitrary terminal posts may
+accept heterogeneous hidden returns, so this is not a general contraction rule.
 
 The shared walks `exp_ok okE` and `prog_ok okE` structurally over-approximate
 the events of the expression or program. For CAS, `prog_ok` requires `exp_ok`
@@ -367,10 +374,11 @@ over `Sequential` raw threads), with `instr_flow_head`, `instr_flow_read`,
 `instr_flow_write`, `instr_flow_write_single`, and `run_nd_fork_bind` equations.
 `Sequential t` is `BranchFree t /\ Framable user_only t`, reusing the two
 existing coinductive predicates; `sequential_inv` exposes its node shape.
-`examples/CSL/Frame/{Shared,AF,AN,AG}.v` keep the original TICL contracts
-(`af_two_procs_*`, `an_two_procs_*`, `ag_two_procs_*`). Their ND proofs use
-framed prefixes and TICL rules directly. Shared `close_ret` closes returning
-`AF done` goals at any `not_done` world through `aur_ret` and `axr_ret`.
+`examples/CSL/Frame/{Shared,AF,AN,AG}.v` keep the original properties
+(`af_two_procs_*`, `an_two_procs_*`, `ag_two_procs_*`), including four-transition
+AN positives and fault negatives. Their ND proofs use framed native-return
+helpers and TICL rules directly. Shared `close_ret` closes an `AF ret` leaf
+with `ret_ret`; exact semantic corollaries retain the final raw value step.
 
 ## Splitting forked programs
 
@@ -421,11 +429,13 @@ never for AN. `examples/CSL/Frame/Separation.v` checks every rule and its
 boundaries on concrete programs.
 
 `owned_ticll_erasure` and `fork_ticll_erasure` transfer original TICL prefix
-formulas to the ND runner unchanged. Suffix bridges retain
-`framer owned_result_rel`; the AF/EF done corollaries discharge it for proper
-result predicates. `erase_owned_silent_path` removes finite erased-silent
-action paths, `erase_owned_select` keeps one scheduler tick, and
-`erase_owned_terminal` keeps the final-value transition. `owned_hag_ticl`
+formulas to the ND runner unchanged. Suffix bridges retain native `ret` through
+`framer owned_result_rel`. Native `owned_*_ret_ticl`/`fork_*_ret_ticl` AF/EF
+bridges discharge it for proper result predicates; the original `*_done_ticl`
+names retain exact semantic eventual-terminal claims via `af_ret_done`/`ef_ret_done`.
+`erase_owned_silent_path` removes finite erased-silent action paths,
+`erase_owned_select` keeps one scheduler tick, and `erase_owned_terminal`
+identifies an immediate native return before its final-value transition. `owned_hag_ticl`
 requires a decreasing silent-action rank separate from lineage release;
 `owned_heg_ticl` requires infinitely many visible actions in its execution.
 
@@ -550,15 +560,18 @@ The CSL development adds no `Axiom`, `Parameter`, `Admitted`, or `admit`. It
 uses no allocator-choice or finite-support oracle and assumes no initialization
 correctness, fairness, recurrence, or program bisimulation.
 
-The frame-rule and prefix-equation files add no new assumptions either. The
-scheduler stack they build on already depends on `Eqdep.Eq_rect_eq.eq_rect_eq`
+The scheduler stack already depends on `Eqdep.Eq_rect_eq.eq_rect_eq`
 (via ctrees' `trans` wrapper, `trans_equ`) and on
 `FunctionalExtensionality.functional_extensionality_dep` (via the Equations
 unfolding lemmas of `vector_remove` in `Utils.Vectors`, reached through
-`schedule_pool_proper`); `Print Assumptions` of the frame theorems reports
-exactly those two, the same set as `interp_schedule_rr_user_bind` and
-`run_rr_fork_bind`. Within the new layers, `ticll_sim` and `framable_bind`
-are closed under the global context; `ticlr_sim` (worlds with
-`Finish`), `csim_structural` (ctrees' `trans`) and `framable_iter`
-(`unfold_iter`) inherit `eq_rect_eq` exactly as the baseline `axr_ret`,
-`ktrans_finish` and `unfold_iter` do.
+`schedule_pool_proper`). Concrete native suffix bridges now also use functional
+extensionality explicitly: `frameRV_right_unique` and
+`owned_result_rel_right_unique` turn pointwise heap and allocation-table
+equivalence into equality of return values. The heap model itself remains
+pointwise; prefix and semantic terminal bridges need no return-uniqueness premise.
+`Print Assumptions ticlr_csl_frame` reports functional extensionality and
+`eq_rect_eq`, the same set as the existing scheduler baseline.
+Within the generic layers, `ticll_sim` and `framable_bind` are closed under
+the global context; `ticlr_sim` (worlds with `Finish`), `csim_structural`
+(ctrees' `trans`), and `framable_iter` (`unfold_iter`) inherit `eq_rect_eq`,
+as do `ret_ret`, `ktrans_finish`, and `unfold_iter`.

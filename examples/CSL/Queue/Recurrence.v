@@ -92,14 +92,14 @@ Section Recurrence.
       qrep hdr (a :: ns) (v :: vs) h ->
       not_done w ->
       <[ {interp_state (sh (A:=nat)) (rot_body hdr) ((h, allocs), (ctx, c))}, w
-         |= ⊤ AU AX done= {(((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, allocs), (ctx, S c)),
+         |= ⊤ AU ret= {(((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, allocs), (ctx, S c)),
                             @inl unit unit tt)}
               {Obs (Log (inr (stamp v c) : CSLObs nat)) tt} ]>.
   Proof.
     intros ns vs a v h allocs ctx c w Hq Hd.
     rewrite (rot_body_spec hdr a ns v vs h allocs ctx c Hq).
     apply aur_log.
-    - cleft; apply axr_ret; [constructor | split; reflexivity].
+    - cleft; apply ret_ret; [constructor | split; reflexivity].
     - apply ticll_top; assumption.
   Qed.
 
@@ -137,7 +137,7 @@ Section Recurrence.
                                not_done w'
                                /\ <[ {interp_state (sh (A:=nat))
                                        ((fun _: unit => rot_body hdr) tt) ((h, allocs), (ctx, c))}, w
-                                     |= ⊤ AU AX done= {(s', @inl unit unit i')} w' ]>
+                                     |= ⊤ AU ret= {(s', @inl unit unit i')} w' ]>
                                /\ InvQ g' i' s'
                                /\ lexnat g' m)).
       { intros d' Hd' Hlex.

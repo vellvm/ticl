@@ -30,10 +30,8 @@ Local Open Scope ctree_scope.
 
     The lemmas in this section internalize complex inductive and coinductive proof techniques to simple lemma application.
 
-    Two regimes (see [Bind.v]): the [ret]-premised lemmas require the loop body to
-    return a single value at each leaf; the [_done]-suffixed lemmas at the end of the
-    file accept a body that returns several values at once through hidden branching
-    and state the obligation one step later ([φ AN (φ AU ψ)]).
+    The [ret]-premised lemmas require the loop body to return a single value at
+    each leaf; immediate exits establish the suffix postcondition at that leaf.
 *)
 Section IterLemmas.
   Context {E B: Type -> Type}.
@@ -48,7 +46,7 @@ Section IterLemmas.
     (forall (i: I) w,
         Ri i w ->
         <( {k i}, w |= φ AN ψ )> \/
-          <[ {k i}, w |= φ AN done
+          <[ {k i}, w |= ret
                       {fun (lr: I + X) (w': World E) => 
                          exists i', lr = inl i' /\ Ri i' w' /\ Rv i' i}]>) ->
     <( {iter k i}, w |= φ AN ψ )>.
@@ -73,43 +71,6 @@ Section IterLemmas.
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
 
-  (** A loop [iter k i] satisfies suffix [φ AN ψ] if [k i] steps to [φ AN ψ] or
-  there is a finite, decreasing chain (well-founded [Rv]) such that eventually [k i]
-  will step to [φ AN ψ]. *)
-  Lemma anr_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E B (I + X)) (φ: ticll E) (ψ: ticlr E X):
-    well_founded Rv ->
-    Ri i w ->    
-    (forall (i: I) w,
-        Ri i w ->
-        <[ {k i}, w |= φ AN done
-                    {fun (lr: I + X) (w': World E) =>
-                       match lr with
-                       | inl i' => Ri i' w' /\ Rv i' i
-                       | inr r => <[ {Ret r: ctree E B X}, w' |= φ AN ψ ]>
-                       end} ]>) ->
-    <[ {iter k i}, w |= φ AN ψ ]>.
-  Proof.
-    intros WfR Hi H.
-    generalize dependent k.
-    generalize dependent w.
-    induction i using (well_founded_induction WfR).
-    rename H into HindWf.
-    intros.
-    unfold iter, MonadIter_ctree.
-    rewrite unfold_iter.
-    destruct (H _ _ Hi).
-    - eapply anr_bind_r with
-        (R:=(fun (lr : I + X) (w' : World E) =>
-               match lr with
-               | inl i' => Ri i' w' /\ Rv i' i
-               | inr r => <[ {Ret r: ctree E B X}, w' |= φ AN ψ ]>
-               end)); auto with ticl.
-      intros [i' | r] w'; auto with ticl.
-      intros (Hi' & Hv). 
-      rewrite sb_guard.
-      apply HindWf; auto with ticl.
-  Qed.
-
   (** ** Iteration lemmas for the [EN] operator *)
   (** A loop [iter k i] satisfies prefix [φ EN ψ] if [k i] steps to [φ EN ψ] or 
       there is a finite, decreasing chain (well-founded [Rv]) such that eventually [k i]
@@ -120,7 +81,7 @@ Section IterLemmas.
     (forall (i: I) w,
         Ri i w ->
         <( {k i}, w |= φ EN ψ )> \/
-          <[ {k i}, w |= φ EN done {fun (lr: I + X) w' =>
+          <[ {k i}, w |= ret {fun (lr: I + X) w' =>
             exists i', lr = inl i' /\ Ri i' w' /\ Rv i' i} ]>) ->
     <( {iter k i}, w |= φ EN ψ )>.
   Proof.    
@@ -144,43 +105,6 @@ Section IterLemmas.
         apply HindWf; auto with ticl.
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
-
-  (** A loop [iter k i] satisfies suffix [φ EN ψ] if [k i] steps to [φ EN ψ] or
-  there is a finite, decreasing chain (well-founded [Rv]) such that eventually [k i]
-  will step to [φ EN ψ]. *)
-  Lemma enr_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E B (I + X))
-    (φ: ticll E) (ψ: ticlr E X):
-    well_founded Rv ->
-    Ri i w ->    
-    (forall (i: I) w,
-        Ri i w ->
-        <[ {k i}, w |= φ EN done {fun (lr: I + X) w' =>
-                                    match lr with
-                                    | inl i' => Ri i' w' /\ Rv i' i
-                                    | inr r => <[ {Ret r: ctree E B X}, w' |= φ EN ψ ]>
-                                    end}]>) ->
-    <[ {iter k i}, w |= φ EN ψ ]>.
-  Proof.
-    intros WfR Hi H.
-    generalize dependent k.
-    generalize dependent w.
-    induction i using (well_founded_induction WfR).
-    cbn in *.
-    rename H into HindWf.
-    intros.
-    unfold iter, MonadIter_ctree.
-    rewrite unfold_iter.    
-    eapply enr_bind_r with
-      (R:=(fun (lr : I + X) (w' : World E) =>
-             match lr with
-             | inl i' => Ri i' w' /\ Rv i' i
-             | inr r => <[ {Ret r: ctree E B X}, w' |= φ EN ψ ]>
-             end)); auto with ticl.
-    intros [i' | r] w'; auto with ticl.
-    intros (Hi' & Hv).
-    rewrite sb_guard.
-    apply HindWf; auto with ticl.
-  Qed.  
 
   (** ** Iteration lemmas for the [AU] operator *)
   (** A loop [iter k i] satisfies prefix [φ AU ψ] if [k i] eventually terminates with post-condition [R],
@@ -355,7 +279,7 @@ Section IterLemmas.
                     {fun (lr: I + X) (w': World E) =>
                        match lr with
                        | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
-                       | inr r => <[ {Ret r: ctree E B X}, w' |= φ AN ψ ]>
+                       | inr r => <[ {Ret r: ctree E B X}, w' |= ψ ]>
                        end} ]>) ->
     <[ {iter k i}, w |= φ AU ψ ]>.
   Proof.
@@ -375,16 +299,16 @@ Section IterLemmas.
       (R:=(fun (lr : I + X) (w' : World E) =>
              match lr with
              | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
-             | inr r => <[ {Ret r: ctree E B X}, w' |= φ AN ψ ]>
+             | inr r => <[ {Ret r: ctree E B X}, w' |= ψ ]>
              end)); auto with ticl.
-    intros [i' | r] w'; auto with ticl.
+    intros [i' | r] w'.
     - intros (Hi' & Hv). 
       rewrite sb_guard.
       remember (i', w') as y.
       replace i' with (fst y) in Hi' |- * by now subst.
       replace w' with (snd y) in Hi' |- * by now subst.
       apply HindWf; auto with ticl.
-    - apply ticlr_an_au. 
+    - intros Hexit; cleft; exact Hexit.
   Qed.
 
   (** Working with well-founded relations can be tricky, so we provide a lemma that allows to use ranking functions
@@ -397,7 +321,7 @@ Section IterLemmas.
                     {fun (lr: I + X) (w': World E) =>
                        match lr with
                        | inl i' => Ri i' w' /\ f i' w' < f i w
-                       | inr r => <[ {Ret r: ctree E B X}, w' |= φ AN ψ ]>
+                       | inr r => <[ {Ret r: ctree E B X}, w' |= ψ ]>
                        end} ]>) ->
     <[ {iter k i}, w |= φ AU ψ ]>.
   Proof.
@@ -462,7 +386,7 @@ Section IterLemmas.
                     {fun (lr: I + X) (w': World E) =>
                        match lr with
                        | inl i' => not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)
-                       | inr r => <[ {Ret r: ctree E B X}, w' |= φ EN ψ ]>
+                       | inr r => <[ {Ret r: ctree E B X}, w' |= ψ ]>
                        end} ]>) ->
     <[ {iter k i}, w |= φ EU ψ ]>.
   Proof.
@@ -482,16 +406,16 @@ Section IterLemmas.
       (R:=(fun (lr : I + X) (w' : World E) =>
              match lr with
              | inl i' => not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)
-             | inr r => <[ {Ret r: ctree E B X}, w' |= φ EN ψ ]>
+             | inr r => <[ {Ret r: ctree E B X}, w' |= ψ ]>
              end)); auto with ticl.
-    intros [i' | r] w'; auto with ticl.
-    intros (Hd' & Hi' & Hv). 
-    rewrite sb_guard.
-    remember (i', w') as y.
-    replace i' with (fst y) in Hi' |- * by now subst.
-    replace w' with (snd y) in Hi',Hd' |- * by now subst.
-    apply HindWf; auto with ticl.
-    apply ticlr_en_eu.
+    intros [i' | r] w'.
+    - intros (Hd' & Hi' & Hv).
+      rewrite sb_guard.
+      remember (i', w') as y.
+      replace i' with (fst y) in Hi' |- * by now subst.
+      replace w' with (snd y) in Hi',Hd' |- * by now subst.
+      apply HindWf; auto with ticl.
+    - intros Hexit; cleft; exact Hexit.
   Qed.
   
   (** ** Iteration lemmas for the coinductive [AG] operator *)
@@ -585,255 +509,6 @@ Section IterLemmas.
                  (fun (lr: I+X) (w0: World E) => exists i' : I, lr = inl i' /\ R i' w0)).
         * now apply H0'. 
         * intros [l | r] w_ (? & Hinv & HR); inv Hinv.          
-          rewrite sb_guard.
-          apply CIH; auto with ticl.
-  Qed.
-
-  (** ** Regime B: iteration through a body with hidden value choice *)
-  (** The body may return several indices at once ([brn 2 (fun _ => Ret (inl _))]);
-      the termination premise is the world-only [φ AU done R] and the obligation is
-      stated one step later ([φ AN (φ AU ψ)]), see [Bind.v]. *)
-
-  (** [φ AN ψ] is a [φ AN (φ AU ψ)] whose successors are all leaves. *)
-  Lemma anr_au{X}: forall (t: ctree E B X) w φ ψ,
-      <[ t, w |= φ AN ψ ]> ->
-      <[ t, w |= φ AN (φ AU ψ) ]>.
-  Proof.
-    intros * H.
-    cdestruct H; csplit; auto with ticl.
-    intros t' w' TR; cleft; auto with ticl.
-  Qed.
-
-  Lemma enr_eu{X}: forall (t: ctree E B X) w φ ψ,
-      <[ t, w |= φ EN ψ ]> ->
-      <[ t, w |= φ EN (φ EU ψ) ]>.
-  Proof.
-    intros * H.
-    cdestruct H; csplit; auto with ticl.
-    exists t0, w0; split; auto with ticl.
-    cleft; auto with ticl.
-  Qed.
-
-  Lemma aur_iter_done{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E B (I + X)) (φ: ticll E) (ψ: ticlr E X):
-    well_founded Rv ->
-    not_done w ->
-    Ri i w ->
-    (forall (i: I) w,
-        not_done w ->
-        Ri i w ->
-        <[ {k i}, w |= φ AU done
-                    {fun (lr: I + X) (w': World E) =>
-                       match lr with
-                       | inl i' => not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)
-                       | inr r => <[ {Ret r: ctree E B X}, w' |= φ AN ψ ]>
-                       end} ]>) ->
-    <[ {iter k i}, w |= φ AN (φ AU ψ) ]>.
-  Proof.
-    remember (i, w) as P.
-    replace i with (fst P) by now subst.
-    replace w with (snd P) by now subst.
-    clear HeqP i w.
-    intros WfR Hd Hi H.
-    generalize dependent k.
-    induction P using (well_founded_induction WfR);
-      destruct P as (i, w); cbn in *. 
-    rename H into HindWf.
-    intros.
-    unfold iter, MonadIter_ctree.
-    rewrite unfold_iter.
-    eapply aur_bind_r_done with
-      (R:=(fun (lr : I + X) (w' : World E) =>
-             match lr with
-             | inl i' => not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)
-             | inr r => <[ {Ret r: ctree E B X}, w' |= φ AN ψ ]>
-             end)); auto with ticl.
-    intros [i' | r] w'; auto with ticl.
-    - intros (Hd' & Hi' & Hv). 
-      rewrite sb_guard.
-      remember (i', w') as y.
-      replace i' with (fst y) in Hi' |- * by now subst.
-      replace w' with (snd y) in Hi', Hd' |- * by now subst.
-      apply HindWf; auto with ticl.
-    - apply anr_au.
-  Qed.
-
-  Corollary aur_iter_done_au{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E B (I + X)) (φ: ticll E) (ψ: ticlr E X):
-    well_founded Rv ->
-    not_done w ->
-    Ri i w ->
-    (forall (i: I) w,
-        not_done w ->
-        Ri i w ->
-        <[ {k i}, w |= φ AU done
-                    {fun (lr: I + X) (w': World E) =>
-                       match lr with
-                       | inl i' => not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)
-                       | inr r => <[ {Ret r: ctree E B X}, w' |= φ AN ψ ]>
-                       end} ]>) ->
-    <[ {iter k i}, w |= φ AU ψ ]>.
-  Proof.
-    intros; cright; eapply aur_iter_done; eauto.
-  Qed.
-
-  (** Visible iteration ([iterS]: each continuing round is a [Step]) whose body
-      returns through hidden branching. Every continuing index decreases along
-      the well-founded [Rv]; every exit value satisfies [Post]. *)
-  Lemma afr_iterS_done{X I} (Ri: I -> World E -> Prop) (Rv: relation (I * World E))
-    (i: I) (w: World E) (k: I -> ctree E B (I + X)) (Post: X -> World E -> Prop):
-    well_founded Rv ->
-    not_done w ->
-    Ri i w ->
-    (forall (i: I) w,
-        not_done w ->
-        Ri i w ->
-        <[ {k i}, w |= AF done
-                    {fun (lr: I + X) (w': World E) =>
-                       match lr with
-                       | inl i' => not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)
-                       | inr r => not_done w' /\ Post r w'
-                       end} ]>) ->
-    <[ {CTree.iterS k i}, w |= AF done Post ]>.
-  Proof.
-    intros WfR Hd Hi H.
-    remember (i, w) as P eqn:HeqP.
-    replace i with (fst P) in Hi |- * by now subst.
-    replace w with (snd P) in Hd, Hi |- * by now subst.
-    clear HeqP i w.
-    revert Hd Hi; pattern P; apply (well_founded_ind WfR); clear P.
-    intros [i w] HindWf Hd Hi; cbn in *.
-    assert (Hunf: CTree.iterS k i ≅
-                    (lr <- k i;; match lr with
-                                 | inl l => Step (CTree.iterS k l)
-                                 | inr r => Ret r
-                                 end)) by now step.
-    rewrite Hunf; cright.
-    eapply aur_bind_r_done; [exact Hd | exact (H i w Hd Hi) |].
-    intros [i' | r] w'.
-    - intros (Hd' & Hi' & Hv).
-      apply anr_step; split; [csplit; auto with ticl|].
-      exact (HindWf (i', w') Hv Hd' Hi').
-    - intros (Hd' & HPost).
-      now apply anr_au, axr_ret.
-  Qed.
-
-  Lemma eur_iter_done{X I} Ri (Rv: relation (I * World E)) (i: I) w (k: I -> ctree E B (I + X)) (φ: ticll E) (ψ: ticlr E X):
-    well_founded Rv ->
-    not_done w ->
-    Ri i w ->
-    (forall (i: I) w,
-        not_done w ->
-        Ri i w ->
-        <[ {k i}, w |= φ EU done
-                    {fun (lr: I + X) (w': World E) =>
-                       match lr with
-                       | inl i' => not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)
-                       | inr r => <[ {Ret r: ctree E B X}, w' |= φ EN ψ ]>
-                       end} ]>) ->
-    <[ {iter k i}, w |= φ EN (φ EU ψ) ]>.
-  Proof.
-    remember (i, w) as P.
-    replace i with (fst P) by now subst.
-    replace w with (snd P) by now subst.
-    clear HeqP i w.
-    intros WfR Hd Hi H.
-    generalize dependent k.
-    induction P using (well_founded_induction WfR);
-      destruct P as (i, w); cbn in *. 
-    rename H into HindWf.
-    intros.
-    unfold iter, MonadIter_ctree.
-    rewrite unfold_iter.
-    eapply eur_bind_r_done with
-      (R:=(fun (lr : I + X) (w' : World E) =>
-             match lr with
-             | inl i' => not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)
-             | inr r => <[ {Ret r: ctree E B X}, w' |= φ EN ψ ]>
-             end)); auto with ticl.
-    intros [i' | r] w'; auto with ticl.
-    - intros (Hd' & Hi' & Hv). 
-      rewrite sb_guard.
-      remember (i', w') as y.
-      replace i' with (fst y) in Hi' |- * by now subst.
-      replace w' with (snd y) in Hi', Hd' |- * by now subst.
-      apply HindWf; auto with ticl.
-    - apply enr_eu.
-  Qed.
-
-  (** [AG] through a body with hidden value choice. The body's first step must be a
-      non-returning step ([AX (φ AN …)]): a body [Ret (inl i')] would make [iter] an
-      unproductive hidden loop. *)
-  Lemma ag_iter_done{X I} (R: rel I (World E)) (i: I) w (k: I -> ctree E B (I + X)) φ:
-    R i w ->
-    (forall (i: I) w,
-        R i w ->
-        <( {iter k i}, w |= φ )> /\
-        <[ {k i}, w |= AX (φ AN (φ AU done
-                      {fun (lr: I + X) (w': World E) =>
-                         exists i', lr = inl i' /\ R i' w'})) ]>) ->
-    <( {iter k i}, w |= AG φ )>.
-  Proof.
-    intros HR H.
-    generalize dependent i.
-    generalize dependent w.
-    unfold iter, MonadIter_ctree.
-    coinduction RR CIH; intros.
-    specialize (H _ _ HR) as (Hφ & H').
-    cdestruct H'.
-    split2.
-    - apply Hφ.
-    - destruct Hs as (k' & wk & TR).
-      rewrite unfold_iter.
-      apply can_step_bind_l with k' wk; auto with ticl.
-      specialize (H' _ _ TR) as HAN.
-      cdestruct HAN.
-      eapply ticll_not_done; eauto.
-    - intros t' w' TR.
-      rewrite unfold_iter in TR.
-      apply ktrans_bind_inv in TR as
-          [(t0' & TR0 & Hd_ & Heq) | (x' & w0 & TRt0 & Hd & TRk)].
-      + (* [k x] steps *)
-        rewrite Heq; clear Heq t'.
-        apply (ag_bind_done_chain φ
-                 (fun (lr: I+X) (w0: World E) => exists i' : I, lr = inl i' /\ R i' w0)); auto with ticl.
-        * cright; now apply H'.
-        * intros [l | r] w_ (? & Hinv & HR'); inv Hinv.
-          rewrite sb_guard.
-          apply CIH; auto with ticl.
-      + (* [k x] returns immediately: contradicts [AX (φ AN …)] *)
-        specialize (H' _ _ TRt0) as HAN.
-        now apply anr_stuck in HAN.
-  Qed.
-
-  Lemma eg_iter_done{X I} (R: rel I (World E)) (i: I) w (k: I -> ctree E B (I + X)) (φ: ticll E):
-    R i w ->
-    (forall (i: I) w,
-        R i w ->
-        <( {iter k i}, w |= φ )> /\
-        <[ {k i}, w |= EX (φ EN (φ EU done
-                      {fun (lr: I + X) (w': World E) =>
-                         exists i', lr = inl i' /\ R i' w'})) ]>) ->
-    <( {iter k i}, w |= EG φ )>.
-  Proof.
-    intros HR H.
-    generalize dependent i.
-    generalize dependent w.
-    unfold iter, MonadIter_ctree.
-    coinduction RR CIH; intros.
-    specialize (H _ _ HR) as (Hφ & H').
-    cdestruct H'.
-    assert (Hd0: not_done w0) by (cdestruct H'; eapply ticll_not_done; eauto).
-    split.
-    - apply Hφ.
-    - exists (lr <- t;; match lr with
-                 | inl l => Guard (CTree.iter k l)
-                 | inr r => Ret r
-                  end), w0; split.
-      + rewrite unfold_iter.
-        apply ktrans_bind_l; auto with ticl.
-      + apply (eg_bind_done_chain φ
-                 (fun (lr: I+X) (w0: World E) => exists i' : I, lr = inl i' /\ R i' w0)); auto with ticl.
-        * cright; apply H'.
-        * intros [l | r] w_ (? & Hinv & HR'); inv Hinv.
           rewrite sb_guard.
           apply CIH; auto with ticl.
   Qed.

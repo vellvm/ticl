@@ -5,6 +5,7 @@ From TICL Require Import
   CTree.Logic.AG
   CTree.Logic.AF
   CTree.Logic.AX
+  CTree.Logic.CanStep
   CTree.Logic.State
   CTree.Logic.Iter
   CTree.Logic.Bind
@@ -69,7 +70,7 @@ Module ElectionDefs(C: Cyclic).
   Lemma aur_recv: forall (x: Id) (ms: Mails) w,
       not_done w ->
       <[ {interp_state h_netE (recv x) ms}, w |=
-           AF (AX (done= {(ms, ms $ x)} {Obs (Log (ms $ x)) tt})) ]>.
+           AF (ret= {(ms, ms $ x)} {Obs (Log (ms $ x)) tt}) ]>.
   Proof.
     intros.
     unfold recv.
@@ -78,21 +79,21 @@ Module ElectionDefs(C: Cyclic).
     apply aur_log.
     - rewrite bind_ret_l, sb_guard.
       cleft.
-      apply axr_ret; eauto with ticl.
+      apply ret_ret; eauto with ticl.
     - csplit; eauto with ticl.
   Qed.
 
   Lemma aur_send: forall (x: Id) (ms: Mails) (m: msg) w,
     not_done w ->
      <[ {interp_state h_netE (send x m) ms}, w |=
-         AF (AX (done= {(ms @ (next x) := m, tt)} w)) ]>.
+         AF (ret= {(ms @ (next x) := m, tt)} w) ]>.
   Proof.
     intros.
     unfold send.
     rewrite interp_state_trigger; cbn.
     rewrite bind_ret_l, sb_guard.
     cleft.
-    apply axr_ret; eauto with ticl.
+    apply ret_ret; eauto with ticl.
   Qed.
   
   (* Always terminates, conditional on receiving either:
@@ -186,7 +187,7 @@ Module Election3.
         end
     | Elected leader => m' = (m @ (next i) := (Elected leader))
     end ->
-    <[ {interp_state h_netE (elect i) m}, {w} |= AF (AX (done= {(m', tt)} {Obs (Log (m $ i)) tt})) ]>.
+    <[ {interp_state h_netE (elect i) m}, {w} |= AF (ret= {(m', tt)} {Obs (Log (m $ i)) tt}) ]>.
   Proof.
     intros.
     unfold elect.
@@ -197,7 +198,7 @@ Module Election3.
         * apply aur_send; eauto with ticl.
         * cleft.
           rewrite interp_state_ret.
-          apply axr_ret; eauto with ticl.
+          apply ret_ret; eauto with ticl.
         * apply aur_send; eauto with ticl.
       + subst.
         apply aur_send; eauto with ticl.
@@ -206,7 +207,7 @@ Module Election3.
   Ltac vroom :=
     eapply aur_state_bind_r_eq;
     [apply aur_elect; eauto with ticl; try exact mailboxes 
-    | cleft; first [apply axr_state_ret | rewrite interp_state_ret; apply axr_ret];
+    | cleft; first [apply axr_state_ret | rewrite interp_state_ret; apply ret_ret];
       eauto with ticl; try eexists; intuition; try simp next; eauto with ticl].
 
   Lemma election3_liveness:

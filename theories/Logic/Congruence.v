@@ -318,23 +318,37 @@ Section EquivTiclrFormulas.
     - cinduction Hu; rewrite unfold_entailsR; [left; auto | right; split]; eauto.
   Qed.
 
-  (** Pointwise implication transports a terminal postcondition. *)
-  Lemma done_impl_ticlr (P Q : X -> World E -> Prop) :
-    (forall x w, P x w -> Q x w) -> impl_ticlr (CDone P) (CDone Q).
+  (** Pointwise implication transports a native return postcondition. *)
+  Lemma ret_impl_ticlr (P Q : X -> World E -> Prop) :
+    (forall x w, P x w -> Q x w) -> impl_ticlr (CRet P) (CRet Q).
   Proof.
-    intros HPQ t w H; rewrite unfold_entailsR in *.
-    destruct H; constructor; auto.
+    intros HPQ t w H.
+    apply ticlr_ret in H as (x & HR & Hd & Hs & Htr).
+    apply ticlr_ret; exists x; split.
+    - now apply HPQ.
+    - exact (conj Hd (conj Hs Htr)).
   Qed.
 
-  (** Universal until is monotone in its terminal postcondition. *)
-  Lemma aur_done_mono (t : M E B X) w φ (P Q : X -> World E -> Prop) :
+  (** Universal until is monotone in its native return postcondition. *)
+  Lemma aur_ret_mono (t : M E B X) w φ (P Q : X -> World E -> Prop) :
     (forall x w, P x w -> Q x w) ->
-    <[ t, w |= φ AU done P ]> -> <[ t, w |= φ AU done Q ]>.
+    <[ t, w |= φ AU ret P ]> -> <[ t, w |= φ AU ret Q ]>.
   Proof.
     intros HPQ H.
     pose proof (impl_ticlr_until Q_A Q_A eq_refl φ φ (reflexivity _) _ _
-      (done_impl_ticlr P Q HPQ)) as HI.
+      (ret_impl_ticlr P Q HPQ)) as HI.
     exact (HI t w H).
+  Qed.
+
+  (** Universal termination is monotone in its terminal postcondition. *)
+  Lemma aur_done_mono (t : M E B X) w φ (P Q : X -> World E -> Prop) :
+    (forall x w, P x w -> Q x w) ->
+    auc (entailsL X φ) (fun _ wd => done_with P wd) t w ->
+    auc (entailsL X φ) (fun _ wd => done_with Q wd) t w.
+  Proof.
+    intros HPQ H.
+    eapply auc_mono_r; [|exact H].
+    intros t' wd Hd; exact (done_with_mono P Q HPQ wd Hd).
   Qed.
 
   Global Add Parametric Morphism: CuR
@@ -618,19 +632,6 @@ Section TiclrEquations.
   Abbreviation MP := (MS -> World E -> Prop).
   Infix "⋖" := (@impl_ticlr M E B KMS X) (at level 58, left associativity).
   Infix "⩸" := (@equiv_ticlr M E B KMS X) (at level 58, left associativity).
-
-  Lemma equivr_finish_done: forall (φ: X -> forall Y, E Y -> Y -> Prop),
-      <[ finish φ ]> ⩸ <[ done {fun x w =>
-                                  exists Y (e: E Y) (v: Y), w = Obs e v /\ φ x Y e v} ]>.
-  Proof.
-    intros; split; intros t w Hinv.
-    - apply ticlr_done.
-      apply ticlr_finish in Hinv; inv Hinv; constructor;
-        destruct H as (Y' & e' & v' & Hinv & ?); ddestruction Hinv; eauto with ticl.
-    - apply ticlr_finish.
-      apply ticlr_finish in Hinv; inv Hinv; constructor;
-        destruct H as (Y' & e' & v' & Hinv & ?); ddestruction Hinv; exists Y', e', v'; eauto with ticl.
-  Qed.
 
   (** Left injection of [p] into [p \/ q] *)
   Lemma equivr_or_injL: forall (p q: ticlr E X),

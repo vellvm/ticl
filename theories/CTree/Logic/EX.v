@@ -167,26 +167,6 @@ Section BasicLemmas.
       now apply ticll_not_done in Hφ.
   Qed.
 
-  (** [φ EN done R] holds iff [φ] holds and some transition returns a value satisfying [R].
-      Unlike [ret R], this does not require all transitions to return the same value. *)
-  Lemma enr_done: forall (t: ctree E B X) φ R w,
-      <[ t, w |= φ EN done R ]> <->
-        <( t, w |= φ )> /\ (exists (x: X) w', done_of x w w' /\ R x w /\ |t, w| ↦ |Stuck, w'|).
-  Proof.
-    split; intros.
-    - cdestruct H; split; eauto with ticl.
-      rewrite unfold_entailsR in H; inv H.
-      + apply ktrans_to_done_inv in TR as Hinv; destruct Hinv as (Heq & ->).
-        rewrite Heq in TR.
-        exists x, (Done x); split2; eauto with ticl.
-      + apply ktrans_to_finish_inv in TR as Hinv; destruct Hinv as (Heq & ->).
-        rewrite Heq in TR.
-        exists x, (Finish e v x); split2; eauto with ticl.
-    - destruct H as (Hφ & x & w' & Hd & HR & TR).
-      csplit; eauto with ticl.
-      exists Stuck, w'; split; eauto with ticl.
-      rewrite unfold_entailsR; inv Hd; eauto with ticl.
-  Qed.
 
   (** A return tree does not satisfy prefix [φ EN ψ]; it does not step. *)
   Lemma enl_ret: forall (r: X) w φ ψ,
@@ -202,52 +182,6 @@ Section BasicLemmas.
       apply ticll_not_done in H; inv H.
   Qed.
 
-  (** A return tree satisfies suffix [φ EN done R] if it satisfies [φ] and its return value satisfies [R]. *)
-  Lemma enr_ret: forall (r: X) (R: rel X (World E)) φ w,
-      <( {Ret r: ctree E B X}, w |= φ )> ->
-      R r w ->
-      <[ {Ret r: ctree E B X}, w |= φ EN done R ]>.
-  Proof.
-    intros.
-    apply enr_done; split; auto with ticl.
-    apply ticll_not_done in H; inv H.
-    - exists r, (Done r); split2; auto with ticl.
-      apply ktrans_done; auto with ticl.
-    - exists r, (Finish e v r); split2; auto with ticl.
-      apply ktrans_finish; auto with ticl.
-  Qed.
-  
-  (** A return tree satisfies suffix [EX done R] if its return value satisfies [R]. *)
-  Lemma exr_ret: forall (r: X) (R: rel X (World E)) w,
-      not_done w ->
-      R r w ->
-      <[ {Ret r: ctree E B X}, w |= EX done R ]>.
-  Proof.
-    intros.
-    apply enr_ret; auto with ticl.
-    csplit; auto with ticl.
-  Qed.
-  
-  (** Inversion lemma for the next [EN] operator and post-condition [ψ]. *)
-  Lemma enr_ret_inv: forall (r: X) w φ ψ,
-      <[ {Ret r: ctree E B X}, w |= φ EN ψ ]> ->
-        <( {Ret r: ctree E B X}, w |= φ )>
-        /\ exists (w': World E), done_with (fun x w' => x = r /\ w = w') w'
-        /\ <[ {Stuck: ctree E B X}, w' |= ψ ]>.
-  Proof.
-    intros.
-    cdestruct H.
-    assert (Hd: not_done w) by now apply ktrans_not_done in TR. 
-    inv Hd.
-    + apply ktrans_done in TR as (-> & Heqt).
-      rewrite Heqt in H.
-      split; auto with ticl.
-      exists (Done r); auto with ticl.
-    + apply ktrans_finish in TR as (-> & Heqt).
-      rewrite Heqt in H.
-      split; auto with ticl.
-      exists (Finish e v r); auto with ticl.
-  Qed.
 End BasicLemmas.
 
 Section WriterLemmas.
@@ -256,14 +190,14 @@ Section WriterLemmas.
   (** Convenience lemma for the [EX] operator and the [log] event. *)
   Lemma exr_log{S}: forall (x: S) w,
       not_done w ->
-      <[ {log x: ctreeW S B unit}, w |= EX EX done=tt {Obs (Log x) tt} ]>.
+      <[ {log x: ctreeW S B unit}, w |= EX ret=tt {Obs (Log x) tt} ]>.
   Proof.
     intros.
     unfold log, CTree.trigger.
     apply enr_vis; split.
     - csplit; eauto with ticl.
     - exists tt.
-      apply exr_ret; eauto with ticl.
+      apply ret_ret; eauto with ticl.
   Qed.
 
 End WriterLemmas.

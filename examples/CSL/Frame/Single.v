@@ -1,7 +1,7 @@
 (** * Regression: the heap frame rule on a single CSL process.
 
     [p] reads cell [1] and writes back its successor.  The property is proved
-    on the one-cell heap, then transported by [aur_csl_frame_done] to the heap
+    on the one-cell heap, then transported by [aur_csl_frame_ret] to the heap
     extended by the disjoint cell [2]; the framed postcondition still exposes
     the untouched frame.  The negative check shows allocation is not
     framable, and the prefix check frames an [AG] of the emit loop. *)
@@ -16,8 +16,8 @@ Definition s0 (ctx : Ctx.Ctx) : SSig := ((hsingle 1 0, hemp), (ctx, 0)).
 Definition fr : ManagedHeap := (hsingle 2 7, hemp).
 
 (** The standalone run: cell [1] ends at [1]. *)
-Lemma p_af ctx :
-  <[ {run_nd p (s0 ctx)}, Pure |= AF done {fun '(s', _) _ => fst (csl_memory s') 1 = Some 1} ]>.
+Local Lemma p_af_ret ctx :
+  <[ {run_nd p (s0 ctx)}, Pure |= AF ret {fun '(s', _) _ => fst (csl_memory s') 1 = Some 1} ]>.
 Proof.
   unfold run_nd, run_nd_pool, csl_pool, denote, s0; cbn [Vector.map].
   change ([denote_flow p;; Ret tt] : pool sE Bn 1) with
@@ -31,6 +31,13 @@ Proof.
   reflexivity.
 Qed.
 
+(** Preserve the terminal-world property, including the final value transition. *)
+Lemma p_af ctx :
+  auc (entailsL (SSig * unit) (CNow (fun _ => True)))
+    (fun _ wd => done_with (X := SSig * unit) (fun '(s', _) _ => fst (csl_memory s') 1 = Some 1) wd)
+    (run_nd p (s0 ctx)) Pure.
+Proof. apply af_ret_done, p_af_ret. Qed.
+
 (** The initial state admits the disjoint frame [fr]. *)
 Lemma frame_inv_s0 ctx : frame_inv fr (s0 ctx).
 Proof.
@@ -40,12 +47,15 @@ Qed.
 (** The framed run on the two-cell heap: cell [1] ends at [1] and cell [2]
     is still [7]. *)
 Theorem p_af_framed ctx :
-  <[ {run_nd p (frame_state fr (s0 ctx))}, Pure |=
-     AF done {fun '(s', _) _ => fst (csl_memory s') 1 = Some 1 /\ fst (csl_memory s') 2 = Some 7} ]>.
+  auc (entailsL (SSig * unit) (CNow (fun _ => True)))
+    (fun _ wd => done_with (X := SSig * unit)
+      (fun '(s', _) _ => fst (csl_memory s') 1 = Some 1 /\ fst (csl_memory s') 2 = Some 7) wd)
+    (run_nd p (frame_state fr (s0 ctx))) Pure.
 Proof.
-  eapply aur_done_mono; [|apply (aur_csl_frame_done fr _ _ _
+  apply af_ret_done.
+  eapply aur_ret_mono; [|apply (aur_csl_frame_ret fr _ _ _
     (run_nd_framable p ltac:(cbn; tauto)) (frame_rel_state fr _ (frame_inv_s0 ctx)));
-    [constructor|apply p_af]].
+    [constructor|apply p_af_ret]].
   intros [[M aux] x] ? HP; apply frame_post_iff in HP.
   destruct HP as (m & [HD _] & _ & [HE _] & HP); cbn in *.
   split.

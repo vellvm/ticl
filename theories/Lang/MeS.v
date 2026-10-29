@@ -209,7 +209,7 @@ Module ME.
   Qed.
   
   Lemma aur_cprog_bind_r_eq{X Y}: forall (h: CProg X) (k: X -> CProg Y) m w r w' m' φ ψ,
-      <[ {instr_cprog h m}, w |= φ AU AX done={(m', r)} w' ]> ->
+      <[ {instr_cprog h m}, w |= φ AU ret={(m', r)} w' ]> ->
       <[ {instr_cprog (k r) m'}, w' |= φ AU ψ ]> ->
       <[ {instr_cprog (CBind h k) m}, w |= φ AU ψ ]>.
   Proof.
@@ -227,7 +227,7 @@ Module ME.
   Qed.
   
   Lemma aur_sprog_bind_r_eq{X Y}: forall (h: SProg X) (k: X -> SProg Y) m m' (r: X) w w' φ ψ,
-      <[ {instr_sprog h m}, w |= φ AU AX done={(m', r)} w' ]> ->
+      <[ {instr_sprog h m}, w |= φ AU ret={(m', r)} w' ]> ->
       <[ {instr_sprog (k r) m'}, w' |= φ AU ψ ]> ->
       <[ {instr_sprog (SBind h k) m}, w |= φ AU ψ ]>.
   Proof.
@@ -236,7 +236,7 @@ Module ME.
   Qed.  
   
   Lemma anr_sprog_bind_l{X Y}: forall (h: SProg X) (k: X -> SProg Y) m m' (r: X) w w' φ ψ,
-      <[ {instr_sprog h m}, w |= φ AN AX done={(m', r)} w' ]> ->
+      <[ {instr_sprog h m}, w |= φ AN ret={(m', r)} w' ]> ->
       <[ {instr_sprog (k r) m'}, w' |= ψ ]> ->
       <[ {instr_sprog (SBind h k) m}, w |= φ AN ψ ]>.
   Proof.

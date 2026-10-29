@@ -13,7 +13,7 @@
 
 From Stdlib Require Import List Lia Fin Vector Relations Program.Equality.
 From CTree Require Import CTree Eq.
-From TICL Require Import Lang.CoCSL.Separation Logic.Tactics.
+From TICL Require Import Lang.CoCSL.Separation Logic.Tactics Logic.World.
 From TICL Require Import CTree.Interp.Yield.SBisim Utils.Vectors Utils.Pcm Events.HeapModel.
 
 (** ** Next: the direct AN split, its clocks, and its boundaries *)
@@ -2578,16 +2578,18 @@ Proof.
 Qed.
 
 Theorem finite_raw_af_done :
-  <[ {run_nd (CBind (CFork fchild) fk) (hC ⊎ hP, (ctx0, 0))}, World.Pure |=
-    AF done {fun r _ => final_cells r} ]>.
+  auc (entailsL (SSig * unit) (CNow (fun _ => True)))
+    (fun _ wd => done_with (fun r _ => final_cells r) wd)
+    (run_nd (CBind (CFork fchild) fk) (hC ⊎ hP, (ctx0, 0))) World.Pure.
 Proof.
   exact (fork_haf_done_ticl fchild fk hC hP ctx0 0 final_cells
     fadmissible final_cells_proper finite_owned_haf).
 Qed.
 
 Theorem finite_raw_ef_done :
-  <[ {run_nd (CBind (CFork fchild) fk) (hC ⊎ hP, (ctx0, 0))}, World.Pure |=
-    EF done {fun r _ => final_cells r} ]>.
+  euc (entailsL (SSig * unit) (CNow (fun _ => True)))
+    (fun _ wd => done_with (fun r _ => final_cells r) wd)
+    (run_nd (CBind (CFork fchild) fk) (hC ⊎ hP, (ctx0, 0))) World.Pure.
 Proof.
   exact (fork_hef_done_ticl fchild fk hC hP ctx0 0 final_cells
     fadmissible final_cells_proper finite_owned_hef).
@@ -2624,13 +2626,14 @@ Proof.
 Qed.
 
 Theorem terminal_not_raw_done :
-  ~ <[ {erase_owned (instrument_owned s9)}, World.Pure |=
-    done {fun r _ => final_cells r} ]>.
-Proof. rewrite ticlr_done; intro H; inversion H. Qed.
+  ~ done_with (E := writerE (CSLObs (nat * nat)))
+      (fun (r : SSig * unit) _ => final_cells r) World.Pure.
+Proof. intro H; inversion H. Qed.
 
 Theorem terminal_raw_af_done :
-  <[ {erase_owned (instrument_owned s9)}, World.Pure |=
-    AF done {fun r _ => final_cells r} ]>.
+  auc (entailsL (SSig * unit) (CNow (fun _ => True)))
+    (fun _ wd => done_with (fun r _ => final_cells r) wd)
+    (erase_owned (instrument_owned s9)) World.Pure.
 Proof.
   apply (owned_haf_done_ticl final_cells s9 World.Pure);
     [exact finite_terminal_erasable|constructor|exact final_cells_proper|].

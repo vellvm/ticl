@@ -3,10 +3,10 @@
     ctrees' LTS crawls through delayed branches [Br c k] and [Guard]; only
     [Step]/[BrS], [Vis] and [Ret] are transitions. The TICL [ret R] atom
     distinguishes "all transitions return the same value" (strongly bisimilar
-    to [Ret x]) from [AX done R] ("every transition returns some value
-    satisfying [R]"). The second goal below is the regression that would
-    silently pass under a visible-[Br] semantics and must fail if [ret] is
-    ever weakened to [AX done]. *)
+    to [Ret x]) from the shallow universal-next terminal postcondition
+    ("every transition returns some value satisfying [R]"). The second
+    goal is the regression that must fail if native [ret] is ever weakened
+    to that terminal-next property. *)
 From Stdlib Require Import Fin Arith.PeanoNat Relations.Relation_Definitions Wellfounded Lia.
 From Coinduction Require Import all.
 From TICL Require Import CTree.Interp.Refine.
@@ -31,17 +31,17 @@ Definition two : fin 2 -> ctree void1 Bn nat :=
 
 (** Hidden value choice is one return, not a step: every transition of
     [brn two] returns [1] or [2] directly. *)
-Goal <[ {brn two}, Pure |= AX done {fun x _ => x = 1 \/ x = 2} ]>.
+Goal anc (entailsL nat (CNow (fun _ => True)))
+  (fun _ wd => done_with (fun x _ => x = 1 \/ x = 2) wd) (brn two) Pure.
 Proof.
-  csplit.
-  - csplit; auto with ticl.
+  split; [csplit; auto with ticl | split].
   - apply can_step_br; exists Fin.F1; apply can_step_ret; constructor.
   - intros t' w' TR.
     apply ktrans_br in TR as (i & TR).
     unfold two in TR.
     destruct (Fin.eqb i Fin.F1).
-    + apply ktrans_done in TR as (-> & _); csplit; auto.
-    + apply ktrans_done in TR as (-> & _); csplit; auto.
+    + apply ktrans_done in TR as (-> & _); constructor; auto.
+    + apply ktrans_done in TR as (-> & _); constructor; auto.
 Qed.
 
 (** ... but it is NOT a single-valued return: [ret] fails. *)
@@ -73,18 +73,24 @@ Proof.
 Qed.
 
 (** Bind through a visible choice (regime A, [aur_bind_r]). *)
-Goal <[ {x <- brSn two ;; (if Nat.eqb x 1 then Ret 1 else Step (Ret 1))}, Pure
-        |= ⊤ AU AX done= 1 Pure ]>.
+Goal auc (entailsL nat (CNow (fun _ => True)))
+  (anc (entailsL nat (CNow (fun _ => True)))
+    (fun _ wd => done_with (fun x w => 1 = x /\ Pure = w) wd))
+  (x <- brSn two ;; (if Nat.eqb x 1 then Ret 1 else Step (Ret 1))) Pure.
 Proof.
-  apply aur_bind_r with (R := fun x w => (x = 1 \/ x = 2) /\ w = Pure).
-  - cright; apply (anr_brS _ _ Fin.F1); split.
-    + csplit; auto with ticl.
-    + intros i; cleft; unfold two; destruct (Fin.eqb i Fin.F1); apply ret_ret; auto; constructor.
-  - intros x w ([-> | ->] & ->); cbn.
-    + cleft; apply axr_ret; auto; constructor.
-    + cright; apply anr_step; split.
+  eapply auc_mono_r with (q := entailsR <[ ret= 1 Pure ]>).
+  - intros t w H; now apply ret_done_next.
+  - change <[ {x <- brSn two ;; (if Nat.eqb x 1 then Ret 1 else Step (Ret 1))}, Pure
+                |= ⊤ AU ret= 1 Pure ]>.
+    apply aur_bind_r with (R := fun x w => (x = 1 \/ x = 2) /\ w = Pure).
+    + cright; apply (anr_brS _ _ Fin.F1); split.
       * csplit; auto with ticl.
-      * cleft; apply axr_ret; auto; constructor.
+      * intros i; cleft; unfold two; destruct (Fin.eqb i Fin.F1); apply ret_ret; auto; constructor.
+    + intros x w ([-> | ->] & ->); cbn.
+      * cleft; apply ret_ret; auto; constructor.
+      * cright; apply anr_step; split.
+        -- csplit; auto with ticl.
+        -- cleft; apply ret_ret; auto; constructor.
 Qed.
 
 (** sbisim invariance: a guard is invisible. *)
@@ -94,66 +100,53 @@ Proof.
   intros; now rewrite sb_guard.
 Qed.
 
-(** Regime B: hidden value choice composes on the world-only target. *)
-Goal <[ {x <- brn two ;; (if Nat.eqb x 1 then Ret 1 else Step (Ret 1))}, Pure
-        |= ⊤ AU done= 1 Pure ]>.
+(** Hidden value choice may mix immediate and delayed return. *)
+Goal auc (entailsL nat (CNow (fun _ => True)))
+  (fun _ wd => done_with (fun x w => 1 = x /\ Pure = w) wd)
+  (x <- brn two ;; (if Nat.eqb x 1 then Ret 1 else Step (Ret 1))) Pure.
 Proof.
-  apply aur_bind_r_done_post with (R := fun x w => (x = 1 \/ x = 2) /\ w = Pure).
-  - constructor.
-  - cright; csplit.
-    + csplit; auto with ticl.
-    + apply can_step_br; exists Fin.F1; apply can_step_ret; constructor.
-    + intros t' w' TR.
-      apply ktrans_br in TR as (i & TR).
-      unfold two in TR.
-      destruct (Fin.eqb i Fin.F1).
-      * apply ktrans_done in TR as (-> & _); cleft; csplit; auto.
-      * apply ktrans_done in TR as (-> & _); cleft; csplit; auto.
-  - intros x w ([-> | ->] & ->); cbn.
-    + cright; csplit; [csplit; auto with ticl | apply can_step_ret; constructor |].
-      intros t' w' TR; apply ktrans_done in TR as (-> & _); cleft; csplit; auto.
-    + cright; apply anr_step; split.
-      * csplit; auto with ticl.
-      * cright; csplit; [csplit; auto with ticl | apply can_step_ret; constructor |].
-        intros t' w' TR; apply ktrans_done in TR as (-> & _); cleft; csplit; auto.
+  unfold brn; rewrite bind_br.
+  apply StepA; split; [csplit; auto with ticl | split].
+  - apply can_step_br; exists Fin.F1.
+    unfold two; cbn; rewrite bind_ret_l; apply can_step_ret; constructor.
+  - intros t' w' TR; apply ktrans_br in TR as (i & TR).
+    unfold two in TR; destruct (Fin.eqb i Fin.F1); rewrite bind_ret_l in TR; cbn in TR.
+    + apply ktrans_done in TR as (-> & _).
+      apply MatchA; constructor; auto.
+    + apply ktrans_step in TR as (Ht & <- & _).
+      rewrite Ht.
+      apply StepA; split; [csplit; auto with ticl | split].
+      * apply can_step_ret; constructor.
+      * intros t'' w'' TR; apply ktrans_done in TR as (-> & _).
+        apply MatchA; constructor; auto.
 Qed.
 
-(** Regime B iteration: the loop body returns two different indices in one
-    hidden state ([aur_iter_done_au]). *)
+(** Hidden iteration returns a uniform final value despite differing indices. *)
 Definition body (n : nat) : ctree void1 Bn (nat + nat) :=
   if Nat.eqb n 0 then Ret (inr 7)
   else brn (fun i : fin 2 => Ret (inl (Nat.pred n - (if Fin.eqb i (@Fin.F1 1) then 0 else 1)))).
 
-Goal <[ {CTree.iter body 3}, Pure |= ⊤ AU done= 7 Pure ]>.
+Local Lemma iter_body_ret (n : nat) :
+  <[ {CTree.iter body n}, Pure |= ret= 7 Pure ]>.
 Proof.
-  apply aur_iter_done_au with
-    (Rv := fun p q : nat * World void1 => fst p < fst q)
-    (Ri := fun _ _ => True).
-  - (* well-founded *)
-    apply (wf_inverse_image _ _ lt fst); apply Nat.lt_wf_0.
-  - constructor.
-  - exact I.
-  - intros n w Hd _.
-    unfold body.
-    destruct (Nat.eqb n 0) eqn:Hn.
-    + (* return 7: one step to the leaf, whose payload is the [AN] obligation on [Ret 7] *)
-      cright; csplit.
-      * csplit; auto.
-      * apply can_step_ret; auto.
-      * intros t' w' TR.
-        inv Hd; [| destruct e].
-        apply ktrans_done in TR as (-> & _); cleft; csplit; cbn.
-        apply axr_ret; auto with ticl.
-    + (* hidden choice of the next index *)
-      cright; csplit.
-      * csplit; auto.
-      * apply can_step_br; exists Fin.F1; apply can_step_ret; auto.
-      * intros t' w' TR.
-        apply ktrans_br in TR as (i & TR).
-        apply Nat.eqb_neq in Hn.
-        inv Hd; [| destruct e].
-        apply ktrans_done in TR as (-> & _); cleft; csplit; cbn.
-        split2; [constructor | exact I | lia].
+  induction n as [n IH] using (well_founded_induction Nat.lt_wf_0).
+  rewrite unfold_iter; unfold body.
+  destruct (Nat.eqb n 0) eqn:Hn.
+  - rewrite bind_ret_l; apply ret_ret; auto; constructor.
+  - unfold brn; rewrite bind_br.
+    eapply ret_br with (y := Fin.F1) (x := 7).
+    + constructor.
+    + auto.
+    + intros i; rewrite bind_ret_l, sb_guard.
+      apply IH; apply Nat.eqb_neq in Hn.
+      destruct (Fin.eqb i Fin.F1); lia.
+Qed.
+
+Goal auc (entailsL nat (CNow (fun _ => True)))
+  (fun _ wd => done_with (fun x w => 7 = x /\ Pure = w) wd)
+  (CTree.iter body 3) Pure.
+Proof.
+  apply af_ret_done; cleft; apply iter_body_ret.
 Qed.
 
 (** Delayed branching forgets branch order under strong bisimulation, but a
@@ -209,37 +202,37 @@ Proof.
   apply val_eq_inv in Hv; discriminate.
 Qed.
 
-(** Visible iteration of the same body: every continuing round is a [Step]
-    and the hidden choice still lowers the index, so all paths end
-    ([afr_iterS_done]). *)
-Lemma iterS_body_af : <[ {CTree.iterS body 3}, Pure |= AF done= 7 Pure ]>.
+(** Visible iteration takes a real step in every continuing round. *)
+Local Lemma iterS_body_af_ret (n : nat) :
+  <[ {CTree.iterS body n}, Pure |= AF ret= 7 Pure ]>.
 Proof.
-  apply afr_iterS_done with
-    (Rv := fun p q : nat * World void1 => fst p < fst q)
-    (Ri := fun _ _ => True).
-  - apply (wf_inverse_image _ _ lt fst); apply Nat.lt_wf_0.
-  - constructor.
-  - exact I.
-  - intros n w Hd _.
-    unfold body.
-    destruct (Nat.eqb n 0) eqn:Hn.
-    + cright; csplit.
-      * csplit; auto.
-      * apply can_step_ret; auto.
-      * intros t' w' TR.
-        inv Hd; [| destruct e].
-        apply ktrans_done in TR as (-> & _); cleft; csplit; cbn.
-        split2; [constructor | reflexivity | reflexivity].
-    + cright; csplit.
-      * csplit; auto.
-      * apply can_step_br; exists Fin.F1; apply can_step_ret; auto.
-      * intros t' w' TR.
-        apply ktrans_br in TR as (i & TR).
-        apply Nat.eqb_neq in Hn.
-        inv Hd; [| destruct e].
-        apply ktrans_done in TR as (-> & _); cleft; csplit; cbn.
-        split2; [constructor | exact I | lia].
+  induction n as [n IH] using (well_founded_induction Nat.lt_wf_0).
+  assert (Hunf : CTree.iterS body n ≅
+    (lr <- body n ;; match lr with
+      | inl l => Step (CTree.iterS body l)
+      | inr r => Ret r
+      end)) by (now step).
+  rewrite Hunf; unfold body.
+  destruct (Nat.eqb n 0) eqn:Hn.
+  - rewrite bind_ret_l; cleft; apply ret_ret; auto; constructor.
+  - unfold brn; rewrite bind_br; cright.
+    split; [csplit; auto with ticl | split].
+    + apply can_step_br; exists Fin.F1; rewrite bind_ret_l.
+      apply can_step_step; constructor.
+    + intros t' w' TR; apply ktrans_br in TR as (i & TR).
+      rewrite bind_ret_l in TR.
+      apply ktrans_step in TR as (Ht & <- & _).
+      change <[ t', Pure |= AF ret= 7 Pure ]>.
+      rewrite Ht.
+      apply IH; apply Nat.eqb_neq in Hn.
+      destruct (Fin.eqb i Fin.F1); lia.
 Qed.
+
+Lemma iterS_body_af :
+  auc (entailsL nat (CNow (fun _ => True)))
+    (fun _ wd => done_with (fun x w => 7 = x /\ Pure = w) wd)
+    (CTree.iterS body 3) Pure.
+Proof. apply af_ret_done; apply iterS_body_af_ret. Qed.
 
 Lemma iterS_body_acc : Acc kripke_step (CTree.iterS body 3, Pure).
 Proof. exact (af_done_accessible _ _ _ iterS_body_af). Qed.
@@ -250,11 +243,13 @@ Proof.
   exact (IH x Hxx Hxx).
 Qed.
 
-(** Negative: a visible self-loop steps forever, so no [AF done] holds. *)
+(** Negative: a visible self-loop cannot eventually reach a terminal world. *)
 Definition self_loop : ctree void1 Bn nat :=
   CTree.iterS (fun u : unit => Ret (inl u)) tt.
 
-Lemma self_loop_not_af : forall R, ~ <[ self_loop, Pure |= AF done R ]>.
+Lemma self_loop_not_af : forall (R : nat -> World void1 -> Prop),
+  ~ auc (entailsL nat (CNow (fun _ => True)))
+      (fun _ wd => done_with R wd) self_loop Pure.
 Proof.
   intros R H%af_done_accessible.
   assert (Hunf: self_loop ≅ Step self_loop).
@@ -275,11 +270,12 @@ Qed.
     pass vacuously. *)
 Definition empty_choice : ctree void1 Bn nat := brn (fun _ : fin 0 => Ret 0).
 
-Lemma empty_choice_not_af : forall R, ~ <[ empty_choice, Pure |= AF done R ]>.
+Lemma empty_choice_not_af : forall (R : nat -> World void1 -> Prop),
+  ~ auc (entailsL nat (CNow (fun _ => True)))
+      (fun _ wd => done_with R wd) empty_choice Pure.
 Proof.
   intros R H.
-  rewrite unfold_entailsR in H.
   inversion H as [t w Hdone | t w (_ & (t' & w' & TR) & _)]; subst.
-  - rewrite unfold_entailsR in Hdone; inversion Hdone.
+  - inversion Hdone.
   - apply ktrans_br in TR as (i & _); inversion i.
 Qed.

@@ -274,28 +274,25 @@ Module StImp.
     (** [get] returns the context, [Ret x] returns [(σ, x)], in one deterministic step.
         Tactics rather than lemmas: [instr_stateE] pins universes that a separately
         elaborated lemma statement does not share. *)
-    Ltac axr_get_eq := try unfold instr_stateE; rewrite interp_state_get; apply axr_ret; eauto with ticl.
-    Ltac axr_state_ret_eq := try unfold instr_stateE; rewrite interp_state_ret; apply axr_ret; eauto with ticl.
+    Ltac axr_get_eq := apply axr_get; eauto with ticl.
+    Ltac axr_state_ret_eq := try unfold instr_stateE; rewrite interp_state_ret; apply ret_ret; eauto with ticl.
 
     (** Comparing [x] and [c] returns a boolean [b] in one step *)
     Lemma axr_ccomp_lt: forall x (c: string) b ctx w (v: nat),
         lookup c ctx = Some v ->
         b = Nat.ltb x v ->
         not_done w ->
-        <[ {instr_comp [[x <? c]] ctx}, {w} |= AX (done= {(ctx, b)} {w}) ]>.
+        <[ {instr_comp [[x <? c]] ctx}, {w} |= ret= {(ctx, b)} {w} ]>.
     Proof.
-      intros.
+      intros; subst b.
       Opaque Nat.ltb.
       unfold instr_comp, instr_stateE; cbn.
-      eapply anr_state_bind_r_eq; eauto with ticl.
-      - axr_state_ret_eq.
-      - eapply anr_state_bind_r_eq; eauto with ticl.
-        + eapply anr_state_bind_r_eq; eauto with ticl.
-          * axr_get_eq.
-          * setoid_rewrite H.
-            axr_state_ret_eq.
-        + rewrite H0.
-          axr_state_ret_eq.
+      repeat (rewrite interp_state_bind || rewrite interp_state_ret ||
+              rewrite interp_state_get || rewrite bind_ret_l).
+      cbn.
+      rewrite H; cbn.
+      repeat (rewrite interp_state_bind || rewrite interp_state_ret || rewrite bind_ret_l).
+      apply ret_ret; eauto with ticl.
     Qed.
     
     (** Constant expressions are evaluated to the constant in one step *)
@@ -304,12 +301,12 @@ Module StImp.
         ctx = ctx' ->
         w = w' ->
         not_done w ->
-        <[ {instr_exp v ctx}, w |= AX done= {(ctx', v')} w' ]>.
+        <[ {instr_exp v ctx}, w |= ret= {(ctx', v')} w' ]>.
     Proof.
       intros; subst.
       unfold instr_exp, instr_stateE; cbn.
       rewrite interp_state_ret.
-      now apply axr_ret.
+      apply ret_ret; eauto with ticl.
     Qed.
 
     (** Adding [v1] to [c] returns [v2] in one step *)
@@ -319,16 +316,15 @@ Module StImp.
         ctx = ctx' ->
         w = w' ->
         not_done w ->
-        <[ {instr_exp [[ c + v1 ]] ctx}, w |= AX done= {(ctx', v2)} w' ]>.
+        <[ {instr_exp [[ c + v1 ]] ctx}, w |= ret= {(ctx', v2)} w' ]>.
     Proof.
       intros; subst.
       unfold instr_exp, instr_stateE; cbn.
-      rewrite bind_bind.
-      eapply anr_state_bind_r_eq.
-      - axr_get_eq.
-      - setoid_rewrite H.
-        rewrite ?bind_ret_l.
-        axr_state_ret_eq.
+      repeat (rewrite interp_state_bind || rewrite interp_state_ret ||
+              rewrite interp_state_get || rewrite bind_ret_l).
+      cbn; rewrite H; cbn.
+      repeat (rewrite interp_state_bind || rewrite interp_state_ret || rewrite bind_ret_l).
+      apply ret_ret; eauto with ticl.
     Qed.
 
     (** Subtracting [v1] from [c] returns [v2] in one step *)
@@ -338,16 +334,15 @@ Module StImp.
         ctx = ctx' ->
         w = w' ->
         not_done w ->
-        <[ {instr_exp [[ c - v1 ]] ctx}, w |= AX done= {(ctx', v2)} w' ]>.
+        <[ {instr_exp [[ c - v1 ]] ctx}, w |= ret= {(ctx', v2)} w' ]>.
     Proof.
       intros; subst.
       unfold instr_exp, instr_stateE; cbn.
-      rewrite bind_bind.
-      eapply anr_state_bind_r_eq.
-      - axr_get_eq.
-      - setoid_rewrite H.
-        rewrite ?bind_ret_l.
-        axr_state_ret_eq.
+      repeat (rewrite interp_state_bind || rewrite interp_state_ret ||
+              rewrite interp_state_get || rewrite bind_ret_l).
+      cbn; rewrite H; cbn.
+      repeat (rewrite interp_state_bind || rewrite interp_state_ret || rewrite bind_ret_l).
+      apply ret_ret; eauto with ticl.
     Qed.
     
     (** * Assignment: structural temporal lemmas *)
@@ -355,7 +350,7 @@ Module StImp.
         Assignments are instrumented with a [log] event, which records the new context.
     *)
     Lemma aur_cprog_assgn: forall x a ctx r w R ψ,
-        <[ {instr_exp a ctx}, w |= AX done= {(ctx, r)} w ]> ->
+        <[ {instr_exp a ctx}, w |= ret= {(ctx, r)} w ]> ->
         <( {log (add x r ctx): ctreeW Ctx B unit}, w |= ψ )> ->
         R (add x r ctx, tt) (Obs (Log (add x r ctx)) tt) ->
         <[ {instr_prog [[ x := a ]] ctx}, w |= ψ AU ret R ]>.
@@ -375,9 +370,9 @@ Module StImp.
 
     (** Deterministic form of [aur_cprog_assgn], composes with the [_eq] sequencing lemmas. *)
     Lemma aur_cprog_assgn_eq: forall x a ctx r w ψ,
-        <[ {instr_exp a ctx}, w |= AX done= {(ctx, r)} w ]> ->
+        <[ {instr_exp a ctx}, w |= ret= {(ctx, r)} w ]> ->
         <( {log (add x r ctx): ctreeW Ctx B unit}, w |= ψ )> ->
-        <[ {instr_prog [[ x := a ]] ctx}, w |= ψ AU AX done= {(add x r ctx, tt)} {Obs (Log (add x r ctx)) tt} ]>.
+        <[ {instr_prog [[ x := a ]] ctx}, w |= ψ AU ret= {(add x r ctx, tt)} {Obs (Log (add x r ctx)) tt} ]>.
     Proof.
       unfold instr_prog, instr_exp.
       intros; cbn.
@@ -388,7 +383,7 @@ Module StImp.
           cleft; axr_get_eq.
         + rewrite interp_state_put.
           eapply aur_log.
-          * cleft; apply axr_ret; eauto with ticl.
+          * cleft; apply ret_ret; eauto with ticl.
           * now apply ticll_bind_l.
     Qed.
 
@@ -396,7 +391,7 @@ Module StImp.
         Assignments are instrumented with a [log] event, which records the new context.
     *)
     Lemma aul_cprog_assgn: forall x a ctx r w ψ φ,
-        <[ {instr_exp a ctx}, w |= AX done= {(ctx, r)} w ]> ->
+        <[ {instr_exp a ctx}, w |= ret= {(ctx, r)} w ]> ->
         <( {log (add x r ctx): ctreeW Ctx B unit}, w |= ψ )> ->
         <( {Ret (add x r ctx, tt): ctreeW Ctx B (Ctx * unit)}, {Obs (Log (add x r ctx)) tt} |= φ )> ->
         <( {instr_prog [[ x := a ]] ctx}, w |= ψ AU φ )>.
@@ -418,7 +413,7 @@ Module StImp.
     (** * Sequence: structural temporal lemmas *)
     (** Sequential composition  [a ;;; b] lemmas *)
     Lemma anr_cprog_seq: forall a b ctx ctx' w w' φ ψ,
-        <[ {instr_prog a ctx}, w |= ψ AN done= {(ctx', tt)} w' ]> ->
+        <[ {instr_prog a ctx}, w |= ret= {(ctx', tt)} w' ]> ->
         <[ {instr_prog b ctx'}, w' |= ψ AN φ ]> ->
         <[ {instr_prog [[ a ;;; b ]] ctx}, w |= ψ AN φ ]>.
     Proof.
@@ -428,7 +423,7 @@ Module StImp.
     Qed.
     
     Lemma aur_cprog_seq: forall a b ctx ctx' w w' φ ψ,
-        <[ {instr_prog a ctx}, w |= φ AU AX done= {(ctx', tt)} w' ]> ->
+        <[ {instr_prog a ctx}, w |= φ AU ret= {(ctx', tt)} w' ]> ->
         <[ {instr_prog b ctx'}, w' |= φ AU ψ ]> ->
         <[ {instr_prog [[ a ;;; b ]] ctx}, w |= φ AU ψ ]>.
     Proof.
@@ -438,7 +433,7 @@ Module StImp.
     Qed.
     
     Lemma aul_cprog_seq: forall a b ctx ctx' w w' φ ψ,
-        <[ {instr_prog a ctx}, w |= φ AU AX done= {(ctx', tt)} w' ]> ->
+        <[ {instr_prog a ctx}, w |= φ AU ret= {(ctx', tt)} w' ]> ->
         <( {instr_prog b ctx'}, w' |= φ AU ψ )> ->
         <( {instr_prog [[ a ;;; b ]] ctx}, w |= φ AU ψ )>.
     Proof.
@@ -448,7 +443,7 @@ Module StImp.
     Qed.
     
     Lemma ag_cprog_seq: forall a b ctx ctx' w w' φ,
-        <[ {instr_prog a ctx}, w |= φ AU AX done= {(ctx', tt)} w' ]> ->
+        <[ {instr_prog a ctx}, w |= φ AU ret= {(ctx', tt)} w' ]> ->
         <( {instr_prog b ctx'}, w' |= AG φ )> ->
         <( {instr_prog [[ a ;;; b ]] ctx}, w |= AG φ )>.
     Proof.
@@ -460,7 +455,7 @@ Module StImp.
     (** * Conditional: structural temporal lemmas *)
     (** If-then-else [if c then t else f] lemmas *)
     Lemma aul_cprog_ite: forall c ctx w φ ψ (b: bool) t f,
-        <[ {instr_comp c ctx}, w |= AX done= {(ctx, b)} w ]> ->
+        <[ {instr_comp c ctx}, w |= ret= {(ctx, b)} w ]> ->
         (if b then
            <( {instr_prog t ctx}, w |= φ AU ψ )>
          else
@@ -475,7 +470,7 @@ Module StImp.
     Qed.
 
     Lemma aur_cprog_ite: forall c ctx w φ ψ (b: bool) t f,
-        <[ {instr_comp c ctx}, w |= AX done= {(ctx, b)} w ]> ->
+        <[ {instr_comp c ctx}, w |= ret= {(ctx, b)} w ]> ->
         (if b then
            <[ {instr_prog t ctx}, w |= φ AU ψ ]>
          else
@@ -492,8 +487,8 @@ Module StImp.
     (** * While loops *)
     (** Unroll one iteration of the while loop if [c] evaluates to [true] *)
     Lemma aul_cprog_while_true: forall c t w w' φ ψ ctx ctx',
-        <[ {instr_comp c ctx}, w |= AX done={(ctx, true)} w ]> ->
-        <[ {instr_prog t ctx}, w |= φ AU AX done={(ctx', tt)} w' ]> ->
+        <[ {instr_comp c ctx}, w |= ret={(ctx, true)} w ]> ->
+        <[ {instr_prog t ctx}, w |= φ AU ret={(ctx', tt)} w' ]> ->
         <( {instr_prog [[ while c do t done ]] ctx'}, w' |= φ AU ψ )> ->   
         <( {instr_prog [[ while c do t done ]] ctx}, w |= φ AU ψ )>.
     Proof.
@@ -509,7 +504,7 @@ Module StImp.
 
     (** The loop terminates if [c] evaluates to [false] *)
     Lemma aul_cprog_while_false: forall c t w φ ψ ctx,
-        <[ {instr_comp c ctx}, w |= AX done={(ctx, false)} w ]> ->
+        <[ {instr_comp c ctx}, w |= ret={(ctx, false)} w ]> ->
         <( {Ret (ctx, tt): ctreeW Ctx B (Ctx * unit)}, w |= ψ )> ->
         <( {instr_prog [[ while c do t done ]] ctx}, w |= φ AU ψ )>.
     Proof.
@@ -525,8 +520,8 @@ Module StImp.
 
     (** Unroll one iteration of the while loop if [c] evaluates to [true], suffix [AU] version *)
     Lemma aur_cprog_while_true: forall c t w w' φ ψ ctx ctx',
-        <[ {instr_comp c ctx}, w |= AX done={(ctx, true)} w ]> ->
-        <[ {instr_prog t ctx}, w |= φ AU AX done={(ctx', tt)} w' ]> ->
+        <[ {instr_comp c ctx}, w |= ret={(ctx, true)} w ]> ->
+        <[ {instr_prog t ctx}, w |= φ AU ret={(ctx', tt)} w' ]> ->
         <[ {instr_prog [[ while c do t done ]] ctx'}, w' |= φ AU AX ψ ]> ->   
         <[ {instr_prog [[ while c do t done ]] ctx}, w |= φ AU AX ψ ]>.
     Proof.
@@ -543,7 +538,7 @@ Module StImp.
 
     (** The loop terminates if [c] evaluates to [false], suffix [AU] version *)
     Lemma aur_cprog_while_false: forall c t w φ ψ ctx,
-        <[ {instr_comp c ctx}, w |= AX done={(ctx, false)} w ]> ->
+        <[ {instr_comp c ctx}, w |= ret={(ctx, false)} w ]> ->
         <[ {Ret (ctx, tt): ctreeW Ctx B (Ctx * unit)}, w |= AX ψ ]> ->
         <[ {instr_prog [[ while c do t done ]] ctx}, w |= φ AU AX ψ ]>.
     Proof.
@@ -553,8 +548,8 @@ Module StImp.
       - eapply aur_state_bind_r_eq.
         + cleft; eauto with ticl.
         + cleft; axr_state_ret_eq.
-          cdestruct H.
-          apply can_step_not_done in Hs; eauto with ticl.
+          apply ticlr_ret in H as (r & HR & Hd & Hs & Htr).
+          eauto with ticl.
       - cleft; eauto with ticl.
     Qed.
     
@@ -562,10 +557,10 @@ Module StImp.
         to the level of StImp programs. *)
     Theorem aul_cprog_while ctx (t: CProg) Ri f c φ ψ:
       Ri ctx ->
-      <[ {instr_comp c ctx}, {Obs (Log ctx) tt} |= AX done={(ctx, true)} {Obs (Log ctx) tt} ]> ->
+      <[ {instr_comp c ctx}, {Obs (Log ctx) tt} |= ret={(ctx, true)} {Obs (Log ctx) tt} ]> ->
       (forall ctx,
           Ri ctx ->        
-          exists (b: bool), <[ {instr_comp c ctx}, {Obs (Log ctx) tt} |= AX done={(ctx, b)} {Obs (Log ctx) tt} ]> /\
+          exists (b: bool), <[ {instr_comp c ctx}, {Obs (Log ctx) tt} |= ret={(ctx, b)} {Obs (Log ctx) tt} ]> /\
             if b then
               <( {instr_prog t ctx}, {Obs (Log ctx) tt} |= φ AU ψ )> \/ 
                 <[ {instr_prog t ctx}, {Obs (Log ctx) tt} |= φ AU ret {fun '(ctx', _) w' =>
@@ -580,7 +575,7 @@ Module StImp.
         (Ri:=fun 'tt ctx w =>
                w = Obs (Log ctx) tt /\
                exists (b: bool),
-                 <[ {instr_stateE (cdenote_comp c) ctx}, w |= AX done={(ctx, b)} w ]> /\
+                 <[ {instr_stateE (cdenote_comp c) ctx}, w |= ret={(ctx, b)} w ]> /\
                    if b then
                      <( {instr_stateE (cdenote_prog t) ctx}, w |= φ AU ψ )> \/ 
                        <[ {instr_stateE (cdenote_prog t) ctx}, w |= φ AU ret {fun '(ctx', _) w' =>
@@ -616,14 +611,14 @@ Module StImp.
         to the level of StImp programs. *)
     Theorem aur_cprog_while_termination ctx (t: CProg) Ri f c φ ψ b:    
         Ri ctx ->
-        <[ {instr_comp c ctx}, {Obs (Log ctx) tt} |= AX done={(ctx, b)} {Obs (Log ctx) tt} ]> ->
+        <[ {instr_comp c ctx}, {Obs (Log ctx) tt} |= ret={(ctx, b)} {Obs (Log ctx) tt} ]> ->
         (forall ctx,
             Ri ctx ->
-            exists (b: bool), <[ {instr_comp c ctx}, {Obs (Log ctx) tt} |= AX done={(ctx, b)} {Obs (Log ctx) tt} ]> /\
+            exists (b: bool), <[ {instr_comp c ctx}, {Obs (Log ctx) tt} |= ret={(ctx, b)} {Obs (Log ctx) tt} ]> /\
             if b then
               <[ {instr_prog t ctx}, {Obs (Log ctx) tt} |= φ AU ret {fun '(ctx', _) w' => w' = Obs (Log ctx') tt /\ Ri ctx' /\ f ctx' < f ctx} ]>
             else
-              <[ {Ret (ctx, tt): ctreeW Ctx B (Ctx * unit)}, {Obs (Log ctx) tt} |= φ AN ψ ]>) ->
+              <[ {Ret (ctx, tt): ctreeW Ctx B (Ctx * unit)}, {Obs (Log ctx) tt} |= ψ ]>) ->
         <[ {instr_prog [[ while c do t done ]] ctx}, {Obs (Log ctx) tt} |= φ AU ψ ]>.
     Proof.
       unfold instr_prog, instr_comp; intros.
@@ -631,12 +626,12 @@ Module StImp.
         (Ri:=fun 'tt ctx w =>
                w = Obs (Log ctx) tt /\
                exists b : bool,
-                 <[ {instr_stateE (cdenote_comp c) ctx}, {Obs (Log ctx) tt} |= AX (done= {(ctx, b)} {Obs (Log ctx) tt}) ]> /\
+                 <[ {instr_stateE (cdenote_comp c) ctx}, {Obs (Log ctx) tt} |= ret= {(ctx, b)} {Obs (Log ctx) tt} ]> /\
                    (if b
                     then
                       <[ {instr_stateE (cdenote_prog t) ctx}, {Obs (Log ctx) tt} |= {φ} AU ret {fun '(ctx', _) (w' : WorldW Ctx) =>
                                                                          w' = Obs (Log ctx') tt /\ Ri ctx' /\ f ctx' < f ctx} ]>
-                    else <[ {Ret (ctx, tt): ctreeW Ctx B (Ctx * unit)}, {Obs (Log ctx) tt} |= {φ} AN {ψ} ]>))
+                    else <[ {Ret (ctx, tt): ctreeW Ctx B (Ctx * unit)}, {Obs (Log ctx) tt} |= {ψ} ]>))
         (f:= fun _ ctx _ => f ctx); eauto with ticl.
       - intros [] ctx' w' Hd (-> & b' & Hb' & HR).
         eapply aur_state_bind_r_eq; eauto with ticl.
@@ -657,7 +652,7 @@ Module StImp.
         (forall ctx,
             R ctx ->
             <( {instr_prog [[while c do t done ]] ctx}, {Obs (Log ctx) tt} |= φ )> /\
-            <[ {instr_comp c ctx}, {Obs (Log ctx) tt} |= AX done={(ctx, true)} {Obs (Log ctx) tt} ]>  /\            
+            <[ {instr_comp c ctx}, {Obs (Log ctx) tt} |= ret={(ctx, true)} {Obs (Log ctx) tt} ]>  /\            
             <[ {instr_prog t ctx}, {Obs (Log ctx) tt} |= AX (φ AU ret {fun '(ctx', _) w' => w' = Obs (Log ctx') tt /\ R ctx'}) ]>) ->
       <( {instr_prog [[ while c do t done ]] ctx}, {Obs (Log ctx) tt} |= AG φ )>.
     Proof.
@@ -666,7 +661,7 @@ Module StImp.
       eapply ag_state_iter with (R:=fun 'tt ctx w =>
                                       w = Obs (Log ctx) tt /\
                                       <( {instr_prog [[while c do t done ]] ctx}, w |= φ )> /\
-                                        <[ {instr_comp c ctx}, w |= AX done={(ctx, true)} w ]>  /\            
+                                        <[ {instr_comp c ctx}, w |= ret={(ctx, true)} w ]>  /\            
                                         <[ {instr_prog t ctx}, w |= AX (φ AU ret {fun '(ctx', _) w' =>
                                                                                         w' = Obs (Log ctx') tt /\ R ctx'}) ]>); eauto with ticl.
       - intros [] ctx' w' Hd (-> & Ht & Hc & HR); intuition.

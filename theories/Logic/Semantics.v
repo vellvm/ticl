@@ -145,6 +145,27 @@ Section Shallow.
     
   Set Elimination Schemes.
 
+  (** Map only the successor predicate, preserving prefix and progress. *)
+  Lemma anc_mono_r (p q q' : MP) :
+    (forall t w, q t w -> q' t w) ->
+    forall t w, anc p q t w -> anc p q' t w.
+  Proof.
+    intros Hqq' t w (Hp & Hs & Htr).
+    split; [exact Hp | split; [exact Hs |]].
+    intros t' w' TR; apply Hqq'; now apply (Htr t' w' TR).
+  Qed.
+
+  (** Map until leaves without changing its prefix or transition evidence. *)
+  Lemma auc_mono_r (p q q' : MP) :
+    (forall t w, q t w -> q' t w) ->
+    forall t w, auc p q t w -> auc p q' t w.
+  Proof.
+    intros Hqq'.
+    apply (auc_ind (fun t w => auc p q' t w)).
+    - intros t w Hq; apply MatchA; now apply Hqq'.
+    - intros t w Hstep IH; now apply StepA.
+  Qed.
+
   Arguments impl /.  
 
   (** ** Forall Always modality (AG) *)
@@ -208,7 +229,6 @@ Section Entailment.
   Definition entailsR {X}: ticlr E X -> MP X := 
     fix entailsR (φ: ticlr E X): MP X :=
       match φ with
-      | (CDone φ) => fun _ => done_with φ
       | (CRet φ) => fun t w => exists x, φ x w /\ anc (fun _ w => not_done w) (fun _ => done_of x w) t w
       | (CuR Q_A p q) => auc (entailsL X p) (entailsR q)
       | (CuR Q_E p q) => euc (entailsL X p) (entailsR q)
@@ -237,7 +257,6 @@ Section Entailment.
   (** ** Unfolding of [entailsR]. *) 
   Lemma unfold_entailsR {X}: forall (t: M E B X) (w: World E) (φ: ticlr E X),
       entailsR φ t w = match φ with
-                       | (CDone φ) => done_with φ w
                        | (CRet φ) => exists x, φ x w /\ anc (fun _ w => not_done w) (fun _ => done_of x w) t w
                        | (CuR Q_A p q) => auc (entailsL X p) (entailsR q) t w
                        | (CuR Q_E p q) => euc (entailsL X p) (entailsR q) t w
@@ -294,18 +313,7 @@ Proof.
 Qed.
 Global Hint Resolve ticll_vis: ticll.
 
-Lemma ticlr_done `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) (φ: X -> World E -> Prop),
-    <[ t, w |= done φ ]> <-> done_with φ w.
-Proof. intros; auto. Qed.
 Create HintDb ticlr.
-Global Hint Resolve ticlr_done: ticlr.
-
-Lemma ticlr_done_eq `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) (r:X),
-    <[ t, w |= done= r w ]> <-> done_with (fun r' w' => r=r' /\ w=w') w.
-Proof. intros; auto. Qed. 
-Global Hint Resolve ticlr_done_eq: ticlr.
 
 Lemma ticlr_ret `{KMS: Kripke M E B} X:
   forall (t: M E B X) (w: World E) (φ: X -> World E -> Prop),
@@ -313,31 +321,53 @@ Lemma ticlr_ret `{KMS: Kripke M E B} X:
 Proof. intros; rewrite unfold_entailsR; reflexivity. Qed.
 Global Hint Resolve ticlr_ret: ticlr.
 
-(** [ret R] unfolds to: some [x] satisfies [R x w] and all transitions return exactly [x]. *)
-Lemma ret_unfold `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) (φ: X -> World E -> Prop),
-    <[ t, w |= ret φ ]> <-> exists x, φ x w /\ <[ t, w |= AX done= x w ]>.
+(** Native return implies a terminal postcondition after its final transition.
+    The postcondition is evaluated at the unchanged predecessor world. *)
+Lemma ret_done_next `{KMS: Kripke M E B} {X}
+    (R : X -> World E -> Prop) (t : M E B X) w :
+  entailsR (CRet R) t w ->
+  anc (entailsL X (CNow (fun _ => True)))
+    (fun _ wd => done_with R wd) t w.
 Proof.
-  intros; rewrite ticlr_ret.
-  split.
-  - intros (x & Hx & Hd & Hs & Htr); exists x; split; auto.
-    rewrite unfold_entailsR; split2; auto.
-    + now apply ticll_now.
-    + intros t' w' TR; rewrite unfold_entailsR; apply done_of_eq; now apply (Htr t' w' TR).
-  - intros (x & Hx & H); rewrite unfold_entailsR in H; destruct H as (_ & Hs & Htr).
-    exists x; split2; auto.
-    + now apply can_step_not_done in Hs.
-    + split; auto.
-      intros t' w' TR; specialize (Htr t' w' TR); rewrite unfold_entailsR in Htr; now apply done_of_eq.
+  intros H; apply ticlr_ret in H as (x & HR & Hd & Hs & Htr).
+  split; [rewrite unfold_entailsL; now split | split; [exact Hs |]].
+  intros t' w' TR; destruct (Htr t' w' TR); constructor; exact HR.
 Qed.
 
+(** Universal eventual native return includes the final value transition. *)
+Lemma af_ret_done `{KMS: Kripke M E B} {X}
+    (R : X -> World E -> Prop) (t : M E B X) w :
+  entailsR (CuR Q_A (CNow (fun _ => True)) (CRet R)) t w ->
+  auc (entailsL X (CNow (fun _ => True)))
+    (fun _ wd => done_with R wd) t w.
+Proof.
+  rewrite unfold_entailsR; revert t w.
+  apply (auc_ind (fun t w =>
+    auc (entailsL X (CNow (fun _ => True)))
+      (fun _ wd => done_with R wd) t w)).
+  - intros t w HR; apply ret_done_next in HR as (Hp & Hs & Htr).
+    apply StepA; split; [exact Hp | split; [exact Hs |]].
+    intros t' w' TR; apply MatchA; now apply (Htr t' w' TR).
+  - intros t w Hstep IH; now apply StepA.
+Qed.
 
-
-Lemma ticlr_finish `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) φ,
-    <[ t, w |= finish φ ]> <-> done_with (X:=X) (finish_with φ) w.
-Proof. intros; auto. Qed. 
-Global Hint Resolve ticlr_finish: ticlr.
+(** Existential eventual native return includes one final value transition. *)
+Lemma ef_ret_done `{KMS: Kripke M E B} {X}
+    (R : X -> World E -> Prop) (t : M E B X) w :
+  entailsR (CuR Q_E (CNow (fun _ => True)) (CRet R)) t w ->
+  euc (entailsL X (CNow (fun _ => True)))
+    (fun _ wd => done_with R wd) t w.
+Proof.
+  rewrite unfold_entailsR; revert t w.
+  apply (euc_ind (fun t w =>
+    euc (entailsL X (CNow (fun _ => True)))
+      (fun _ wd => done_with R wd) t w)).
+  - intros t w HR; apply ret_done_next in HR as (Hp & (t' & w' & TR) & Htr).
+    apply StepE; split; [exact Hp | exists t', w'; split; [exact TR |]].
+    apply MatchE; now apply (Htr t' w' TR).
+  - intros t w (Hp & t' & w' & TR & _ & IH).
+    apply StepE; split; [exact Hp | exists t', w'; now split].
+Qed.
 
 (*| AN, WX, EN unfold |*)
 Lemma ticll_an `{KMS: Kripke M E B} X:
@@ -470,7 +500,7 @@ Lemma ticll_sound `{KMS: Kripke M E B} X: forall (t: M E B X) (w: World E),
     ~ <( t, w |= ⊥ )>.
 Proof. now intros * []. Qed. 
 
-(** There are two top statements, one for prefix and one for suffix. *)
+(** Prefix truth holds exactly at nonterminal worlds. *)
 Lemma ticll_top `{KMS: Kripke M E B} X: forall (t: M E B X) (w: World E),
     not_done w -> <( t, w |= ⊤ )>.
 Proof.
@@ -478,13 +508,6 @@ Proof.
   now apply ticll_now.
 Qed.
 
-Lemma ticlr_top `{KMS: Kripke M E B} X: forall (t: M E B X) (w: World E),
-    is_done X w -> <[ t, w |= ⫪ ]>.
-Proof.
-  intros.
-  apply ticlr_done.
-  inv H; now constructor.
-Qed.
 
 (** Cannot exist path such that eventually Bot.
     This is a strong statement, it shows that [False] cannot eventually appear.
@@ -511,18 +534,18 @@ Qed.
 
 (** Cannot exist path such that eventually Bot. *)
 Lemma ticlr_sound_ef `{KMS: Kripke M E B} X: forall (t: M E B X) (w: World E),
-    ~ <[ t, w |= EF ⫫ ]>.
+    ~ <[ t, w |= EF ret {fun _ _ => False} ]>.
 Proof.
   intros * Contra.
   rewrite unfold_entailsR in Contra.
   induction Contra.
-  - rewrite ticlr_done in H; now ddestruction H.
+  - apply ticlr_ret in H as (x & HF & _); contradiction.
   - now destruct H as (? & ? & ? & ? & ?).
 Qed.
 
 (** Cannot have all paths such that eventually always Bot. *)
 Lemma ticlr_sound_af `{KMS: Kripke M E B} X: forall (t: M E B X) (w: World E),
-    ~ <[ t, w |= AF ⫫ ]>.
+    ~ <[ t, w |= AF ret {fun _ _ => False} ]>.
 Proof.
   intros * Contra.
   apply ticlr_au_eu in Contra.
@@ -530,16 +553,16 @@ Proof.
   contradiction.
 Qed.
 
-(** [AF done R] rules out infinite paths: every [ktrans] path from [t, w] is
-    finite, whatever branch is taken. *)
+(** Eventual terminal postconditions rule out infinite paths: every [ktrans]
+    path from [t, w] is finite, whatever branch is taken. *)
 Theorem af_done_accessible `{Kripke M E B} {X}
     (R : X -> World E -> Prop) (t : M E B X) (w : World E) :
-  <[ t, w |= AF done R ]> -> Acc kripke_step (t, w).
+  auc (entailsL X (CNow (fun _ => True)))
+    (fun _ wd => done_with R wd) t w -> Acc kripke_step (t, w).
 Proof.
-  rewrite unfold_entailsR; revert t w.
+  revert t w.
   apply (auc_ind (fun t w => Acc kripke_step (t, w))).
   - intros t w Hdone; constructor; intros [u w'] TR; cbn in TR.
-    rewrite unfold_entailsR in Hdone.
     apply ktrans_not_done in TR; inversion Hdone; subst; inversion TR.
   - intros t w _ (_ & _ & IH); constructor; intros [u w'] TR.
     exact (IH u w' TR).
@@ -565,7 +588,7 @@ Qed.
 Hint Resolve enc_not_done anc_not_done: ticl.
 
 (** * Prefix formulas hold for [not_done] worlds *)
-(** Here the syntax separation becomes semantically apparent, as suffix formulas are the only ones that can hold for [done] worlds. *)
+(** Prefix atoms carry nonterminal evidence, preserved by their temporal rules. *)
 Lemma ticll_not_done `{KMS: Kripke M E B} X: forall (t: M E B X) (w: World E) (p: ticll E),
     <( t, w |= p )> ->
     not_done w.

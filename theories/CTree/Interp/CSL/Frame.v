@@ -1,3 +1,4 @@
+From Stdlib Require Import FunctionalExtensionality.
 From TICL Require Export CTree.Interp.CSL.Mod CTree.Logic.Sim Logic.Simulation.
 From TICL Require Import CTree.Core Logic.Kripke Logic.Semantics
   CTree.Logic.Trans CTree.Interp.State.Mod Utils.Pcm.
@@ -24,6 +25,22 @@ Definition frame_rel (fr: ManagedHeap) (s s': SSig) : Prop :=
 (** Frame-related results carry equal values and frame-related states. *)
 Definition frameRV {X} (fr: ManagedHeap) : SSig * X -> SSig * X -> Prop :=
   fun '(s,x) '(s',x') => x' = x /\ frame_rel fr s s'.
+
+(** Framing determines a unique target result, including both heap functions. *)
+Lemma frameRV_right_unique {X} fr : forall (r r1 r2 : SSig * X),
+  frameRV fr r r1 -> frameRV fr r r2 -> r1 = r2.
+Proof.
+  intros [s x] [[[h1 al1] aux1] x1] [[[h2 al2] aux2] x2].
+  intros [Hx1 [_ [Ha1 [Hh1 Hal1]]]] [Hx2 [_ [Ha2 [Hh2 Hal2]]]].
+  cbn in *.
+  assert (Hh : h1 = h2).
+  { apply functional_extensionality; intro a.
+    rewrite (Hh1 a), (Hh2 a); reflexivity. }
+  assert (Hal : al1 = al2).
+  { apply functional_extensionality; intro a.
+    rewrite (Hal1 a), (Hal2 a); reflexivity. }
+  subst h2 al2 x1 x2; f_equal; f_equal; congruence.
+Qed.
 (** Existentially frame a result postcondition. *)
 Definition frame_post {A X} (fr: ManagedHeap)
   (P: SSig * X -> World (writerE (CSLObs A)) -> Prop) :=
@@ -187,7 +204,8 @@ Proof.
 Qed.
 
 
-(** Client API: prefixes transport unchanged; suffixes use [framer] and [done] uses [frame_post]. *)
+(** Client API: prefixes transport unchanged; native returns and terminal
+    semantic postconditions are transported by [frame_post]. *)
 Section FrameLogic.
   Context {X: Type} (fr: ManagedHeap) (u: ctree sE Bn X) (s s': SSig).
   Hypothesis HF: Framable no_alloc_sE u.
@@ -204,21 +222,62 @@ Section FrameLogic.
     <[ {interp_state sh u s}, w |= ψ ]> ->
     <[ {interp_state sh u s'}, w |= {framer (frameRV fr) ψ} ]>.
   Proof.
-    intros Hnd; eapply ticlr_csim; [|now apply simW_refl].
-    now apply csim_interp_sh_frame.
+    intros Hnd; eapply ticlr_csim.
+    - apply frameRV_right_unique.
+    - now apply csim_interp_sh_frame.
+    - now apply simW_refl.
   Qed.
 
+  (** Frame a native return postcondition under universal next. *)
+  Corollary anr_csl_frame_ret φ P w : not_done w ->
+    <[ {interp_state sh u s}, w |= φ AN ret P ]> ->
+    <[ {interp_state sh u s'}, w |= φ AN ret {frame_post fr P} ]>.
+  Proof. intros Hnd; apply (ticlr_csl_frame (CxR Q_A φ (CRet P))); exact Hnd. Qed.
+
+  (** Frame a native return postcondition under universal until. *)
+  Corollary aur_csl_frame_ret φ P w : not_done w ->
+    <[ {interp_state sh u s}, w |= φ AU ret P ]> ->
+    <[ {interp_state sh u s'}, w |= φ AU ret {frame_post fr P} ]>.
+  Proof. intros Hnd; apply (ticlr_csl_frame (CuR Q_A φ (CRet P))); exact Hnd. Qed.
+
   (** Frame the terminal postcondition under universal next. *)
-  Corollary anr_csl_frame_done φ P w : not_done w ->
-    <[ {interp_state sh u s}, w |= φ AN done P ]> ->
-    <[ {interp_state sh u s'}, w |= φ AN done {frame_post fr P} ]>.
-  Proof. intros Hnd; apply (ticlr_csl_frame (CxR Q_A φ (CDone P))); exact Hnd. Qed.
+  Corollary anr_csl_frame_done φ
+      (P : SSig * X -> World (writerE (CSLObs (nat * nat))) -> Prop) w : not_done w ->
+    anc (entailsL (SSig * X) φ) (fun _ wd => done_with P wd)
+      (interp_state sh u s) w ->
+    anc (entailsL (SSig * X) φ) (fun _ wd => done_with (frame_post fr P) wd)
+      (interp_state sh u s') w.
+  Proof.
+    intros Hnd H.
+    eapply sim_anc with (RV := frameRV fr) (Fr := csim (frameRV fr)).
+    - apply csim_ktrans_l.
+    - apply csim_ktrans_r.
+    - intros t t' z HS HP; eapply ticll_csim; eauto.
+    - intros t t' z z' HS HW HP.
+      exact (sim_done_with (frameRV fr) P z z' HW HP).
+    - exact (csim_interp_sh_frame fr u s s' HF HR).
+    - exact H.
+  Qed.
 
 
   (** Frame the terminal postcondition under universal until. *)
-  Corollary aur_csl_frame_done φ P w : not_done w ->
-    <[ {interp_state sh u s}, w |= φ AU done P ]> ->
-    <[ {interp_state sh u s'}, w |= φ AU done {frame_post fr P} ]>.
-  Proof. intros Hnd; apply (ticlr_csl_frame (CuR Q_A φ (CDone P))); exact Hnd. Qed.
+  Corollary aur_csl_frame_done φ
+      (P : SSig * X -> World (writerE (CSLObs (nat * nat))) -> Prop) w : not_done w ->
+    auc (entailsL (SSig * X) φ) (fun _ wd => done_with P wd)
+      (interp_state sh u s) w ->
+    auc (entailsL (SSig * X) φ) (fun _ wd => done_with (frame_post fr P) wd)
+      (interp_state sh u s') w.
+  Proof.
+    intros Hnd H.
+    eapply sim_auc with (RV := frameRV fr) (Fr := csim (frameRV fr)).
+    - apply csim_ktrans_l.
+    - apply csim_ktrans_r.
+    - intros t t' z HS HP; eapply ticll_csim; eauto.
+    - intros t t' z z' HS HW HP.
+      exact (sim_done_with (frameRV fr) P z z' HW HP).
+    - exact (csim_interp_sh_frame fr u s s' HF HR).
+    - now apply simW_refl.
+    - exact H.
+  Qed.
 
 End FrameLogic.

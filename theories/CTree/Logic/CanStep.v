@@ -156,22 +156,19 @@ Section CanStepCtrees.
 
   (** A bind can always step, if the right-hand side can step. *)
   Lemma can_step_bind_r{X Y}: forall (t: ctree E B Y) (k: Y -> ctree E B X) w R,      
-      <[ t, w |= AF AX done R ]> ->
+      <[ t, w |= AF ret R ]> ->
       (forall y w, R y w -> can_step (k y) w) ->
       can_step (x <- t ;; k x) w.
   Proof. 
     intros * Hau Hk.
     apply can_step_bind.
     induction Hau.
-    - (* MatchA: AX done R at (t, w) *)
-      destruct H as (? & (t' & w' & TR') & Hdone).
-      specialize (Hdone _ _ TR') as Hd; inv Hd.
-      + (* Done x: t returned from Pure *)
-        apply ktrans_to_done_inv in TR' as Hinv; destruct Hinv as (Heq & ->).
+    - apply ticlr_ret in H as (x & HR & Hd & (t' & w' & TR') & Hdone).
+      specialize (Hdone _ _ TR'); inversion Hdone; subst.
+      + apply ktrans_to_done_inv in TR' as Hinv; destruct Hinv as (Heq & _).
         right; exists x, (Done x); split2; eauto with ticl.
         now rewrite <- Heq.
-      + (* Finish e v x *)
-        apply ktrans_to_finish_inv in TR' as Hinv; destruct Hinv as (Heq & ->).
+      + apply ktrans_to_finish_inv in TR' as Hinv; destruct Hinv as (Heq & _).
         right; exists x, (Finish e v x); split2; eauto with ticl.
         now rewrite <- Heq.
     - (* StepA *)
@@ -179,16 +176,16 @@ Section CanStepCtrees.
       pose proof TR' as TR_; cbn in TR_; ddestruction TR_.
       + left; exists t', w; split; eauto with ticl.
       + left; exists t', (Obs e v); split; eauto with ticl.
-      + (* the successor is done: the successor [Stuck] must be a [MatchA] of [AX done R],
-           but a stuck tree cannot step; contradiction *)
-        exfalso.
-        pose proof (trans_val_inv H) as Heq; rewrite Heq in TR'.
-        specialize (Htr _ _ TR') as Hs.
-        inv Hs; destruct H0 as (_ & (? & ? & TRc) & _); now apply ktrans_stuck in TRc.
       + exfalso.
-        pose proof (trans_val_inv H) as Heq; rewrite Heq in TR'.
         specialize (Htr _ _ TR') as Hs.
-        inv Hs; destruct H0 as (_ & (? & ? & TRc) & _); now apply ktrans_stuck in TRc.
+        inv Hs.
+        * apply ticlr_ret in H0 as (? & _ & Hd & _); inversion Hd.
+        * destruct H0 as ((_ & Hd) & _); inversion Hd.
+      + exfalso.
+        specialize (Htr _ _ TR') as Hs.
+        inv Hs.
+        * apply ticlr_ret in H0 as (? & _ & Hd & _); inversion Hd.
+        * destruct H0 as ((_ & Hd) & _); inversion Hd.
   Qed.
   Hint Resolve can_step_bind_r: ticl.
 
@@ -223,7 +220,7 @@ Section CanStepInterp.
 
   (** A stateful bind can always step, if the right-hand side can step. *)
   Lemma can_step_state_bind_r{X Y}: forall (k: X -> ctree E B Y) (s s': S) (t: ctree E B X) x w w',
-      <[ {interp_state h t s}, w |= AF AX done= {(s', x)} w' ]> ->
+      <[ {interp_state h t s}, w |= AF ret= {(s', x)} w' ]> ->
       can_step (interp_state h (k x) s') w' ->
       can_step (interp_state h (x <- t ;; k x) s) w.
   Proof.
@@ -282,12 +279,12 @@ Qed.
 (** * The [ret] atom on ctrees *)
 (** [<[ t, w |= ret R ]>] says every transition of [t] returns the same value
     [x] with [R x w]. On ctrees this is exactly strong bisimilarity to [Ret x]:
-    hidden branches that return different values ([brn 2 (fun i => Ret i)])
-    satisfy [AX done R] but not [ret R]. *)
+    hidden branches that return different values can satisfy a universal
+    terminal postcondition after one step, but not [ret R]. *)
 Section CTreeRet.
   Context {E B: Type -> Type} {X: Type}.
 
-  (** Every [ktrans] out of a state satisfying [AX done= x w] is a [val x] step to [Stuck]. *)
+  (** Every transition returning [x] has label [val x] and residual [Stuck]. *)
   Local Lemma trans_done_eq_inv: forall (t t': ctree E B X) w (x: X) l,
       not_done w ->
       (forall t' w', |t, w| ↦ |t', w'| -> done_eq x w') ->
@@ -312,13 +309,11 @@ Section CTreeRet.
       exists x, R x w /\ t ~ (Ret x : ctree E B X).
   Proof.
     intros * H.
-    apply ret_unfold in H as (x & HR & H).
-    rewrite unfold_entailsR in H; destruct H as (Hd & Hs & Htr).
-    rewrite unfold_entailsL in Hd; destruct Hd as (_ & Hd).
+    apply ticlr_ret in H as (x & HR & Hd & Hs & Htr).
     exists x; split; auto.
     assert (Htr': forall t' w', |t, w| ↦ |t', w'| -> done_eq (E:=E) x w').
-    { intros t' w' TR; specialize (Htr t' w' TR); rewrite unfold_entailsR in Htr.
-      unfold done_eq; inv Htr; destruct H as (-> & ->); now constructor. }
+    { intros t' w' TR; specialize (Htr t' w' TR).
+      unfold done_eq; inversion Htr; now constructor. }
     clear Htr HR R.
     step; split; cbn.
     - (* t simulates Ret x *)
@@ -351,11 +346,9 @@ Section CTreeRet.
       <[ {Ret x : ctree E B X}, w |= ret R ]>.
   Proof.
     intros * Hd HR.
-    apply ret_unfold; exists x; split; auto.
-    rewrite unfold_entailsR; split2.
-    - rewrite unfold_entailsL; split; auto.
+    apply ticlr_ret; exists x; split; [exact HR|]; split; [exact Hd|]; split.
     - now apply can_step_ret.
-    - intros t' w' TR; rewrite unfold_entailsR.
+    - intros t' w' TR.
       inv Hd.
       + apply ktrans_done in TR as (-> & _); now constructor.
       + apply ktrans_finish in TR as (-> & _); now constructor.
@@ -376,17 +369,14 @@ Section CTreeRet.
       <[ {Br c k}, w |= ret R ]>.
   Proof.
     intros Y c k y w x R Hd HR Hk.
-    apply ret_unfold; exists x; split; auto.
-    rewrite unfold_entailsR; split2.
-    - rewrite unfold_entailsL; split; auto.
+    apply ticlr_ret; exists x; split; [exact HR|]; split; [exact Hd|]; split.
     - apply can_step_br; exists y.
-      specialize (Hk y); apply ret_unfold in Hk as (x' & _ & Hk).
-      rewrite unfold_entailsR in Hk; now destruct Hk as (_ & ? & _).
+      specialize (Hk y); apply ticlr_ret in Hk as (x' & _ & _ & Hs & _).
+      exact Hs.
     - intros t' w' TR.
       apply ktrans_br in TR as (y' & TR).
-      specialize (Hk y'); apply ret_unfold in Hk as (x' & (-> & _) & Hk).
-      rewrite unfold_entailsR in Hk; destruct Hk as (_ & _ & Hk).
-      now apply Hk.
+      specialize (Hk y'); apply ticlr_ret in Hk as (x' & (-> & _) & _ & _ & Htr).
+      exact (Htr t' w' TR).
   Qed.
 End CTreeRet.
 

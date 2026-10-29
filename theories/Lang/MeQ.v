@@ -131,32 +131,32 @@ Module ME.
     (** Pop lemmas *)
     Lemma axr_pop_nil: forall w,
         not_done w ->
-        <[ {instr_prog CPop nil}, w |= AX (done= {(nil, None)} w) ]>.
+        <[ {instr_prog CPop nil}, w |= ret= {(nil, None)} w ]>.
     Proof.
       intros; unfold instr_prog; cbn.
       unfold_trigger.
       rewrite bind_ret_l, sb_guard.
-      apply axr_ret; auto with ticl.
+      apply ret_ret; auto with ticl.
     Qed.
 
     Lemma anr_pop_cons: forall w h ts φ,
         not_done w ->
         <( {log h: ctreeW T B unit}, w |= φ )> ->
-        <[ {instr_prog CPop (h::ts)}, w |= φ AN AX (done= {(ts, Some h)} {Obs (Log h) tt}) ]>.
+        <[ {instr_prog CPop (h::ts)}, w |= φ AN ret= {(ts, Some h)} {Obs (Log h) tt} ]>.
     Proof.
       intros; unfold instr_prog; cbn.
       unfold_trigger.
       rewrite bind_bind.
       apply anr_log.
       - rewrite bind_ret_l, sb_guard.
-        apply axr_ret; auto with ticl.
+        apply ret_ret; auto with ticl.
       - now apply ticll_bind_l.
     Qed.
 
     Lemma aur_pop_cons: forall w h ts φ,
         not_done w ->
         <( {log h: ctreeW T B unit}, w |= φ )> ->
-        <[ {instr_prog CPop (h::ts)}, w |= φ AU AX (done= {(ts, Some h)} {Obs (Log h) tt}) ]>.
+        <[ {instr_prog CPop (h::ts)}, w |= φ AU ret= {(ts, Some h)} {Obs (Log h) tt} ]>.
     Proof.
       intros; unfold instr_prog; cbn.
       cright.
@@ -167,12 +167,12 @@ Module ME.
 
     Lemma axr_push: forall w x q,
         not_done w ->
-        <[ {instr_prog (CPush x) q}, w |= AX (done= {(q ++ [x], tt)} w) ]>.
+        <[ {instr_prog (CPush x) q}, w |= ret= {(q ++ [x], tt)} w ]>.
     Proof.
       intros; unfold instr_prog; cbn.
       unfold_trigger.
       rewrite bind_ret_l, sb_guard.
-      apply axr_ret; auto with ticl.
+      apply ret_ret; auto with ticl.
     Qed.
 
     (** Ret lemmas *)
@@ -187,7 +187,7 @@ Module ME.
 
     (** Sequence lemmas *)
     Lemma aul_qprog_bind{X Y}: forall (h: CProg X) (k: X -> CProg Y) q q' (r: X) w w' φ ψ,
-        <[ {instr_prog h q}, w |= φ AU AX done={(q',r)} w' ]> ->
+        <[ {instr_prog h q}, w |= φ AU ret={(q',r)} w' ]> ->
         <( {instr_prog (k r) q'}, w' |= φ AU ψ )> ->
         <( {instr_prog (CBind h k) q}, w |= φ AU ψ )>.
     Proof.
@@ -196,7 +196,7 @@ Module ME.
     Qed.
 
     Lemma aur_qprog_bind_r{X Y}: forall (h: CProg X) (k: X -> CProg Y) q q' (r: X) w w' φ ψ,
-        <[ {instr_prog h q}, w |= φ AU AX done={(q',r)} w' ]> ->
+        <[ {instr_prog h q}, w |= φ AU ret={(q',r)} w' ]> ->
         <[ {instr_prog (k r) q'}, w' |= φ AU ψ ]> ->
         <[ {instr_prog (CBind h k) q}, w |= φ AU ψ ]>.
     Proof.
@@ -205,7 +205,7 @@ Module ME.
     Qed.
 
     Lemma anr_qprog_bind_l{X Y}: forall (h: CProg X) (k: X -> CProg Y) q q' (r: X) w w' φ ψ,
-        <[ {instr_prog h q}, w |= φ AN AX done={(q',r)} w' ]> ->
+        <[ {instr_prog h q}, w |= φ AN ret={(q',r)} w' ]> ->
         <[ {instr_prog (k r) q'}, w' |= ψ ]> ->
         <[ {instr_prog (CBind h k) q}, w |= φ AN ψ ]>.
     Proof.
@@ -240,10 +240,10 @@ Module ME.
           not_done w ->
           exists (opt: option X) q' w',
             not_done w' /\
-            <[ {instr_prog b q}, w |= φ AU AX done={(q',opt)} w' ]> /\
+            <[ {instr_prog b q}, w |= φ AU ret={(q',opt)} w' ]> /\
               match opt with
               | Some _ => Ri q' w' /\ f q' < f q
-              | None => <[ {Ret (q', tt): ctreeW T B (Q * unit)}, w' |= φ AN ψ ]>
+              | None => <[ {Ret (q', tt): ctreeW T B (Q * unit)}, w' |= ψ ]>
               end) ->
       <[ {instr_prog (CUntilNone b) q}, w |= φ AU ψ ]>.
     Proof.
@@ -252,10 +252,10 @@ Module ME.
         (Ri:=fun 'tt q w =>
                exists (opt: option X) q' w',
                  not_done w' /\
-                 <[ {interp_state h_queueE (cdenote_prog b) q}, w |= φ AU AX done={(q',opt)} w' ]> /\
+                 <[ {interp_state h_queueE (cdenote_prog b) q}, w |= φ AU ret={(q',opt)} w' ]> /\
                    match opt with
                    | Some _ => Ri q' w' /\ f q' < f q
-                   | None => <[ {Ret (q', tt): ctreeW T B (Q * unit)}, w' |= φ AN ψ ]>
+                   | None => <[ {Ret (q', tt): ctreeW T B (Q * unit)}, w' |= ψ ]>
                    end)
         (f:= fun _ q _ => f q); eauto with ticl.
       - intros [] q' w' Hd (opt & q_ & w_ & Hd' & Hopt & HR).

@@ -119,9 +119,13 @@ Section ConditionalSimulation.
   Proof. eapply ticll_sim; [apply csim_ktrans_l|apply csim_ktrans_r]. Qed.
 
   (** Suffix formulas transport with [framer] across related worlds. *)
-  Theorem ticlr_csim RV (ψ: ticlr E X) : forall t t' w w',
+  Theorem ticlr_csim RV (ψ: ticlr E X) :
+    (forall x y1 y2, RV x y1 -> RV x y2 -> y1 = y2) -> forall t t' w w',
     csim RV t t' -> simW RV w w' -> <[ t, w |= ψ ]> -> <[ t', w' |= {framer RV ψ} ]>.
-  Proof. eapply ticlr_sim; [apply csim_ktrans_l|apply csim_ktrans_r]. Qed.
+  Proof.
+    intros Hunique; eapply ticlr_sim;
+      [apply csim_ktrans_l|apply csim_ktrans_r|exact Hunique].
+  Qed.
 End ConditionalSimulation.
 
 (** Unconditional bisimulation supplies both conditional simulation matches. *)

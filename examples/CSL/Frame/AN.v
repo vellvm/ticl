@@ -2,17 +2,15 @@
 
     [fork2 (wproc 1) (wproc 2)]: each process writes [1] into its own cell
     and yields.  Writes are silent, so the only visible steps are the
-    scheduler's; exactly three of them precede [done].  Each write is proved
+    scheduler's; exactly three of them precede the native return. Each write is proved
     on the process's own region and framed by the other one. *)
 
 (** [run_rr_prefix]/[run_nd_prefix] expose the standalone write in a bind.
-    [write_ret] is transported by [ticlr_csl_frame] to [AX done (frame_post ...)],
-    not another [ret] atom.  The done-premised [anr_bind_r] consumes that
-    transformed suffix; [frame_post_write] recovers [Some tt], the joined
-    memory, unchanged context/counter, and the old world for the continuation.
-    [frame_rel_after_2] then supplies the other worker's owned/frame split.
-    Three scheduler picks and the final return account for the four [AX]
-    layers; the silent writes add no scheduler picks. *)
+    [write_ret_framed] transports its native return through framing, and
+    [anr_bind_r] consumes it without a visible step. [frame_post_write]
+    recovers the joined memory, unchanged context/counter and old world.
+    Three scheduler picks precede native return; its final value transition
+    gives the original four-next terminal contracts below. *)
 From Stdlib Require Import Fin Vector.
 From Coinduction Require Import all.
 From examples Require Import CSL.Frame.Shared.
@@ -44,7 +42,7 @@ Local Ltac finish_nd_singleton Hpost :=
   focus_single; rewrite interp_nd_source_ret; unfocus;
   rewrite (interp_schedule_nd_ret sh) by reflexivity;
   rewrite vector_remove_head, (interp_schedule_nd_empty sh);
-  apply axr_ret; [constructor|exact Hpost].
+  apply ret_ret; [constructor|exact Hpost].
 
 
 
@@ -58,22 +56,22 @@ Proof.
   eapply peq_trans; [exact Hm|apply pop_comm, region_disj; auto].
 Qed.
 
-(** Both silently-writing processes finish after four round-robin steps. *)
-Theorem an_two_procs_rr a b ctx c :
+(** Native return follows three round-robin scheduler steps. *)
+Local Lemma an_two_procs_rr_ret a b ctx c :
   <[ {run_rr (fork2 (wproc 1) (wproc 2)) (shared a b ctx c)}, Pure |=
-     AX (AX (AX (AX done {fun '(s', _) _ => both 1 1 (csl_memory s')}))) ]>.
+     AX (AX (AX ret {fun '(s', _) _ => both 1 1 (csl_memory s')})) ]>.
 Proof.
   unfold fork2; rewrite run_rr_fork_bind; unfold denote.
   (* parent: write 2, yield *)
   focus_parent; unfold wproc at 2; rr_prefix write_yield_fork_free.
-  eapply anr_bind_r; [apply (write_ax_framed 2 1 b a ctx c _ Pure); [constructor|apply frame_rel_shared_2]|].
+  eapply anr_bind_r; [apply (write_ret_framed 2 1 b a ctx c _ Pure); [constructor|apply frame_rel_shared_2]|].
   intros [s1 r] w1 HP; apply frame_post_write in HP as (-> & Hm1 & Hs1 & ->); unfocus.
   focus_parent; rewrite interp_rr_bind, interp_rr_yield.
   rewrite interp_schedule_rr_select; apply anr_step; split; [csplit; auto with ticl|].
   rewrite rr_pick_1_0; unfocus.
   (* child: write 1, yield *)
   focus_child; unfold wproc; rr_prefix write_yield_fork_free.
-  eapply anr_bind_r; [apply (write_ax_framed 1 2 a 1 ctx c _ Pure); [constructor|apply frame_rel_after_2; assumption]|].
+  eapply anr_bind_r; [apply (write_ret_framed 1 2 a 1 ctx c _ Pure); [constructor|apply frame_rel_after_2; assumption]|].
   intros [s2 r] w2 HP; apply frame_post_write in HP as (-> & Hm2 & _ & ->); unfocus.
   focus_child; rewrite interp_rr_bind, interp_rr_yield.
   rewrite interp_schedule_rr_select; apply anr_step; split; [csplit; auto with ticl|].
@@ -88,11 +86,11 @@ Proof.
   focus_single; rewrite interp_rr_ret; unfocus.
   rewrite (interp_schedule_rr_ret sh) by reflexivity.
   rewrite vector_remove_head, (interp_schedule_rr_empty sh).
-  apply axr_ret; [constructor|exact Hm2].
+  apply ret_ret; [constructor|exact Hm2].
 Qed.
 
-(** Nondeterministic scheduler: every pick order reaches [done] at the same
-    depth. *)
+(** Nondeterministic scheduler: every pick order reaches the terminal
+    postcondition at the same four-transition depth. *)
 Local Ltac nd_select :=
   rewrite (interp_schedule_nd_select sh); apply (anr_brS _ _ Fin.F1); split; [csplit; auto with ticl|].
 (** Split a nonempty finite choice into its head and remaining indices. *)
@@ -108,28 +106,36 @@ Local Ltac fin1_case := fin_case; [|fin_none].
 Lemma ax4_done_mono {X} (t : ctreeW (CSLObs (nat * nat)) Bn X) w
   (P Q : X -> World (writerE (CSLObs (nat * nat))) -> Prop) :
   (forall x w, P x w -> Q x w) ->
-  <[ t, w |= AX (AX (AX (AX done P))) ]> -> <[ t, w |= AX (AX (AX (AX done Q))) ]>.
+  anc (entailsL X (CNow (fun _ => True)))
+    (anc (entailsL X (CNow (fun _ => True)))
+      (anc (entailsL X (CNow (fun _ => True)))
+        (anc (entailsL X (CNow (fun _ => True))) (fun _ wd => done_with P wd)))) t w ->
+  anc (entailsL X (CNow (fun _ => True)))
+    (anc (entailsL X (CNow (fun _ => True)))
+      (anc (entailsL X (CNow (fun _ => True)))
+        (anc (entailsL X (CNow (fun _ => True))) (fun _ wd => done_with Q wd)))) t w.
 Proof.
-  intros HPQ.
-  pose proof (done_impl_ticlr (M := ctree) (B := Bn) P Q HPQ) as HI.
-  do 4 apply (impl_ticlr_next Q_A Q_A eq_refl <( ⊤ )> <( ⊤ )> (reflexivity _)) in HI.
-  exact (HI t w).
+  intros HPQ; apply anc_mono_r; intros t1 w1.
+  apply anc_mono_r; intros t2 w2.
+  apply anc_mono_r; intros t3 w3.
+  apply anc_mono_r; intros t4 w4.
+  apply done_with_mono; exact HPQ.
 Qed.
-(** Every nondeterministic pick order finishes both writes after four steps. *)
-Theorem an_two_procs_nd a b ctx c :
+(** Native return follows three nondeterministic scheduler steps. *)
+Local Lemma an_two_procs_nd_ret a b ctx c :
   <[ {run_nd (fork2 (wproc 1) (wproc 2)) (shared a b ctx c)}, Pure |=
-     AX (AX (AX (AX done {fun '(s', _) _ => both 1 1 (csl_memory s')}))) ]>.
+     AX (AX (AX ret {fun '(s', _) _ => both 1 1 (csl_memory s')})) ]>.
 Proof.
   unfold fork2; rewrite run_nd_fork_bind; unfold denote.
   (* parent: write 2, yield *)
   focus_parent; unfold wproc at 2; nd_prefix write_yield_fork_free.
-  eapply anr_bind_r; [apply (write_ax_framed 2 1 b a ctx c _ Pure); [constructor|apply frame_rel_shared_2]|].
+  eapply anr_bind_r; [apply (write_ret_framed 2 1 b a ctx c _ Pure); [constructor|apply frame_rel_shared_2]|].
   intros [s1 r] w1 HP; apply frame_post_write in HP as (-> & Hm1 & Hs1 & ->); unfocus.
   focus_parent; rewrite interp_nd_source_bind, interp_nd_source_yield.
   nd_select; fin2_cases; unfocus.
   - (* child first: write 1, yield *)
     focus_child; unfold wproc; nd_prefix write_yield_fork_free.
-    eapply anr_bind_r; [apply (write_ax_framed 1 2 a 1 ctx c _ Pure); [constructor|apply frame_rel_after_2; assumption]|].
+    eapply anr_bind_r; [apply (write_ret_framed 1 2 a 1 ctx c _ Pure); [constructor|apply frame_rel_after_2; assumption]|].
     intros [s2 r] w2 HP; apply frame_post_write in HP as (-> & Hm2 & _ & ->); unfocus.
     focus_child; rewrite interp_nd_source_bind, interp_nd_source_yield.
     nd_select; fin2_cases; unfocus.
@@ -151,11 +157,40 @@ Proof.
     unfold parent; rewrite vector_remove_tail, vector_remove_head.
     nd_select; fin1_case.
     focus_single; unfold wproc; nd_prefix write_yield_fork_free.
-    eapply anr_bind_r; [apply (write_ax_framed 1 2 a 1 ctx c _ Pure); [constructor|apply frame_rel_after_2; assumption]|].
+    eapply anr_bind_r; [apply (write_ret_framed 1 2 a 1 ctx c _ Pure); [constructor|apply frame_rel_after_2; assumption]|].
     intros [s2 r] w2 HP; apply frame_post_write in HP as (-> & Hm2 & _ & ->); unfocus.
     focus_single; rewrite interp_nd_source_bind, interp_nd_source_yield.
     nd_select; fin1_case.
     finish_nd_singleton Hm2.
+Qed.
+
+(** Preserve the original four-transition terminal properties. *)
+Theorem an_two_procs_rr a b ctx c :
+  anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+    (anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+      (anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+        (anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+          (fun _ wd => done_with (X := SSig * unit) (fun '(s', _) _ => both 1 1 (csl_memory s')) wd))))
+    (run_rr (fork2 (wproc 1) (wproc 2)) (shared a b ctx c)) Pure.
+Proof.
+  eapply anc_mono_r; [intros t1 w1|exact (an_two_procs_rr_ret a b ctx c)].
+  apply anc_mono_r; intros t2 w2.
+  apply anc_mono_r; intros t3 w3.
+  intros H; apply ret_done_next; apply ticlr_ret; exact H.
+Qed.
+
+Theorem an_two_procs_nd a b ctx c :
+  anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+    (anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+      (anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+        (anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+          (fun _ wd => done_with (X := SSig * unit) (fun '(s', _) _ => both 1 1 (csl_memory s')) wd))))
+    (run_nd (fork2 (wproc 1) (wproc 2)) (shared a b ctx c)) Pure.
+Proof.
+  eapply anc_mono_r; [intros t1 w1|exact (an_two_procs_nd_ret a b ctx c)].
+  apply anc_mono_r; intros t2 w2.
+  apply anc_mono_r; intros t3 w3.
+  intros H; apply ret_done_next; apply ticlr_ret; exact H.
 Qed.
 
 (** ** Closed terms *)
@@ -163,8 +198,12 @@ Qed.
 
 (** Instantiate the round-robin result and expose both final cell values. *)
 Example an_rr_3_5 ctx :
-  <[ {run_rr (fork2 (wproc 1) (wproc 2)) (shared 3 5 ctx 0)}, Pure |=
-     AX (AX (AX (AX done {fun '(s', _) _ => fst (csl_memory s') 1 = Some 1 /\ fst (csl_memory s') 2 = Some 1}))) ]>.
+  anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+    (anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+      (anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+        (anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+          (fun _ wd => done_with (X := SSig * unit) (fun '(s', _) _ => fst (csl_memory s') 1 = Some 1 /\ fst (csl_memory s') 2 = Some 1) wd))))
+    (run_rr (fork2 (wproc 1) (wproc 2)) (shared 3 5 ctx 0)) Pure.
 Proof.
   eapply ax4_done_mono; [|apply an_two_procs_rr].
   intros [s' _] _ H; apply both_lookup, H.
@@ -172,8 +211,12 @@ Qed.
 
 (** Instantiate the nondeterministic result and expose both final cell values. *)
 Example an_nd_3_5 ctx :
-  <[ {run_nd (fork2 (wproc 1) (wproc 2)) (shared 3 5 ctx 0)}, Pure |=
-     AX (AX (AX (AX done {fun '(s', _) _ => fst (csl_memory s') 1 = Some 1 /\ fst (csl_memory s') 2 = Some 1}))) ]>.
+  anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+    (anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+      (anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+        (anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+          (fun _ wd => done_with (X := SSig * unit) (fun '(s', _) _ => fst (csl_memory s') 1 = Some 1 /\ fst (csl_memory s') 2 = Some 1) wd))))
+    (run_nd (fork2 (wproc 1) (wproc 2)) (shared 3 5 ctx 0)) Pure.
 Proof.
   eapply ax4_done_mono; [|apply an_two_procs_nd].
   intros [s' _] _ H; apply both_lookup, H.
@@ -198,19 +241,28 @@ Proof.
 Qed.
 
 Goal forall b ctx c,
-  ~ <[ {run_rr (fork2 (wproc 1) (wproc 2)) (own 2 b ctx c)}, Pure |=
-       AX (AX (AX (AX done {fun _ _ => True}))) ]>.
+  ~ anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+    (anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+      (anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+        (anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+          (fun _ wd => done_with (fun (_ : SSig * unit) _ => True) wd))))
+    (run_rr (fork2 (wproc 1) (wproc 2)) (own 2 b ctx c)) Pure.
 Proof.
   intros b ctx c H.
   rewrite wproc_own_2_stuck in H.
-  apply anr_step in H as [_ H].
-  exact (anr_stuck H).
+  destruct H as (_ & _ & H).
+  specialize (H Stuck Pure ltac:(apply ktrans_step; split; [reflexivity|split; [reflexivity|constructor]])).
+  destruct H as (_ & Hs & _); exact (can_step_stuck _ Hs).
 Qed.
 
 (** A permitted child selection faults without region [1], refuting universal next. *)
 Lemma wproc_own_2_no_ax4_nd b ctx c :
-  ~ <[ {run_nd (fork2 (wproc 1) (wproc 2)) (own 2 b ctx c)},
-       Pure |= AX (AX (AX (AX done {fun _ _ => True}))) ]>.
+  ~ anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+    (anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+      (anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+        (anc (entailsL (SSig * unit) (CNow (fun _ => True)))
+          (fun _ wd => done_with (fun (_ : SSig * unit) _ => True) wd))))
+    (run_nd (fork2 (wproc 1) (wproc 2)) (own 2 b ctx c)) Pure.
 Proof.
   intro H.
   unfold fork2 in H; rewrite run_nd_fork_bind in H; unfold denote in H.
@@ -226,15 +278,15 @@ Proof.
     with (([denote_flow (wproc 1);; Ret tt; Ret tt]%vector : pool sE Bn 2)
       @ parent := (denote_flow (CBind CYield (fun _ => CRet tt)) >>= fun _ => Ret tt)) in H.
   rewrite interp_nd_source_bind, interp_nd_source_yield, interp_schedule_nd_select in H.
-  apply (anr_brS _ _ Fin.F1) in H as [_ H].
-  specialize (H Fin.F1).
+  destruct H as (_ & _ & H).
+  specialize (H _ Pure ltac:(apply ktrans_brS; exists Fin.F1; split; [reflexivity|split; [reflexivity|constructor]])).
   cbn [Vector.replace caseS' parent] in H.
   change ([denote_flow (wproc 1);; Ret tt; denote_flow (CRet tt);; Ret tt]%vector)
     with (([Ret tt; denote_flow (CRet tt);; Ret tt]%vector : pool sE Bn 2)
       @ child := (denote_flow (wproc 1) >>= fun _ => Ret tt)) in H.
   unfold wproc in H; rewrite interp_nd_source_bind in H.
   rewrite interp_nd_source_write_missing in H by reflexivity.
-  exact (anr_stuck H).
+  destruct H as (_ & Hs & _); exact (can_step_stuck _ Hs).
 Qed.
 
 Print Assumptions an_two_procs_rr.

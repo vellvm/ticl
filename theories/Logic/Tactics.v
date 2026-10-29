@@ -53,10 +53,6 @@ Generalizable All Variables.
       rewrite ticll_vis; econstructor
   | |- @entailsL ?M ?E ?B ?KMS ?X <( now ?φ )> ?t ?w =>
       rewrite ticll_now
-  | |- @entailsR ?M ?E ?B ?KMS ?X <[ finish ?φ ]> ?t ?w =>
-      rewrite ticlr_finish; econstructor
-  | |- @entailsR ?M ?E ?B ?KMS ?X <[ done ?φ ]> ?t ?w =>
-      rewrite ticlr_done; econstructor
   | |- @entailsR ?M ?E ?B ?KMS ?X <[ ret ?φ ]> ?t ?w =>
       rewrite ticlr_ret; eexists; split; [| split; [| split]]
   end.
@@ -109,9 +105,6 @@ end.
   | <( ?t, ?w |= vis ?φ )> =>
       rewrite ticll_vis in H; ddestruction H
   | <( ?t, ?w |= now ?φ )> => rewrite ticll_now in H; destruct H
-  | <[ ?t, ?w |= finish ?φ ]> =>
-      rewrite ticlr_finish in H; ddestruction H
-  | <[ ?t, ?w |= done ?φ ]> => rewrite ticlr_done in H; ddestruction H
   | <[ ?t, ?w |= ret ?φ ]> =>
       let x := fresh "x" in
       let HR := fresh "HR" in

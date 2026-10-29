@@ -48,6 +48,14 @@ Variant done_with {E} {X} (R: X -> World E -> Prop): World E -> Prop :=
       R x (Obs e v) -> done_with R (Finish e v x).
 Global Hint Constructors done_with: ticl.
 
+(** Terminal postconditions are covariant without changing their predecessor world. *)
+Lemma done_with_mono {E X} (P Q : X -> World E -> Prop) :
+  (forall x w, P x w -> Q x w) ->
+  forall wd, done_with P wd -> done_with Q wd.
+Proof.
+  intros HPQ wd H; destruct H; constructor; now apply HPQ.
+Qed.
+
 Definition done_eq {E} {X} (x: X): World E -> Prop :=
   @done_with E X (fun x' w' => x = x').
 
@@ -64,9 +72,7 @@ Proof.
   split; intros; inversion H; intuition auto with ticl; subst; constructor.
 Qed.
 
-Definition finish_with {E} {X} (R: X -> forall Y, E Y -> Y -> Prop) : X -> World E -> Prop :=
-  fun x w => exists Y (e: E Y) (v: Y), w = Obs e v /\ R x Y e v.
-Global Hint Unfold done_eq finish_with: ticl.
+Global Hint Unfold done_eq: ticl.
 
 Variant not_done {E}: World E -> Prop :=
   | NotDonePure: not_done Pure

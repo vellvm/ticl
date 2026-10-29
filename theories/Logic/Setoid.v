@@ -92,10 +92,6 @@ Section EquivSetoid.
       with signature meq ==> eq ==> iff as meq_proper_fun.
   Proof. intros; split; auto. Qed.
   
-  Global Add Parametric Morphism p: (entailsR (CDone p))
-        with signature meq ==> eq ==> iff as meq_proper_done.
-  Proof. intros; rewrite unfold_entailsR; reflexivity. Qed.
-
   (** * Congruence with respect to binary modalities AN, EN, AU, EU *)
   Section Binary.
     Context {P Q: MP} {HP: Proper (meq ==> eq ==> iff) P} {HQ: Proper (meq ==> eq ==> iff) Q}.
@@ -294,7 +290,6 @@ Global Add Parametric Morphism `{KS: KripkeSetoid M E B X meq} (φ: ticlr E X) :
        with signature (meq ==> eq  ==> iff) as proper_entailsR_meq.
 Proof.
   induction φ; intros * Heq w.
-  - (* Done *) rewrite ?ticll_done; reflexivity. 
   - (* Ret *) rewrite ?ticlr_ret.
     split; intros (r & Hr & Han); exists r; split; auto.
     + refine (proj1 (@proper_ax_equ M E B K X meq Eqm KS (fun _ w => not_done w) (fun _ => done_of r w) _ _ _ _ Heq _ _ eq_refl) Han);

@@ -74,7 +74,7 @@ Section ThreadStateRules.
     forall (t : ctree (yieldE +' (forkE +' E)) B A)
            (k : A -> ctree (yieldE +' (forkE +' E)) B C)
            (s s' : S) (r : A) w w' φ ψ,
-      <[ {interp_state h (interp_thread t) s}, w |= φ AN done= {(s', r)} w' ]> ->
+      <[ {interp_state h (interp_thread t) s}, w |= ret= {(s', r)} w' ]> ->
       <[ {interp_state h (interp_thread (k r)) s'}, w' |= φ AN ψ ]> ->
       <[ {interp_state h (interp_thread (x <- t ;; k x)) s}, w |= φ AN ψ ]>.
   Proof.
@@ -87,7 +87,7 @@ Section ThreadStateRules.
     forall (t : ctree (yieldE +' (forkE +' E)) B A)
            (k : A -> ctree (yieldE +' (forkE +' E)) B C)
            (s s' : S) (r : A) w w' φ ψ,
-      <[ {interp_state h (interp_thread t) s}, w |= φ AU AX done= {(s', r)} w' ]> ->
+      <[ {interp_state h (interp_thread t) s}, w |= φ AU ret= {(s', r)} w' ]> ->
       <[ {interp_state h (interp_thread (k r)) s'}, w' |= φ AU ψ ]> ->
       <[ {interp_state h (interp_thread (x <- t ;; k x)) s}, w |= φ AU ψ ]>.
   Proof.
@@ -100,7 +100,7 @@ Section ThreadStateRules.
     forall (t : ctree (yieldE +' (forkE +' E)) B A)
            (k : A -> ctree (yieldE +' (forkE +' E)) B C)
            (s s' : S) (r : A) w w' φ ψ,
-      <[ {interp_state h (interp_thread t) s}, w |= φ AU AX done= {(s', r)} w' ]> ->
+      <[ {interp_state h (interp_thread t) s}, w |= φ AU ret= {(s', r)} w' ]> ->
       <( {interp_state h (interp_thread (k r)) s'}, w' |= φ AU ψ )> ->
       <( {interp_state h (interp_thread (x <- t ;; k x)) s}, w |= φ AU ψ )>.
   Proof.
@@ -166,7 +166,7 @@ Section RawThreadRules.
     forall (t : ctree (yieldE +' (forkE +' stateE Σ)) B A)
            (k : A -> ctree (yieldE +' (forkE +' stateE Σ)) B C)
            (σ σ' : Σ) (r : A) w w' φ ψ,
-      <[ {instr_thread t σ}, w |= φ AN done= {(σ', r)} w' ]> ->
+      <[ {instr_thread t σ}, w |= ret= {(σ', r)} w' ]> ->
       <[ {instr_thread (k r) σ'}, w' |= φ AN ψ ]> ->
       <[ {instr_thread (x <- t ;; k x) σ}, w |= φ AN ψ ]>.
   Proof. exact (anr_ithread_bind_r_eq h_stateW). Qed.
@@ -176,7 +176,7 @@ Section RawThreadRules.
     forall (t : ctree (yieldE +' (forkE +' stateE Σ)) B A)
            (k : A -> ctree (yieldE +' (forkE +' stateE Σ)) B C)
            (σ σ' : Σ) (r : A) w w' φ ψ,
-      <[ {instr_thread t σ}, w |= φ AU AX done= {(σ', r)} w' ]> ->
+      <[ {instr_thread t σ}, w |= φ AU ret= {(σ', r)} w' ]> ->
       <[ {instr_thread (k r) σ'}, w' |= φ AU ψ ]> ->
       <[ {instr_thread (x <- t ;; k x) σ}, w |= φ AU ψ ]>.
   Proof. exact (aur_ithread_bind_r_eq h_stateW). Qed.
@@ -186,7 +186,7 @@ Section RawThreadRules.
     forall (t : ctree (yieldE +' (forkE +' stateE Σ)) B A)
            (k : A -> ctree (yieldE +' (forkE +' stateE Σ)) B C)
            (σ σ' : Σ) (r : A) w w' φ ψ,
-      <[ {instr_thread t σ}, w |= φ AU AX done= {(σ', r)} w' ]> ->
+      <[ {instr_thread t σ}, w |= φ AU ret= {(σ', r)} w' ]> ->
       <( {instr_thread (k r) σ'}, w' |= φ AU ψ )> ->
       <( {instr_thread (x <- t ;; k x) σ}, w |= φ AU ψ )>.
   Proof. exact (aul_ithread_bind_r_eq h_stateW). Qed.

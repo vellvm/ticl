@@ -33,9 +33,9 @@ Global Open Scope ticl_scope.
 Global Open Scope fin_vector_scope.
 Global Open Scope pcm_scope.
 
-(** Close a returning [AF done] goal at a [not_done] world. *)
+(** Close a returning [AF ret] goal at a [not_done] world. *)
 Ltac close_ret :=
-  apply aur_ret; cright; apply axr_ret; [auto with ticl|].
+  cleft; apply ret_ret; [auto with ticl|].
 (** Run the focused slot's yield-free head standalone after exposing its replacement. *)
 Ltac rr_prefix free := rewrite interp_rr_bind; rewrite run_rr_prefix by apply free.
 (** Run the nondeterministic focused slot's yield-free head standalone. *)
@@ -125,14 +125,21 @@ Proof.
 Qed.
 
 (** Standalone work eventually returns its postcondition. *)
-Lemma work_af i a ctx c w : not_done w ->
-  <[ {instr_flow_erased (work i) (own i a ctx c)}, w |= AF done {Qwork i a ctx c} ]>.
+Lemma work_af_ret i a ctx c w : not_done w ->
+  <[ {instr_flow_erased (work i) (own i a ctx c)}, w |= AF ret {Qwork i a ctx c} ]>.
 Proof.
   intro Hw; rewrite work_run.
   apply afr_log; [exact Hw|].
   close_ret.
   split; [reflexivity|split; [apply upd_region|split; reflexivity]].
 Qed.
+
+(** The original eventual terminal claim follows through the final value transition. *)
+Lemma work_af i a ctx c w : not_done w ->
+  auc (entailsL _ (CNow (fun _ => True)))
+    (fun _ wd => done_with (Qwork i a ctx c) wd)
+    (instr_flow_erased (work i) (own i a ctx c)) w.
+Proof. intro Hw; apply af_ret_done, work_af_ret; exact Hw. Qed.
 
 (** A standalone write preserves context, counter, and observation world. *)
 Definition Qwrite (i : nat) (ctx : Ctx.Ctx) (c : nat) (w : World (writerE (CSLObs (nat * nat))))
@@ -158,24 +165,41 @@ Lemma write_yield_fork_free i : yield_fork_free (CWrite i 1).
 Proof. cbn; tauto. Qed.
 
 (** Work on a framed state eventually returns the framed postcondition. *)
-Lemma work_af_framed i j a b ctx c s' w : not_done w ->
+Lemma work_af_framed_ret i j a b ctx c s' w : not_done w ->
   frame_rel (region j b) (own i a ctx c) s' ->
-  <[ {instr_flow_erased (work i) s'}, w |= AF done {frame_post (region j b) (Qwork i a ctx c)} ]>.
+  <[ {instr_flow_erased (work i) s'}, w |= AF ret {frame_post (region j b) (Qwork i a ctx c)} ]>.
 Proof.
   intros Hw HR.
-  apply (aur_csl_frame_done (region j b) _ _ _
-    (instr_flow_framable (work i) ltac:(cbn; tauto)) HR); auto using work_af.
+  apply (aur_csl_frame_ret (region j b) _ _ _
+    (instr_flow_framable (work i) ltac:(cbn; tauto)) HR); auto using work_af_ret.
 Qed.
-(** Writing on a framed state satisfies the framed universal-next postcondition. *)
-Lemma write_ax_framed i j a b ctx c s' w : not_done w ->
+
+(** Preserve the original eventual terminal claim on a framed state. *)
+Lemma work_af_framed i j a b ctx c s' w : not_done w ->
   frame_rel (region j b) (own i a ctx c) s' ->
-  <[ {instr_flow_erased (CWrite i 1) s'}, w |= AX done {frame_post (region j b) (Qwrite i ctx c w)} ]>.
+  auc (entailsL _ (CNow (fun _ => True)))
+    (fun _ wd => done_with (frame_post (region j b) (Qwork i a ctx c)) wd)
+    (instr_flow_erased (work i) s') w.
+Proof. intros Hw HR; apply af_ret_done; apply work_af_framed_ret; assumption. Qed.
+
+(** Writing on a framed state returns without an intervening transition. *)
+Lemma write_ret_framed i j a b ctx c s' w : not_done w ->
+  frame_rel (region j b) (own i a ctx c) s' ->
+  <[ {instr_flow_erased (CWrite i 1) s'}, w |= ret {frame_post (region j b) (Qwrite i ctx c w)} ]>.
 Proof.
   intros Hw HR.
   exact (ticlr_csl_frame (region j b) _ _ _
     (instr_flow_framable (CWrite i 1) I) HR
     <[ ret {Qwrite i ctx c w} ]> w Hw (write_ret i a ctx c w Hw)).
 Qed.
+
+(** Writing preserves the original universal-next terminal postcondition. *)
+Lemma write_ax_framed i j a b ctx c s' w : not_done w ->
+  frame_rel (region j b) (own i a ctx c) s' ->
+  anc (entailsL _ (CNow (fun _ => True)))
+    (fun _ wd => done_with (frame_post (region j b) (Qwrite i ctx c w)) wd)
+    (instr_flow_erased (CWrite i 1) s') w.
+Proof. intros Hw HR; apply ret_done_next; eapply write_ret_framed; eassumption. Qed.
 
 (** Unpack the shared shape of the two framed process postconditions. *)
 Local Ltac unpack_frame_post :=

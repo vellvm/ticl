@@ -146,13 +146,10 @@ Section KripkeSim.
     Proof. apply (sim_egc_chain (chain_gfp _)). Qed.
   End Always.
 
-  (** Rewrite [done]/[ret] postconditions by [RV]; [ret R] becomes [AX done (R ⋆ RV)]
-      because the target return value is only [RV]-related. *)
+  (** Rewrite native return postconditions through the result relation [RV]. *)
   Fixpoint framer (ψ: ticlr E X) : ticlr E X :=
     match ψ with
-    | CDone p => CDone (fun x' w => exists x, RV x x' /\ p x w)
-    | CRet p => CxR Q_A (CNow (fun _ => True))
-        (CDone (fun x' w => exists x, RV x x' /\ p x w))
+    | CRet p => CRet (fun x' w => exists x, RV x x' /\ p x w)
     | CuR q φ ψ => CuR q φ (framer ψ)
     | CxR q φ ψ => CxR q φ (framer ψ)
     | CAndR p q => CAndR (framer p) (framer q)
@@ -189,6 +186,17 @@ Section KripkeSim.
     intros HW HD; destruct HD; ddestruction HW; constructor; eauto.
   Qed.
 
+  (** A return witness transports to a related target value. *)
+  Lemma sim_done_of x w z z' : simW z z' -> done_of x w z ->
+    exists x', RV x x' /\ done_of x' w z'.
+  Proof.
+    intros HW HD; destruct HD; ddestruction HW;
+      eexists; split; eauto with ticl.
+  Qed.
+
+  Hypothesis RV_right_unique :
+    forall x y1 y2, RV x y1 -> RV x y2 -> y1 = y2.
+
   (** Suffix formulas transport forward across related worlds with [framer]. *)
   Theorem ticlr_sim : forall (ψ: ticlr E X) t t' w w',
     Fr t t' -> simW w w' ->
@@ -196,16 +204,20 @@ Section KripkeSim.
   Proof.
     induction ψ; cbn [framer]; intros t t' w w' HF HW H;
       rewrite unfold_entailsR in *.
-    - eapply sim_done_with; eauto.
     - destruct H as (x & Hp & Hnd & Hcan & HN).
       pose proof (simW_not_done _ _ HW Hnd); subst w'.
-      split; [split; auto|split; [eapply sim_can_step; eauto|]].
-      intros u' z' HT'.
-      destruct (sim_r _ _ _ _ _ HF Hcan HT') as (u & z & HT & HF1 & HW1).
-      specialize (HN _ _ HT); apply done_of_eq in HN.
-      pose proof (sim_done_with _ _ _ HW1 HN) as HD.
-      destruct HD as [x' [y [HR [Heq Hz]]]|Y e v x' [y [HR [Heq Hz]]]];
-        subst y; subst; constructor; exists x; auto.
+      destruct Hcan as (u & z & HT).
+      destruct (sim_l _ _ _ _ _ HF HT) as (u' & z' & HT' & HF1 & HW1).
+      destruct (sim_done_of _ _ _ _ HW1 (HN _ _ HT)) as (x' & HR & HD).
+      exists x'; split; [exists x; auto|].
+      split; [exact Hnd|].
+      split; [eapply sim_can_step; [exact HF|now exists u, z]|].
+      intros v' q' HV'.
+      destruct (sim_r _ _ _ _ _ HF (ex_intro _ u (ex_intro _ z HT)) HV')
+        as (v & q & HV & HF2 & HW2).
+      destruct (sim_done_of _ _ _ _ HW2 (HN _ _ HV)) as (y & HRy & HDy).
+      assert (y = x') by (eapply RV_right_unique; eauto).
+      now subst y.
     - destruct q.
       + eapply sim_auc; [exact (ticll_sim φ)| |exact HF|exact HW|exact H].
         intros; eapply IHψ; eauto.

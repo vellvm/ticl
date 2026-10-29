@@ -91,7 +91,7 @@ Section StateLemmas.
   
   (** Bind lemma for [interp_state] and prefix [AN] *)
   Theorem anl_state_bind_r{X Y}: forall (t: ctree E B Y) (k: Y -> ctree E B X) w φ ψ R,
-      <[ {interp_state h t σ}, w |= φ AN done {fun '(σ, x) => R x σ} ]> ->
+      <[ {interp_state h t σ}, w |= ret {fun '(σ, x) => R x σ} ]> ->
       (forall x σ w, R x σ w -> <( {interp_state h (k x) σ}, w |= φ AN ψ )>) ->
       <( {interp_state h (x <- t ;; k x) σ}, w |= φ AN ψ )>.  
   Proof.
@@ -103,7 +103,7 @@ Section StateLemmas.
   
   (** Bind lemma for [interp_state] and suffix [AN] *)
   Theorem anr_state_bind_r{X Y}: forall (t: ctree E B Y) (k: Y -> ctree E B X) w φ ψ R,
-      <[ {interp_state h t σ}, w |= φ AN done {fun '(σ, x) => R x σ} ]> ->
+      <[ {interp_state h t σ}, w |= ret {fun '(σ, x) => R x σ} ]> ->
       (forall x σ w, R x σ w -> <[ {interp_state h (k x) σ}, w |= φ AN ψ ]>) ->
       <[ {interp_state h (x <- t ;; k x) σ}, w |= φ AN ψ ]>.  
   Proof.
@@ -127,7 +127,7 @@ Section StateLemmas.
   
   (** Convenience bind lemma for [interp_state] and suffix [AN], does not require the [R] postcondition if [t] is deterministic. *)
   Theorem anr_state_bind_r_eq{X Y}: forall (t: ctree E B Y) (k: Y -> ctree E B X) w w' φ ψ r σ',
-      <[ {interp_state h t σ}, w |= φ AN done= {(σ', r)} w' ]> ->
+      <[ {interp_state h t σ}, w |= ret= {(σ', r)} w' ]> ->
       <[ {interp_state h (k r) σ'}, w' |= φ AN ψ ]> ->
       <[ {interp_state h (x <- t ;; k x) σ}, w |= φ AN ψ ]>.  
   Proof.
@@ -138,22 +138,20 @@ Section StateLemmas.
 
   (** Convenience bind lemma for [interp_state] and prefix [AN], does not require the [R] postcondition if [t] is deterministic. *)
   Theorem anr_state_bind_l_eq{X Y}: forall (t: ctree E B Y) (k: Y -> ctree E B X) w w' φ ψ r σ',
-      <[ {interp_state h t σ}, w |= φ AN AX done= {(σ', r)} w' ]> ->
+      <[ {interp_state h t σ}, w |= φ AN ret= {(σ', r)} w' ]> ->
       <[ {interp_state h (k r) σ'}, w' |= ψ ]> ->
       <[ {interp_state h (x <- t ;; k x) σ}, w |= φ AN ψ ]>.  
   Proof.
     intros.
     rewrite interp_state_bind.
     eapply anr_bind_l with (R:=fun p w_ => (σ', r) = p /\ w' = w_).
-    - cdestruct H; csplit; eauto with ticl.
-      intros t' w_ TR.
-      apply axr_done_eq_ret; eauto with ticl.
+    - exact H.
     - intros [σ_ y] w_ (Hinv & HR); inv Hinv; subst; eauto with ticl.
   Qed.
   
   (** Bind lemma for [interp_state] and suffix [EN] *)
   Theorem enl_state_bind_r{X Y}: forall (t: ctree E B Y) (k: Y -> ctree E B X) w φ ψ R,
-      <[ {interp_state h t σ}, w |= φ EN done {fun '(σ, r) => R r σ}  ]> ->
+      <[ {interp_state h t σ}, w |= ret {fun '(σ, r) => R r σ}  ]> ->
       (forall x σ w, R x σ w -> <( {interp_state h (k x) σ}, w |= φ EN ψ )>) ->
       <( {interp_state h (x <- t ;; k x) σ}, w |= φ EN ψ )>.
   Proof.
@@ -165,7 +163,7 @@ Section StateLemmas.
   
   (** Convenience bind lemma for [interp_state] and suffix [EN], does not require the [R] postcondition if [t] is deterministic. *)
   Theorem enl_state_bind_r_eq{X Y}: forall (t: ctree E B Y) (k: Y -> ctree E B X) w w' φ ψ r σ',
-      <[ {interp_state h t σ}, w |= φ EN done= {(σ', r)} w' ]> ->
+      <[ {interp_state h t σ}, w |= ret= {(σ', r)} w' ]> ->
       <( {interp_state h (k r) σ'}, w' |= φ EN ψ )> ->
       <( {interp_state h (x <- t ;; k x) σ}, w |= φ EN ψ )>.
   Proof.
@@ -176,7 +174,7 @@ Section StateLemmas.
 
   (** Bind lemma for [interp_state] and prefix [EN] *)
   Theorem enr_state_bind_r{X Y}: forall (t: ctree E B Y) (k: Y -> ctree E B X) w φ ψ R,
-      <[ {interp_state h t σ}, w |= φ EN done {fun '(σ, r) => R r σ}  ]> ->
+      <[ {interp_state h t σ}, w |= ret {fun '(σ, r) => R r σ}  ]> ->
       (forall x σ w, R x σ w -> <[ {interp_state h (k x) σ}, w |= φ EN ψ ]>) ->
       <[ {interp_state h (x <- t ;; k x) σ}, w |= φ EN ψ ]>.
   Proof.
@@ -188,7 +186,7 @@ Section StateLemmas.
 
   (** Convenience bind lemma for [interp_state] and suffix [EN], does not require the [R] postcondition if [t] is deterministic. *)
   Theorem enr_state_bind_r_eq{X Y}: forall (t: ctree E B Y) (k: Y -> ctree E B X) w w' r σ' φ ψ,
-      <[ {interp_state h t σ}, w |= φ EN done= {(σ', r)} w' ]> ->
+      <[ {interp_state h t σ}, w |= ret= {(σ', r)} w' ]> ->
       <[ {interp_state h (k r) σ'}, w' |= φ EN ψ ]> ->
       <[ {interp_state h (x <- t ;; k x) σ}, w |= φ EN ψ ]>.
   Proof.
@@ -239,7 +237,7 @@ Section StateLemmas.
 
   (** Convenience bind lemma for [interp_state] and prefix [AU], does not require the [R] postcondition if [t] is deterministic. *)
   Theorem aul_state_bind_r_eq{X Y}: forall (t: ctree E B Y) (k: Y -> ctree E B X) w φ ψ x' σ' w',
-      <[ {interp_state h t σ}, w |= φ AU AX done= {(σ', x')} w' ]> ->
+      <[ {interp_state h t σ}, w |= φ AU ret= {(σ', x')} w' ]> ->
       <( {interp_state h (k x') σ'}, w' |= φ AU ψ )> ->
       <( {interp_state h (x <- t ;; k x) σ}, w |= φ AU ψ )>.  
   Proof.
@@ -262,7 +260,7 @@ Section StateLemmas.
 
   (** Convenience bind lemma for [interp_state] and suffix [AU], does not require the [R] postcondition if [t] is deterministic. *)
   Theorem aur_state_bind_r_eq{X Y}: forall (t: ctree E B Y) (k: Y -> ctree E B X) w φ ψ x' σ' w',
-      <[ {interp_state h t σ}, w |= φ AU AX done= {(σ', x')} w' ]> ->
+      <[ {interp_state h t σ}, w |= φ AU ret= {(σ', x')} w' ]> ->
       <[ {interp_state h (k x') σ'}, w' |= φ AU ψ ]> ->
       <[ {interp_state h (x <- t ;; k x) σ}, w |= φ AU ψ ]>.  
   Proof.
@@ -333,14 +331,14 @@ Section StateLemmas.
   
   (** Convenience bind lemma for [interp_state] and prefix [AG], does not require the [R] postcondition if [t] is deterministic. *)
   Theorem ag_state_bind_r_eq{X Y}: forall (t: ctree E B X) w w' (k: X -> ctree E B Y) φ x' σ',
-      <[ {interp_state h t σ}, w |= φ AU AX done= {(σ', x')} w' ]> ->
+      <[ {interp_state h t σ}, w |= φ AU ret= {(σ', x')} w' ]> ->
       <( {interp_state h (k x') σ'}, w' |= AG φ )> ->
       <( {interp_state h (x <- t ;; k x) σ} , w |= AG φ )>.
   Proof.
     intros.
     rewrite interp_state_bind.
     apply ag_bind_r with (R:=fun p w_ => (σ', x') = p /\ w' = w_).
-    - now apply aur_axr_done_eq_ret.
+    - exact H.
     - intros [σ'' y] * [Heq HR]; inv Heq; eauto with ticl.    
   Qed.
   
@@ -378,7 +376,7 @@ Section StateLemmas.
     (forall (i: I) σ w,
         Ri i σ w ->
         <( {interp_state h (k i) σ}, w |= φ AN ψ )> \/
-          <[ {interp_state h (k i) σ}, w |= φ AN done
+          <[ {interp_state h (k i) σ}, w |= ret
                       {fun '(σ', lr) w' => 
                          exists (i': I), lr = inl i' /\ Ri i' σ' w' /\ Rv i' i}]>) ->
     <( {interp_state h (CTree.iter k i) σ}, w |= φ AN ψ )>.
@@ -403,42 +401,6 @@ Section StateLemmas.
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
 
-  (** Lift the iter lemma [anr_iter] to state events. *)
-  Theorem anr_state_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E B (I + X))
-    (φ: ticllW W) (ψ: ticlrW W (Σ * X)):
-    well_founded Rv ->
-    Ri i σ w ->    
-    (forall (i: I) σ w,
-        Ri i σ w ->
-        <[ {interp_state h (k i) σ}, w |= φ AN done
-                                       {fun '(σ', lr) (w': WorldW W) =>
-                                          match lr with
-                                          | inl i' => Ri i' σ' w' /\ Rv i' i
-                                          | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= φ AN ψ ]>
-                                          end} ]>) ->
-    <[ {interp_state h (CTree.iter k i) σ}, w |= φ AN ψ ]>.
-  Proof.
-    intros WfR Hi H.
-    generalize dependent k.
-    generalize dependent w.
-    generalize dependent σ.
-    induction i using (well_founded_induction WfR).
-    rename H into HindWf.
-    intros.
-    rewrite interp_state_unfold_iter.
-    destruct (H _ _ _ Hi) as (Hφ & Hs & H').
-    eapply anr_bind_r with
-        (R:=fun '(σ', lr) w' =>
-               match lr with
-               | inl i' => Ri i' σ' w' /\ Rv i' i
-               | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= φ AN ψ ]>
-               end); auto with ticl.
-    intros [σ' [i' | r]] w'.            
-    - intros (Hi' & Hv). 
-      rewrite sb_guard.        
-      apply HindWf; auto with ticl.
-    - auto.
-  Qed.
 
   (** Lift the iter lemma [enl_iter] to state events. *)
   Theorem enl_state_iter{X I} Ri (Rv: relation I) (i: I) w
@@ -448,7 +410,7 @@ Section StateLemmas.
     (forall (i: I) σ w,
         Ri i σ w ->
         <( {interp_state h (k i) σ}, w |= φ EN ψ )> \/
-          <[ {interp_state h (k i) σ}, w |= φ EN done
+          <[ {interp_state h (k i) σ}, w |= ret
                       {fun '(σ', lr) w' => 
                          exists (i': I), lr = inl i' /\ Ri i' σ' w' /\ Rv i' i}]>) ->
     <( {interp_state h (CTree.iter k i) σ}, w |= φ EN ψ )>.
@@ -473,41 +435,6 @@ Section StateLemmas.
       + intros (j & Hcontra & ?); inv Hcontra.
   Qed.
 
-  (** Lift the iter lemma [enr_iter] to state events. *)
-  Theorem enr_state_iter{X I} Ri (Rv: relation I) (i: I) w (k: I -> ctree E B (I + X))
-    (φ: ticllW W) (ψ: ticlrW W (Σ * X)):
-    well_founded Rv ->
-    Ri i σ w ->    
-    (forall (i: I) σ w,
-        Ri i σ w ->
-        <[ {interp_state h (k i) σ}, w |= φ EN done
-                                       {fun '(σ', lr) (w': WorldW W) =>
-                                          match lr with
-                                          | inl i' => Ri i' σ' w' /\ Rv i' i
-                                          | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= φ EN ψ ]>
-                                          end} ]>) ->
-    <[ {interp_state h (CTree.iter k i) σ}, w |= φ EN ψ ]>.
-  Proof.
-    intros WfR Hi H.
-    generalize dependent k.
-    generalize dependent w.
-    generalize dependent σ.
-    induction i using (well_founded_induction WfR).
-    rename H into HindWf.
-    intros.
-    rewrite interp_state_unfold_iter.
-    eapply enr_bind_r with
-        (R:=fun '(σ', lr) w' =>
-               match lr with
-               | inl i' => Ri i' σ' w' /\ Rv i' i
-               | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= φ EN ψ ]>
-               end); auto with ticl.
-    intros [σ' [i' | r]] w'.
-    - intros (Hi' & Hv).
-      rewrite sb_guard.
-      apply HindWf; auto with ticl.
-    - auto.
-  Qed.
 
   (** Lift the iter lemma [aul_iter] to state events. *)
   Theorem aul_state_iter{X I} Ri (Rv: relation (I * Σ * WorldW W)) (i: I) w
@@ -574,7 +501,7 @@ Section StateLemmas.
 
   (** Convenience lemma for [aul_state_iter_next], does not require the [R] postcondition if [k i] is deterministic. *)
   Theorem aul_state_iter_next_eq{X I} (i i': I) w w' σ' (k: I -> ctree E B (I + X)) φ ψ:
-    <[ {interp_state h (k i) σ}, w |= φ AU AX done= {(σ', inl i')} w' ]> ->
+    <[ {interp_state h (k i) σ}, w |= φ AU ret= {(σ', inl i')} w' ]> ->
     not_done w' ->
     <( {interp_state h (iter k i') σ'}, w' |= φ AU ψ )> ->
     <( {interp_state h (iter k i) σ}, w |= φ AU ψ )>.
@@ -653,7 +580,7 @@ Section StateLemmas.
                     {fun '(σ', lr) (w': WorldW W) =>
                        match lr with
                        | inl i' => not_done w' /\ Ri i' σ' w' /\ Rv (i', σ', w') (i, σ, w)
-                       | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= φ AN ψ ]>
+                       | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= ψ ]>
                        end} ]>) ->
     <[ {interp_state h (iter k i) σ}, w |= φ AU ψ ]>.
   Proof.
@@ -674,7 +601,7 @@ Section StateLemmas.
       (R:=fun '(σ', lr) w' =>
              match lr with
              | inl i' => not_done w' /\ Ri i' σ' w' /\ Rv (i', σ', w') (i, σ, w)
-             | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= φ AN ψ ]>
+             | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= ψ ]>
              end); auto with ticl.
     intros [σ' [i' | r]] w'; auto with ticl.
     - intros (Hd' & Hi' & Hv). 
@@ -684,7 +611,7 @@ Section StateLemmas.
       replace σ' with (snd (fst y)) in Hi' |- * by now subst.
       replace w' with (snd y) in Hi', Hd' |- * by now subst.
       apply HindWf; auto with ticl.
-    - apply ticlr_an_au. 
+    - intro Hexit; cleft; exact Hexit.
   Qed.
 
   (** Lift the iter lemma [aur_iter_next] to state events. 
@@ -704,7 +631,7 @@ Section StateLemmas.
 
   (** Convenience lemma for [aur_state_iter_next], does not require the [R] postcondition if [k i] is deterministic. *)
   Theorem aur_state_iter_next_eq{X I} (i i': I) w w' σ' (k: I -> ctree E B (I + X)) φ ψ:
-    <[ {interp_state h (k i) σ}, w |= φ AU AX done= {(σ', inl i')} w' ]> ->
+    <[ {interp_state h (k i) σ}, w |= φ AU ret= {(σ', inl i')} w' ]> ->
     not_done w' ->
     <[ {interp_state h (iter k i') σ'}, w' |= φ AU ψ ]> ->
     <[ {interp_state h (iter k i) σ}, w |= φ AU ψ ]>.
@@ -780,7 +707,7 @@ Section StateLemmas.
                     {fun '(σ', lr) w' =>
                        match lr with
                        | inl i' => not_done w' /\ Ri i' σ' w' /\ Rv (i', σ', w') (i, σ, w)
-                       | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= φ EN ψ ]>
+                       | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= ψ ]>
                        end} ]>) ->
     <[ {interp_state h (iter k i) σ}, w |= φ EU ψ ]>.
   Proof.
@@ -801,7 +728,7 @@ Section StateLemmas.
       (R:=fun '(σ', lr) w' =>
             match lr with
             | inl i' => not_done w' /\ Ri i' σ' w' /\ Rv (i', σ', w') (i, σ, w)
-            | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= φ EN ψ ]>
+            | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= ψ ]>
              end); auto with ticl.
     intros [σ' [i' | r]] w'; auto with ticl.
     - intros (Hd' & Hi' & Hv). 
@@ -811,7 +738,7 @@ Section StateLemmas.
       replace σ' with (snd (fst y)) in Hi' |- * by now subst.
       replace w' with (snd y) in Hd', Hi' |- * by now subst.
       apply HindWf; auto with ticl.
-    - apply ticlr_en_eu.
+    - intro Hexit; cleft; exact Hexit.
   Qed.
 
   (** Lift the iter lemma [ag_iter] to state events. *)
@@ -961,7 +888,7 @@ Section StateLemmas.
                                           | inl i' => not_done w'
                                                      /\ Ri i' σ' w'
                                                      /\ f i' σ' w' < f i σ w
-                                          | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= φ AN ψ ]>
+                                          | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= ψ ]>
                                           end} ]>) ->
     <[ {interp_state h (CTree.iter k i) σ}, w |= φ AU ψ ]>.
   Proof.
@@ -1004,7 +931,7 @@ Section StateLemmas.
                     {fun '(σ', lr) w' =>
                        match lr with
                        | inl i' => not_done w' /\ Ri i' σ' w' /\ f i' σ' w' < f i σ w
-                       | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= φ EN ψ ]>
+                       | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= ψ ]>
                        end} ]>) ->
     <[ {interp_state h (iter k i) σ}, w |= φ EU ψ ]>.
   Proof.
@@ -1013,257 +940,6 @@ Section StateLemmas.
     apply well_founded_ltof.
   Qed.  
 
-  (** ** Regime B: sequencing and iteration through hidden value choice under [interp_state] *)
-  (** The interpreted prefix may return several values at once ([φ AU done R], world-only);
-      the continuation obligation is stated one step later ([φ AN (φ AU ψ)]), see [Bind.v]. *)
-  Theorem aur_state_bind_r_done{X Y}: forall (t: ctree E B Y) (k: Y -> ctree E B X) w φ ψ R,
-      not_done w ->
-      <[ {interp_state h t σ}, w |= φ AU done {fun '(σ, r) => R r σ} ]> ->
-      (forall x σ w, R x σ w -> <[ {interp_state h (k x) σ}, w |= φ AN (φ AU ψ) ]>) ->
-      <[ {interp_state h (x <- t ;; k x) σ}, w |= φ AN (φ AU ψ) ]>.
-  Proof.
-    intros.
-    rewrite interp_state_bind.
-    eapply aur_bind_r_done; eauto with ticl.
-    intros [σ' y] * HR; eauto with ticl.
-  Qed.
-
-  Corollary aur_state_bind_r_done_post{X Y}: forall (t: ctree E B Y) (k: Y -> ctree E B X) w φ R R',
-      not_done w ->
-      <[ {interp_state h t σ}, w |= φ AU done {fun '(σ, r) => R r σ} ]> ->
-      (forall x σ w, R x σ w -> <[ {interp_state h (k x) σ}, w |= φ AU done {fun '(σ, r) => R' r σ} ]>) ->
-      <[ {interp_state h (x <- t ;; k x) σ}, w |= φ AU done {fun '(σ, r) => R' r σ} ]>.
-  Proof.
-    intros.
-    rewrite interp_state_bind.
-    eapply aur_bind_r_done_post; eauto with ticl.
-    intros [σ' y] * HR; eauto with ticl.
-  Qed.
-
-  Theorem aul_state_bind_r_done{X Y}: forall (t: ctree E B Y) (k: Y -> ctree E B X) w φ (ψ: ticllW W) R,
-      not_done w ->
-      <[ {interp_state h t σ}, w |= φ AU done {fun '(σ, r) => R r σ} ]> ->
-      (forall x σ w, R x σ w -> <( {interp_state h (k x) σ}, w |= φ AN (φ AU ψ) )>) ->
-      <( {interp_state h (x <- t ;; k x) σ}, w |= φ AN (φ AU ψ) )>.
-  Proof.
-    intros.
-    rewrite interp_state_bind.
-    eapply aul_bind_r_done; eauto with ticl.
-    intros [σ' y] * HR; eauto with ticl.
-  Qed.
-
-  Theorem eur_state_bind_r_done{X Y}: forall (t: ctree E B Y) (k: Y -> ctree E B X) w φ ψ R,
-      not_done w ->
-      <[ {interp_state h t σ}, w |= φ EU done {fun '(σ, r) => R r σ} ]> ->
-      (forall x σ w, R x σ w -> <[ {interp_state h (k x) σ}, w |= φ EN (φ EU ψ) ]>) ->
-      <[ {interp_state h (x <- t ;; k x) σ}, w |= φ EN (φ EU ψ) ]>.
-  Proof.
-    intros.
-    rewrite interp_state_bind.
-    eapply eur_bind_r_done; eauto with ticl.
-    intros [σ' y] * HR; eauto with ticl.
-  Qed.
-
-  Theorem ag_state_bind_r_done{X Y}: forall (t: ctree E B X) w (k: X -> ctree E B Y) φ R,
-      not_done w ->
-      <[ {interp_state h t σ}, w |= φ AU done {fun '(σ, r) => R r σ} ]> ->
-      (forall (x: X) σ w, R x σ w -> <( {interp_state h (k x) σ}, w |= AG φ )>) ->
-      <( {interp_state h (x <- t ;; k x) σ} , w |= AG φ )>.
-  Proof.
-    intros.
-    rewrite interp_state_bind.
-    apply ag_bind_r_done with (R:=fun '(σ, r) => R r σ); auto with ticl.
-    intros [σ' y] * HR; auto with ticl.
-  Qed.
-
-  Theorem eg_state_bind_r_done{X Y}: forall (t: ctree E B X) w (k: X -> ctree E B Y) φ R,
-      not_done w ->
-      <[ {interp_state h t σ}, w |= φ EU done {fun '(σ, r) => R r σ} ]> ->
-      (forall (x: X) σ w, R x σ w -> <( {interp_state h (k x) σ}, w |= EG φ )>) ->
-      <( {interp_state h (x <- t ;; k x) σ} , w |= EG φ )>.
-  Proof.
-    intros.
-    rewrite interp_state_bind.
-    apply eg_bind_r_done with (R:=fun '(σ, r) => R r σ); auto with ticl.
-    intros [σ' y] * HR; auto with ticl.
-  Qed.
-
-  (** Lift the iter lemma [aur_iter_done] to state events. *)
-  Theorem aur_state_iter_done{X I} Ri (Rv: relation (I * Σ * WorldW W)) (i: I) w
-    (k: I -> ctree E B (I + X)) (φ: ticllW W) (ψ: ticlrW W (Σ * X)):
-    well_founded Rv ->
-    not_done w ->
-    Ri i σ w ->    
-    (forall (i: I) σ w,
-        not_done w ->
-        Ri i σ w ->
-        <[ {interp_state h (k i) σ}, w |= φ AU done
-                    {fun '(σ', lr) (w': WorldW W) =>
-                       match lr with
-                       | inl i' => not_done w' /\ Ri i' σ' w' /\ Rv (i', σ', w') (i, σ, w)
-                       | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= φ AN ψ ]>
-                       end} ]>) ->
-    <[ {interp_state h (iter k i) σ}, w |= φ AN (φ AU ψ) ]>.
-  Proof.
-    remember (i, σ, w) as P.
-    replace i with (fst (fst P)) by now subst.
-    replace σ with (snd (fst P)) by now subst.
-    replace w with (snd P) by now subst.
-    clear HeqP i w σ.
-    intros WfR Hd Hi H.
-    generalize dependent k.
-    induction P using (well_founded_induction WfR);
-      destruct P as ((i, σ), w); cbn in *. 
-    rename H into HindWf.
-    intros.
-    unfold iter, MonadIter_ctree.
-    rewrite interp_state_unfold_iter.
-    eapply aur_bind_r_done with
-      (R:=fun '(σ', lr) w' =>
-             match lr with
-             | inl i' => not_done w' /\ Ri i' σ' w' /\ Rv (i', σ', w') (i, σ, w)
-             | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= φ AN ψ ]>
-             end); auto with ticl.
-    intros [σ' [i' | r]] w'; auto with ticl.
-    - intros (Hd' & Hi' & Hv). 
-      rewrite sb_guard.
-      remember (i', σ', w') as y.
-      replace i' with (fst (fst y)) in Hi' |- * by now subst.
-      replace σ' with (snd (fst y)) in Hi' |- * by now subst.
-      replace w' with (snd y) in Hi', Hd' |- * by now subst.
-      apply HindWf; auto with ticl.
-    - apply anr_au.
-  Qed.
-
-  (** Lift the iter lemma [eur_iter_done] to state events. *)
-  Theorem eur_state_iter_done{X I} Ri (Rv: relation (I * Σ * WorldW W)) (i: I) w 
-    (k: I -> ctree E B (I + X)) (φ: ticllW W) (ψ: ticlrW W (Σ * X)):
-    well_founded Rv ->
-    not_done w ->
-    Ri i σ w ->    
-    (forall (i: I) σ w,
-        not_done w ->
-        Ri i σ w ->
-        <[ {interp_state h (k i) σ}, w |= φ EU done
-                    {fun '(σ', lr) w' =>
-                       match lr with
-                       | inl i' => not_done w' /\ Ri i' σ' w' /\ Rv (i', σ', w') (i, σ, w)
-                       | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= φ EN ψ ]>
-                       end} ]>) ->
-    <[ {interp_state h (iter k i) σ}, w |= φ EN (φ EU ψ) ]>.
-  Proof.
-    remember (i, σ, w) as P.
-    replace i with (fst (fst P)) by now subst.
-    replace σ with (snd (fst P)) by now subst.
-    replace w with (snd P) by now subst.
-    clear HeqP i σ w.
-    intros WfR Hd Hi H.
-    generalize dependent k.
-    induction P using (well_founded_induction WfR);
-      destruct P as ((i, σ), w); cbn in *. 
-    rename H into HindWf.
-    intros.
-    unfold iter, MonadIter_ctree.
-    rewrite interp_state_unfold_iter.
-    eapply eur_bind_r_done with
-      (R:=fun '(σ', lr) w' =>
-            match lr with
-            | inl i' => not_done w' /\ Ri i' σ' w' /\ Rv (i', σ', w') (i, σ, w)
-            | inr r => <[ {Ret (σ', r): ctreeW W B (Σ * X)}, w' |= φ EN ψ ]>
-             end); auto with ticl.
-    intros [σ' [i' | r]] w'; auto with ticl.
-    - intros (Hd' & Hi' & Hv). 
-      rewrite sb_guard.
-      remember (i', σ', w') as y.
-      replace i' with (fst (fst y)) in Hi' |- * by now subst.
-      replace σ' with (snd (fst y)) in Hi' |- * by now subst.
-      replace w' with (snd y) in Hd', Hi' |- * by now subst.
-      apply HindWf; auto with ticl.
-    - apply enr_eu.
-  Qed.
-
-  (** Lift the iter lemma [ag_iter_done] to state events. *)
-  Lemma ag_state_iter_done{X I} R i w (k: I -> ctree E B (I + X)) φ:
-    not_done w ->
-    R i σ w ->
-    (forall (i: I) σ w,
-        not_done w ->
-        R i σ w ->
-        <( {interp_state h (iter k i) σ}, w |= φ )> /\
-        <[ {interp_state h (k i) σ}, w |= AX (φ AN (φ AU done
-                    {fun '(σ', lr) w' =>
-                       exists (i': I), lr = inl i' /\ not_done w' /\ R i' σ' w'})) ]>) ->
-    <( {interp_state h (CTree.iter k i) σ}, w |= AG φ )>.
-  Proof.
-    intros.
-    generalize dependent i.
-    generalize dependent w.
-    generalize dependent σ.
-    coinduction_g RR CIH; intros.
-    specialize (H1 _ _ _ H H0) as (Hφ & H1').
-    cdestruct H1'.
-    split2.
-    - now apply Hφ. 
-    - rewrite interp_state_unfold_iter.
-      destruct Hs as (k' & wk & TRk).
-      apply can_step_bind_l with k' wk; auto with ticl.
-      specialize (H1' _ _ TRk) as HAN.
-      cdestruct HAN.
-      eapply ticll_not_done; eauto.
-    - intros t' w' TR.
-      rewrite interp_state_unfold_iter in TR.
-      apply ktrans_bind_inv in TR as
-          [(t0' & TR0 & Hd_ & Heq) | (x' & w0 & TRt0 & Hd & TRk)].
-      + (* [k x] steps *)
-        rewrite Heq; clear Heq t'.
-        apply (ag_bind_done_chain φ
-                 (fun '(σ', lr) w' => exists i' : I, lr = inl i' /\ not_done w' /\ R i' σ' w')); auto with ticl.
-        * cright; now apply H1'.
-        * intros [σ' [l | r]] w_ (? & Hinv & Hd & HR); inv Hinv.
-          rewrite sb_guard.
-          apply CIH; auto with ticl.
-      + (* [k x] returns immediately: contradicts [AX (φ AN …)] *)
-        specialize (H1' _ _ TRt0) as HAN.
-        now apply anr_stuck in HAN.
-  Qed.
-
-  (** Lift the iter lemma [eg_iter_done] to state events. *)
-  Lemma eg_state_iter_done{X I} R (i: I) w (k: I -> ctree E B (I + X)) φ:
-    R i σ w ->
-    not_done w ->
-    (forall (i: I) σ w,
-        not_done w ->
-        R i σ w ->
-        <( {interp_state h (iter k i) σ}, w |= φ )> /\
-        <[ {interp_state h (k i) σ}, w |= EX (φ EN (φ EU done
-                    {fun '(σ', lr) w' =>
-                       exists (i': I), lr = inl i' /\ not_done w' /\ R i' σ' w'})) ]>) ->
-    <( {interp_state h (iter k i) σ}, w |= EG φ )>.
-  Proof.
-    unfold iter, MonadIter_ctree.
-    intros.
-    generalize dependent i.
-    generalize dependent w.
-    generalize dependent σ.
-    coinduction_g RR CIH; intros.
-    specialize (H1 _ _ _ H0 H) as (Hφ & H1').
-    cdestruct H1'.
-    assert (Hd0: not_done w0) by (cdestruct H1'; eapply ticll_not_done; eauto).
-    split.
-    - now apply Hφ. 
-    - setoid_rewrite interp_state_unfold_iter.
-      exists (pat <- t;; match pat with
-                 | (s, inl l) => Guard (interp_state h (CTree.iter k l) s)
-                 | (s, inr r) => Ret (s, r)
-                  end), w0; split.
-      + apply ktrans_bind_l; auto with ticl.
-      + apply (eg_bind_done_chain φ
-                 (fun '(σ', lr) w' => exists i' : I, lr = inl i' /\ not_done w' /\ R i' σ' w')); auto with ticl.
-        * cright; apply H1'.
-        * intros [σ' [l | r]] w_ (? & Hinv & Hd & HR); inv Hinv.
-          rewrite sb_guard.
-          apply CIH; auto with ticl.
-  Qed.
 End StateLemmas.
 
 (** A state-iteration rule with a well-founded rank on ghost data.  The
@@ -1285,7 +961,7 @@ Theorem aul_state_iter_ghost {E B: Type -> Type} {Sg W}
         \/ (exists g' i' s' w',
                not_done w'
                /\ <[ {interp_state hh (bd i) s}, w
-                     |= phi AU AX done= {(s', inl i')} w' ]>
+                     |= phi AU ret= {(s', inl i')} w' ]>
                /\ Inv g' i' s'
                /\ Rv g' g)) ->
     <( {interp_state hh (CTree.iter bd i) s}, w |= phi AU psi )>.
@@ -1305,17 +981,6 @@ Section StateELemmas.
   (** S: State, s: initial state *)
   Context {B: Type -> Type} {S: Type} (s: S).
 
-  (** [get] commands terminate in one step and return the initial state. *)
-  Lemma anr_get: forall (w: WorldW S) ψ R,
-      R (s,s) w ->
-      <( {Ret (s, s): ctreeW S B (S * S)}, {w} |= ψ )> ->
-      <[ {instr_stateE (get: ctree (stateE S) B S) s}, w |= ψ AN done R ]>.
-  Proof.
-    intros.
-    unfold instr_stateE.
-    rewrite interp_state_get.
-    apply anr_ret_done; eauto with ticl.
-  Qed.
 
   (** [get] commands terminate in one step and return the initial state. *)
   Lemma axr_get: forall (w: WorldW S) R,
@@ -1368,29 +1033,6 @@ Section StateELemmas.
     - now apply ticll_bind_l.
   Qed.
 
-  (** [get] commands terminate in one step and return the initial state. *)
-  Lemma enr_get: forall (w: WorldW S) ψ R,
-      R (s,s) w ->
-      <( {Ret (s, s): ctreeW S B (S * S)}, {w} |= ψ )> ->
-      <[ {instr_stateE (get: ctree (stateE S) B S) s}, w |= ψ EN done R ]>.
-  Proof.
-    intros.
-    unfold instr_stateE.
-    rewrite interp_state_get.
-    apply enr_ret; eauto with ticl.
-  Qed.
-
-  (** [get] commands terminate in one step and return the initial state. *)
-  Lemma exr_get: forall (w: WorldW S) R,
-      not_done w ->
-      R (s,s) w ->
-      <[ {instr_stateE (get: ctree (stateE S) B S) s}, w |= ret R ]>.
-  Proof.
-    intros.
-    unfold instr_stateE.
-    rewrite interp_state_get.
-    apply ret_ret; eauto with ticl. 
-  Qed.
  
   (** [get] commands terminate in one step and return the initial state. *)
   Lemma eur_get: forall (w: WorldW S) ψ R,

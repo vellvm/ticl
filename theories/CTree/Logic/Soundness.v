@@ -181,7 +181,7 @@ Section SyntacticEntailment.
       (forall (v: Y), syntailsL (k v) (Obs e v) ψ) ->
       syntailsL (Vis e k) w <( φ AN ψ )>
   | SynAnBindR: forall {Y} (t: ctree E B Y) (k: Y -> ctree E B X) φ ψ w R,
-      <[ t, w |= φ AN done R ]> ->
+      <[ t, w |= ret R ]> ->
       (forall r w', R r w' -> syntailsL (k r) w' <( φ AN ψ )>) ->
       syntailsL (x <- t ;; k x) w <( φ AN ψ )>
   | SynAnIter: forall {I} Ri Rv (i: I) w (k: I -> ctree E B (I + X)) φ ψ,
@@ -190,7 +190,7 @@ Section SyntacticEntailment.
       (forall (i: I) w,
           Ri i w ->
           <( {k i}, w |= φ AN ψ )> \/
-            <[ {k i}, w |= φ AN done
+            <[ {k i}, w |= ret
                         {fun (lr: I + X) (w': World E) =>
                            exists i', lr = inl i' /\ Ri i' w' /\ Rv i' i}]>) ->
       syntailsL (iter k i) w <( φ AN ψ )>
@@ -214,7 +214,7 @@ Section SyntacticEntailment.
       (exists (v: Y), <( {k v}, {Obs e v} |= ψ )>) ->
       syntailsL (Vis e k) w <( φ EN ψ )>
   | SynEnBindR: forall {Y} (t: ctree E B Y) (k: Y -> ctree E B X) φ ψ w R,
-      <[ t, w |= φ EN done R ]> ->
+      <[ t, w |= ret R ]> ->
       (forall r w', R r w' -> syntailsL (k r) w' <( φ EN ψ )>) ->
       syntailsL (x <- t ;; k x) w <( φ EN ψ )>
   | SynEnIter: forall {I} Ri Rv (i: I) w (k: I -> ctree E B (I + X)) φ ψ,
@@ -223,7 +223,7 @@ Section SyntacticEntailment.
       (forall (i: I) w,
           Ri i w ->
           <( {k i}, w |= φ EN ψ )> \/
-            <[ {k i}, w |= φ EN done
+            <[ {k i}, w |= ret
                         {fun (lr: I + X) (w': World E) =>
                            exists i', lr = inl i' /\ Ri i' w' /\ Rv i' i}]>) ->
       syntailsL (iter k i) w <( φ EN ψ )>
@@ -420,7 +420,7 @@ Section SyntacticEntailment.
                       {fun (lr: I + X) (w': World E) =>
                          match lr with
                          | inl i' => Ri i' w' /\ Rv (i', w') (i, w)
-                         | inr r => <[ {Ret r: ctree E B X}, w' |= φ AN ψ ]>
+                         | inr r => <[ {Ret r: ctree E B X}, w' |= ψ ]>
                          end} ]>) ->
       syntailsR (iter k i) w <[ φ AU ψ ]>
   (* φ EU ψ *)
@@ -469,17 +469,13 @@ Section SyntacticEntailment.
                       {fun (lr: I + X) (w': World E) =>
                          match lr with
                          | inl i' => not_done w' /\ Ri i' w' /\ Rv (i', w') (i, w)
-                         | inr r => <[ {Ret r: ctree E B X}, w' |= φ EN ψ ]>
+                         | inr r => <[ {Ret r: ctree E B X}, w' |= ψ ]>
                          end} ]>) ->
       syntailsR (iter k i) w <[ φ EU ψ ]>
   (* φ AN ψ *)
   | SynRAnStuck: forall w φ ψ,
       False ->
       syntailsR Stuck w <[ φ AN ψ ]>
-  | SynRAnRetDone: forall w φ (R: rel X (World E)) r,
-      syntailsL (Ret r) w φ ->
-      R r w ->
-      syntailsR (Ret r) w <[ φ AN done R ]>
   | SynRAnBrS: forall w {Y} (c: B Y) (k: Y -> ctree E B X) (y: Y) φ ψ,
       syntailsL (BrS c k) w φ ->
       (forall (y: Y), syntailsR (k y) w ψ) ->
@@ -497,29 +493,13 @@ Section SyntacticEntailment.
       (forall r w', R r w' -> syntailsR (k r) w' ψ) ->
       syntailsR (x <- t ;; k x) w <[ φ AN ψ ]>
   | SynRAnBindR: forall {Y} (t: ctree E B Y) (k: Y -> ctree E B X) φ ψ w R,
-      <[ t, w |= φ AN done R ]> ->
+      <[ t, w |= ret R ]> ->
       (forall r w', R r w' -> syntailsR (k r) w' <[ φ AN ψ ]>) ->
       syntailsR (x <- t ;; k x) w <[ φ AN ψ ]>
-  | SynRAnIter: forall {I} Ri Rv (i: I) w (k: I -> ctree E B (I + X)) φ ψ,
-      well_founded Rv ->
-      Ri i w ->
-      (forall (i: I) w,
-          Ri i w ->
-          <[ {k i}, w |= φ AN done
-                      {fun (lr: I + X) (w': World E) =>
-                         match lr with
-                         | inl i' => Ri i' w' /\ Rv i' i
-                         | inr r => <[ {Ret r: ctree E B X}, w' |= φ AN ψ ]>
-                         end} ]>) ->
-      syntailsR (iter k i) w <[ φ AN ψ ]>
   (* φ EN ψ *)
   | SynREnStuck: forall w φ ψ,
       False ->
       syntailsR Stuck w <[ φ EN ψ ]>
-  | SynREnRetDone: forall w φ (R: rel X (World E)) r,
-      syntailsL (Ret r) w φ ->
-      R r w ->
-      syntailsR (Ret r) w <[ φ EN done R ]>
   | SynREnBrS: forall w {Y} (c: B Y) (k: Y -> ctree E B X) φ ψ,
       syntailsL (BrS c k) w φ ->
       (exists (y: Y), <[ {k y}, w |= ψ ]>) ->
@@ -533,21 +513,9 @@ Section SyntacticEntailment.
       (exists (v: Y), <[ {k v}, {Obs e v} |= ψ ]>) ->
       syntailsR (Vis e k) w <[ φ EN ψ ]>
   | SynREnBindR: forall {Y} (t: ctree E B Y) (k: Y -> ctree E B X) φ ψ w R,
-      <[ t, w |= φ EN done R ]> ->
+      <[ t, w |= ret R ]> ->
       (forall r w', R r w' -> syntailsR (k r) w' <[ φ EN ψ ]>) ->
-      syntailsR (x <- t ;; k x) w <[ φ EN ψ ]>
-  | SynREnIter: forall {I} Ri Rv (i: I) w (k: I -> ctree E B (I + X)) φ ψ,
-      well_founded Rv ->
-      Ri i w ->
-      (forall (i: I) w,
-          Ri i w ->
-          <[ {k i}, w |= φ EN done
-                      {fun (lr: I + X) (w': World E) =>
-                         match lr with
-                         | inl i' => Ri i' w' /\ Rv i' i
-                         | inr r => <[ {Ret r: ctree E B X}, w' |= φ EN ψ ]>
-                         end} ]>) ->
-      syntailsR (iter k i) w <[ φ EN ψ ]>.
+      syntailsR (x <- t ;; k x) w <[ φ EN ψ ]>.
 
   Lemma soundnessR{X}: forall (t: ctree E B X) (w: World E) (φ: ticlr E X),
       syntailsR t w φ -> <[ t, w |= φ ]>.
@@ -582,20 +550,16 @@ Section SyntacticEntailment.
     - apply eur_bind_r with R; eauto with ticl.
     - apply eur_iter with Ri Rv; eauto with ticl.
     - contradiction.
-    - apply anr_ret_done; auto; now apply soundnessL.
     - apply (anr_brS c k y); split; auto; now apply soundnessL.
     - apply anr_step; split; auto; now apply soundnessL.
     - apply (anr_vis e k wit); split; auto; now apply soundnessL.
     - apply anr_bind_l with R; eauto with ticl.
     - apply anr_bind_r with R; eauto with ticl.
-    - apply anr_iter with Ri Rv; eauto with ticl.
     - contradiction.
-    - apply enr_ret; auto; now apply soundnessL.
     - apply enr_brS; split; auto; now apply soundnessL.
     - apply enr_step; split; auto; now apply soundnessL.
     - apply enr_vis; split; auto; now apply soundnessL.
     - apply enr_bind_r with R; eauto with ticl.
-    - apply enr_iter with Ri Rv; eauto with ticl.
   Qed.
 
 End SyntacticEntailment.

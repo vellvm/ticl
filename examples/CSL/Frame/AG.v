@@ -58,8 +58,8 @@ Proof.
   intros Hw HR HK.
   unfold fresh, denote, lproc, lproc_body.
   rewrite interp_rr_until_none; rr_prefix work_yield_fork_free.
-  apply (ag_bind_done_chain _ (frame_post (region k b) (Qwork i a ctx c)));
-    [exact Hw | apply work_af_framed; assumption |].
+  apply (ag_bind_chain _ (frame_post (region k b) (Qwork i a ctx c)));
+    [apply work_af_framed_ret; assumption |].
   intros [s' r] w' HP; apply frame_post_work in HP as (-> & HE & HA & ->).
   cbv beta iota.
   rewrite interp_rr_bind, interp_rr_yield.
@@ -79,8 +79,8 @@ Proof.
   intros Hw HR HK.
   unfold fresh, denote, lproc, lproc_body.
   rewrite interp_nd_source_until_none; nd_prefix work_yield_fork_free.
-  apply (ag_bind_done_chain _ (frame_post (region k b) (Qwork i a ctx c)));
-    [exact Hw | apply work_af_framed; assumption |].
+  apply (ag_bind_chain _ (frame_post (region k b) (Qwork i a ctx c)));
+    [apply work_af_framed_ret; assumption |].
   intros [s' r] w' HP; apply frame_post_work in HP as (-> & HE & HA & ->).
   cbv beta iota.
   rewrite interp_nd_source_bind, interp_nd_source_yield.

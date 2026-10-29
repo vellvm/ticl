@@ -3662,11 +3662,11 @@ Lemma axr_csl_exp_lit : forall n n' s s' w w',
     s = s' ->
     w = w' ->
     not_done w ->
-    <[ {instr_exp_erased (CLit n) s}, w |= AX done= {(s', n')} w' ]>.
+    <[ {instr_exp_erased (CLit n) s}, w |= ret= {(s', n')} w' ]>.
 Proof.
   intros; subst.
   unfold instr_exp_erased; cbn [denote_exp].
-  rewrite interp_state_thread_ret; apply axr_ret; [assumption | split; reflexivity].
+  rewrite interp_state_thread_ret; apply ret_ret; [assumption | split; reflexivity].
 Qed.
 
 Lemma axr_csl_exp_var_some : forall name value s s' w w',
@@ -3674,61 +3674,67 @@ Lemma axr_csl_exp_var_some : forall name value s s' w w',
     s = s' ->
     w = w' ->
     not_done w ->
-    <[ {instr_exp_erased (CVar name) s}, w |= AX done= {(s', value)} w' ]>.
+    <[ {instr_exp_erased (CVar name) s}, w |= ret= {(s', value)} w' ]>.
 Proof.
   intros name value s s' w w' Hlookup Hs Hw Hnd; subst.
   unfold instr_exp_erased; cbn [denote_exp].
   rewrite interp_thread_get_ctx, Hlookup, source_yield_bind.
   rewrite interp_state_thread_yield.
-  rewrite interp_state_thread_ret; apply axr_ret; [assumption | split; reflexivity].
+  rewrite interp_state_thread_ret; apply ret_ret; [assumption | split; reflexivity].
 Qed.
 
 Lemma axr_csl_exp_plus : forall a b x y value s s' w w',
-    <[ {instr_exp_erased a s}, w |= AX done= {(s, x)} w ]> ->
-    <[ {instr_exp_erased b s}, w |= AX done= {(s, y)} w ]> ->
+    <[ {instr_exp_erased a s}, w |= ret= {(s, x)} w ]> ->
+    <[ {instr_exp_erased b s}, w |= ret= {(s, y)} w ]> ->
     value = (x + y)%nat ->
     s = s' ->
     w = w' ->
     not_done w ->
-    <[ {instr_exp_erased (CPlus a b) s}, w |= AX done= {(s', value)} w' ]>.
+    <[ {instr_exp_erased (CPlus a b) s}, w |= ret= {(s', value)} w' ]>.
 Proof.
   intros a b x y value s s' w w' Ha Hb Hvalue Hs Hw Hnd; subst.
   unfold instr_exp_erased in *; cbn [denote_exp].
-  eapply anr_ithread_bind_r_eq; [exact Ha | cbv beta].
-  eapply anr_ithread_bind_r_eq; [exact Hb | cbv beta].
-  rewrite interp_state_thread_ret; apply axr_ret; [assumption | split; reflexivity].
+  apply ret_sbisim in Ha as (ra & [Hra _] & Ha); subst ra.
+  apply ret_sbisim in Hb as (rb & [Hrb _] & Hb); subst rb.
+  rewrite interp_state_thread_bind, Ha, bind_ret_l; cbn [fst snd].
+  rewrite interp_state_thread_bind, Hb, bind_ret_l; cbn [fst snd].
+  rewrite interp_state_thread_ret; apply ret_ret; [assumption | split; reflexivity].
 Qed.
 
 Lemma axr_csl_exp_minus : forall a b x y value s s' w w',
-    <[ {instr_exp_erased a s}, w |= AX done= {(s, x)} w ]> ->
-    <[ {instr_exp_erased b s}, w |= AX done= {(s, y)} w ]> ->
+    <[ {instr_exp_erased a s}, w |= ret= {(s, x)} w ]> ->
+    <[ {instr_exp_erased b s}, w |= ret= {(s, y)} w ]> ->
     value = (x - y)%nat ->
     s = s' ->
     w = w' ->
     not_done w ->
-    <[ {instr_exp_erased (CMinus a b) s}, w |= AX done= {(s', value)} w' ]>.
+    <[ {instr_exp_erased (CMinus a b) s}, w |= ret= {(s', value)} w' ]>.
 Proof.
   intros a b x y value s s' w w' Ha Hb Hvalue Hs Hw Hnd; subst.
   unfold instr_exp_erased in *; cbn [denote_exp].
-  eapply anr_ithread_bind_r_eq; [exact Ha | cbv beta].
-  eapply anr_ithread_bind_r_eq; [exact Hb | cbv beta].
-  rewrite interp_state_thread_ret; apply axr_ret; [assumption | split; reflexivity].
+  apply ret_sbisim in Ha as (ra & [Hra _] & Ha); subst ra.
+  apply ret_sbisim in Hb as (rb & [Hrb _] & Hb); subst rb.
+  rewrite interp_state_thread_bind, Ha, bind_ret_l; cbn [fst snd].
+  rewrite interp_state_thread_bind, Hb, bind_ret_l; cbn [fst snd].
+  rewrite interp_state_thread_ret; apply ret_ret; [assumption | split; reflexivity].
 Qed.
 
 Lemma axr_csl_exp_mult : forall a b x y value s s' w w',
-    <[ {instr_exp_erased a s}, w |= AX done= {(s, x)} w ]> ->
-    <[ {instr_exp_erased b s}, w |= AX done= {(s, y)} w ]> ->
+    <[ {instr_exp_erased a s}, w |= ret= {(s, x)} w ]> ->
+    <[ {instr_exp_erased b s}, w |= ret= {(s, y)} w ]> ->
     value = (x * y)%nat ->
     s = s' ->
     w = w' ->
     not_done w ->
-    <[ {instr_exp_erased (CMult a b) s}, w |= AX done= {(s', value)} w' ]>.
+    <[ {instr_exp_erased (CMult a b) s}, w |= ret= {(s', value)} w' ]>.
 Proof.
   intros a b x y value s s' w w' Ha Hb Hvalue Hs Hw Hnd; subst.
   unfold instr_exp_erased in *; cbn [denote_exp].
-  eapply anr_ithread_bind_r_eq; [exact Ha | cbv beta].
-  eapply anr_ithread_bind_r_eq; [exact Hb | cbv beta].
-  rewrite interp_state_thread_ret; apply axr_ret; [assumption | split; reflexivity].
+  apply ret_sbisim in Ha as (ra & [Hra _] & Ha); subst ra.
+  apply ret_sbisim in Hb as (rb & [Hrb _] & Hb); subst rb.
+  rewrite interp_state_thread_bind, Ha, bind_ret_l; cbn [fst snd].
+  rewrite interp_state_thread_bind, Hb, bind_ret_l; cbn [fst snd].
+  rewrite interp_state_thread_ret; apply ret_ret; [assumption | split; reflexivity].
 Qed.
 
 Lemma axr_csl_exp_plus_lit_lit : forall x y value s s' w w',
@@ -3737,7 +3743,7 @@ Lemma axr_csl_exp_plus_lit_lit : forall x y value s s' w w',
     w = w' ->
     not_done w ->
     <[ {instr_exp_erased (CPlus (CLit x) (CLit y)) s},
-       w |= AX done= {(s', value)} w' ]>.
+       w |= ret= {(s', value)} w' ]>.
 Proof.
   intros; subst.
   eapply axr_csl_exp_plus; eauto; apply axr_csl_exp_lit; auto.
@@ -3749,7 +3755,7 @@ Lemma axr_csl_exp_minus_lit_lit : forall x y value s s' w w',
     w = w' ->
     not_done w ->
     <[ {instr_exp_erased (CMinus (CLit x) (CLit y)) s},
-       w |= AX done= {(s', value)} w' ]>.
+       w |= ret= {(s', value)} w' ]>.
 Proof.
   intros; subst.
   eapply axr_csl_exp_minus; eauto; apply axr_csl_exp_lit; auto.
@@ -3761,7 +3767,7 @@ Lemma axr_csl_exp_mult_lit_lit : forall x y value s s' w w',
     w = w' ->
     not_done w ->
     <[ {instr_exp_erased (CMult (CLit x) (CLit y)) s},
-       w |= AX done= {(s', value)} w' ]>.
+       w |= ret= {(s', value)} w' ]>.
 Proof.
   intros; subst.
   eapply axr_csl_exp_mult; eauto; apply axr_csl_exp_lit; auto.
@@ -3773,7 +3779,7 @@ Lemma axr_csl_nd_skip : forall s s' w w',
     s = s' ->
     w = w' ->
     not_done w ->
-    <[ {run_nd (CRet tt) s}, w |= AX done= {(s', tt)} w' ]>.
+    <[ {run_nd (CRet tt) s}, w |= ret= {(s', tt)} w' ]>.
 Proof.
   intros s s' w w' Hs Hw Hnd; subst.
   rewrite run_nd_unfold.
@@ -3781,17 +3787,17 @@ Proof.
              (cons_pool_equ _ _ _ _ denote_ret_unit (pool_equ_refl _))).
   rewrite (interp_schedule_nd_ret sh 0 [(Ret tt : thread sE Bn)]%vector Fin.F1 s' eq_refl).
   rewrite interp_schedule_nd_empty.
-  apply axr_ret; [assumption | split; reflexivity].
+  apply ret_ret; [assumption | split; reflexivity].
 Qed.
 
-(** The [AX AX] count is specific to the nondeterministic scheduler: its
+(** The [AX ret] count is specific to the nondeterministic scheduler: its
     scheduling point is a real branch, whereas round robin selects
     deterministically. *)
-Lemma axax_csl_nd_yield : forall s s' w w',
+Lemma axr_csl_nd_yield : forall s s' w w',
     s = s' ->
     w = w' ->
     not_done w ->
-    <[ {run_nd CYield s}, w |= AX AX done= {(s', tt)} w' ]>.
+    <[ {run_nd CYield s}, w |= AX ret= {(s', tt)} w' ]>.
 Proof.
   intros s s' w w' Hs Hw Hnd; subst.
   rewrite run_nd_unfold.
@@ -3807,19 +3813,19 @@ Proof.
     + rewrite (interp_schedule_nd_ret sh 0 _ Fin.F1 s')
         by (now rewrite Vector.nth_replace_eq).
       rewrite interp_schedule_nd_empty.
-      apply axr_ret; [assumption | split; reflexivity].
+      apply ret_ret; [assumption | split; reflexivity].
     + inversion i.
 Qed.
 
-Lemma aur_csl_nd_yield_done : forall s s' w w' ψ,
+Lemma aur_csl_nd_yield_ret : forall s s' w w' ψ,
     s = s' ->
     w = w' ->
     not_done w ->
-    <[ {run_nd CYield s}, w |= ψ AU AX AX done= {(s', tt)} w' ]>.
+    <[ {run_nd CYield s}, w |= ψ AU AX ret= {(s', tt)} w' ]>.
 Proof.
   intros; subst.
   cleft.
-  now apply axax_csl_nd_yield.
+  now apply axr_csl_nd_yield.
 Qed.
 
 (** *** Flow-preserving statement rules *)
@@ -3828,7 +3834,7 @@ Qed.
     (one [Log] whose continuation is the finished program): the library
     [log] term carries rigid universes that do not unify with the goals. *)
 Lemma aur_csl_flow_assign : forall name expr (value : nat) s (w : WorldW (CSLObs (nat * nat))) (ψ : ticllW (CSLObs (nat * nat))) R,
-    <[ {instr_exp_erased expr s}, w |= AX done= {(s, value)} w ]> ->
+    <[ {instr_exp_erased expr s}, w |= ret= {(s, value)} w ]> ->
     <( {Vis (Log (inl (add name value (csl_context s)) : CSLObs (nat * nat)))
           (fun _ : unit => Ret (csl_set_context s (add name value (csl_context s)), Some tt))
         : ctreeW (CSLObs (nat * nat)) Bn (SSig * option unit)}, w |= ψ )> ->
@@ -3848,7 +3854,7 @@ Proof.
 Qed.
 
 Lemma aul_csl_flow_assign : forall name expr (value : nat) s (w : WorldW (CSLObs (nat * nat))) (ψ φ : ticllW (CSLObs (nat * nat))),
-    <[ {instr_exp_erased expr s}, w |= AX done= {(s, value)} w ]> ->
+    <[ {instr_exp_erased expr s}, w |= ret= {(s, value)} w ]> ->
     <( {Vis (Log (inl (add name value (csl_context s)) : CSLObs (nat * nat)))
           (fun _ : unit => Ret (csl_set_context s (add name value (csl_context s)), Some tt))
         : ctreeW (CSLObs (nat * nat)) Bn (SSig * option unit)}, w |= ψ )> ->
@@ -3868,7 +3874,7 @@ Proof.
 Qed.
 
 Lemma anr_csl_flow_bind_fallthrough : forall (a b : CProg unit) s s' w w' φ ψ,
-    <[ {instr_flow_erased a s}, w |= φ AN done= {(s', Some tt)} w' ]> ->
+    <[ {instr_flow_erased a s}, w |= ret= {(s', Some tt)} w' ]> ->
     <[ {instr_flow_erased b s'}, w' |= φ AN ψ ]> ->
     <[ {instr_flow_erased (CBind a (fun _ => b)) s}, w |= φ AN ψ ]>.
 Proof.
@@ -3879,7 +3885,7 @@ Proof.
 Qed.
 
 Lemma aur_csl_flow_bind : forall (a b : CProg unit) s s' w w' φ ψ,
-    <[ {instr_flow_erased a s}, w |= φ AU AX done= {(s', Some tt)} w' ]> ->
+    <[ {instr_flow_erased a s}, w |= φ AU ret= {(s', Some tt)} w' ]> ->
     <[ {instr_flow_erased b s'}, w' |= φ AU ψ ]> ->
     <[ {instr_flow_erased (CBind a (fun _ => b)) s}, w |= φ AU ψ ]>.
 Proof.
@@ -3890,7 +3896,7 @@ Proof.
 Qed.
 
 Lemma aul_csl_flow_bind : forall (a b : CProg unit) s s' w w' φ ψ,
-    <[ {instr_flow_erased a s}, w |= φ AU AX done= {(s', Some tt)} w' ]> ->
+    <[ {instr_flow_erased a s}, w |= φ AU ret= {(s', Some tt)} w' ]> ->
     <( {instr_flow_erased b s'}, w' |= φ AU ψ )> ->
     <( {instr_flow_erased (CBind a (fun _ => b)) s}, w |= φ AU ψ )>.
 Proof.
@@ -3902,21 +3908,21 @@ Qed.
 
 (** A halted first statement skips the second: the halt flow propagates. *)
 Lemma aur_csl_flow_bind_halt : forall (a b : CProg unit) s s' w w' φ,
-    <[ {instr_flow_erased a s}, w |= φ AU AX done= {(s', None)} w' ]> ->
+    <[ {instr_flow_erased a s}, w |= φ AU ret= {(s', None)} w' ]> ->
     not_done w' ->
     <[ {instr_flow_erased (CBind a (fun _ => b)) s},
-       w |= φ AU AX done= {(s', None)} w' ]>.
+       w |= φ AU ret= {(s', None)} w' ]>.
 Proof.
   intros a b s s' w w' φ Ha Hnd.
   unfold instr_flow_erased in *.
   rewrite denote_flow_cbind_unit.
   eapply aur_ithread_bind_r_eq; [exact Ha | cbv beta].
   cleft.
-  rewrite interp_state_thread_ret; apply axr_ret; [assumption | split; reflexivity].
+  rewrite interp_state_thread_ret; apply ret_ret; [assumption | split; reflexivity].
 Qed.
 
 Lemma aul_csl_flow_if {A} : forall test (yes no : CProg A) condition s w φ ψ,
-    <[ {instr_exp_erased test s}, w |= AX done= {(s, condition)} w ]> ->
+    <[ {instr_exp_erased test s}, w |= ret= {(s, condition)} w ]> ->
     (if CoCSLSyntax.is_true condition then
        <( {instr_flow_erased yes s}, w |= φ AU ψ )>
      else
@@ -3931,7 +3937,7 @@ Proof.
 Qed.
 
 Lemma aur_csl_flow_if {A} : forall test (yes no : CProg A) condition s w φ ψ,
-    <[ {instr_exp_erased test s}, w |= AX done= {(s, condition)} w ]> ->
+    <[ {instr_exp_erased test s}, w |= ret= {(s, condition)} w ]> ->
     (if CoCSLSyntax.is_true condition then
        <[ {instr_flow_erased yes s}, w |= φ AU ψ ]>
      else
@@ -3951,9 +3957,9 @@ Qed.
     flow directly; they make no claim about scheduled liveness. *)
 
 Lemma aul_csl_raw_while : forall test body condition w w' φ ψ,
-    <[ {denote_exp test}, w |= φ AU AX done= condition w ]> ->
+    <[ {denote_exp test}, w |= φ AU ret= condition w ]> ->
     CoCSLSyntax.is_true condition = true ->
-    <[ {denote_flow body}, w |= φ AU AX done= {Some tt} w' ]> ->
+    <[ {denote_flow body}, w |= φ AU ret= {Some tt} w' ]> ->
     not_done w' ->
     <( {denote_flow (CWhile test body)}, w' |= φ AU ψ )> ->
     <( {denote_flow (CWhile test body)}, w |= φ AU ψ )>.
@@ -3971,27 +3977,27 @@ Proof.
 Qed.
 
 Lemma aul_csl_raw_while_false : forall test body condition w φ ψ,
-    <[ {denote_exp test}, w |= φ AU AX done= condition w ]> ->
+    <[ {denote_exp test}, w |= φ AU ret= condition w ]> ->
     CoCSLSyntax.is_true condition = false ->
     <( {Ret (Some tt) : ctree CEff Bn (option unit)}, w |= ψ )> ->
     <( {denote_flow (CWhile test body)}, w |= φ AU ψ )>.
 Proof.
   intros test body condition w φ ψ Htest Hfalse Hret.
   pose proof Htest as Htest_not_done.
-  apply aur_not_done in Htest_not_done.
+  apply aur_ret_not_done in Htest_not_done.
   rewrite denote_flow_cwhile, unfold_iter.
   eapply aul_bind_r_eq.
   - unfold cwhile_iteration.
     eapply aur_bind_r_eq; [exact Htest |].
     rewrite Hfalse.
-    cleft; apply axr_ret; [exact Htest_not_done | split; reflexivity].
+    cleft; apply ret_ret; [exact Htest_not_done | split; reflexivity].
   - cbn; cleft; exact Hret.
 Qed.
 
 Lemma aul_csl_raw_while_halt : forall test body condition w w' φ ψ,
-    <[ {denote_exp test}, w |= φ AU AX done= condition w ]> ->
+    <[ {denote_exp test}, w |= φ AU ret= condition w ]> ->
     CoCSLSyntax.is_true condition = true ->
-    <[ {denote_flow body}, w |= φ AU AX done= {None} w' ]> ->
+    <[ {denote_flow body}, w |= φ AU ret= {None} w' ]> ->
     not_done w' ->
     <( {Ret None : ctree CEff Bn (option unit)}, w' |= ψ )> ->
     <( {denote_flow (CWhile test body)}, w |= φ AU ψ )>.
@@ -4003,14 +4009,14 @@ Proof.
     eapply aur_bind_r_eq; [exact Htest |].
     rewrite Htrue.
     eapply aur_bind_r_eq; [exact Hbody |].
-    cleft; apply axr_ret; auto.
+    cleft; apply ret_ret; auto.
   - cbn; cleft; exact Hret.
 Qed.
 
 Lemma aur_csl_raw_while : forall test body condition w w' φ ψ,
-    <[ {denote_exp test}, w |= φ AU AX done= condition w ]> ->
+    <[ {denote_exp test}, w |= φ AU ret= condition w ]> ->
     CoCSLSyntax.is_true condition = true ->
-    <[ {denote_flow body}, w |= φ AU AX done= {Some tt} w' ]> ->
+    <[ {denote_flow body}, w |= φ AU ret= {Some tt} w' ]> ->
     not_done w' ->
     <[ {denote_flow (CWhile test body)}, w' |= φ AU AX ψ ]> ->
     <[ {denote_flow (CWhile test body)}, w |= φ AU AX ψ ]>.
@@ -4028,20 +4034,20 @@ Proof.
 Qed.
 
 Lemma aur_csl_raw_while_false : forall test body condition w φ ψ,
-    <[ {denote_exp test}, w |= φ AU AX done= condition w ]> ->
+    <[ {denote_exp test}, w |= φ AU ret= condition w ]> ->
     CoCSLSyntax.is_true condition = false ->
     <[ {Ret (Some tt) : ctree CEff Bn (option unit)}, w |= AX ψ ]> ->
     <[ {denote_flow (CWhile test body)}, w |= φ AU AX ψ ]>.
 Proof.
   intros test body condition w φ ψ Htest Hfalse Hret.
   pose proof Htest as Htest_not_done.
-  apply aur_not_done in Htest_not_done.
+  apply aur_ret_not_done in Htest_not_done.
   rewrite denote_flow_cwhile, unfold_iter.
   eapply aur_bind_r_eq.
   - unfold cwhile_iteration.
     eapply aur_bind_r_eq; [exact Htest |].
     rewrite Hfalse.
-    cleft; apply axr_ret; [exact Htest_not_done | split; reflexivity].
+    cleft; apply ret_ret; [exact Htest_not_done | split; reflexivity].
   - cbn; cleft; exact Hret.
 Qed.
 

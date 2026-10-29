@@ -14,8 +14,8 @@ Variant ticlq := Q_A | Q_E.
 (** This section defines the syntax of TICL formulas.
     We define two syntaxes, one for prefix formulas [ticll] and one for suffix formulas [ticlr].
     The prefix syntax is used to define the semantics of TICL formulas that hold in [not_done] worlds.
-    The suffix syntax is used to define the semantics of TICL formulas that hold in [done] worlds,
-    meaning postconditions on the return value of the program.
+    The suffix syntax describes deterministic pre-return postconditions and
+    temporal formulas ending in such returns.
 
     The syntax is parameterized by the indexed event signature [E], which
     gives us the type of worlds [World E].
@@ -36,8 +36,6 @@ Section TiclSyntax.
   | COrL (p q: ticll): ticll.
 
   Inductive ticlr {X: Type} : Type :=
-  (* Model returns with type [X] and [φ] holds at this point *)
-  | CDone (φ: X -> World E -> Prop): ticlr
   (* Model can step and every transition returns the same value [x], with [φ x w] *)
   | CRet (φ: X -> World E -> Prop): ticlr
   | CuR (q: ticlq) (φ: ticll) (ψ: ticlr): ticlr
@@ -61,7 +59,6 @@ Section Contramap.
   Definition contramap(f: Y -> X): ticlr E X -> ticlr E Y :=
     fix F φ :=
       match φ with
-      | CDone p => CDone (fun y w => p (f y) w)
       | CRet p => CRet (fun y w => p (f y) w)
       | CuR q φ ψ => CuR q φ (F ψ)
       | CxR q φ ψ => CxR q φ (F ψ)
@@ -112,14 +109,6 @@ Module TiclNotations.
                        end)))
       (in custom ticll at level 74): ticl_scope.
 
-  Notation "'done' R" :=
-    (CDone R)
-      (in custom ticlr at level 74): ticl_scope.
-
-  Notation "'done=' r w" :=
-    (CDone (fun r' w' => r = r' /\ w = w'))
-      (in custom ticlr at level 74): ticl_scope.
-
   Notation "'ret' R" :=
     (CRet R)
       (in custom ticlr at level 74): ticl_scope.
@@ -128,30 +117,10 @@ Module TiclNotations.
     (CRet (fun r' w' => r = r' /\ w = w'))
       (in custom ticlr at level 74): ticl_scope.
 
-  Notation "'finish' R" :=
-    (CDone (finish_with R))
-      (in custom ticlr at level 74): ticl_scope.
-
-  Notation "'finishW' R" :=
-    (CDone (finish_with (fun '(s, x) Y (pat : writerE _ Y) =>
-                           match pat in writerE _ Y return Y -> Prop with
-                           | Log w => fun 'tt => R x s w
-                           end)))
-      (in custom ticlr at level 74): ticl_scope.
-
-  Notation "'finishW=' x s w" :=
-    (CDone (finish_with (fun '(s', x') Y (pat : writerE _ Y) =>
-                           match pat in writerE _ Y return Y -> Prop with
-                           | Log w' => fun 'tt => x = x' /\ s = s' /\ w = w'
-                           end)))
-      (in custom ticlr at level 74): ticl_scope.
-
   Notation "⊤" := (CNow (fun _ => True)) (in custom ticll): ticl_scope.
   Notation "⊥" := (CNow (fun _ => False)) (in custom ticll): ticl_scope.
   Notation "⊤" := (CNow (fun _ => True)) (in custom ticlr): ticl_scope.
   Notation "⊥" := (CNow (fun _ => False)) (in custom ticlr): ticl_scope.
-  Notation "⫪" := (CDone (fun _ _ => True)) (in custom ticlr): ticl_scope.
-  Notation "⫫" := (CDone (fun _ _ => False)) (in custom ticlr): ticl_scope.
 
   (* Temporal syntax *)
   Notation "p 'EN' q" := (CxL Q_E p q) (in custom ticll at level 75): ticl_scope.
