@@ -179,7 +179,7 @@ Lemma shared_pool_agaf_rr hdr nl k g s cursor (P : CSLObs (nat * nat) -> Prop) :
     (SharedInv hdr nl k) (fun g => g) lexnat P ->
   SharedInv hdr nl k g s ->
   <( {run_rr_pool [worker 2 hdr; worker 1 hdr]%vector None cursor s}, Pure
-     |= AG (AF visW {P}) )>.
+     |= AG (AF visW {fair_obs P}) )>.
 Proof.
   intros Hranked Hinv.
   apply (ag_csl_rr_invariance _ (SharedInv hdr nl k) _
@@ -229,7 +229,7 @@ Qed.
 Theorem shared_rotate_agaf_pop_rr_fresh : forall hdr nl h allocs ctx c ns vs d k,
   qrep hdr ns vs h -> find_index Nat.eqb nl vs = Some d ->
   <( {run_rr (shared_queue hdr) ((h,allocs),(ctx,c))}, Pure
-     |= AG (AF visW {shared_pop_after nl k}) )>.
+     |= AG (AF visW {fair_obs (shared_pop_after nl k)}) )>.
 Proof.
   intros hdr nl h allocs ctx c ns vs d k Hq Hf.
   unfold shared_queue; rewrite run_rr_two_forks.
@@ -263,7 +263,7 @@ Qed.
 Theorem shared_rotate_agaf_pop_rr : forall hdr nl h allocs ctx c ns vs d,
   qrep hdr ns vs h -> find_index Nat.eqb nl vs = Some d ->
   <( {run_rr (shared_queue hdr) ((h,allocs),(ctx,c))}, Pure
-     |= AG (AF visW {shared_pop nl}) )>.
+     |= AG (AF visW {fair_obs (shared_pop nl)}) )>.
 Proof.
   intros hdr nl h allocs ctx c ns vs d Hq Hf.
   unfold shared_queue; rewrite run_rr_two_forks.
@@ -309,7 +309,7 @@ Qed.
 Theorem shared_rotate_agaf_pop_alloc_rr : forall values nl ctx c d,
   find_index Nat.eqb nl values = Some d ->
   <( {run_rr (allocated_shared_queue values) (managed_empty,(ctx,c))}, Pure
-     |= AG (AF visW {shared_pop nl}) )>.
+     |= AG (AF visW {fair_obs (shared_pop nl)}) )>.
 Proof.
   intros values nl ctx c d Hf; rewrite run_rr_allocated_shared_queue.
   eapply shared_rotate_agaf_pop_rr; [apply allocated_shared_queue_rep|exact Hf].
@@ -349,7 +349,7 @@ Qed.
 Theorem shared_rotate_agaf_pop_alloc_rr_fresh : forall values nl ctx c d k,
   find_index Nat.eqb nl values = Some d ->
   <( {run_rr (allocated_shared_queue values) (managed_empty,(ctx,c))}, Pure
-     |= AG (AF visW {shared_pop_after nl k}) )>.
+     |= AG (AF visW {fair_obs (shared_pop_after nl k)}) )>.
 Proof.
   intros values nl ctx c d k Hf; rewrite run_rr_allocated_shared_queue.
   eapply shared_rotate_agaf_pop_rr_fresh; [apply allocated_shared_queue_rep|exact Hf].
@@ -363,17 +363,16 @@ Local Open Scope list_scope.
     The first three complete rotations of the allocated program under round
     robin: worker 2 runs first (the parent is gone and the cursor is still
     [0]), then worker 1, then worker 2 again, each rotating the same queue
-    once and logging one pop.  Every scheduling decision is one visible
-    [Step] ([run_rr_pool_select]). *)
+    once and logging one pop.  Every scheduling decision is one logged pick
+    ([run_rr_pool_select]): slot [0] is worker 2, slot [1] is worker 1. *)
 Theorem shared_queue_rr_prefix3 :
   let h0 := new_queue_heap 1 [10;20;30] hemp in
   let h3 := qstepN 1 3 [3;5;7] h0 in
   run_rr (allocated_shared_queue [10;20;30]) (managed_empty,(List.nil,0)) ~
-  Step (log (inr (stamp (2,10) 0) : CSLObs (nat * nat));;
-   Step (log (inr (stamp (1,20) 1) : CSLObs (nat * nat));;
-    Step (log (inr (stamp (2,30) 2) : CSLObs (nat * nat));;
-     run_rr_pool [worker 2 1; worker 1 1]%vector None 3
-       ((h3,upd hemp 1 8),(List.nil,3))))).
+  emit_list [inr 0; inl (inr (stamp (2,10) 0)); inr 1; inl (inr (stamp (1,20) 1));
+             inr 0; inl (inr (stamp (2,30) 2))]%list
+    (run_rr_pool [worker 2 1; worker 1 1]%vector None 3
+       ((h3,upd hemp 1 8),(List.nil,3))).
 Proof.
   intros h0 h3.
   rewrite run_rr_allocated_shared_queue; unfold shared_queue; rewrite run_rr_two_forks.
@@ -384,31 +383,32 @@ Proof.
   change (qrep 1 [5;7;3] [20;30;10] (qstep 1 [3;5;7] h0)) in Hq1.
   pose proof (qstep_qrep 1 [5;7;3] [20;30;10] _ Hq1 ltac:(discriminate)) as Hq2.
   change (qrep 1 [7;3;5] [30;10;20] (qstep 1 [5;7;3] (qstep 1 [3;5;7] h0))) in Hq2.
+  unfold emit_list at 1; cbn [List.fold_right]; repeat setoid_rewrite log_vis.
   (* worker 2 *)
   rewrite (run_rr_pool_select [worker 2 1; worker 1 1]%vector 0), (rr_pick_even 0 eq_refl).
-  apply sb_step.
+  apply sb_vis; intros _.
   etransitivity;
     [exact (run_rr_pool_turn [worker 2 1; worker 1 1]%vector Fin.F1 1 _ _ _
       (exact_worker_turn 2 1 3 [5;7] 10 [20;30] h0 allocs List.nil 0 Hq0))|].
-  cbn [emit_list List.fold_right].
-  rewrite !log_vis; apply sb_vis; intros _.
+  cbn [List.map emit_list List.fold_right].
+  repeat setoid_rewrite log_vis; apply sb_vis; intros _.
   (* worker 1 *)
   rewrite (run_rr_pool_select [worker 2 1; worker 1 1]%vector 1), (rr_pick_odd 1 eq_refl).
-  apply sb_step.
+  apply sb_vis; intros _.
   etransitivity;
     [exact (run_rr_pool_turn [worker 2 1; worker 1 1]%vector (Fin.FS Fin.F1) 2 _ _ _
       (exact_worker_turn 1 1 5 [7;3] 20 [30;10] (qstep 1 [3;5;7] h0) allocs List.nil 1 Hq1))|].
-  cbn [emit_list List.fold_right].
-  rewrite !log_vis; apply sb_vis; intros _.
+  cbn [List.map emit_list List.fold_right].
+  repeat setoid_rewrite log_vis; apply sb_vis; intros _.
   (* worker 2 again *)
   rewrite (run_rr_pool_select [worker 2 1; worker 1 1]%vector 2), (rr_pick_even 2 eq_refl).
-  apply sb_step.
+  apply sb_vis; intros _.
   etransitivity;
     [exact (run_rr_pool_turn [worker 2 1; worker 1 1]%vector Fin.F1 3 _ _ _
       (exact_worker_turn 2 1 7 [3;5] 30 [10;20] (qstep 1 [5;7;3] (qstep 1 [3;5;7] h0))
          allocs List.nil 2 Hq2))|].
-  cbn [emit_list List.fold_right].
-  rewrite !log_vis; apply sb_vis; intros _.
+  cbn [List.map emit_list List.fold_right].
+  repeat setoid_rewrite log_vis; apply sb_vis; intros _.
   reflexivity.
 Qed.
 
@@ -417,22 +417,23 @@ Local Open Scope fin_vector_scope.
 (** ** The empty queue faults.
 
     An allocated empty queue has a null head pointer and the null cell is
-    unallocated: after the scheduler's visible pick, the first worker turn
+    unallocated: after the scheduler's logged pick, the first worker turn
     reads it and the whole run is stuck, so no [AG] formula holds. *)
 Lemma allocated_shared_queue_empty_stuck : forall ctx c,
   run_rr (allocated_shared_queue []) (managed_empty,(ctx,c)) ~
-    Step (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+    (log (inr 0 : CSLObs (nat * nat) + nat);; Stuck
+      : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
 Proof.
   intros ctx c.
   rewrite run_rr_allocated_shared_queue; unfold shared_queue; rewrite run_rr_two_forks.
   rewrite run_rr_pool_select, (rr_pick_even 0 eq_refl).
-  apply sb_step.
+  rewrite log_vis; apply sb_vis; intros _.
   unfold run_rr_pool, csl_pool; cbn [Vector.map].
   change (interp_schedule_rr sh 2
     ([Ret tt; denote (worker 1 1)]%vector @ Fin.F1 :=
       (denote_flow (worker 2 1) >>= fun _ => Ret tt)) (Some Fin.F1) 1
     ((new_queue_heap 1 [] hemp, upd hemp 1 (2 * S (length (@List.nil nat)))),(ctx,c)) ~
-    (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit))).
+    (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit))).
   unfold worker at 2; rewrite interp_rr_until_none, interp_rr_bind.
   unfold rotate_once at 1; rewrite interp_rr_bind.
   rewrite (interp_rr_read_value _ _ _ 2 0) by reflexivity; cbv beta iota.
@@ -441,10 +442,10 @@ Proof.
 Qed.
 
 Lemma allocated_shared_queue_empty_no_ag : forall ctx c w
-    (phi : ticllW (CSLObs (nat * nat))),
+    (phi : ticllW (CSLObs (nat * nat) + nat)),
   ~ <( {run_rr (allocated_shared_queue []) (managed_empty,(ctx,c))}, {w}
        |= AG phi )>.
 Proof.
-  intros ctx c w phi; rewrite allocated_shared_queue_empty_stuck.
-  intro H; apply ag_step in H as (_ & H); eapply ag_stuck; exact H.
+  intros ctx c w phi; rewrite allocated_shared_queue_empty_stuck, log_vis.
+  intro H; apply (ag_vis _ _ tt) in H as (_ & H); eapply ag_stuck; exact (H tt).
 Qed.

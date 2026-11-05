@@ -8,6 +8,7 @@ From Coinduction Require Import all.
 From TICL Require Import
   CTree.Core
   CTree.Logic.Trans
+  CTree.Interp.Yield.Mod
   CTree.Logic.CanStep
   Logic.Core
   CTree.Logic.AX
@@ -126,6 +127,17 @@ Section BasicLemmas.
       <( {Br c k}, w |= φ AU ψ )>.
   Proof.
     intros; cright; now apply anl_br.
+  Qed.
+
+  (** Policy alternatives: the single-alternative case is the body itself,
+      otherwise [aul_br]. *)
+  Lemma aul_br_alts `{Bn -< B}: forall m (k: Fin.t (S m) -> ctree E B X) w φ ψ,
+      <( {br_alts m k}, w |= φ )> ->
+      (exists a, can_step (k a) w) ->
+      (forall a t' w', |k a, w| ↦ |t', w'| -> <( t', w' |= φ AU ψ )>) ->
+      <( {br_alts m k}, w |= φ AU ψ )>.
+  Proof.
+    intros; cright; now apply anl_br_alts.
   Qed.
 
   (** Visible branch iff lemma for prefix eventually [AU_L] *)

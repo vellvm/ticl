@@ -353,7 +353,7 @@ Lemma interp_rr_new_page_read_missing n
   interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CBind (new_page capacity)
       (fun base => CRead (address base))) >>= K)) (Some i) m (managed_empty,(ctx,c)) ~
-    (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+    (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
 Proof.
   intro Missing; rewrite interp_rr_bind, interp_rr_new_page_hemp.
   apply interp_rr_read_missing; exact Missing.
@@ -818,7 +818,7 @@ Theorem turn_interp_rr base capacity who s t event allocs ctx cursor :
     guard_equ residual ((allocator_pool base t) $ slot_of_actor who) /\
     interp_schedule_rr sh 3 (allocator_pool base s) (Some (slot_of_actor who))
       cursor ((aheap s,allocs),(ctx,acount s)) ~
-    emit_list (event_obs event)
+    emit_list (List.map inl (event_obs event))
       (interp_schedule_rr sh 3
         (allocator_pool base t @ slot_of_actor who := residual)
         None cursor ((aheap t,allocs),(ctx,acount t))).
@@ -828,10 +828,10 @@ Proof.
     as (residual & Hseg & Htail).
   exists residual; split; [exact Htail|].
   etransitivity.
-  - exact (segment_interp_rr sh csl_equ (fun X t u => equ_sbisim t u)
+  - exact (segment_interp_fair rr_scheduler sh csl_equ (fun X t u => equ_sbisim t u)
       2 (allocator_pool base s) (slot_of_actor who) cursor ((aheap s,allocs),(ctx,acount s))
       (event_obs event) residual ((aheap t,allocs),(ctx,acount t)) Hseg).
-  - apply emit_list_sbisim, equ_sbisim, interp_schedule_rr_equ.
+  - apply emit_list_sbisim, equ_sbisim, interp_schedule_fair_equ.
     exact (source_replace_turn base who s t event residual Hturn).
 Qed.
 
@@ -868,7 +868,7 @@ Theorem selected_turn_interp_rr base capacity (ts : pool sE Bn 3)
     state_agrees sigma' t /\
     guard_equ residual ((allocator_pool base t) $ slot_of_actor who) /\
     interp_schedule_rr sh 3 ts (Some (slot_of_actor who)) cursor sigma ~
-    emit_list (event_obs event)
+    emit_list (List.map inl (event_obs event))
       (interp_schedule_rr sh 3 (ts @ slot_of_actor who := residual) None cursor sigma').
 Proof.
   intros Hpool Hagree Hinv Hturn.
@@ -878,7 +878,7 @@ Proof.
   exists residual, sigma'; split; [exact Hstate|]; split.
   - pose proof (Hnext (slot_of_actor who)) as Htail.
     rewrite Vector.nth_replace_eq in Htail; exact Htail.
-  - exact (segment_interp_rr sh csl_equ (fun X t u => equ_sbisim t u)
+  - exact (segment_interp_fair rr_scheduler sh csl_equ (fun X t u => equ_sbisim t u)
       2 ts (slot_of_actor who) cursor sigma
       (event_obs event) residual sigma' Hseg).
 Qed.
@@ -904,7 +904,7 @@ Qed.
 Theorem run_rr_allocator_bisim capacity ctx c :
   run_rr (allocator_program capacity) (managed_empty,(ctx,c)) ~
     (model_rr 2 actor_of_slot (turn 1) (initial_state capacity c) 0
-       : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+       : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
 Proof.
   rewrite run_rr_allocator_initialized.
   exact (pool_simulation_rr_bisim actor_of_slot slot_of_actor_of_slot

@@ -53,7 +53,7 @@ Theorem p_af_framed ctx :
     (run_nd p (frame_state fr (s0 ctx))) Pure.
 Proof.
   apply af_ret_done.
-  eapply aur_ret_mono; [|apply (aur_csl_frame_ret fr _ _ _
+  eapply aur_ret_mono; [|apply (aur_csl_frame_ret sh _ sh_frame_handler fr _ _ _
     (run_nd_framable p ltac:(cbn; tauto)) (frame_rel_state fr _ (frame_inv_s0 ctx)));
     [constructor|apply p_af_ret]].
   intros [[M aux] x] ? HP; apply frame_post_iff in HP.
@@ -77,7 +77,7 @@ Theorem emit_loop_ag_framed ctx :
   <( {run_nd (CUntilNone (CBind (CEmit 1 2) (fun _ => CRet (Some tt : option unit))))
         (frame_state fr (s0 ctx))}, Pure |= AG ⊤ )>.
 Proof.
-  apply (ticll_csl_frame fr _ _ _
+  apply (ticll_csl_frame sh _ sh_frame_handler fr _ _ _
     (run_nd_framable (CUntilNone (CBind (CEmit 1 2) (fun _ => CRet (Some tt : option unit)))) ltac:(cbn; tauto))
     (frame_rel_state fr _ (frame_inv_s0 ctx))).
   apply run_nd_emit_loop_ag; constructor.

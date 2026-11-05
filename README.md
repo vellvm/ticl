@@ -64,9 +64,17 @@ dependencies, `make` builds `TICL` and `make install` installs it.
 Use `make doc` in the root directory to build the documentation. The documentation is accessed
 by `main.html` in the root of the repository. The documentation is generated using rocqdoc.
 
-Fair-scheduler liveness in [`Fair.v`](theories/CTree/Interp/Yield/Fair.v) reuses
-the finite observation-prefix rules in [`CTree/Logic/Trace.v`](theories/CTree/Logic/Trace.v).
+Pools are scheduled by the event-only policy scheduler `schedule_with` in
+[`Yield/Mod.v`](theories/CTree/Interp/Yield/Mod.v): it never inspects a
+thread's hidden branches and logs every scheduling decision as a `Scheduled`
+event, which the instrumented runner in
+[`Policy.v`](theories/CTree/Interp/Yield/Policy.v) records as `Log (inr slot)`
+next to the program's `Log (inl _)` observations. Round robin
+([`RoundRobin.v`](theories/CTree/Interp/Yield/RoundRobin.v)) is its
+`rr_scheduler` instance. Fair-scheduler liveness in
+[`Fair.v`](theories/CTree/Interp/Yield/Fair.v) reuses the finite
+observation-prefix rules in [`CTree/Logic/Trace.v`](theories/CTree/Logic/Trace.v).
 `fair_obs` excludes scheduling logs; queue and allocator recurrence results
-require a `FairScheduler` policy.
+require a `FairScheduler` policy (`rr_fair` certifies round robin; `nd_not_fair` refutes nondeterministic selection).
 
 

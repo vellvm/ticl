@@ -11,8 +11,11 @@ From ExtLib Require Import
 From TICL Require Import
   CTree.Core
   CTree.Interp.State.Mod
+  CTree.Interp.Yield.Policy
   CTree.Events.State
   CTree.Events.Writer
+  CTree.Events.Yield
+  Utils.Vectors
   CTree.Logic.Trans
   CTree.Logic.CanStep
   CTree.Logic.AX
@@ -61,50 +64,57 @@ Qed.
 
     [n] is the turn counter and the loop index.  A turn is a whole rotation;
     the counter advances only after it completes.  Each completed turn ends
-    with one visible [Step]: the scheduling decision of the source
-    round-robin scheduler ([interp_schedule_rr_select]) is a visible step
-    under [ctrees]' hidden branching, so the reference scheduler must take
-    the same step for [Program.queue_pool_bisim] to be a bisimulation. *)
+    with one logged scheduling decision: the source round-robin scheduler
+    ([interp_schedule_rr_select]) logs the slot it picks next, so the
+    reference scheduler, written in the scheduled signature
+    [schedE +' sE], triggers the same [Scheduled] event for
+    [Program.queue_pool_bisim] to be a bisimulation. *)
 
 Definition hdrof (u v n: nat) : nat := if Nat.even n then u else v.
 Definition tagof (n: nat) : nat := if Nat.even n then 1 else 2.
 
-Definition sbody (u v: nat) (n: nat) : ctree sE Bn (nat + unit) :=
-  if Nat.even n
-  then turnk 1 u (Step (Ret (inl (S n))))
-  else turnk 2 v (Step (Ret (inl (S n)))).
+(** The pool slot that runs turn [n]: queue 2 sits in slot [0], queue 1 in
+    slot [1]. *)
+Definition queue_slot (n : nat) : Fin.t 2 :=
+  if Nat.even n then Fin.FS Fin.F1 else Fin.F1.
 
-Definition sched (u v n: nat) : ctree sE Bn unit := CTree.iter (sbody u v) n.
+Definition sbody (u v: nat) (n: nat) : ctree (schedE +' sE) Bn (nat + unit) :=
+  translate inr1 (turn (tagof n) (hdrof u v n)) ;;
+  CTree.trigger (inl1 (Scheduled (slot_index (queue_slot (S n)))) : (schedE +' sE) unit) ;;
+  Ret (inl (S n)).
+
+Definition sched (u v n: nat) : ctree (schedE +' sE) Bn unit := CTree.iter (sbody u v) n.
 
 Definition srun (u v n: nat) (s: SSig)
-  : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit) :=
-  interp_state sh (sched u v n) s.
+  : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit) :=
+  interp_state (policy_handler sh) (sched u v n) s.
 
 (** One scheduler turn, for EITHER phase, in one statement.  [hdrof]/[tagof]
     are what let the phase case analysis happen once, in the temporal proof,
     rather than twice in the language layer. *)
 Theorem sbody_spec: forall u v n a ns pv vs h allocs ctx c,
     qrep (hdrof u v n) (a :: ns) (pv :: vs) h ->
-    interp_state sh (sbody u v n) ((h, allocs), (ctx, c))
-    ~ (log (inr (stamp ((tagof n),pv) c) : CSLObs (nat * nat)) ;;
-       Step (Ret (((rot_heap (hdrof u v n) a (List.hd 0 ns) (zof (hdrof u v n) ns) h, allocs),
+    interp_state (policy_handler sh) (sbody u v n) ((h, allocs), (ctx, c))
+    ~ (log (inl (inr (stamp ((tagof n),pv) c)) : CSLObs (nat * nat) + nat) ;;
+       log (inr (slot_index (queue_slot (S n))) : CSLObs (nat * nat) + nat) ;;
+       Ret (((rot_heap (hdrof u v n) a (List.hd 0 ns) (zof (hdrof u v n) ns) h, allocs),
                    (ctx, S c)),
-                  @inl nat unit (S n)))
-       : ctreeW (CSLObs (nat * nat)) Bn (SSig * (nat + unit))).
+                  @inl nat unit (S n))
+       : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * (nat + unit))).
 Proof.
   intros u v n a ns pv vs h allocs ctx c Hq.
-  unfold sbody, hdrof, tagof in *.
-  destruct (Nat.even n).
-  - rewrite (turnk_spec 1 u a ns pv vs h allocs ctx c
-               (Step (Ret (@inl nat unit (S n))): ctree sE Bn (nat + unit)) Hq).
-    rewrite !log_vis; apply sb_vis; intros _.
-    rewrite interp_state_step; apply sb_step.
-    rewrite sb_guard, interp_state_ret; reflexivity.
-  - rewrite (turnk_spec 2 v a ns pv vs h allocs ctx c
-               (Step (Ret (@inl nat unit (S n))): ctree sE Bn (nat + unit)) Hq).
-    rewrite !log_vis; apply sb_vis; intros _.
-    rewrite interp_state_step; apply sb_step.
-    rewrite sb_guard, interp_state_ret; reflexivity.
+  unfold sbody.
+  rewrite interp_state_bind, interp_state_policy_translate.
+  unfold turn.
+  rewrite (turnk_spec (tagof n) (hdrof u v n) a ns pv vs h allocs ctx c (Ret tt) Hq).
+  rewrite (translate_log_bind _ _).
+  rewrite !log_vis, bind_vis; apply sb_vis; intros _.
+  rewrite interp_state_ret, translate_ret, bind_ret_l.
+  rewrite interp_state_bind, interp_state_trigger_bind.
+  cbn [policy_handler h_sum sched_handler].
+  change (Monad.bind ?a ?b) with (CTree.bind a b); rewrite bind_vis.
+  rewrite !log_vis; apply sb_vis; intros _.
+  rewrite bind_ret_l, interp_state_ret; reflexivity.
 Qed.
 
 (** The parity flip: one turn of the scheduler changes whose turn it is.
@@ -149,17 +159,21 @@ Qed.
 
 Lemma srun_turn u v n (s : SSig) :
   srun u v n s ~
-  (interp_state sh (turn (tagof n) (hdrof u v n)) s >>=
-    fun '(s', _) => Step (srun u v (S n) s')).
+  (translate relabel_log (interp_state sh (turn (tagof n) (hdrof u v n)) s) >>=
+    fun '(s', _) =>
+      Vis (Log (inr (slot_index (queue_slot (S n))))) (fun _ => srun u v (S n) s')).
 Proof.
   unfold srun, sched.
   rewrite interp_state_unfold_iter.
   cbv beta.
-  unfold sbody, tagof, hdrof.
-  destruct (Nat.even n).
-  all: rewrite turnk_bind, interp_state_bind, bind_bind.
-  all: apply sbisim_clo_bind_eq; [reflexivity | intros [s' x]].
-  all: rewrite interp_state_step, bind_step; apply sb_step.
-  all: rewrite bind_guard, sb_guard, interp_state_ret, bind_ret_l.
-  all: apply sb_guard.
+  unfold sbody.
+  rewrite interp_state_bind, interp_state_policy_translate, bind_bind.
+  apply sbisim_clo_bind_eq; [reflexivity | intros [s' x]].
+  rewrite interp_state_bind, interp_state_trigger_bind.
+  cbn [policy_handler h_sum sched_handler].
+  change (Monad.bind ?a ?b) with (CTree.bind a b); rewrite !bind_bind, bind_vis.
+  apply sb_vis; intros _.
+  rewrite !bind_ret_l; cbn [fst].
+  rewrite interp_state_ret, bind_ret_l.
+  apply sb_guard.
 Qed.

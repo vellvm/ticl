@@ -8,9 +8,10 @@
     [ThreadSegment] stay output/list polymorphic; only these two models fix
     the zero-or-one-observation turn shape.
 
-    Every scheduling decision of the concrete schedulers is one visible step
-    ([brS] under nondeterministic scheduling, its round-robin refinement
-    [Step]); both models begin every turn with that step. *)
+    Every scheduling decision of the concrete schedulers is one visible
+    transition: a [brS] under nondeterministic scheduling, a logged
+    [Scheduled] slot under round robin; both models begin every turn with
+    that transition. *)
 
 From Stdlib Require Import List Lia Arith.PeanoNat Fin Vector
   Classes.Morphisms Classes.RelationClasses Classes.RelationPairs.
@@ -25,6 +26,7 @@ From TICL Require Import
   CTree.Interp.Refine
   CTree.Interp.Yield.Mod
   CTree.Interp.Yield.SBisim
+  CTree.Interp.Yield.Policy
   CTree.Interp.Yield.RoundRobin
   CTree.Interp.Yield.Nondeterministic
   CTree.Interp.Yield.Segments
@@ -37,53 +39,12 @@ Local Open Scope fin_vector_scope.
 Local Open Scope list_scope.
 Local Open Scope nat_scope.
 
-(** ** Turn-structured emission.
+(** ** Turn emission.
 
-    A finite list of turns, each one visible step followed by its (at most
-    one) observation. *)
-Fixpoint emit_turns {W : Type} {B : Type -> Type} {X : Type}
-  (turns : list (option W)) (t : ctreeW W B X) : ctreeW W B X :=
-  match turns with
-  | [] => t
-  | ev :: rest => Step (emit_list (event_obs ev) (emit_turns rest t))
-  end.
-
-Lemma emit_turns_app {W : Type} {B : Type -> Type} {X : Type} xs ys (t : ctreeW W B X) :
-  emit_turns (xs ++ ys) t = emit_turns xs (emit_turns ys t).
-Proof. induction xs as [|ev xs IH]; cbn [emit_turns List.app]; [reflexivity|now rewrite IH]. Qed.
-
-Lemma emit_turns_equ {W : Type} {B : Type -> Type} {X : Type} turns (t u : ctreeW W B X) :
-  t ≅ u -> emit_turns turns t ≅ emit_turns turns u.
-Proof.
-  intro E; induction turns as [|ev rest IH]; cbn [emit_turns]; [exact E|].
-  apply step_equ_node, emit_list_equ, IH.
-Qed.
-
-Lemma emit_turns_chain {W : Type} {B : Type -> Type} {X : Type}
-  {R : Chain (@sb (writerE W) (writerE W) B B X X eq)} turns (t u : ctreeW W B X) :
-  `R t u -> `R (emit_turns turns t) (emit_turns turns u).
-Proof.
-  intro H; induction turns as [|ev rest IH]; cbn [emit_turns]; [exact H|].
-  apply (b_chain R), step_sb_step; [reflexivity|].
-  apply emit_list_chain, IH.
-Qed.
-
-Lemma emit_turns_sbisim {W : Type} {B : Type -> Type} {X : Type} turns (t u : ctreeW W B X) :
-  t ~ u -> emit_turns turns t ~ emit_turns turns u.
-Proof. apply (emit_turns_chain (R := chain_gfp _)). Qed.
-
-Lemma emit_turns_bind {W : Type} {B : Type -> Type} {X Y : Type} turns (t : ctreeW W B X)
-  (k : X -> ctreeW W B Y) :
-  emit_turns turns t >>= k ≅ emit_turns turns (t >>= k).
-Proof.
-  induction turns as [|ev rest IH]; cbn [emit_turns]; [reflexivity|].
-  rewrite bind_step, emit_list_bind; apply step_equ_node, emit_list_equ, IH.
-Qed.
-
-Lemma emit_turns_ret_bind {W : Type} {B : Type -> Type} {X Y : Type} turns (x : X)
-  (k : X -> ctreeW W B Y) :
-  emit_turns turns (Ret x) >>= k ≅ emit_turns turns (k x).
-Proof. rewrite emit_turns_bind; apply emit_turns_equ, bind_ret_l. Qed.
+    A turn is a plain [emit_list] log: the logged slot of its scheduling
+    decision under [inr], then its (at most one) program observation under
+    [inl].  Finite runs and repeating turn batches reuse [emit_list] and
+    [emit_batches] directly. *)
 
 (** Finitely many leading guards are invisible. *)
 Lemma rr_guards_sbisim {W : Type} {B : Type -> Type} {X : Type} k (t : ctreeW W B X) :
@@ -102,55 +63,6 @@ Proof.
   intro H; transitivity u; [exact H|apply (gfp_chain R); symmetry; apply rr_guards_sbisim].
 Qed.
 
-(** Repeating turn batches: the turn-structured twin of [emit_batches]. *)
-Definition emit_turn_batches {W : Type} {B : Type -> Type} {I X : Type}
-  (batch : I -> list (option W)) (next : I -> I) (i : I) : ctreeW W B X :=
-  CTree.iter (fun j => emit_turns (batch j) (Ret (@inl I X (next j)))) i.
-
-Lemma emit_turn_batches_unfold {W : Type} {B : Type -> Type} {I X : Type}
-  (batch : I -> list (option W)) (next : I -> I) i :
-  (emit_turn_batches batch next i : ctreeW W B X) ≅
-    emit_turns (batch i) (Guard (emit_turn_batches batch next (next i))).
-Proof.
-  unfold emit_turn_batches at 1; rewrite unfold_iter.
-  rewrite emit_turns_ret_bind; reflexivity.
-Qed.
-
-Lemma emit_turn_batches_unfold_sbisim {W : Type} {B : Type -> Type} {I X : Type}
-  (batch : I -> list (option W)) (next : I -> I) i :
-  (emit_turn_batches batch next i : ctreeW W B X) ~
-    emit_turns (batch i) (emit_turn_batches batch next (next i) : ctreeW W B X).
-Proof.
-  rewrite emit_turn_batches_unfold.
-  apply emit_turns_sbisim, sb_guard.
-Qed.
-
-(** A root family that runs its own turn batch each round IS the batch loop.
-    A nonempty batch always begins with a visible step, which is what makes
-    the coinduction productive. *)
-Lemma emit_turn_batches_bisim {W : Type} {B : Type -> Type} {I X : Type}
-  (batch : I -> list (option W)) (next : I -> I)
-  (Inv : I -> Prop) (root : I -> ctreeW W B X)
-  (Hnext : forall i, Inv i -> Inv (next i))
-  (Hnonempty : forall i, Inv i -> batch i <> [])
-  (Hroot : forall i, Inv i -> root i ~ emit_turns (batch i) (root (next i))) :
-  forall i, Inv i -> root i ~ (emit_turn_batches batch next i : ctreeW W B X).
-Proof.
-  unfold sbisim; coinduction R IH; intros i Hi.
-  assert (Hstep : sb eq `R
-      (emit_turns (batch i) (root (next i)))
-      (emit_turns (batch i) (emit_turn_batches batch next (next i) : ctreeW W B X))).
-  { destruct (batch i) as [|ev rest] eqn:Eb;
-      [exfalso; exact (Hnonempty i Hi Eb) |].
-    cbn [emit_turns]; apply step_sb_step; [reflexivity|].
-    apply emit_list_chain, emit_turns_chain, IH, Hnext, Hi. }
-  transitivity (emit_turns (batch i) (root (next i)));
-    [apply (gfp_bchain R), (Hroot i Hi) |].
-  transitivity (emit_turns (batch i) (emit_turn_batches batch next (next i) : ctreeW W B X));
-    [exact Hstep |].
-  apply (gfp_bchain R); symmetry.
-  exact (emit_turn_batches_unfold_sbisim batch next i).
-Qed.
 
 (** ** The two models *)
 Section ModelND.
@@ -209,26 +121,26 @@ Section ModelRR.
     (actor : Fin.t (S n) -> Act)
     (step : Act -> St -> option (St * option W)).
 
-  (** Every round-robin turn begins with the one visible step of the
-      scheduler's (refined) selection. *)
-  CoFixpoint model_rr (s : St) (cursor : nat) : ctreeW W B X :=
-    Step
-      (match step (actor (rr_pick n cursor)) s with
-       | None => Stuck
-       | Some (next,None) => Guard (model_rr next (S cursor))
-       | Some (next,Some event) =>
-           Vis (Log event) (fun _ => Guard (model_rr next (S cursor)))
-       end).
+  (** Every round-robin turn begins with the logged slot of the scheduler's
+      selection. *)
+  CoFixpoint model_rr (s : St) (cursor : nat) : ctreeW (W + nat) B X :=
+    Vis (Log (inr (slot_index (rr_pick n cursor)))) (fun _ =>
+      match step (actor (rr_pick n cursor)) s with
+      | None => Stuck
+      | Some (next,None) => Guard (model_rr next (S cursor))
+      | Some (next,Some event) =>
+          Vis (Log (inl event)) (fun _ => Guard (model_rr next (S cursor)))
+      end).
 
   Lemma unfold_model_rr s cursor :
-    (model_rr s cursor : ctreeW W B X) ≅
-    Step
-      (match step (actor (rr_pick n cursor)) s with
-       | None => Stuck
-       | Some (next,None) => Guard (model_rr next (S cursor))
-       | Some (next,Some event) =>
-           Vis (Log event) (fun _ => Guard (model_rr next (S cursor)))
-       end).
+    (model_rr s cursor : ctreeW (W + nat) B X) ≅
+    Vis (Log (inr (slot_index (rr_pick n cursor)))) (fun _ =>
+      match step (actor (rr_pick n cursor)) s with
+      | None => Stuck
+      | Some (next,None) => Guard (model_rr next (S cursor))
+      | Some (next,Some event) =>
+          Vis (Log (inl event)) (fun _ => Guard (model_rr next (S cursor)))
+      end).
   Proof. step; now cbn. Qed.
 End ModelRR.
 
@@ -245,7 +157,7 @@ Section ModelRRCongruence.
 
   Lemma model_rr_equ : forall s t cursor cursor',
     R s t -> cursor mod (S n) = cursor' mod (S n) ->
-    (model_rr n actor step s cursor : ctreeW W B X) ≅
+    (model_rr n actor step s cursor : ctreeW (W + nat) B X) ≅
       model_rr n actor step t cursor'.
   Proof.
     coinduction Rc IH; intros s t cursor cursor' Hst Hmod.
@@ -257,8 +169,8 @@ Section ModelRRCongruence.
       reflexivity. }
     rewrite (unfold_model_rr n actor step s cursor),
       (unfold_model_rr n actor step t cursor').
-    cbn -[rr_pick]; constructor.
     rewrite <- (rr_pick_mod_congr n cursor cursor' Hmod).
+    cbn -[rr_pick]; constructor; intros [].
     pose proof (Hstep (actor (rr_pick n cursor)) _ eq_refl s t Hst) as Hturn.
     destruct (step (actor (rr_pick n cursor)) s) as [[s' event]|];
       destruct (step (actor (rr_pick n cursor)) t) as [[t' event']|];
@@ -281,6 +193,31 @@ Definition rr_script {Act} (n : nat) (actor : Fin.t (S n) -> Act)
 (** One turn per script entry: the turn list of a run. *)
 Definition turn_list {W} (event : option W) : list (option W) := [event].
 
+(** The observations of one round-robin turn: its logged slot, then its
+    program observation. *)
+Definition rr_turn_obs {W} (n cursor : nat) (event : option W) : list (W + nat) :=
+  inr (slot_index (rr_pick n cursor)) :: List.map inl (event_obs event).
+
+(** The observations of a run started at [cursor]. *)
+Fixpoint rr_run_obs {W} (n cursor : nat) (turns : list (option W)) : list (W + nat) :=
+  match turns with
+  | [] => []
+  | ev :: rest => rr_turn_obs n cursor ev ++ rr_run_obs n (S cursor) rest
+  end.
+
+Lemma rr_run_obs_nil_iff {W} n cursor (turns : list (option W)) :
+  rr_run_obs n cursor turns = [] <-> turns = [].
+Proof. destruct turns; cbn [rr_run_obs rr_turn_obs List.app]; split; congruence. Qed.
+
+Lemma in_rr_run_obs {W} n cursor (turns : list (option W)) (o : W) :
+  List.In (Some o) turns -> List.In (inl o) (rr_run_obs n cursor turns).
+Proof.
+  revert cursor; induction turns as [|ev rest IH]; intros cursor Hin; [destruct Hin|].
+  cbn [rr_run_obs rr_turn_obs]; apply List.in_or_app; destruct Hin as [->|Hin].
+  - cbn [event_obs List.map]; left; right; left; reflexivity.
+  - right; apply (IH (S cursor) Hin).
+Qed.
+
 Section ModelReplay.
   Context {St Act W X : Type} {B : Type -> Type} (n : nat)
     (actor : Fin.t (S n) -> Act)
@@ -288,12 +225,13 @@ Section ModelReplay.
 
   Lemma model_rr_run_turns : forall len cursor s last turns,
     run_turns step turn_list (rr_script n actor cursor len) s = Some (last,turns) ->
-    (model_rr n actor step s cursor : ctreeW W B X) ~
-      emit_turns turns (model_rr n actor step last (cursor + len) : ctreeW W B X).
+    (model_rr n actor step s cursor : ctreeW (W + nat) B X) ~
+      emit_list (rr_run_obs n cursor turns)
+        (model_rr n actor step last (cursor + len) : ctreeW (W + nat) B X).
   Proof.
     induction len as [|len IH]; intros cursor s last turns Hrun.
     - cbn [rr_script List.seq List.map run_turns] in Hrun.
-      inversion Hrun; subst; cbn [emit_turns].
+      inversion Hrun; subst; cbn [rr_run_obs emit_list List.fold_right].
       now rewrite Nat.add_0_r.
     - unfold rr_script in Hrun; cbn [List.seq List.map run_turns] in Hrun.
       destruct (step (actor (rr_pick n cursor)) s) as [[next event]|] eqn:Hstep;
@@ -305,9 +243,9 @@ Section ModelReplay.
       specialize (IH (S cursor) next last' tail Hrest).
       rewrite (unfold_model_rr n actor step s cursor), Hstep.
       replace (cursor + S len) with (S cursor + len) by lia.
-      cbn [turn_list List.app emit_turns].
-      apply sb_step.
-      destruct event as [o|]; cbn [event_obs].
+      cbn [turn_list List.app rr_run_obs rr_turn_obs List.app]; rewrite emit_list_cons.
+      apply sb_vis; intros [].
+      destruct event as [o|]; cbn [event_obs List.map List.app].
       + rewrite emit_list_cons.
         apply sb_vis; intros []; rewrite sb_guard; exact IH.
       + cbn [emit_list List.fold_right]; rewrite sb_guard; exact IH.
@@ -377,7 +315,7 @@ End ModelReplayND.
 
     A family of boundaries, each of whose RR cycle actually runs to a state
     related to the next boundary while producing a nonempty turn batch, makes
-    the RR model bisimilar to the turn batch loop [emit_turn_batches].  A
+    the RR model bisimilar to the batch loop [emit_batches].  A
     failed turn cannot supply a certificate, and the batch comes from the
     actual run; no observation is synthesized and no state is reset. *)
 Section ModelRRBatches.
@@ -396,18 +334,19 @@ Section ModelRRBatches.
         Some (last,batch i) /\ R last (boundary (next i))).
 
   Lemma model_rr_emit_batches : forall i, Inv i ->
-    (model_rr n actor step (boundary i) cursor : ctreeW W B X) ~
-      (emit_turn_batches batch next i : ctreeW W B X).
+    (model_rr n actor step (boundary i) cursor : ctreeW (W + nat) B X) ~
+      (emit_batches (fun j => rr_run_obs n cursor (batch j)) next i : ctreeW (W + nat) B X).
   Proof.
-    apply (emit_turn_batches_bisim batch next Inv
-      (fun i => model_rr n actor step (boundary i) cursor : ctreeW W B X)
-      Hnext Hnonempty).
+    apply (emit_batches_bisim (fun j => rr_run_obs n cursor (batch j)) next Inv
+      (fun i => model_rr n actor step (boundary i) cursor : ctreeW (W + nat) B X)
+      Hnext).
+    { intros i Hi Hnil; apply (Hnonempty i Hi), (proj1 (rr_run_obs_nil_iff n cursor (batch i))), Hnil. }
     intros i Hi.
     destruct (Hcycle i Hi) as (last & Hrun & Hlast).
     etransitivity;
       [exact (model_rr_run_turns n actor step period cursor (boundary i) last
                 (batch i) Hrun)|].
-    apply emit_turns_sbisim, equ_sbisim.
+    apply emit_list_sbisim, equ_sbisim.
     exact (model_rr_equ n actor step R Hstep last (boundary (next i))
       (cursor + period) cursor Hlast Hcursor).
   Qed.
@@ -824,7 +763,9 @@ Arguments PoolSimulation {E B W Sigma St Act} n handler slot step
 
 (** *** Round-robin scheduling agrees with the RR model.
 
-    Round-robin refinement is fixed to the finite branch signature [Bn]. *)
+    The round-robin runner is fixed to the finite branch signature [Bn]; its
+    observations are the program's under [inl] and the scheduling decisions
+    under [inr]. *)
 Section PoolSimulationRR.
   Context {E : Type -> Type} {W Sigma St Act : Type}
     {n : nat}
@@ -840,7 +781,7 @@ Section PoolSimulationRR.
   Lemma pool_simulation_rr_bisim : forall s ts sigma cursor,
     Inv s -> agree sigma s -> pool_guard_equ ts (pool_of s) ->
     interp_schedule_rr handler (S n) ts None cursor sigma ~
-      (model_rr n actor step s cursor : ctreeW W Bn (Sigma * unit)).
+      (model_rr n actor step s cursor : ctreeW (W + nat) Bn (Sigma * unit)).
   Proof.
     unfold sbisim; coinduction R IH.
     intros s ts sigma cursor Hinv Hagree Hpool.
@@ -850,32 +791,29 @@ Section PoolSimulationRR.
       as (next & event & Hstep & Hnextinv).
     destruct (selected_turn_segment Hsim ts s who next event sigma
       Hinv Hagree Hpool Hstep) as (residual & sigma' & Hseg & Hagree' & Hnextpool).
-    destruct (exact_segment_rr_prefix handler n ts (slot who)
+    destruct (exact_segment_fair_prefix rr_scheduler handler n ts (slot who)
       (ts $ slot who) (S cursor) sigma (event_obs event) residual sigma' Hseg)
       as (word & Ew & Et).
     set (next_tree := interp_schedule_rr handler (S n)
       (ts @ slot who := residual) None (S cursor) sigma').
     set (next_model :=
-      (model_rr n actor step next (S cursor) : ctreeW W Bn (Sigma * unit))).
+      (model_rr n actor step next (S cursor) : ctreeW (W + nat) Bn (Sigma * unit))).
     assert (Eprefix : interp_schedule_rr handler (S n) ts
       (Some (slot who)) (S cursor) sigma ≅ rr_prefix word (Guard next_tree)).
     { etransitivity; [| exact Et].
       symmetry;
-      exact (interp_schedule_rr_equ handler (S n)
+      exact (interp_schedule_fair_equ rr_scheduler handler (S n)
         (ts @ slot who := (ts $ slot who)) ts (Some (slot who)) (S cursor) sigma
         (pool_replace_current ts (slot who))). }
     assert (Hcontinue : `R next_tree next_model).
     { apply IH; assumption. }
-    rewrite (segment_rr_select_exact handler n ts cursor sigma).
+    rewrite (interp_schedule_rr_select_exact handler n ts cursor sigma).
     rewrite (unfold_model_rr n actor step s cursor); fold who; rewrite Hstep.
-    transitivity (Step (rr_guards 3 (interp_schedule_rr handler (S n) ts
-      (Some (rr_pick n cursor)) (S cursor) sigma)));
-      [apply (gfp_bchain R), rr_guards_sbisim|].
-    apply step_sb_step; [reflexivity|].
-    apply sb_chain_guards_l.
+    apply step_sb_vis_id; intros []; split; [|reflexivity].
+    apply (sb_chain_guards_l 1).
     rewrite <- Eslot, Eprefix.
-    destruct event as [o|]; cbn [event_obs] in Ew.
-    - destruct (rr_prefix_one_event word o (Guard next_tree) Ew) as (a & b & Eword).
+    destruct event as [o|]; cbn [event_obs List.map] in Ew.
+    - destruct (rr_prefix_one_event word (inl o) (Guard next_tree) Ew) as (a & b & Eword).
       rewrite Eword.
       apply sb_chain_guards_l.
       apply vis_chain; intros [].

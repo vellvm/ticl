@@ -136,12 +136,12 @@ Proof. unfold parallel_queues; apply denote_fork_bind. Qed.
     scheduler continuation re-associated past it. *)
 Local Ltac rotate_state_bind :=
   lazymatch goal with
-  | |- _ ~ (interp_state ?handler (CTree.bind ?t ?k) ?s >>= ?finish) =>
+  | |- _ ~ (translate relabel_log (interp_state ?handler (CTree.bind ?t ?k) ?s) >>= ?finish) =>
     let Hbind := fresh "Hbind" in
-    assert (Hbind : (interp_state handler (t >>= k) s >>= finish) ≅
-      (interp_state handler t s >>= fun xs =>
-        interp_state handler (k (snd xs)) (fst xs) >>= finish)) by
-      (rewrite interp_state_bind; apply bind_bind);
+    assert (Hbind : (translate relabel_log (interp_state handler (t >>= k) s) >>= finish) ≅
+      (translate relabel_log (interp_state handler t s) >>= fun xs =>
+        translate relabel_log (interp_state handler (k (snd xs)) (fst xs)) >>= finish)) by
+      (rewrite interp_state_bind, translate_bind; apply bind_bind);
     rewrite Hbind; clear Hbind
   end.
 
@@ -155,7 +155,7 @@ Lemma interp_rr_rotate_once n (ts : pool sE Bn (S n))
   (i : Fin.t (S n)) q hdr (K : option unit -> thread sE Bn) m (s : SSig) :
   interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (rotate_once q hdr) >>= K)) (Some i) m s ~
-  (interp_state sh (turn q hdr) s >>=
+  (translate relabel_log (interp_state sh (turn q hdr) s) >>=
     fun '(s', _) =>
       interp_schedule_rr sh (S n) (ts @ i := K (Some tt)) (Some i) m s').
 Proof.
@@ -169,12 +169,9 @@ Proof.
   rotate_effect interp_rr_write.
   rotate_effect interp_rr_write.
   rotate_effect interp_rr_write.
-  rewrite interp_state_ret, bind_ret_l.
+  rewrite interp_state_ret, translate_ret, bind_ret_l.
   reflexivity.
 Qed.
-
-Definition queue_slot (n : nat) : Fin.t 2 :=
-  if Nat.even n then Fin.FS Fin.F1 else Fin.F1.
 
 Definition queue_workers (u v : nat) (g2 g1 : bool) : pool sE Bn 2 :=
   [(if g2 then Guard (denote (worker 2 v)) else denote (worker 2 v));
@@ -191,7 +188,7 @@ Qed.
 Local Lemma interp_rr_worker n (ts : pool sE Bn (S n))
   (i : Fin.t (S n)) q hdr m (s : SSig) :
   interp_schedule_rr sh (S n) (ts @ i := denote (worker q hdr)) (Some i) m s ~
-  (interp_state sh (turn q hdr) s >>= fun '(s', _) =>
+  (translate relabel_log (interp_state sh (turn q hdr) s) >>= fun '(s', _) =>
     interp_schedule_rr sh (S n) (ts @ i := Guard (denote (worker q hdr))) None m s').
 Proof.
   set (again := fun r : option (option unit) =>
@@ -225,26 +222,27 @@ Proof.
   }
   transitivity (interp_schedule_rr sh (S n)
     (ts @ i := Guard (denote (worker q hdr))) None m s');
-    [apply equ_sbisim; exact (interp_schedule_rr_equ sh (S n) _ _ None m s' Hpark)
+    [apply equ_sbisim; exact (interp_schedule_fair_equ rr_scheduler sh (S n) _ _ None m s' Hpark)
     | reflexivity].
 Qed.
 
-(** One pool turn: the focused worker rotates, then the scheduler's visible
+(** One pool turn: the focused worker rotates, then the scheduler's logged
     pick ([interp_schedule_rr_select]) moves to the other slot. *)
 Lemma queue_pool_turn u v n g2 g1 (s : SSig) :
   interp_schedule_rr sh 2 (queue_workers u v g2 g1)
     (Some (queue_slot n)) n s ~
-  (interp_state sh (turn (tagof n) (hdrof u v n)) s >>=
+  (translate relabel_log (interp_state sh (turn (tagof n) (hdrof u v n)) s) >>=
     fun '(s', _) =>
-      Step (interp_schedule_rr sh 2
-        (queue_workers u v (if Nat.even n then g2 else true)
-                           (if Nat.even n then true else g1))
-        (Some (queue_slot (S n))) (S n) s')).
+      Vis (Log (inr (slot_index (queue_slot (S n))))) (fun _ =>
+        interp_schedule_rr sh 2
+          (queue_workers u v (if Nat.even n then g2 else true)
+                             (if Nat.even n then true else g1))
+          (Some (queue_slot (S n))) (S n) s')).
 Proof.
   unfold queue_slot at 1; unfold tagof, hdrof.
   destruct (Nat.even n) eqn:Hphase.
   - destruct g1;
-      [etransitivity; [eapply interp_schedule_rr_guard; reflexivity|] |].
+      [etransitivity; [eapply interp_schedule_fair_guard; reflexivity|] |].
     all: lazymatch goal with
     | |- _ ~ ?rhs =>
       change (interp_schedule_rr sh 2
@@ -256,7 +254,7 @@ Proof.
     all: etransitivity; [apply interp_schedule_rr_select|].
     all: rewrite queue_pick_next; reflexivity.
   - destruct g2;
-      [etransitivity; [eapply interp_schedule_rr_guard; reflexivity|] |].
+      [etransitivity; [eapply interp_schedule_fair_guard; reflexivity|] |].
     all: lazymatch goal with
     | |- _ ~ ?rhs =>
       change (interp_schedule_rr sh 2
@@ -271,24 +269,26 @@ Qed.
 
 (** The two-worker pool under the source round-robin scheduler IS the
     reference alternating scheduler: both factor every turn through
-    [interp_state sh (turn _ _)] and end it with the same visible step. *)
+    [interp_state sh (turn _ _)] and end it with the same logged pick. *)
 Lemma queue_pool_bisim : forall u v n g2 g1 (s : SSig),
   interp_schedule_rr sh 2 (queue_workers u v g2 g1)
     (Some (queue_slot n)) n s ~ srun u v n s.
 Proof.
   coinduction R CIH; intros u v n g2 g1 s.
-  transitivity (interp_state sh (turn (tagof n) (hdrof u v n)) s >>=
+  transitivity (translate relabel_log (interp_state sh (turn (tagof n) (hdrof u v n)) s) >>=
     fun '(s', _) =>
-      Step (interp_schedule_rr sh 2
-        (queue_workers u v (if Nat.even n then g2 else true)
-                           (if Nat.even n then true else g1))
-        (Some (queue_slot (S n))) (S n) s'));
+      Vis (Log (inr (slot_index (queue_slot (S n))))) (fun _ =>
+        interp_schedule_rr sh 2
+          (queue_workers u v (if Nat.even n then g2 else true)
+                             (if Nat.even n then true else g1))
+          (Some (queue_slot (S n))) (S n) s'));
     [apply (gfp_bchain R), queue_pool_turn |].
-  transitivity (interp_state sh (turn (tagof n) (hdrof u v n)) s >>=
-    fun '(s', _) => Step (srun u v (S n) s'));
+  transitivity (translate relabel_log (interp_state sh (turn (tagof n) (hdrof u v n)) s) >>=
+    fun '(s', _) =>
+      Vis (Log (inr (slot_index (queue_slot (S n))))) (fun _ => srun u v (S n) s'));
     [| apply (gfp_bchain R); symmetry; apply srun_turn].
   apply sb_chain_bind_eq; intros [s' x].
-  apply step_sb_step; [reflexivity | apply CIH].
+  apply step_sb_vis_id; intros []; split; [apply CIH | reflexivity].
 Qed.
 
 Theorem run_rr_parallel_bisim u v (s : SSig) :
@@ -301,26 +301,29 @@ Proof.
 Qed.
 
 (** One whole rotation of the reference scheduler, read off [turnk_spec]:
-    one logged pop, the visible scheduling step, the rotated heap. *)
+    one logged pop, the logged scheduling pick, the rotated heap. *)
 Lemma srun_pop u v n hdr tag a ns pv vs h allocs ctx c :
   hdrof u v n = hdr -> tagof n = tag ->
   qrep hdr (a :: ns) (pv :: vs) h ->
   srun u v n ((h, allocs), (ctx, c)) ~
-  (log (inr (stamp (tag, pv) c) : CSLObs (nat * nat));;
-   Step (srun u v (S n) ((qstep hdr (a :: ns) h, allocs), (ctx, S c)))).
+  (log (inl (inr (stamp (tag, pv) c)) : CSLObs (nat * nat) + nat);;
+   log (inr (slot_index (queue_slot (S n))) : CSLObs (nat * nat) + nat);;
+   srun u v (S n) ((qstep hdr (a :: ns) h, allocs), (ctx, S c))).
 Proof.
   intros <- <- Hq.
   rewrite srun_turn; unfold turn.
   rewrite (turnk_spec (tagof n) (hdrof u v n) a ns pv vs h allocs ctx c (Ret tt) Hq).
+  rewrite (translate_log_bind _ _).
   rewrite !log_vis, bind_vis; apply sb_vis; intros _.
-  rewrite interp_state_ret, bind_ret_l; cbn [qstep].
-  reflexivity.
+  rewrite interp_state_ret, translate_ret, bind_ret_l; cbn [qstep].
+  rewrite log_vis; apply sb_vis; intros _; reflexivity.
 Qed.
 
 (** The first four pops of two disjoint queues under the shared source
     round-robin scheduler: queue 1 rotates [a;b], queue 2 its singleton [d],
     alternating, with the observation counter advancing once per pop and one
-    visible scheduling step between consecutive pops. *)
+    logged scheduling pick between consecutive pops (slot [0] is queue 2,
+    slot [1] is queue 1). *)
 Lemma parallel_queues_four_pop_bisim u a b v d h allocs x y z ctx c :
   qrep u [a;b] [x;y] h -> qrep v [d] [z] h -> Disj u [a;b] v [d] ->
   let h1 := qstep u [a;b] h in
@@ -328,11 +331,11 @@ Lemma parallel_queues_four_pop_bisim u a b v d h allocs x y z ctx c :
   let h3 := qstep u [b;a] h2 in
   let h4 := qstep v [d] h3 in
   run_rr (parallel_queues u v) ((h,allocs),(ctx,c)) ~
-    (log (inr (stamp (1,x) c) : CSLObs (nat * nat));;
-     Step (log (inr (stamp (2,z) (S c)) : CSLObs (nat * nat));;
-     Step (log (inr (stamp (1,y) (S (S c))) : CSLObs (nat * nat));;
-     Step (log (inr (stamp (2,z) (S (S (S c)))) : CSLObs (nat * nat));;
-     Step (srun u v 4 ((h4,allocs),(ctx,S (S (S (S c)))))))))).
+    emit_list [inl (inr (stamp (1,x) c)); inr 0;
+               inl (inr (stamp (2,z) (S c))); inr 1;
+               inl (inr (stamp (1,y) (S (S c)))); inr 0;
+               inl (inr (stamp (2,z) (S (S (S c))))); inr 1]%list
+      (srun u v 4 ((h4,allocs),(ctx,S (S (S (S c)))))).
 Proof.
   intros H1 H2 Hd; cbv zeta.
   pose proof (qstep_qrep u [a;b] [x;y] h H1 ltac:(discriminate)) as H1a.
@@ -350,14 +353,16 @@ Proof.
   pose proof (foreign_pres u [b;a] [y;x] v [d] [z]
     (qstep v [d] (qstep u [a;b] h)) H1b ltac:(discriminate) H2b Hda) as H2c.
   etransitivity; [exact (run_rr_parallel_bisim u v ((h,allocs),(ctx,c))) |].
+  unfold emit_list; cbn [List.fold_right].
+  repeat setoid_rewrite log_vis.
   rewrite (srun_pop u v 0 u 1 a [b] x [y] h allocs ctx c eq_refl eq_refl H1).
-  rewrite !log_vis; apply sb_vis; intros _; apply sb_step.
+  repeat setoid_rewrite log_vis; apply sb_vis; intros _; apply sb_vis; intros _.
   rewrite (srun_pop u v 1 v 2 d [] z [] _ allocs ctx (S c) eq_refl eq_refl H2a).
-  rewrite !log_vis; apply sb_vis; intros _; apply sb_step.
+  repeat setoid_rewrite log_vis; apply sb_vis; intros _; apply sb_vis; intros _.
   rewrite (srun_pop u v 2 u 1 b [a] y [x] _ allocs ctx (S (S c)) eq_refl eq_refl H1b).
-  rewrite !log_vis; apply sb_vis; intros _; apply sb_step.
+  repeat setoid_rewrite log_vis; apply sb_vis; intros _; apply sb_vis; intros _.
   rewrite (srun_pop u v 3 v 2 d [] z [] _ allocs ctx (S (S (S c))) eq_refl eq_refl H2c).
-  rewrite !log_vis; apply sb_vis; intros _; apply sb_step.
+  repeat setoid_rewrite log_vis; apply sb_vis; intros _; apply sb_vis; intros _.
   reflexivity.
 Qed.
 
@@ -381,21 +386,21 @@ Local Lemma parallel_queues_first_turn_stuck u v (s : SSig) :
   interp_state sh (turn 1 u) s ~
     (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)) ->
   run_rr (parallel_queues u v) s ~
-    (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+    (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
 Proof.
   intro Hfault.
   unfold parallel_queues; rewrite run_rr_fork_bind.
   change (interp_schedule_rr sh 2 (queue_workers u v false false)
     (Some (queue_slot 0)) 0 s ~
-    (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit))).
+    (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit))).
   rewrite queue_pool_turn.
   change (tagof 0) with 1; change (hdrof u v 0) with u.
-  rewrite Hfault, bind_stuck; reflexivity.
+  rewrite Hfault, translate_stuck_node, bind_stuck; reflexivity.
 Qed.
 
 Lemma parallel_queues_hemp_stuck u v ctx c :
   run_rr (parallel_queues u v) (managed_empty,(ctx,c)) ~
-    (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+    (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
 Proof.
   apply parallel_queues_first_turn_stuck.
   assert (Hhead : hemp (S u) = None) by reflexivity.
@@ -879,7 +884,7 @@ Qed.
     unallocated: the first source turn faults, whatever the second queue is. *)
 Lemma allocated_parallel_queues_empty_stuck values ctx c :
   run_rr (allocated_parallel_queues [] values) (managed_empty,(ctx,c)) ~
-    (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+    (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
 Proof.
   destruct (run_rr_allocated_parallel [] values ctx c)
     as (u & v & h & allocs & _ & Owned & Run).

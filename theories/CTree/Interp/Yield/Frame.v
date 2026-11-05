@@ -152,19 +152,73 @@ Section PoolFramable.
   Qed.
 End PoolFramable.
 
-(** Round-robin refinement preserves framability. *)
-Lemma framable_refine_rr {E X} (okE: forall Y, E Y -> Prop) :
-  forall (t: ctree E Bn X) cursor, Framable okE t -> Framable okE (refine_rr t cursor).
+(** Round-robin scheduling only introduces [Scheduled] events and
+    administrative guards; thread-internal branches are kept, so the pool's
+    branch freedom is what makes the scheduled tree framable. *)
+Lemma framable_schedule_rr {E} (okE: forall Y, E Y -> Prop) :
+  forall n (ts: pool E Bn n) focus cursor,
+    pool_branchfree ts -> pool_framable okE ts ->
+    Framable (okE_lift okE) (schedule_with rr_scheduler n ts focus cursor).
 Proof.
-  unfold Framable at 2; coinduction R IH; intros t cursor Ht.
+  unfold Framable; coinduction R IH; intros n ts focus cursor Hbf Hfr.
+  destruct focus as [i|].
+  - destruct n as [|n]; [inversion i|].
+    pose proof (Hbf i) as Hi; apply branchfree_unfold in Hi.
+    pose proof (Hfr i) as Hfi; apply framable_unfold in Hfi.
+    destruct (observe (ts $ i)) eqn:Hobs; cbn.
+    + destruct r.
+      rewrite (schedule_with_focused_ret rr_scheduler n ts i cursor Hobs); constructor.
+      apply IH; auto using pool_branchfree_remove, pool_framable_remove.
+    + rewrite (schedule_with_focused_stuck rr_scheduler n ts i cursor Hobs); constructor.
+    + rewrite (schedule_with_focused_step rr_scheduler n ts i t cursor Hobs); constructor.
+      inversion Hi; inversion Hfi; subst.
+      apply IH; auto using pool_branchfree_replace, pool_framable_replace.
+    + rewrite (schedule_with_focused_guard rr_scheduler n ts i t cursor Hobs); constructor.
+      inversion Hi; inversion Hfi; subst.
+      apply IH; auto using pool_branchfree_replace, pool_framable_replace.
+    + ddestruction Hi; ddestruction Hfi.
+      destruct e as [y|[f|e]]; [destruct y|destruct f|].
+      * rewrite (schedule_with_focused_yield rr_scheduler n ts i k cursor Hobs); constructor.
+        apply IH; auto using pool_branchfree_replace, pool_framable_replace.
+      * rewrite (schedule_with_focused_fork rr_scheduler n ts i k cursor Hobs); constructor.
+        apply IH;
+          auto using pool_branchfree_replace, pool_branchfree_cons,
+            pool_framable_replace, pool_framable_cons.
+      * rewrite (schedule_with_focused_user_event rr_scheduler n ts i e k cursor Hobs);
+          apply FrVisF; [exact H0|].
+        intro x; apply IH; auto using pool_branchfree_replace, pool_framable_replace.
+    + inversion Hi.
+  - destruct n as [|n].
+    + cbn; constructor.
+    + change (framableF (okE_lift okE) `R (observe (schedule_with rr_scheduler (S n) ts None cursor)));
+        rewrite schedule_with_rr_no_focus; constructor; [exact I|].
+      intros _; apply IH; auto.
+Qed.
+
+(** Translation preserves finite guarded-step prefixes. *)
+Lemma guards_to_step_translate {E F B X} (f: E ~> F) (t: ctree E B X) :
+  guards_to_step t -> guards_to_step (translate f t).
+Proof.
+  induction 1.
+  - eapply guards_to_step_equ; [symmetry; apply unfold_translate|].
+    eapply GtsStep; cbn; now rewrite H.
+  - eapply guards_to_step_equ; [symmetry; apply unfold_translate|].
+    eapply GtsGuard; [cbn; now rewrite H|exact IHguards_to_step].
+Qed.
+
+(** Embedding a tree's events under a right summand preserves framability. *)
+Lemma framable_translate_inr1 {F E B X} (okE: forall Y, E Y -> Prop) :
+  forall (t: ctree E B X), Framable okE t -> Framable (okE_lift (F:=F) okE) (translate inr1 t).
+Proof.
+  unfold Framable at 2; coinduction R IH; intros t Ht.
   apply framable_unfold in Ht.
-  rewrite unfold_refine_rr; cbn; destruct Ht; cbn.
+  rewrite unfold_translate; cbn; destruct Ht; cbn.
   - constructor.
   - constructor.
   - constructor; apply IH, H.
   - constructor; apply IH, H.
   - constructor; [exact H|intro; apply IH, H0].
-  - destruct c as [[|n]]; constructor; apply IH, H0.
+  - constructor; [intro; apply guards_to_step_translate, H|intro; apply IH, H0].
 Qed.
 
 
@@ -180,15 +234,3 @@ Proof.
   now apply framable_schedule.
 Qed.
 
-(** Round-robin scheduler erasure preserves framability. *)
-Lemma framable_erased_rr {E} (okE: forall Y, E Y -> Prop)
-  n (ts: pool E Bn n) focus cursor :
-  pool_branchfree ts -> pool_framable okE ts ->
-  Framable okE (interp_yield (interp_spawn (run_round_robin (schedule n ts focus) cursor))).
-Proof.
-  intros Hbf Hfr; unfold interp_yield, interp_spawn.
-  apply (framable_interp _ (okE_lift okE)); [framable_handler|].
-  apply (framable_interp _ (okE_thread okE)); [framable_handler|].
-  unfold run_round_robin, CTree.map.
-  apply framable_bind; [apply framable_refine_rr; now apply framable_schedule|intro; apply fr_ret].
-Qed.

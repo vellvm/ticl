@@ -147,11 +147,11 @@ Proof.
   rewrite Run; eapply rotate_agaf_pop_fair_q2_fresh; eassumption.
 Qed.
 
-Lemma parallel_queues_hemp_no_ag u v ctx c (phi : ticllW (CSLObs (nat * nat))) w :
+Lemma parallel_queues_hemp_no_ag u v ctx c (phi : ticllW (CSLObs (nat * nat) + nat)) w :
   ~ <( {run_rr (parallel_queues u v) (managed_empty,(ctx,c))}, {w} |= AG phi )>.
 Proof. rewrite (parallel_queues_hemp_stuck u v ctx c); apply ag_stuck. Qed.
 
 Lemma allocated_parallel_queues_empty_no_ag values ctx c
-  (phi : ticllW (CSLObs (nat * nat))) w :
+  (phi : ticllW (CSLObs (nat * nat) + nat)) w :
   ~ <( {run_rr (allocated_parallel_queues [] values) (managed_empty,(ctx,c))}, {w} |= AG phi )>.
 Proof. rewrite (allocated_parallel_queues_empty_stuck values ctx c); apply ag_stuck. Qed.

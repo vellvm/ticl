@@ -154,12 +154,12 @@ Lemma run_nd_pool_framable {n} (ps : Vector.t (CProg unit) n) focus :
   Framable no_alloc_sE (interp_yield (interp_spawn (schedule n (csl_pool ps) focus))).
 Proof. intro; apply framable_erased_nd; auto using csl_pool_branchfree, csl_pool_framable. Qed.
 
-(** The erased round-robin pool runner is framable. *)
+(** The round-robin scheduled pool is framable: scheduling events are always
+    admitted. *)
 Lemma run_rr_pool_framable {n} (ps : Vector.t (CProg unit) n) focus cursor :
   Vector.Forall alloc_free ps ->
-  Framable no_alloc_sE (interp_yield (interp_spawn
-    (run_round_robin (schedule n (csl_pool ps) focus) cursor))).
-Proof. intro; apply framable_erased_rr; auto using csl_pool_branchfree, csl_pool_framable. Qed.
+  Framable (okE_lift no_alloc_sE) (schedule_with rr_scheduler n (csl_pool ps) focus cursor).
+Proof. intro; apply framable_schedule_rr; auto using csl_pool_branchfree, csl_pool_framable. Qed.
 
 (** The standalone erased flow of an allocation-free program is framable. *)
 Lemma instr_flow_framable {A} (p : CProg A) :
@@ -170,11 +170,17 @@ Lemma run_nd_framable p : alloc_free p ->
   Framable no_alloc_sE (interp_yield (interp_spawn (schedule 1 (csl_pool [p]%vector) (Some Fin.F1)))).
 Proof. intro; apply run_nd_pool_framable; repeat constructor; assumption. Qed.
 
-(** The singleton round-robin runner has a framable erased tree. *)
+(** The singleton round-robin runner has a framable scheduled tree. *)
 Lemma run_rr_framable p : alloc_free p ->
-  Framable no_alloc_sE (interp_yield (interp_spawn
-    (run_round_robin (schedule 1 (csl_pool [p]%vector) (Some Fin.F1)) 0))).
+  Framable (okE_lift no_alloc_sE) (schedule_with rr_scheduler 1 (csl_pool [p]%vector) (Some Fin.F1) 0).
 Proof. intro; apply run_rr_pool_framable; repeat constructor; assumption. Qed.
+
+(** The standalone erased flow, embedded under the policy handler's event
+    signature, is framable. *)
+Lemma instr_flow_sched_framable {A} (p : CProg A) :
+  alloc_free p ->
+  Framable (okE_lift (F := schedE) no_alloc_sE) (translate inr1 (interp_thread (denote_flow p))).
+Proof. intro; apply framable_translate_inr1, instr_flow_framable; assumption. Qed.
 
 
 (** Client-facing unfolding of a framed postcondition on the memory component. *)

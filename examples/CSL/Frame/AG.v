@@ -23,6 +23,9 @@ Definition slot (i : nat) (t : thread sE Bn) : Prop := t = fresh i \/ t = spent 
 (** The coinductive functional for the pool safety property [AG ⊤]. *)
 Abbreviation agtop :=
   (agcF (@entailsL ctree (writerE (CSLObs (nat * nat))) Bn _ (SSig * unit) <( ⊤ )>)).
+(** The same functional at the round-robin observation type. *)
+Abbreviation agtopW :=
+  (agcF (@entailsL ctree (writerE rr_obs) Bn _ (SSig * unit) <( ⊤ )>)).
 
 (** A spent slot, once focused, is back at the head of its loop. *)
 Lemma spent_focus_rr (ts : pool sE Bn 2) (j : Fin.t 2) i m s :
@@ -30,7 +33,7 @@ Lemma spent_focus_rr (ts : pool sE Bn 2) (j : Fin.t 2) i m s :
   interp_schedule_rr sh 2 (ts @ j := fresh i) (Some j) m s.
 Proof.
   unfold spent; rewrite interp_rr_ret.
-  erewrite interp_schedule_rr_guard by (rewrite Vector.nth_replace_eq; reflexivity).
+  erewrite interp_schedule_fair_guard by (rewrite Vector.nth_replace_eq; reflexivity).
   rewrite Vector.replace_replace_eq; unfold fresh, denote, lproc; reflexivity.
 Qed.
 
@@ -47,20 +50,20 @@ Qed.
 
 (** ** One turn of process [i] (cell [i], framed by cell [k]) *)
 (** A round-robin turn runs [work i] with the other cell framed, then yields. *)
-Lemma turn_rr (R : Chain agtop) (ts : pool sE Bn 2) (j : Fin.t 2) i k a b ctx c m s w :
+Lemma turn_rr (R : Chain agtopW) (ts : pool sE Bn 2) (j : Fin.t 2) i k a b ctx c m s w :
   not_done w ->
   frame_rel (region k b) (own i a ctx c) s ->
   (forall s', csl_memory s' ≈ region i (S a) ⊎ region k b -> snd s' = (ctx, S c) ->
      `R (interp_schedule_rr sh 2 (ts @ j := spent i) None m s')
-        (Obs (Log (inr (stamp (i, S a) c))) tt)) ->
+        (Obs (Log (inl (inr (stamp (i, S a) c)))) tt)) ->
   `R (interp_schedule_rr sh 2 (ts @ j := fresh i) (Some j) m s) w.
 Proof.
   intros Hw HR HK.
   unfold fresh, denote, lproc, lproc_body.
   rewrite interp_rr_until_none; rr_prefix work_yield_fork_free.
-  apply (ag_bind_chain _ (frame_post (region k b) (Qwork i a ctx c)));
-    [apply work_af_framed_ret; assumption |].
-  intros [s' r] w' HP; apply frame_post_work in HP as (-> & HE & HA & ->).
+  apply (ag_bind_chain _ (frame_post (region k b) (QworkW i a ctx c)));
+    [apply work_af_framed_ret_W; assumption |].
+  intros [s' r] w' HP; apply frame_post_work_W in HP as (-> & HE & HA & ->).
   cbv beta iota.
   rewrite interp_rr_bind, interp_rr_yield.
   cbv beta iota.
@@ -91,20 +94,22 @@ Qed.
 
 (** ** The unfocused-pool invariant *)
 (** Round-robin selection preserves the two-slot loop and disjoint-heap invariant. *)
-Lemma pool_ag_rr : forall R : Chain agtop,
+Lemma pool_ag_rr : forall R : Chain agtopW,
   forall t1 t2 m s w a b ctx c, slot 1 t1 -> slot 2 t2 ->
   csl_memory s ≈ region 1 a ⊎ region 2 b -> snd s = (ctx, c) -> not_done w ->
   `R (interp_schedule_rr sh 2 [t1; t2] None m s) w.
 Proof.
-  apply (tower (b := agtop) (P := fun R => forall t1 t2 m s w a b ctx c, slot 1 t1 -> slot 2 t2 ->
+  apply (tower (b := agtopW) (P := fun R => forall t1 t2 m s w a b ctx c, slot 1 t1 -> slot 2 t2 ->
     csl_memory s ≈ region 1 a ⊎ region 2 b -> snd s = (ctx, c) -> not_done w ->
     R (interp_schedule_rr sh 2 [t1; t2] None m s) w)).
   - intros T HT t1 t2 m s w a b ctx c H1 H2 HE HA Hw R HR; apply (HT R HR _ _ _ _ _ a b ctx c); auto.
   - intros R HR t1 t2 m s w a b ctx c H1 H2 HE HA Hw; cbn.
     rewrite interp_schedule_rr_select.
     split; [split; [exact I | exact Hw]|].
-    split; [apply can_step_step; exact Hw|].
-    intros t' w' TR; apply ktrans_step in TR as (Heq & -> & _); rewrite Heq; clear Heq.
+    split; [apply can_step_vis; [exact tt|exact Hw]|].
+    intros t' w' TR; apply ktrans_vis in TR as ([] & -> & Heq & _); rewrite <- Heq; clear Heq.
+    clear w Hw; set (w := Obs (Log (inr (slot_index (rr_pick 1 m)))) tt).
+    assert (Hw : not_done w) by constructor; clearbody w.
     generalize (rr_pick 1 m); intro j.
     apply (Fin.caseS' j); [|intro j'; apply (Fin.caseS' j'); [|intro j''; inversion j'']].
     + destruct H1 as [-> | ->];

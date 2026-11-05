@@ -409,6 +409,79 @@ Section SchedulerTransitions.
         constructor. intro i. cbn. step. constructor. apply CH. exact Hvw.
   Qed.
 
+  (** ** [schedule_with] respects [equ]-equality of pools, in every focus. *)
+  Lemma schedule_with_pool_proper (sch : Scheduler) n (v w : pool E B n) focus st :
+    pool_equ v w ->
+    schedule_with sch n v focus st ≅ schedule_with sch n w focus st.
+  Proof.
+    revert n v w focus st.
+    __coinduction_equ R CH.
+    intros n v w focus st Hvw.
+    destruct focus as [i |].
+    - destruct n as [| n']; [ inversion i |].
+      pose proof (Hvw i) as Hi.
+      assert (Hgo : go (observe (v $ i)) ≅ go (observe (w $ i))).
+      { rewrite <- !ctree_eta. exact Hi. }
+      rewrite (ctree_eta (schedule_with sch (S n') v (Some i) st)).
+      rewrite (ctree_eta (schedule_with sch (S n') w (Some i) st)).
+      destruct (observe (v $ i)) as [r | | t | g | Y e k | Y c k] eqn:Hv;
+      destruct (observe (w $ i)) as [r2 | | t2 | g2 | Y2 e2 k2 | Y2 c2 k2] eqn:Hw;
+        try (step in Hgo; cbn in Hgo; inversion Hgo; fail).
+      + destruct r, r2.
+        rewrite (schedule_with_focused_ret sch n' v i st Hv).
+        rewrite (schedule_with_focused_ret sch n' w i st Hw).
+        cbn. constructor. apply CH. apply remove_pool_equ. exact Hvw.
+      + rewrite (schedule_with_focused_stuck sch n' v i st Hv).
+        rewrite (schedule_with_focused_stuck sch n' w i st Hw).
+        cbn. constructor.
+      + apply equ_step_inv in Hgo.
+        rewrite (schedule_with_focused_step sch n' v i t st Hv).
+        rewrite (schedule_with_focused_step sch n' w i t2 st Hw).
+        cbn. constructor. apply CH.
+        apply replace_pool_equ. exact Hvw. exact Hgo.
+      + apply equ_guard_inv in Hgo.
+        rewrite (schedule_with_focused_guard sch n' v i g st Hv).
+        rewrite (schedule_with_focused_guard sch n' w i g2 st Hw).
+        cbn. constructor. apply CH.
+        apply replace_pool_equ. exact Hvw. exact Hgo.
+      + pose proof (equ_vis_invT _ _ _ _ Hgo) as HY; subst Y2.
+        pose proof (equ_vis_invE _ _ _ _ Hgo) as [He Hke]; subst e2.
+        destruct e as [yld | [frk | usr]].
+        * destruct yld.
+          rewrite (schedule_with_focused_yield sch n' v i k st Hv).
+          rewrite (schedule_with_focused_yield sch n' w i k2 st Hw).
+          cbn. constructor. apply CH.
+          apply replace_pool_equ. exact Hvw. apply (Hke tt).
+        * destruct frk.
+          rewrite (schedule_with_focused_fork sch n' v i k st Hv).
+          rewrite (schedule_with_focused_fork sch n' w i k2 st Hw).
+          cbn. constructor. apply CH.
+          apply cons_pool_equ.
+          -- apply (Hke true).
+          -- apply replace_pool_equ. exact Hvw. apply (Hke false).
+        * rewrite (schedule_with_focused_user_event sch n' v i usr k st Hv).
+          rewrite (schedule_with_focused_user_event sch n' w i usr k2 st Hw).
+          cbn. constructor. intro x. apply CH.
+          apply replace_pool_equ. exact Hvw. apply (Hke x).
+      + pose proof (equ_br_invT _ _ _ _ Hgo) as HY; subst Y2.
+        pose proof (equ_br_invE _ _ _ _ Hgo) as [Hc Hke]; subst c2.
+        rewrite (schedule_with_focused_br sch n' v i c k st Hv).
+        rewrite (schedule_with_focused_br sch n' w i c k2 st Hw).
+        cbn. constructor. intro j. apply CH.
+        apply replace_pool_equ. exact Hvw. apply Hke.
+    - destruct n as [| n'].
+      + rewrite (ctree_eta (schedule_with sch 0 v None st)).
+        rewrite (ctree_eta (schedule_with sch 0 w None st)).
+        rewrite schedule_with_empty_none, schedule_with_empty_none.
+        cbn. reflexivity.
+      + rewrite (schedule_with_no_focus_nonempty sch n' v st),
+          (schedule_with_no_focus_nonempty sch n' w st).
+        generalize (sched_pick sch n' st); destruct (sched_arity sch n' st); intro pick;
+          cbn [br_alts].
+        * constructor; intros _; apply CH; exact Hvw.
+        * constructor; intro a; step; constructor; intros _; apply CH; exact Hvw.
+  Qed.
+
   (** ** Phase 4: thread-step to scheduler-step lifts. *)
 
   Lemma pool_equ_refl {n} (v : pool E B n) : pool_equ v v.
@@ -1632,4 +1705,161 @@ Section ScheduleAlign.
     intro Hp; unfold interp_yield, interp_spawn.
     apply interp_galigned, interp_galigned, schedule_galigned, Hp.
   Qed.
+
+  (** ** The policy scheduler maps guard-equivalent pools to aligned trees *)
+  Section PolicyAlign.
+    Context (sch : Scheduler).
+
+    Lemma schedule_with_focus_guards : forall a N (ts : pool E B (S N)) i (x : thread E B) st,
+      (ts $ i) ≅ guards a x ->
+      schedule_with sch (S N) ts (Some i) st ≅
+      guards a (schedule_with sch (S N) (ts @ i := x) (Some i) st).
+    Proof.
+      induction a as [|a IH]; intros N ts i x st Hx; cbn [guards] in *.
+      - apply schedule_with_pool_proper.
+        intro j; destruct (Fin.eq_dec j i) as [->|Hne].
+        + rewrite Vector.nth_replace_eq; exact Hx.
+        + rewrite Vector.nth_replace_neq by congruence; reflexivity.
+      - transitivity (schedule_with sch (S N) (ts @ i := Guard (guards a x)) (Some i) st).
+        { apply schedule_with_pool_proper.
+          intro j; destruct (Fin.eq_dec j i) as [->|Hne].
+          + rewrite Vector.nth_replace_eq; exact Hx.
+          + rewrite Vector.nth_replace_neq by congruence; reflexivity. }
+        rewrite (observe_equ_go _ _ (schedule_with_focused_guard sch N
+          (ts @ i := Guard (guards a x)) i (guards a x) st
+          ltac:(rewrite Vector.nth_replace_eq; reflexivity))).
+        rewrite Vector.replace_replace_eq.
+        apply guard_equ_node.
+        rewrite (IH N (ts @ i := guards a x) i x st)
+          by (rewrite Vector.nth_replace_eq; reflexivity).
+        rewrite Vector.replace_replace_eq; reflexivity.
+    Qed.
+
+    Inductive policy_rel : scheduled E B -> scheduled E B -> Prop :=
+    | policy_rel_at n m N (ts us : pool E B N) f st T U :
+        pool_guard_equ ts us ->
+        T ≅ guards n (schedule_with sch N ts f st) ->
+        U ≅ guards m (schedule_with sch N us f st) ->
+        policy_rel T U
+    | policy_rel_pick n m N (ts us : pool E B (S N)) i st' k T U :
+        pool_guard_equ ts us ->
+        T ≅ guards n (Vis (inl1 (Scheduled k)) (fun _ => schedule_with sch (S N) ts (Some i) st')) ->
+        U ≅ guards m (Vis (inl1 (Scheduled k)) (fun _ => schedule_with sch (S N) us (Some i) st')) ->
+        policy_rel T U.
+
+    Lemma policy_rel_step T U : policy_rel T U -> galignF policy_rel T U.
+    Proof.
+      intros [n m N ts us f st T' U' Hp ET EU|n m N ts us i st' k T' U' Hp ET EU].
+      2: { apply (galignF_vis _ T' U' n m (inl1 (Scheduled k))
+             (fun _ => schedule_with sch (S N) ts (Some i) st')
+             (fun _ => schedule_with sch (S N) us (Some i) st')); [exact ET|exact EU|].
+           intros _; apply (policy_rel_at 0 0 (S N) ts us (Some i) st');
+             [exact Hp|reflexivity|reflexivity]. }
+      destruct f as [i|].
+      2: { destruct N as [|N].
+           - apply (galignF_ret _ T' U' n m tt).
+             + rewrite ET, (observe_equ_go _ _ (schedule_with_empty_none sch ts st)); reflexivity.
+             + rewrite EU, (observe_equ_go _ _ (schedule_with_empty_none sch us st)); reflexivity.
+           - rewrite (schedule_with_no_focus_nonempty sch N ts st) in ET.
+             rewrite (schedule_with_no_focus_nonempty sch N us st) in EU.
+             revert ET EU; generalize (sched_pick sch N st);
+               destruct (sched_arity sch N st) as [|a]; intros pick ET EU; cbn [br_alts] in ET, EU.
+             + apply (galignF_vis _ T' U' n m (inl1 (Scheduled (slot_index (fst (pick Fin.F1)))))
+                 (fun _ => schedule_with sch (S N) ts (Some (fst (pick Fin.F1))) (snd (pick Fin.F1)))
+                 (fun _ => schedule_with sch (S N) us (Some (fst (pick Fin.F1))) (snd (pick Fin.F1))));
+                 [exact ET|exact EU|].
+               intros _; apply (policy_rel_at 0 0 (S N) ts us (Some (fst (pick Fin.F1))) (snd (pick Fin.F1)));
+                 [exact Hp|reflexivity|reflexivity].
+             + apply (galignF_br _ T' U' n m (subevent _ (branchn (S (S a))))
+                 (fun c => Vis (inl1 (Scheduled (slot_index (fst (pick c)))))
+                    (fun _ => schedule_with sch (S N) ts (Some (fst (pick c))) (snd (pick c))))
+                 (fun c => Vis (inl1 (Scheduled (slot_index (fst (pick c)))))
+                    (fun _ => schedule_with sch (S N) us (Some (fst (pick c))) (snd (pick c)))));
+                 [exact ET|exact EU|].
+               intro c; apply (policy_rel_pick 0 0 N ts us (fst (pick c)) (snd (pick c)) (slot_index (fst (pick c))));
+                 [exact Hp|reflexivity|reflexivity]. }
+      destruct N as [|N]; [inversion i|].
+      destruct (guard_equ_guards _ _ (Hp i)) as (a & b & x & Ea & Eb).
+      pose proof (pool_guard_equ_replace ts us i x Hp) as Hp'.
+      set (ts' := ts @ i := x) in *; set (us' := us @ i := x) in *.
+      assert (ET' : T' ≅ guards (n + a) (schedule_with sch (S N) ts' (Some i) st))
+        by (rewrite ET, (schedule_with_focus_guards a N ts i x st Ea), <- guards_add; reflexivity).
+      assert (EU' : U' ≅ guards (m + b) (schedule_with sch (S N) us' (Some i) st))
+        by (rewrite EU, (schedule_with_focus_guards b N us i x st Eb), <- guards_add; reflexivity).
+      assert (Hts : observe (ts' $ i) = observe x) by (unfold ts'; now rewrite Vector.nth_replace_eq).
+      assert (Hus : observe (us' $ i) = observe x) by (unfold us'; now rewrite Vector.nth_replace_eq).
+      clearbody ts' us'; clear ET EU.
+      destruct (observe x) as [[]| |st0|y|Y e k|Y c k] eqn:Hx.
+      - apply (galignF_guard _ T' U' (n + a) (m + b)
+          (schedule_with sch N (ts' -- i) None st) (schedule_with sch N (us' -- i) None st)).
+        + rewrite ET', (observe_equ_go _ _ (schedule_with_focused_ret sch N ts' i st Hts));
+            rewrite <- guards_guard; reflexivity.
+        + rewrite EU', (observe_equ_go _ _ (schedule_with_focused_ret sch N us' i st Hus));
+            rewrite <- guards_guard; reflexivity.
+        + apply (policy_rel_at 0 0 N (ts' -- i) (us' -- i) None st);
+            [apply pool_guard_equ_remove, Hp'|reflexivity|reflexivity].
+      - apply (galignF_stuck _ T' U' (n + a) (m + b)).
+        + rewrite ET', (observe_equ_go _ _ (schedule_with_focused_stuck sch N ts' i st Hts)); reflexivity.
+        + rewrite EU', (observe_equ_go _ _ (schedule_with_focused_stuck sch N us' i st Hus)); reflexivity.
+      - apply (galignF_step _ T' U' (n + a) (m + b)
+          (schedule_with sch (S N) (ts' @ i := st0) (Some i) st)
+          (schedule_with sch (S N) (us' @ i := st0) (Some i) st)).
+        + rewrite ET', (observe_equ_go _ _ (schedule_with_focused_step sch N ts' i st0 st Hts)); reflexivity.
+        + rewrite EU', (observe_equ_go _ _ (schedule_with_focused_step sch N us' i st0 st Hus)); reflexivity.
+        + eapply (policy_rel_at 0 0 (S N) _ _ (Some i) st);
+            [|cbn [guards]; reflexivity|cbn [guards]; reflexivity]; apply pool_guard_equ_replace, Hp'.
+      - apply (galignF_guard _ T' U' (n + a) (m + b)
+          (schedule_with sch (S N) (ts' @ i := y) (Some i) st)
+          (schedule_with sch (S N) (us' @ i := y) (Some i) st)).
+        + rewrite ET', (observe_equ_go _ _ (schedule_with_focused_guard sch N ts' i y st Hts));
+            rewrite <- guards_guard; reflexivity.
+        + rewrite EU', (observe_equ_go _ _ (schedule_with_focused_guard sch N us' i y st Hus));
+            rewrite <- guards_guard; reflexivity.
+        + eapply (policy_rel_at 0 0 (S N) _ _ (Some i) st);
+            [|cbn [guards]; reflexivity|cbn [guards]; reflexivity]; apply pool_guard_equ_replace, Hp'.
+      - destruct e as [y|[f|e']]; [dependent destruction y|dependent destruction f|].
+        + apply (galignF_guard _ T' U' (n + a) (m + b)
+            (schedule_with sch (S N) (ts' @ i := k tt) None st)
+            (schedule_with sch (S N) (us' @ i := k tt) None st)).
+          * rewrite ET', (observe_equ_go _ _ (schedule_with_focused_yield sch N ts' i k st Hts));
+              rewrite <- guards_guard; reflexivity.
+          * rewrite EU', (observe_equ_go _ _ (schedule_with_focused_yield sch N us' i k st Hus));
+              rewrite <- guards_guard; reflexivity.
+          * eapply (policy_rel_at 0 0 (S N) _ _ None st);
+              [|cbn [guards]; reflexivity|cbn [guards]; reflexivity];
+              apply pool_guard_equ_replace, Hp'.
+        + apply (galignF_guard _ T' U' (n + a) (m + b)
+            (schedule_with sch (S (S N)) (k true :: (ts' @ i := k false)) (Some (Fin.FS i)) st)
+            (schedule_with sch (S (S N)) (k true :: (us' @ i := k false)) (Some (Fin.FS i)) st)).
+          * rewrite ET', (observe_equ_go _ _ (schedule_with_focused_fork sch N ts' i k st Hts));
+              rewrite <- guards_guard; reflexivity.
+          * rewrite EU', (observe_equ_go _ _ (schedule_with_focused_fork sch N us' i k st Hus));
+              rewrite <- guards_guard; reflexivity.
+          * eapply (policy_rel_at 0 0 (S (S N)) _ _ (Some (Fin.FS i)) st);
+              [|cbn [guards]; reflexivity|cbn [guards]; reflexivity];
+              apply pool_guard_equ_cons, pool_guard_equ_replace, Hp'.
+        + apply (galignF_vis _ T' U' (n + a) (m + b) (inr1 e' : (schedE +' E) Y)
+            (fun z => schedule_with sch (S N) (ts' @ i := k z) (Some i) st)
+            (fun z => schedule_with sch (S N) (us' @ i := k z) (Some i) st)).
+          * rewrite ET', (observe_equ_go _ _ (schedule_with_focused_user_event sch N ts' i e' k st Hts)); reflexivity.
+          * rewrite EU', (observe_equ_go _ _ (schedule_with_focused_user_event sch N us' i e' k st Hus)); reflexivity.
+          * intro z; eapply (policy_rel_at 0 0 (S N) _ _ (Some i) st);
+              [|cbn [guards]; reflexivity|cbn [guards]; reflexivity]; apply pool_guard_equ_replace, Hp'.
+      - apply (galignF_br _ T' U' (n + a) (m + b) c
+          (fun j => schedule_with sch (S N) (ts' @ i := k j) (Some i) st)
+          (fun j => schedule_with sch (S N) (us' @ i := k j) (Some i) st)).
+        + rewrite ET', (observe_equ_go _ _ (schedule_with_focused_br sch N ts' i c k st Hts)); reflexivity.
+        + rewrite EU', (observe_equ_go _ _ (schedule_with_focused_br sch N us' i c k st Hus)); reflexivity.
+        + intro j; eapply (policy_rel_at 0 0 (S N) _ _ (Some i) st);
+            [|cbn [guards]; reflexivity|cbn [guards]; reflexivity]; apply pool_guard_equ_replace, Hp'.
+    Qed.
+
+    Lemma schedule_with_galigned N (ts us : pool E B N) f st :
+      pool_guard_equ ts us ->
+      galigned (schedule_with sch N ts f st) (schedule_with sch N us f st).
+    Proof.
+      intro Hp; apply (galigned_coind policy_rel policy_rel_step).
+      apply (policy_rel_at 0 0 N ts us f st); [exact Hp|reflexivity|reflexivity].
+    Qed.
+  End PolicyAlign.
 End ScheduleAlign.

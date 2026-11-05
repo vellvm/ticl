@@ -123,7 +123,7 @@ Lemma worker_split_pool_rr hdr focus cursor s :
   run_rr_pool [worker_split 2 hdr; worker_split 1 hdr]%vector focus cursor s ~
   run_rr_pool [worker 2 hdr; worker 1 hdr]%vector focus cursor s.
 Proof.
-  unfold run_rr_pool; apply interp_schedule_rr_guard_equ.
+  unfold run_rr_pool; apply interp_schedule_fair_guard_equ.
   intros i; dependent destruction i; [|dependent destruction i; [|dependent destruction i]];
     cbn [csl_pool Vector.map]; apply guard_equ_equ, denote_worker_split.
 Qed.
@@ -156,7 +156,7 @@ Lemma allocated_shared_queue_split_rr values s :
   run_rr (allocated_shared_queue_split values) s ~
   run_rr (allocated_shared_queue values) s.
 Proof.
-  unfold run_rr, run_rr_pool; apply interp_schedule_rr_guard_equ.
+  unfold run_rr, run_rr_pool; apply interp_schedule_fair_guard_equ.
   intros i; dependent destruction i; [|dependent destruction i].
   cbn [csl_pool Vector.map]; apply guard_equ_equ.
   unfold denote; apply equ_clo_bind with (S:=eq); [|intros x y <-; reflexivity].
@@ -247,20 +247,21 @@ Qed.
 Theorem allocated_shared_queue_passive_fresh_rr values nl d k f ctx c :
   heap_finite f -> find_index Nat.eqb nl values = Some d ->
   <( {run_rr (allocated_shared_queue values) ((f,hemp),(ctx,c))},
-     Pure |= AG (AF visW {shared_pop_after nl k}) )>.
+     Pure |= AG (AF visW {fair_obs (shared_pop_after nl k)}) )>.
 Proof.
   intros Finite Member.
   destruct (allocated_shared_queue_rr_contract values f ctx c Finite)
     as (hdr & Positive & Free & Owned & Related & Run).
   rewrite Run.
-  unfold run_rr, run_rr_pool, interp_schedule_rr.
-  eapply (ticll_csl_frame (f,hemp)).
+  unfold run_rr, run_rr_pool, interp_schedule_fair.
+  eapply (ticll_csl_frame (policy_handler sh) _ (policy_handler_frame sh _ sh_frame_handler)
+    (f,hemp)).
   - apply run_rr_framable, shared_queue_alloc_free.
   - exact Related.
   - change <( {run_rr (shared_queue hdr)
       ((qheap hdr (queue_nodes hdr (length values)) values,
         upd hemp hdr (2 * S (length values))),(ctx,c))},
-      Pure |= AG (AF visW {shared_pop_after nl k}) )>.
+      Pure |= AG (AF visW {fair_obs (shared_pop_after nl k)}) )>.
     eapply shared_rotate_agaf_pop_rr_fresh;
       [now apply qheap_queue_nodes_rep|exact Member].
 Qed.
@@ -268,7 +269,7 @@ Qed.
 Theorem allocated_shared_queue_split_passive_fresh_rr values nl d k f ctx c :
   heap_finite f -> find_index Nat.eqb nl values = Some d ->
   <( {run_rr (allocated_shared_queue_split values) ((f,hemp),(ctx,c))},
-     Pure |= AG (AF visW {shared_pop_after nl k}) )>.
+     Pure |= AG (AF visW {fair_obs (shared_pop_after nl k)}) )>.
 Proof.
   intros Finite Member; rewrite allocated_shared_queue_split_rr.
   eapply allocated_shared_queue_passive_fresh_rr; eassumption.
@@ -277,7 +278,7 @@ Qed.
 Corollary client_passive_10 k :
   <( {run_rr (allocated_shared_queue [10;20;30])
        ((upd hemp 100 7,hemp),(List.nil,0))},
-     Pure |= AG (AF visW {shared_pop_after 10 k}) )>.
+     Pure |= AG (AF visW {fair_obs (shared_pop_after 10 k)}) )>.
 Proof.
   eapply allocated_shared_queue_passive_fresh_rr with (d:=0).
   - apply heap_finite_upd, heap_finite_hemp.
@@ -287,7 +288,7 @@ Qed.
 Corollary client_split_passive_10 k :
   <( {run_rr (allocated_shared_queue_split [10;20;30])
        ((upd hemp 100 7,hemp),(List.nil,0))},
-     Pure |= AG (AF visW {shared_pop_after 10 k}) )>.
+     Pure |= AG (AF visW {fair_obs (shared_pop_after 10 k)}) )>.
 Proof.
   rewrite allocated_shared_queue_split_rr; apply client_passive_10.
 Qed.
@@ -331,16 +332,16 @@ Proof.
   - intros j Positive Earlier; lia.
 Qed.
 
-(** Three scheduler picks, each followed by a complete constructor-backed
-    turn.  The suffix records the actual cursor, not a claimed state cycle. *)
+(** Three logged scheduler picks, each followed by a complete
+    constructor-backed turn.  The suffix records the actual cursor, not a
+    claimed state cycle. *)
 Theorem client_split_prefix3 :
   run_rr (allocated_shared_queue_split [10;20;30])
     ((upd hemp 100 7,hemp),(List.nil,0)) ~
-  Step (log (inr (stamp (2,10) 0) : CSLObs (nat * nat));;
-   Step (log (inr (stamp (1,20) 1) : CSLObs (nat * nat));;
-    Step (log (inr (stamp (2,30) 2) : CSLObs (nat * nat));;
-     run_rr_pool [worker 2 1; worker 1 1]%vector None 3
-       ((qstepN 1 3 [3;5;7] client_heap,upd hemp 1 8),(List.nil,3))))).
+  emit_list [inr 0; inl (inr (stamp (2,10) 0)); inr 1; inl (inr (stamp (1,20) 1));
+             inr 0; inl (inr (stamp (2,30) 2))]%list
+    (run_rr_pool [worker 2 1; worker 1 1]%vector None 3
+       ((qstepN 1 3 [3;5;7] client_heap,upd hemp 1 8),(List.nil,3))).
 Proof.
   rewrite allocated_shared_queue_split_rr, client_initialization.
   unfold shared_queue; rewrite run_rr_two_forks.
@@ -350,25 +351,26 @@ Proof.
   pose proof (qstep_qrep 1 [5;7;3] [20;30;10] _ Hq1 ltac:(discriminate)) as Hq2.
   change (qrep 1 [7;3;5] [30;10;20]
     (qstep 1 [5;7;3] (qstep 1 [3;5;7] client_heap))) in Hq2.
+  unfold emit_list at 1; cbn [List.fold_right]; repeat setoid_rewrite log_vis.
   rewrite (run_rr_pool_select [worker 2 1; worker 1 1]%vector 0), (rr_pick_even 0 eq_refl).
-  apply sb_step; etransitivity;
+  apply sb_vis; intros _; etransitivity;
     [exact (run_rr_pool_turn [worker 2 1; worker 1 1]%vector Fin.F1 1 _ _ _
       (exact_worker_turn 2 1 3 [5;7] 10 [20;30] client_heap
         (upd hemp 1 8) List.nil 0 Hq0))|].
-  cbn [emit_list List.fold_right]; rewrite !log_vis; apply sb_vis; intros _.
+  cbn [List.map emit_list List.fold_right]; repeat setoid_rewrite log_vis; apply sb_vis; intros _.
   rewrite (run_rr_pool_select [worker 2 1; worker 1 1]%vector 1), (rr_pick_odd 1 eq_refl).
-  apply sb_step; etransitivity;
+  apply sb_vis; intros _; etransitivity;
     [exact (run_rr_pool_turn [worker 2 1; worker 1 1]%vector (Fin.FS Fin.F1) 2 _ _ _
       (exact_worker_turn 1 1 5 [7;3] 20 [30;10] (qstep 1 [3;5;7] client_heap)
         (upd hemp 1 8) List.nil 1 Hq1))|].
-  cbn [emit_list List.fold_right]; rewrite !log_vis; apply sb_vis; intros _.
+  cbn [List.map emit_list List.fold_right]; repeat setoid_rewrite log_vis; apply sb_vis; intros _.
   rewrite (run_rr_pool_select [worker 2 1; worker 1 1]%vector 2), (rr_pick_even 2 eq_refl).
-  apply sb_step; etransitivity;
+  apply sb_vis; intros _; etransitivity;
     [exact (run_rr_pool_turn [worker 2 1; worker 1 1]%vector Fin.F1 3 _ _ _
       (exact_worker_turn 2 1 7 [3;5] 30 [10;20]
         (qstep 1 [5;7;3] (qstep 1 [3;5;7] client_heap))
         (upd hemp 1 8) List.nil 2 Hq2))|].
-  cbn [emit_list List.fold_right]; rewrite !log_vis; apply sb_vis; intros _.
+  cbn [List.map emit_list List.fold_right]; repeat setoid_rewrite log_vis; apply sb_vis; intros _.
   reflexivity.
 Qed.
 

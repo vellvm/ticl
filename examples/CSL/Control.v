@@ -6,7 +6,8 @@
     an assignment, the separation of context observations from the indexed
     counter, and faults on missing variables or CAS cells.  CAS operands also
     exercise capture-before-yield and late comparison across interleavings.
-    Every round-robin scheduling decision is one visible [Step]. *)
+    Every round-robin scheduling decision is one logged [inr slot]
+    observation; program observations are logged under [inl]. *)
 
 From Stdlib Require Import List Lia Arith.PeanoNat Fin Vector Strings.String.
 From ExtLib Require Import Structures.Maps Data.Map.FMapAList Data.String.
@@ -34,7 +35,7 @@ Local Open Scope fin_vector_scope.
 Ltac rr_focus :=
   lazymatch goal with
   | |- interp_schedule_rr ?h ?N ?P (Some ?i) ?m ?s ~ _ =>
-      rewrite <- (interp_schedule_rr_equ h N (P @ i := (P $ i)) P (Some i) m s
+      rewrite <- (interp_schedule_fair_equ rr_scheduler h N (P @ i := (P $ i)) P (Some i) m s
         (pool_replace_current P i));
       let x := eval cbn [Vector.nth Vector.replace Vector.caseS Vector.caseS'] in (P $ i) in
       change (P $ i) with x; unfold denote
@@ -43,22 +44,29 @@ Ltac rr_focus :=
 (** A focused finished slot is removed; the remaining pool is computed
     without unfolding any source denotation. *)
 Ltac rr_finish_step :=
-  rewrite interp_schedule_rr_ret by reflexivity;
+  rewrite interp_schedule_fair_ret by reflexivity;
   cbn [Vector.replace Vector.caseS Vector.caseS'];
   rewrite ?vector_remove_tail, ?vector_remove_head.
-
-(** Round-robin selection: one visible [Step], with the picked slot computed. *)
-Ltac rr_select :=
-  rewrite interp_schedule_rr_select;
-  lazymatch goal with
-  | |- context [rr_pick ?n ?m] =>
-      let p := eval vm_compute in (rr_pick n m) in change (rr_pick n m) with p
-  end;
-  apply sb_step.
 
 (** Split a shared leading observation. *)
 Ltac rr_log :=
   unfold log; rewrite !bind_trigger; apply sb_vis; intros [].
+
+(** Round-robin selection: one logged pick, with the picked slot computed. *)
+Ltac rr_select :=
+  rewrite interp_schedule_rr_select;
+  lazymatch goal with
+  | |- context [slot_index (rr_pick ?n ?m)] =>
+      let k := eval vm_compute in (slot_index (rr_pick n m)) in
+      change (slot_index (rr_pick n m)) with k
+  end;
+  lazymatch goal with
+  | |- context [rr_pick ?n ?m] =>
+      let p := eval vm_compute in (rr_pick n m) in change (rr_pick n m) with p
+  end;
+  rr_log.
+
+Abbreviation rr_obs := (CSLObs (nat * nat) + nat)%type.
 
 Definition ctx0 : Ctx.Ctx := List.nil.
 Definition state0 : SSig := (managed_empty, (ctx0, 0)).
@@ -67,14 +75,12 @@ Definition state0 : SSig := (managed_empty, (ctx0, 0)).
 
     The child runs only its own body; it never executes the parent's
     continuation.  Parent first (the focus stays on the parent after a
-    fork), then one scheduling step, then the child, each emitting exactly
-    once. *)
+    fork), then one logged scheduling decision, then the child, each
+    emitting exactly once. *)
 Theorem scoped_fork_no_parent_replay :
   run_rr (CBind (CFork (CEmit 1 7)) (fun _ => CEmit 0 9)) state0 ~
-  emit_list [inr (stamp (0,9) 0)]%list
-    (Step (emit_list [inr (stamp (1,7) 1)]%list
-      (Ret ((managed_empty, (ctx0, 2)), tt)
-        : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)))).
+  emit_list [inl (inr (stamp (0,9) 0)); inr 0; inl (inr (stamp (1,7) 1))]%list
+    (Ret ((managed_empty, (ctx0, 2)), tt) : ctreeW rr_obs Bn (SSig * unit)).
 Proof.
   rewrite run_rr_fork_bind; unfold state0.
   rr_focus.
@@ -86,7 +92,7 @@ Proof.
   rewrite interp_rr_emit_log.
   rr_log.
   rr_finish_step.
-  apply interp_schedule_rr_empty.
+  apply interp_schedule_fair_empty.
 Qed.
 
 (** ** Late context reads
@@ -105,11 +111,8 @@ Theorem context_resume_preserves_updates :
   let ctx2 := add "z"%string 9 ctx1 in
   let ctx3 := add "y"%string 1 ctx2 in
   run_rr context_program state0 ~
-  emit_list [inl ctx1]%list
-    (Step (emit_list [inl ctx2]%list
-      (Step (emit_list [inl ctx3]%list
-        (Ret ((managed_empty, (ctx3, 0)), tt)
-          : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)))))).
+  emit_list [inl (inl ctx1); inr 0; inl (inl ctx2); inr 0; inl (inl ctx3)]%list
+    (Ret ((managed_empty, (ctx3, 0)), tt) : ctreeW rr_obs Bn (SSig * unit)).
 Proof.
   intros ctx1 ctx2 ctx3.
   rewrite run_rr_unfold; unfold state0, context_program.
@@ -142,7 +145,7 @@ Proof.
   rr_log.
   cbv beta iota.
   rr_finish_step.
-  apply interp_schedule_rr_empty.
+  apply interp_schedule_fair_empty.
 Qed.
 
 (** A successful variable read captures its value before yielding.  The
@@ -156,10 +159,8 @@ Theorem captured_before_yield_rr memory c :
   let ctx0 := add "x"%string 0 List.nil in
   let ctx1 := add "x"%string 1 ctx0 in
   run_rr captured_before_yield (memory,(ctx0,c)) ~
-    Step (emit_list [inl ctx1]%list
-      (Step (emit_list [inr (stamp (9,0) c)]%list
-        (Ret ((memory,(ctx1,S c)),tt)
-          : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit))))).
+    emit_list [inr 0; inl (inl ctx1); inr 0; inl (inr (stamp (9,0) c))]%list
+      (Ret ((memory,(ctx1,S c)),tt) : ctreeW rr_obs Bn (SSig * unit)).
 Proof.
   intros ctx0 ctx1.
   unfold captured_before_yield; rewrite run_rr_fork_bind.
@@ -167,7 +168,7 @@ Proof.
   (* Parent: capture x = 0, then clear the focus at the read's yield. *)
   rr_focus.
   rewrite interp_rr_bind.
-  rewrite (interp_schedule_rr_equ sh 2 _ _ (Some (Fin.FS Fin.F1)) 0 _
+  rewrite (interp_schedule_fair_equ rr_scheduler sh 2 _ _ (Some (Fin.FS Fin.F1)) 0 _
     (replace_pool_equ _ _ (Fin.FS Fin.F1) _ _
       (pool_equ_refl _) (source_raw_eval _ _))).
   rewrite (interp_rr_var _ _ _ "x"%string 0) by reflexivity.
@@ -185,7 +186,7 @@ Proof.
   rewrite interp_rr_emit_log.
   rr_log.
   rr_finish_step.
-  apply interp_schedule_rr_empty.
+  apply interp_schedule_fair_empty.
 Qed.
 
 (** ** Missing variables fault
@@ -194,12 +195,12 @@ Qed.
     whole run is [Stuck] rather than an empty observation sequence. *)
 Theorem missing_variable_stuck :
   run_rr (CBind (CEval (CVar "missing")) (fun _ => CRet tt)) state0 ~
-    (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+    (Stuck : ctreeW rr_obs Bn (SSig * unit)).
 Proof.
   rewrite run_rr_unfold; unfold state0.
   rr_focus.
   rewrite interp_rr_bind.
-  rewrite (interp_schedule_rr_equ sh 1 _ _ (Some Fin.F1) 0 _
+  rewrite (interp_schedule_fair_equ rr_scheduler sh 1 _ _ (Some Fin.F1) 0 _
     (replace_pool_equ _ _ Fin.F1 _ _ (pool_equ_refl _) (source_raw_eval _ _))).
   apply interp_rr_var_missing; reflexivity.
 Qed.
@@ -216,9 +217,9 @@ Definition cas_arithmetic : CProg unit :=
 
 Theorem cas_arithmetic_rr :
   run_rr cas_arithmetic ((upd hemp 3 7, hemp), (List.nil, 0)) ~
-    emit_list [inr (stamp (90,1) 0)]%list
+    emit_list [inl (inr (stamp (90,1) 0))]%list
       (Ret (((upd (upd hemp 3 7) 3 8, hemp), (List.nil, 1)), tt)
-        : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+        : ctreeW rr_obs Bn (SSig * unit)).
 Proof.
   assert (Arithmetic : forall K : option bool -> thread sE Bn,
     (denote_flow (CCAS (CPlus (CLit 1) (CLit 2))
@@ -228,12 +229,12 @@ Proof.
   rewrite run_rr_unfold; unfold cas_arithmetic.
   unfold emit_list; cbn [List.fold_right].
   rr_focus; rewrite interp_rr_bind.
-  rewrite (interp_schedule_rr_equ sh 1 _ _ (Some Fin.F1) 0 _
+  rewrite (interp_schedule_fair_equ rr_scheduler sh 1 _ _ (Some Fin.F1) 0 _
     (replace_pool_equ _ _ Fin.F1 _ _ (pool_equ_refl _) (Arithmetic _))).
   erewrite interp_rr_cas_value by reflexivity; cbn [Nat.eqb].
   cbv beta iota; rewrite interp_rr_emit_log.
   rr_log; rr_finish_step.
-  apply interp_schedule_rr_empty.
+  apply interp_schedule_fair_empty.
 Qed.
 
 (** The child changes the context between the parent's four reads, then
@@ -261,13 +262,11 @@ Theorem cas_interleaving_rr :
   let ctx3 := add "x"%string 8 ctx2 in
   let ctx4 := add "x"%string 9 ctx3 in
   run_rr cas_interleaving ((h0, hemp), (ctx0, 0)) ~
-    Step (emit_list [inl ctx1]%list
-      (Step (Step (emit_list [inl ctx2]%list
-        (Step (Step (emit_list [inl ctx3]%list
-          (Step (Step (emit_list [inl ctx4]%list
-            (Step (emit_list [inr (stamp (90,1) 0)]%list
-              (Ret (((upd (upd h0 3 7) 3 8, hemp), (ctx4, 1)), tt)
-                : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)))))))))))))).
+    emit_list [inr 0; inl (inl ctx1); inr 1; inr 0; inl (inl ctx2); inr 1; inr 0;
+               inl (inl ctx3); inr 1; inr 0; inl (inl ctx4); inr 0;
+               inl (inr (stamp (90,1) 0))]%list
+      (Ret (((upd (upd h0 3 7) 3 8, hemp), (ctx4, 1)), tt)
+        : ctreeW rr_obs Bn (SSig * unit)).
 Proof.
   intros h0 ctx0 ctx1 ctx2 ctx3 ctx4.
   assert (Sub : forall K : nat -> thread sE Bn,
@@ -283,7 +282,7 @@ Proof.
   unfold emit_list; cbn [List.fold_right].
   (* Parent: the first address read captures 4, then yields. *)
   rr_focus; rewrite interp_rr_bind, interp_rr_cas_exp.
-  rewrite (interp_schedule_rr_equ sh 2 _ _ (Some (Fin.FS Fin.F1)) 0 _
+  rewrite (interp_schedule_fair_equ rr_scheduler sh 2 _ _ (Some (Fin.FS Fin.F1)) 0 _
     (replace_pool_equ _ _ (Fin.FS Fin.F1) _ _ (pool_equ_refl _) (Sub _))).
   rewrite (interp_rr_var _ _ _ "x"%string 4) by reflexivity.
   (* Slot 0: x := 1, then yield. *)
@@ -323,7 +322,7 @@ Proof.
   erewrite interp_rr_cas_value by reflexivity; cbn [Nat.eqb].
   cbv beta iota; rewrite interp_rr_emit_log.
   rr_log; rr_finish_step.
-  apply interp_schedule_rr_empty.
+  apply interp_schedule_fair_empty.
 Qed.
 
 (** ** Operand faults precede the heap event
@@ -336,7 +335,7 @@ Theorem cas_missing_address_rr :
       (fun ok => CEmit 90 (if ok then 1 else 0)))
     ((upd hemp 3 99, hemp),
       (add "d"%string 8 (add "e"%string 7 (add "a"%string 3 List.nil)), 0)) ~
-    (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+    (Stuck : ctreeW rr_obs Bn (SSig * unit)).
 Proof.
   rewrite run_rr_unfold; rr_focus.
   rewrite interp_rr_bind, interp_rr_cas_exp.
@@ -349,7 +348,7 @@ Theorem cas_missing_expected_rr :
       (fun ok => CEmit 90 (if ok then 1 else 0)))
     ((upd hemp 3 99, hemp),
       (add "d"%string 8 (add "e"%string 7 (add "a"%string 3 List.nil)), 0)) ~
-    Step (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+    (log (inr 0 : rr_obs);; Stuck : ctreeW rr_obs Bn (SSig * unit)).
 Proof.
   rewrite run_rr_unfold; rr_focus.
   rewrite interp_rr_bind, interp_rr_cas_exp.
@@ -364,7 +363,7 @@ Theorem cas_missing_desired_rr :
       (fun ok => CEmit 90 (if ok then 1 else 0)))
     ((upd hemp 3 99, hemp),
       (add "d"%string 8 (add "e"%string 7 (add "a"%string 3 List.nil)), 0)) ~
-    Step (Step (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit))).
+    (log (inr 0 : rr_obs);; log (inr 0 : rr_obs);; Stuck : ctreeW rr_obs Bn (SSig * unit)).
 Proof.
   rewrite run_rr_unfold; rr_focus.
   rewrite interp_rr_bind, interp_rr_cas_exp.
@@ -381,7 +380,8 @@ Theorem cas_missing_cell_rr :
       (fun ok => CEmit 90 (if ok then 1 else 0)))
     (managed_empty,
       (add "d"%string 8 (add "e"%string 7 (add "a"%string 3 List.nil)), 0)) ~
-    Step (Step (Step (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)))).
+    (log (inr 0 : rr_obs);; log (inr 0 : rr_obs);; log (inr 0 : rr_obs);; Stuck
+      : ctreeW rr_obs Bn (SSig * unit)).
 Proof.
   rewrite run_rr_unfold; rr_focus.
   rewrite interp_rr_bind, interp_rr_cas_exp.

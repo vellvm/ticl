@@ -13,3 +13,6 @@ Variant forkE : Type -> Type := Fork : forkE bool.
 
 (** Scheduler-level observation that a fork spawned another runnable thread. *)
 Variant spawnE : Type -> Type := Spawn : spawnE unit.
+
+(** Scheduler-level observation: the slot index picked at a scheduling point. *)
+Variant schedE : Type -> Type := Scheduled : nat -> schedE unit.

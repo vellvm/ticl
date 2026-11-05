@@ -17,6 +17,7 @@ From TICL Require Import
   CTree.Interp.State.Mod
   CTree.Interp.Yield.Mod
   CTree.Interp.Yield.SBisim
+  CTree.Interp.Yield.Policy
   CTree.Interp.Yield.RoundRobin
   CTree.Interp.Yield.Nondeterministic
   CTree.Interp.Heap
@@ -100,12 +101,19 @@ Lemma run_rr_prefix {A} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (p : CProg A) (K : option A -> thread sE Bn) m σ :
   yield_fork_free p ->
   interp_schedule_rr sh (S n) (ts @ i := (denote_flow p >>= K)) (Some i) m σ ~
-  (instr_flow_erased p σ >>= fun '(σ', r) =>
+  (translate relabel_log (instr_flow_erased p σ) >>= fun '(σ', r) =>
     interp_schedule_rr sh (S n) (ts @ i := K r) (Some i) m σ').
 Proof.
   intro Hp; unfold instr_flow_erased.
-  apply interp_schedule_rr_prefix_bind, denote_flow_sequential, Hp.
+  apply interp_schedule_fair_prefix_bind, denote_flow_sequential, Hp.
 Qed.
+
+(** The relabelled standalone run is the standalone run under the policy
+    handler, with its events embedded on the right. *)
+Lemma instr_flow_sched_interp {A} (p : CProg A) σ :
+  translate relabel_log (instr_flow_erased p σ) ≅
+  interp_state (policy_handler sh) (translate inr1 (interp_thread (denote_flow p))) σ.
+Proof. symmetry; apply interp_state_policy_translate. Qed.
 
 (** Join principle: a focused yield/fork-free segment runs standalone, then its nondeterministic pool continues. *)
 Lemma run_nd_prefix {A} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))

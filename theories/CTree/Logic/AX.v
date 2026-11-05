@@ -8,6 +8,7 @@ From Coinduction Require Import all.
 From TICL Require Import
   CTree.Core
   CTree.Logic.Trans
+  CTree.Interp.Yield.Mod
   CTree.Logic.CanStep
   CTree.Logic.EX
   CTree.Events.Writer
@@ -66,6 +67,20 @@ Section BasicLemmas.
     - now apply can_step_br.
     - intros t' w' TR.
       apply ktrans_br in TR as (y & TR); eauto with ticl.
+  Qed.
+
+  (** Policy alternatives, prefix next [AN]: every alternative is crawled
+      through like a hidden branch. *)
+  Lemma anl_br_alts `{Bn -< B}: forall m (k: Fin.t (S m) -> ctree E B X) w φ ψ,
+      <( {br_alts m k}, w |= φ )> ->
+      (exists a, can_step (k a) w) ->
+      (forall a t' w', |k a, w| ↦ |t', w'| -> <( t', w' |= ψ )>) ->
+      <( {br_alts m k}, w |= φ AN ψ )>.
+  Proof.
+    intros * Hφ Hs Hk; csplit; eauto with ticl.
+    - now apply can_step_br_alts.
+    - intros t' w' TR.
+      apply ktrans_br_alts in TR as (a & TR); eauto with ticl.
   Qed.
 
   (** Visible branch iff lemma for prefix next [AN] *)

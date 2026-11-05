@@ -16,6 +16,7 @@ From TICL Require Export
   CTree.Interp.Yield.Mod
   CTree.Interp.Yield.SBisim
   CTree.Interp.Yield.Observed
+  CTree.Interp.Yield.Policy
   CTree.Logic.Yield
   CTree.Logic.SchedulerFairness
   CTree.Interp.Yield.Fair.
@@ -494,7 +495,7 @@ Definition run_nd_pool {n} (ps : Vector.t (CProg unit) n)
 
 Definition run_rr_pool {n} (ps : Vector.t (CProg unit) n)
     (focus : option (Fin.t n)) (cursor : nat) (s : SSig)
-  : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit) :=
+  : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit) :=
   interp_schedule_rr sh n (csl_pool ps) focus cursor s.
 
 Definition run_nd (p : CProg unit) (s : SSig)
@@ -502,7 +503,7 @@ Definition run_nd (p : CProg unit) (s : SSig)
   run_nd_pool [p]%vector (Some Fin.F1) s.
 
 Definition run_rr (p : CProg unit) (s : SSig)
-  : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit) :=
+  : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit) :=
   run_rr_pool [p]%vector (Some Fin.F1) 0 s.
 
 Lemma run_nd_unfold (p : CProg unit) (s : SSig) :
@@ -546,7 +547,7 @@ Lemma interp_rr_lit n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   interp_schedule_rr sh (S n) (ts @ i := (denote_exp (CLit v) >>= K)) (Some i) m s ≅
   interp_schedule_rr sh (S n) (ts @ i := K v) (Some i) m s.
 Proof.
-  apply interp_schedule_rr_equ, replace_pool_equ; [apply pool_equ_refl|].
+  apply interp_schedule_fair_equ, replace_pool_equ; [apply pool_equ_refl|].
   apply source_raw_lit.
 Qed.
 
@@ -569,7 +570,7 @@ Lemma interp_rr_assign n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
       source_get >>= fun ctx => source_put (add name value ctx) >>= fun _ => K (Some tt)))
     (Some i) m s.
 Proof.
-  apply interp_schedule_rr_equ, replace_pool_equ; [apply pool_equ_refl|].
+  apply interp_schedule_fair_equ, replace_pool_equ; [apply pool_equ_refl|].
   apply source_raw_assign.
 Qed.
 
@@ -597,7 +598,7 @@ Lemma interp_rr_cas_exp n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
       (addr <- denote_exp a;; old <- denote_exp expected;; value <- denote_exp desired;;
        denote_flow (CCAS (CLit addr) (CLit old) (CLit value)) >>= K)) (Some i) m s.
 Proof.
-  apply interp_schedule_rr_equ, replace_pool_equ; [apply pool_equ_refl|].
+  apply interp_schedule_fair_equ, replace_pool_equ; [apply pool_equ_refl|].
   apply source_raw_cas.
 Qed.
 
@@ -621,10 +622,10 @@ Lemma interp_rr_var n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   interp_schedule_rr sh (S n) (ts @ i := K value) None m s.
 Proof.
   intro Hlookup.
-  rewrite (interp_schedule_rr_equ sh (S n) _ _ (Some i) m s
+  rewrite (interp_schedule_fair_equ rr_scheduler sh (S n) _ _ (Some i) m s
     (replace_pool_equ ts ts i _ _ (pool_equ_refl ts) (source_raw_var name K))).
   rewrite interp_rr_get_ctx; cbv beta; rewrite Hlookup.
-  erewrite interp_schedule_rr_yield by (rewrite Vector.nth_replace_eq; reflexivity).
+  erewrite interp_schedule_fair_yield by (rewrite Vector.nth_replace_eq; reflexivity).
   rewrite Vector.replace_replace_eq; reflexivity.
 Qed.
 
@@ -647,13 +648,13 @@ Lemma interp_rr_var_missing n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   name (K : nat -> thread sE Bn) m (s : SSig) :
   lookup name (csl_context s) = None ->
   interp_schedule_rr sh (S n) (ts @ i := (denote_exp (CVar name) >>= K)) (Some i) m s ~
-  (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+  (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
 Proof.
   intro Hlookup.
-  rewrite (interp_schedule_rr_equ sh (S n) _ _ (Some i) m s
+  rewrite (interp_schedule_fair_equ rr_scheduler sh (S n) _ _ (Some i) m s
     (replace_pool_equ ts ts i _ _ (pool_equ_refl ts) (source_raw_var name K))).
   rewrite interp_rr_get_ctx; cbv beta; rewrite Hlookup.
-  rewrite (interp_schedule_rr_stuck sh n _ i m s)
+  rewrite (interp_schedule_fair_stuck rr_scheduler sh n _ i m s)
     by (rewrite Vector.nth_replace_eq; reflexivity).
   reflexivity.
 Qed.
@@ -678,31 +679,31 @@ Lemma interp_rr_ret {A} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   interp_schedule_rr sh (S n) (ts @ i := (denote_flow (CRet x) >>= K)) (Some i) m σ ≅
   interp_schedule_rr sh (S n) (ts @ i := K (Some x)) (Some i) m σ.
 Proof.
-  apply interp_schedule_rr_equ, replace_pool_equ; [apply pool_equ_refl|].
+  apply interp_schedule_fair_equ, replace_pool_equ; [apply pool_equ_refl|].
   apply source_raw_ret.
 Qed.
 
 Lemma interp_rr_read n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a (K : option nat -> thread sE Bn) m σ :
   interp_schedule_rr sh (S n) (ts @ i := (denote_flow (CRead a) >>= K)) (Some i) m σ ~
-  (interp_state sh (heap_read (E:=sE) (B:=Bn) a) σ >>= fun '(σ',x) =>
+  (translate relabel_log (interp_state sh (heap_read (E:=sE) (B:=Bn) a) σ) >>= fun '(σ',x) =>
     interp_schedule_rr sh (S n) (ts @ i := K (Some x)) (Some i) m σ').
 Proof.
-  apply (interp_schedule_rr_user_bind sh n ts i _ (inl1 (HRead a))
-    (fun x => K (Some x)) m σ).
-  apply source_raw_read_head.
+  rewrite (interp_schedule_fair_user_bind rr_scheduler sh n ts i _ (inl1 (HRead a))
+    (fun x => K (Some x)) m σ (source_raw_read_head a K)).
+  unfold heap_read; rewrite translate_interp_state_trigger_bind; reflexivity.
 Qed.
 
 Lemma interp_rr_alloc n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   size (K : option nat -> thread sE Bn) m sigma :
   interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CAlloc size) >>= K)) (Some i) m sigma ~
-  (interp_state sh (heap_alloc (E:=sE) (B:=Bn) size) sigma >>= fun '(sigma',base) =>
+  (translate relabel_log (interp_state sh (heap_alloc (E:=sE) (B:=Bn) size) sigma) >>= fun '(sigma',base) =>
     interp_schedule_rr sh (S n) (ts @ i := K (Some base)) (Some i) m sigma').
 Proof.
-  apply (interp_schedule_rr_user_bind sh n ts i _ (inl1 (HAlloc size))
-    (fun base => K (Some base)) m sigma).
-  apply source_raw_alloc_head.
+  rewrite (interp_schedule_fair_user_bind rr_scheduler sh n ts i _ (inl1 (HAlloc size))
+    (fun base => K (Some base)) m sigma (source_raw_alloc_head size K)).
+  unfold heap_alloc; rewrite translate_interp_state_trigger_bind; reflexivity.
 Qed.
 
 Lemma interp_rr_cas n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
@@ -710,34 +711,34 @@ Lemma interp_rr_cas n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K))
     (Some i) m sigma ~
-  (interp_state sh (heap_cas (E:=sE) (B:=Bn) a expected desired) sigma >>= fun '(sigma',b) =>
+  (translate relabel_log (interp_state sh (heap_cas (E:=sE) (B:=Bn) a expected desired) sigma) >>= fun '(sigma',b) =>
    interp_schedule_rr sh (S n) (ts @ i := K (Some b)) (Some i) m sigma').
 Proof.
-  apply (interp_schedule_rr_user_bind sh n ts i _ (inl1 (HCAS a expected desired))
-    (fun b => K (Some b)) m sigma).
-  apply source_raw_cas_head.
+  rewrite (interp_schedule_fair_user_bind rr_scheduler sh n ts i _ (inl1 (HCAS a expected desired))
+    (fun b => K (Some b)) m sigma (source_raw_cas_head a expected desired K)).
+  unfold heap_cas; rewrite translate_interp_state_trigger_bind; reflexivity.
 Qed.
 
 Lemma interp_rr_write n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a v (K : option unit -> thread sE Bn) m σ :
   interp_schedule_rr sh (S n) (ts @ i := (denote_flow (CWrite a v) >>= K)) (Some i) m σ ~
-  (interp_state sh (heap_write (E:=sE) (B:=Bn) a v) σ >>= fun '(σ',_) =>
+  (translate relabel_log (interp_state sh (heap_write (E:=sE) (B:=Bn) a v) σ) >>= fun '(σ',_) =>
     interp_schedule_rr sh (S n) (ts @ i := K (Some tt)) (Some i) m σ').
 Proof.
-  apply (interp_schedule_rr_user_bind sh n ts i _ (inl1 (HWrite a v))
-    (fun _ => K (Some tt)) m σ).
-  apply source_raw_write_head.
+  rewrite (interp_schedule_fair_user_bind rr_scheduler sh n ts i _ (inl1 (HWrite a v))
+    (fun _ => K (Some tt)) m σ (source_raw_write_head a v K)).
+  unfold heap_write; rewrite translate_interp_state_trigger_bind; reflexivity.
 Qed.
 
 Lemma interp_rr_emit n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   q v (K : option unit -> thread sE Bn) m σ :
   interp_schedule_rr sh (S n) (ts @ i := (denote_flow (CEmit q v) >>= K)) (Some i) m σ ~
-  (interp_state sh (semit q v) σ >>= fun '(σ',_) =>
+  (translate relabel_log (interp_state sh (semit q v) σ) >>= fun '(σ',_) =>
     interp_schedule_rr sh (S n) (ts @ i := K (Some tt)) (Some i) m σ').
 Proof.
-  apply (interp_schedule_rr_user_bind sh n ts i _ (inr1 (inr1 (Log (q,v))))
-    (fun _ => K (Some tt)) m σ).
-  apply source_raw_emit_head.
+  rewrite (interp_schedule_fair_user_bind rr_scheduler sh n ts i _ (inr1 (inr1 (Log (q,v))))
+    (fun _ => K (Some tt)) m σ (source_raw_emit_head q v K)).
+  unfold semit; rewrite translate_interp_state_trigger_bind; reflexivity.
 Qed.
 
 Lemma interp_rr_bind {A B} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
@@ -749,7 +750,7 @@ Lemma interp_rr_bind {A B} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
       match r with None => K None | Some x => denote_flow (next x) >>= K end))
     (Some i) m σ.
 Proof.
-  apply interp_schedule_rr_equ, replace_pool_equ; [apply pool_equ_refl|].
+  apply interp_schedule_fair_equ, replace_pool_equ; [apply pool_equ_refl|].
   apply source_raw_bind.
 Qed.
 
@@ -758,13 +759,13 @@ Lemma interp_rr_yield n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   interp_schedule_rr sh (S n) (ts @ i := (denote_flow CYield >>= K)) (Some i) m σ ~
   interp_schedule_rr sh (S n) (ts @ i := K (Some tt)) None m σ.
 Proof.
-  pose proof (interp_schedule_rr_equ sh (S n)
+  pose proof (interp_schedule_fair_equ rr_scheduler sh (S n)
     (ts @ i := (denote_flow CYield >>= K))
     (ts @ i := Vis (inl1 Yield) (fun _ => K (Some tt)))
     (Some i) m σ
     (replace_pool_equ ts ts i _ _ (pool_equ_refl ts) (source_raw_yield_head K))) as Hpool.
   rewrite Hpool.
-  erewrite interp_schedule_rr_yield by (rewrite Vector.nth_replace_eq; reflexivity).
+  erewrite interp_schedule_fair_yield by (rewrite Vector.nth_replace_eq; reflexivity).
   rewrite Vector.replace_replace_eq; reflexivity.
 Qed.
 
@@ -775,7 +776,7 @@ Lemma interp_rr_fork n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
     ((denote_flow p >>= fun _ => K None) :: (ts @ i := K (Some tt)))
     (Some (Fin.FS i)) m σ.
 Proof.
-  pose proof (interp_schedule_rr_equ sh (S n)
+  pose proof (interp_schedule_fair_equ rr_scheduler sh (S n)
     (ts @ i := (denote_flow (CFork p) >>= K))
     (ts @ i := Vis (inr1 (inl1 Fork))
       (fun child : bool => if child
@@ -783,7 +784,7 @@ Proof.
     (Some i) m σ
     (replace_pool_equ ts ts i _ _ (pool_equ_refl ts) (source_raw_fork_head p K))) as Hpool.
   rewrite Hpool.
-  erewrite interp_schedule_rr_fork by (rewrite Vector.nth_replace_eq; reflexivity).
+  erewrite interp_schedule_fair_fork by (rewrite Vector.nth_replace_eq; reflexivity).
   rewrite Vector.replace_replace_eq; reflexivity.
 Qed.
 
@@ -799,7 +800,7 @@ Lemma interp_rr_until_none {A} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
       | Some (Some _) => Guard (denote_flow (CUntilNone body) >>= K)
       end)) (Some i) m σ.
 Proof.
-  apply interp_schedule_rr_equ, replace_pool_equ; [apply pool_equ_refl|].
+  apply interp_schedule_fair_equ, replace_pool_equ; [apply pool_equ_refl|].
   apply source_raw_until.
 Qed.
 
@@ -813,8 +814,8 @@ Proof.
     [Vis (inr1 (inl1 Fork))
       (fun child : bool => if child then denote p else denote (next tt))]%vector).
   { apply cons_pool_equ; [apply denote_fork_bind|apply pool_equ_refl]. }
-  rewrite (interp_schedule_rr_equ sh 1 _ _ (Some Fin.F1) 0 s Hpool).
-  erewrite interp_schedule_rr_fork by reflexivity.
+  rewrite (interp_schedule_fair_equ rr_scheduler sh 1 _ _ (Some Fin.F1) 0 s Hpool).
+  erewrite interp_schedule_fair_fork by reflexivity.
   reflexivity.
 Qed.
 
@@ -1134,7 +1135,7 @@ Proof.
   rewrite bind_ret_r, interp_state_ret in Hstate.
   rewrite interp_rr_write.
   csl_lift_handler_result Hstate.
-  rewrite bind_ret_l; reflexivity.
+  rewrite translate_ret, bind_ret_l; reflexivity.
 Qed.
 
 Lemma interp_nd_source_write_present n
@@ -1168,7 +1169,7 @@ Proof.
   rewrite bind_ret_r, interp_state_ret in Hstate.
   rewrite interp_rr_read.
   csl_lift_handler_result Hstate.
-  rewrite bind_ret_l; reflexivity.
+  rewrite translate_ret, bind_ret_l; reflexivity.
 Qed.
 
 Lemma interp_nd_source_read_value n
@@ -1194,7 +1195,7 @@ Lemma interp_rr_emit_log n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   tag value (K : option unit -> thread sE Bn) m memory ctx c :
   interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CEmit tag value) >>= K)) (Some i) m (memory,(ctx,c)) ~
-  (log (inr (stamp (tag,value) c) : CSLObs (nat * nat));;
+  (log (inl (inr (stamp (tag,value) c)) : CSLObs (nat * nat) + nat);;
    interp_schedule_rr sh (S n)
     (ts @ i := K (Some tt)) (Some i) m (memory,(ctx,S c))).
 Proof.
@@ -1203,8 +1204,8 @@ Proof.
   rewrite bind_ret_r in Hemit.
   setoid_rewrite interp_state_ret in Hemit.
   rewrite interp_rr_emit; unfold semit.
-  rewrite Hemit, bind_bind.
-  setoid_rewrite bind_ret_l; reflexivity.
+  rewrite Hemit, translate_log_bind, bind_bind.
+  setoid_rewrite translate_ret; setoid_rewrite bind_ret_l; reflexivity.
 Qed.
 
 Lemma interp_rr_cas_value n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
@@ -1226,13 +1227,13 @@ Proof.
       (fun x : bool => (Ret x : ctree sE Bn bool)) Lookup) as Hstate.
     rewrite bind_ret_r, interp_state_ret in Hstate.
     csl_lift_handler_result Hstate.
-    rewrite bind_ret_l; reflexivity.
+    rewrite translate_ret, bind_ret_l; reflexivity.
   - apply Nat.eqb_neq in Cmp.
     pose proof ((interp_heap_cas_failure (h_sum csl_context_handler (csl_emit_handler (A:=nat * nat)))) a expected desired current h allocs (ctx,c)
       (fun x : bool => (Ret x : ctree sE Bn bool)) Lookup Cmp) as Hstate.
     rewrite bind_ret_r, interp_state_ret in Hstate.
     csl_lift_handler_result Hstate.
-    rewrite bind_ret_l; reflexivity.
+    rewrite translate_ret, bind_ret_l; reflexivity.
 Qed.
 
 Lemma interp_rr_alloc_first n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
@@ -1246,11 +1247,9 @@ Lemma interp_rr_alloc_first n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
 Proof.
   intros Pos Base Free First.
   rewrite interp_rr_alloc.
-  unfold heap_alloc; rewrite interp_state_trigger, subevent_left; cbn [sh h_sum].
-  csl_monad_bind.
+  unfold heap_alloc; rewrite translate_interp_state_trigger_bind, subevent_left; cbn [sh h_sum].
   rewrite (heap_handler_alloc_first_guards h allocs size base (ctx,c) Pos Base Free First).
-  rewrite !bind_guards, guards_sbisim.
-  rewrite bind_ret_l, bind_guard, sb_guard, bind_ret_l; reflexivity.
+  rewrite translate_guards, translate_ret, bind_guards, guards_sbisim, bind_ret_l; reflexivity.
 Qed.
 
 (** Focused heap primitives on the fair runner, directly from the handler
@@ -1296,14 +1295,14 @@ Lemma interp_rr_read_missing n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   h a = None ->
   interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CRead a) >>= K)) (Some i) m ((h,allocs),(ctx,c)) ~
-  (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+  (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
 Proof.
   intro Missing.
   pose proof ((interp_heap_rd_stuck (h_sum csl_context_handler (csl_emit_handler (A:=nat * nat))))
     a h allocs (ctx,c) Missing) as Hstate.
   rewrite interp_rr_read.
   csl_lift_handler_result Hstate.
-  rewrite bind_stuck; reflexivity.
+  rewrite translate_stuck_node, bind_stuck; reflexivity.
 Qed.
 
 Lemma interp_rr_write_missing n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
@@ -1311,14 +1310,14 @@ Lemma interp_rr_write_missing n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   h a = None ->
   interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CWrite a v) >>= K)) (Some i) m ((h,allocs),(ctx,c)) ~
-  (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+  (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
 Proof.
   intro Missing.
   pose proof ((interp_heap_wr_stuck (h_sum csl_context_handler (csl_emit_handler (A:=nat * nat))))
     a v h allocs (ctx,c) Missing) as Hstate.
   rewrite interp_rr_write.
   csl_lift_handler_result Hstate.
-  rewrite bind_stuck; reflexivity.
+  rewrite translate_stuck_node, bind_stuck; reflexivity.
 Qed.
 
 Lemma interp_rr_cas_missing n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
@@ -1326,7 +1325,7 @@ Lemma interp_rr_cas_missing n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   h a = None ->
   interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) m ((h,allocs),(ctx,c)) ~
-  (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+  (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
 Proof.
   intro Missing.
   pose proof ((interp_heap_cas_missing (h_sum csl_context_handler (csl_emit_handler (A:=nat * nat))))
@@ -1334,7 +1333,7 @@ Proof.
   rewrite bind_ret_r in Hstate.
   rewrite interp_rr_cas.
   csl_lift_handler_result Hstate.
-  rewrite bind_stuck; reflexivity.
+  rewrite translate_stuck_node, bind_stuck; reflexivity.
 Qed.
 
 
@@ -1468,7 +1467,7 @@ Lemma interp_rr_free n (ts : pool sE Bn (S n)) (i : Fin.t (S n)) base
     (Some i) cursor (memory',(ctx,c)).
 Proof.
   intro Free.
-  rewrite (interp_schedule_rr_equ sh (S n) _ _ (Some i) cursor (memory,(ctx,c))
+  rewrite (interp_schedule_fair_equ rr_scheduler sh (S n) _ _ (Some i) cursor (memory,(ctx,c))
     (replace_pool_equ ts ts i _ _ (pool_equ_refl ts) (source_free_raw_heap_free base K))).
   exact (interp_rr_heap_free n ts i base (fun _ => K (Some tt)) cursor memory memory' ctx c Free).
 Qed.
@@ -1478,10 +1477,10 @@ Lemma interp_rr_free_invalid n (ts : pool sE Bn (S n)) (i : Fin.t (S n)) base
   managed_free memory base = None ->
   interp_schedule_rr sh (S n) (ts @ i := (denote_flow (CFree base) >>= K))
     (Some i) cursor (memory,(ctx,c)) ~
-  (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+  (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
 Proof.
   intro Invalid.
-  rewrite (interp_schedule_rr_equ sh (S n) _ _ (Some i) cursor (memory,(ctx,c))
+  rewrite (interp_schedule_fair_equ rr_scheduler sh (S n) _ _ (Some i) cursor (memory,(ctx,c))
     (replace_pool_equ ts ts i _ _ (pool_equ_refl ts) (source_free_raw_heap_free base K))).
   exact (interp_rr_heap_free_invalid n ts i base (fun _ => K (Some tt)) cursor memory ctx c Invalid).
 Qed.
@@ -1775,7 +1774,7 @@ Qed.
 
 Lemma anl_csl_rr_read n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a value (K : option nat -> thread sE Bn) m h allocs ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   h a = Some value ->
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CRead a) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AN ψ )> <->
@@ -1788,7 +1787,7 @@ Qed.
 
 Lemma anr_csl_rr_read n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a value (K : option nat -> thread sE Bn) m h allocs ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   h a = Some value ->
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CRead a) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AN ψ ]> <->
@@ -1801,7 +1800,7 @@ Qed.
 
 Lemma aul_csl_rr_read n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a value (K : option nat -> thread sE Bn) m h allocs ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   h a = Some value ->
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CRead a) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AU ψ )> <->
@@ -1814,7 +1813,7 @@ Qed.
 
 Lemma aur_csl_rr_read n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a value (K : option nat -> thread sE Bn) m h allocs ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   h a = Some value ->
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CRead a) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AU ψ ]> <->
@@ -1827,7 +1826,7 @@ Qed.
 
 Lemma ag_csl_rr_read n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a value (K : option nat -> thread sE Bn) m h allocs ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) :
   h a = Some value ->
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CRead a) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= AG φ )> <->
@@ -1905,7 +1904,7 @@ Qed.
 
 Lemma anl_csl_rr_write n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a v (K : option unit -> thread sE Bn) m h allocs ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   h a <> None ->
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CWrite a v) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AN ψ )> <->
@@ -1918,7 +1917,7 @@ Qed.
 
 Lemma anr_csl_rr_write n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a v (K : option unit -> thread sE Bn) m h allocs ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   h a <> None ->
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CWrite a v) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AN ψ ]> <->
@@ -1931,7 +1930,7 @@ Qed.
 
 Lemma aul_csl_rr_write n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a v (K : option unit -> thread sE Bn) m h allocs ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   h a <> None ->
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CWrite a v) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AU ψ )> <->
@@ -1944,7 +1943,7 @@ Qed.
 
 Lemma aur_csl_rr_write n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a v (K : option unit -> thread sE Bn) m h allocs ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   h a <> None ->
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CWrite a v) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AU ψ ]> <->
@@ -1957,7 +1956,7 @@ Qed.
 
 Lemma ag_csl_rr_write n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a v (K : option unit -> thread sE Bn) m h allocs ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) :
   h a <> None ->
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CWrite a v) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= AG φ )> <->
@@ -2037,7 +2036,7 @@ Qed.
 
 Lemma anl_csl_rr_free n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   base (K : option unit -> thread sE Bn) cursor (memory memory' : ManagedHeap) ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   managed_free memory base = Some memory' ->
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CFree base) >>= K)) (Some i) cursor (memory,(ctx,c))}, {w} |= φ AN ψ )> <->
@@ -2050,7 +2049,7 @@ Qed.
 
 Lemma anr_csl_rr_free n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   base (K : option unit -> thread sE Bn) cursor (memory memory' : ManagedHeap) ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   managed_free memory base = Some memory' ->
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CFree base) >>= K)) (Some i) cursor (memory,(ctx,c))}, {w} |= φ AN ψ ]> <->
@@ -2063,7 +2062,7 @@ Qed.
 
 Lemma aul_csl_rr_free n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   base (K : option unit -> thread sE Bn) cursor (memory memory' : ManagedHeap) ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   managed_free memory base = Some memory' ->
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CFree base) >>= K)) (Some i) cursor (memory,(ctx,c))}, {w} |= φ AU ψ )> <->
@@ -2076,7 +2075,7 @@ Qed.
 
 Lemma aur_csl_rr_free n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   base (K : option unit -> thread sE Bn) cursor (memory memory' : ManagedHeap) ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   managed_free memory base = Some memory' ->
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CFree base) >>= K)) (Some i) cursor (memory,(ctx,c))}, {w} |= φ AU ψ ]> <->
@@ -2089,7 +2088,7 @@ Qed.
 
 Lemma ag_csl_rr_free n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   base (K : option unit -> thread sE Bn) cursor (memory memory' : ManagedHeap) ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) :
   managed_free memory base = Some memory' ->
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CFree base) >>= K)) (Some i) cursor (memory,(ctx,c))}, {w} |= AG φ )> <->
@@ -2172,7 +2171,7 @@ Qed.
 
 Lemma anl_csl_rr_alloc n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   size base (K : option nat -> thread sE Bn) m h allocs ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   Nat.lt 0 size -> Nat.lt 0 base -> block_free h base size ->
   (forall j, Nat.lt 0 j -> Nat.lt j base -> ~ block_free h j size) ->
   (<( {interp_schedule_rr sh (S n)
@@ -2186,7 +2185,7 @@ Qed.
 
 Lemma anr_csl_rr_alloc n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   size base (K : option nat -> thread sE Bn) m h allocs ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   Nat.lt 0 size -> Nat.lt 0 base -> block_free h base size ->
   (forall j, Nat.lt 0 j -> Nat.lt j base -> ~ block_free h j size) ->
   (<[ {interp_schedule_rr sh (S n)
@@ -2200,7 +2199,7 @@ Qed.
 
 Lemma aul_csl_rr_alloc n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   size base (K : option nat -> thread sE Bn) m h allocs ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   Nat.lt 0 size -> Nat.lt 0 base -> block_free h base size ->
   (forall j, Nat.lt 0 j -> Nat.lt j base -> ~ block_free h j size) ->
   (<( {interp_schedule_rr sh (S n)
@@ -2214,7 +2213,7 @@ Qed.
 
 Lemma aur_csl_rr_alloc n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   size base (K : option nat -> thread sE Bn) m h allocs ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   Nat.lt 0 size -> Nat.lt 0 base -> block_free h base size ->
   (forall j, Nat.lt 0 j -> Nat.lt j base -> ~ block_free h j size) ->
   (<[ {interp_schedule_rr sh (S n)
@@ -2228,7 +2227,7 @@ Qed.
 
 Lemma ag_csl_rr_alloc n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   size base (K : option nat -> thread sE Bn) m h allocs ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) :
   Nat.lt 0 size -> Nat.lt 0 base -> block_free h base size ->
   (forall j, Nat.lt 0 j -> Nat.lt j base -> ~ block_free h j size) ->
   (<( {interp_schedule_rr sh (S n)
@@ -2327,7 +2326,7 @@ Qed.
 
 Lemma anl_csl_rr_cas n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a expected desired current (K : option bool -> thread sE Bn) m h allocs ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   h a = Some current ->
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AN ψ )> <->
@@ -2344,7 +2343,7 @@ Qed.
 
 Lemma anr_csl_rr_cas n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a expected desired current (K : option bool -> thread sE Bn) m h allocs ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   h a = Some current ->
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AN ψ ]> <->
@@ -2361,7 +2360,7 @@ Qed.
 
 Lemma aul_csl_rr_cas n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a expected desired current (K : option bool -> thread sE Bn) m h allocs ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   h a = Some current ->
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AU ψ )> <->
@@ -2378,7 +2377,7 @@ Qed.
 
 Lemma aur_csl_rr_cas n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a expected desired current (K : option bool -> thread sE Bn) m h allocs ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   h a = Some current ->
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AU ψ ]> <->
@@ -2395,7 +2394,7 @@ Qed.
 
 Lemma ag_csl_rr_cas n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   a expected desired current (K : option bool -> thread sE Bn) m h allocs ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) :
   h a = Some current ->
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CCAS (CLit a) (CLit expected) (CLit desired)) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= AG φ )> <->
@@ -2469,7 +2468,7 @@ Qed.
 
 Lemma anl_csl_rr_ret {A : Type} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (x : A) (K : option A -> thread sE Bn) m memory ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CRet x) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AN ψ )> <->
    (<( {interp_schedule_rr sh (S n)
@@ -2480,7 +2479,7 @@ Qed.
 
 Lemma anr_csl_rr_ret {A : Type} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (x : A) (K : option A -> thread sE Bn) m memory ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CRet x) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AN ψ ]> <->
    (<[ {interp_schedule_rr sh (S n)
@@ -2491,7 +2490,7 @@ Qed.
 
 Lemma aul_csl_rr_ret {A : Type} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (x : A) (K : option A -> thread sE Bn) m memory ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CRet x) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AU ψ )> <->
    (<( {interp_schedule_rr sh (S n)
@@ -2502,7 +2501,7 @@ Qed.
 
 Lemma aur_csl_rr_ret {A : Type} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (x : A) (K : option A -> thread sE Bn) m memory ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CRet x) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AU ψ ]> <->
    (<[ {interp_schedule_rr sh (S n)
@@ -2513,7 +2512,7 @@ Qed.
 
 Lemma ag_csl_rr_ret {A : Type} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (x : A) (K : option A -> thread sE Bn) m memory ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CRet x) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= AG φ )> <->
    (<( {interp_schedule_rr sh (S n)
@@ -2584,7 +2583,7 @@ Qed.
 
 Lemma anl_csl_rr_bind {A B : Type} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (p : CProg A) (next : A -> CProg B) (K : option B -> thread sE Bn) m memory ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CBind p next) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AN ψ )> <->
    (<( {interp_schedule_rr sh (S n)
@@ -2596,7 +2595,7 @@ Qed.
 
 Lemma anr_csl_rr_bind {A B : Type} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (p : CProg A) (next : A -> CProg B) (K : option B -> thread sE Bn) m memory ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CBind p next) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AN ψ ]> <->
    (<[ {interp_schedule_rr sh (S n)
@@ -2608,7 +2607,7 @@ Qed.
 
 Lemma aul_csl_rr_bind {A B : Type} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (p : CProg A) (next : A -> CProg B) (K : option B -> thread sE Bn) m memory ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CBind p next) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AU ψ )> <->
    (<( {interp_schedule_rr sh (S n)
@@ -2620,7 +2619,7 @@ Qed.
 
 Lemma aur_csl_rr_bind {A B : Type} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (p : CProg A) (next : A -> CProg B) (K : option B -> thread sE Bn) m memory ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CBind p next) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AU ψ ]> <->
    (<[ {interp_schedule_rr sh (S n)
@@ -2632,7 +2631,7 @@ Qed.
 
 Lemma ag_csl_rr_bind {A B : Type} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (p : CProg A) (next : A -> CProg B) (K : option B -> thread sE Bn) m memory ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CBind p next) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= AG φ )> <->
    (<( {interp_schedule_rr sh (S n)
@@ -2699,7 +2698,7 @@ Qed.
 
 Lemma anl_csl_rr_until_none {A : Type} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (body : CProg (option A)) (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CUntilNone body) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AN ψ )> <->
    (<( {interp_schedule_rr sh (S n)
@@ -2710,7 +2709,7 @@ Qed.
 
 Lemma anr_csl_rr_until_none {A : Type} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (body : CProg (option A)) (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CUntilNone body) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AN ψ ]> <->
    (<[ {interp_schedule_rr sh (S n)
@@ -2721,7 +2720,7 @@ Qed.
 
 Lemma aul_csl_rr_until_none {A : Type} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (body : CProg (option A)) (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CUntilNone body) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AU ψ )> <->
    (<( {interp_schedule_rr sh (S n)
@@ -2732,7 +2731,7 @@ Qed.
 
 Lemma aur_csl_rr_until_none {A : Type} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (body : CProg (option A)) (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CUntilNone body) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AU ψ ]> <->
    (<[ {interp_schedule_rr sh (S n)
@@ -2743,7 +2742,7 @@ Qed.
 
 Lemma ag_csl_rr_until_none {A : Type} n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (body : CProg (option A)) (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CUntilNone body) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= AG φ )> <->
    (<( {interp_schedule_rr sh (S n)
@@ -2809,7 +2808,7 @@ Qed.
 
 Lemma anl_csl_rr_fork n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (child : CProg unit) (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CFork child) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AN ψ )> <->
    (<( {interp_schedule_rr sh (S (S n))
@@ -2820,7 +2819,7 @@ Qed.
 
 Lemma anr_csl_rr_fork n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (child : CProg unit) (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CFork child) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AN ψ ]> <->
    (<[ {interp_schedule_rr sh (S (S n))
@@ -2831,7 +2830,7 @@ Qed.
 
 Lemma aul_csl_rr_fork n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (child : CProg unit) (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CFork child) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AU ψ )> <->
    (<( {interp_schedule_rr sh (S (S n))
@@ -2842,7 +2841,7 @@ Qed.
 
 Lemma aur_csl_rr_fork n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (child : CProg unit) (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CFork child) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AU ψ ]> <->
    (<[ {interp_schedule_rr sh (S (S n))
@@ -2853,7 +2852,7 @@ Qed.
 
 Lemma ag_csl_rr_fork n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (child : CProg unit) (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CFork child) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= AG φ )> <->
    (<( {interp_schedule_rr sh (S (S n))
@@ -2947,14 +2946,14 @@ Qed.
 
 Lemma anl_csl_rr_emit n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   tag value (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CEmit tag value) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AN ψ )> <->
-   (<( {log (inr (stamp (tag,value) c) : CSLObs (nat * nat));;
+   (<( {log (inl (inr (stamp (tag,value) c)) : CSLObs (nat * nat) + nat);;
     interp_schedule_rr sh (S n)
     (ts @ i := K (Some tt)) (Some i) m (memory,(ctx,S c))}, {w} |= φ )> /\
     <( {interp_schedule_rr sh (S n)
-    (ts @ i := K (Some tt)) (Some i) m (memory,(ctx,S c))}, {Obs (Log (inr (stamp (tag,value) c) : CSLObs (nat * nat))) tt} |= ψ )>)).
+    (ts @ i := K (Some tt)) (Some i) m (memory,(ctx,S c))}, {Obs (Log (inl (inr (stamp (tag,value) c) : CSLObs (nat * nat)))) tt} |= ψ )>)).
 Proof.
   rewrite interp_rr_emit_log.
   apply anl_log_iff.
@@ -2962,14 +2961,14 @@ Qed.
 
 Lemma anr_csl_rr_emit n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   tag value (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CEmit tag value) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AN ψ ]> <->
-   (<( {log (inr (stamp (tag,value) c) : CSLObs (nat * nat));;
+   (<( {log (inl (inr (stamp (tag,value) c)) : CSLObs (nat * nat) + nat);;
     interp_schedule_rr sh (S n)
     (ts @ i := K (Some tt)) (Some i) m (memory,(ctx,S c))}, {w} |= φ )> /\
     <[ {interp_schedule_rr sh (S n)
-    (ts @ i := K (Some tt)) (Some i) m (memory,(ctx,S c))}, {Obs (Log (inr (stamp (tag,value) c) : CSLObs (nat * nat))) tt} |= ψ ]>)).
+    (ts @ i := K (Some tt)) (Some i) m (memory,(ctx,S c))}, {Obs (Log (inl (inr (stamp (tag,value) c) : CSLObs (nat * nat)))) tt} |= ψ ]>)).
 Proof.
   rewrite interp_rr_emit_log.
   apply anr_log_iff.
@@ -2977,17 +2976,17 @@ Qed.
 
 Lemma aul_csl_rr_emit n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   tag value (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CEmit tag value) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AU ψ )> <->
-   (<( {log (inr (stamp (tag,value) c) : CSLObs (nat * nat));;
+   (<( {log (inl (inr (stamp (tag,value) c)) : CSLObs (nat * nat) + nat);;
     interp_schedule_rr sh (S n)
     (ts @ i := K (Some tt)) (Some i) m (memory,(ctx,S c))}, {w} |= ψ )> \/
-   (<( {log (inr (stamp (tag,value) c) : CSLObs (nat * nat));;
+   (<( {log (inl (inr (stamp (tag,value) c)) : CSLObs (nat * nat) + nat);;
     interp_schedule_rr sh (S n)
     (ts @ i := K (Some tt)) (Some i) m (memory,(ctx,S c))}, {w} |= φ )> /\
     <( {interp_schedule_rr sh (S n)
-    (ts @ i := K (Some tt)) (Some i) m (memory,(ctx,S c))}, {Obs (Log (inr (stamp (tag,value) c) : CSLObs (nat * nat))) tt} |= φ AU ψ )>))).
+    (ts @ i := K (Some tt)) (Some i) m (memory,(ctx,S c))}, {Obs (Log (inl (inr (stamp (tag,value) c) : CSLObs (nat * nat)))) tt} |= φ AU ψ )>))).
 Proof.
   rewrite interp_rr_emit_log.
   apply aul_log_iff.
@@ -2995,17 +2994,17 @@ Qed.
 
 Lemma aur_csl_rr_emit n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   tag value (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CEmit tag value) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AU ψ ]> <->
-   (<[ {log (inr (stamp (tag,value) c) : CSLObs (nat * nat));;
+   (<[ {log (inl (inr (stamp (tag,value) c)) : CSLObs (nat * nat) + nat);;
     interp_schedule_rr sh (S n)
     (ts @ i := K (Some tt)) (Some i) m (memory,(ctx,S c))}, {w} |= ψ ]> \/
-   (<( {log (inr (stamp (tag,value) c) : CSLObs (nat * nat));;
+   (<( {log (inl (inr (stamp (tag,value) c)) : CSLObs (nat * nat) + nat);;
     interp_schedule_rr sh (S n)
     (ts @ i := K (Some tt)) (Some i) m (memory,(ctx,S c))}, {w} |= φ )> /\
     <[ {interp_schedule_rr sh (S n)
-    (ts @ i := K (Some tt)) (Some i) m (memory,(ctx,S c))}, {Obs (Log (inr (stamp (tag,value) c) : CSLObs (nat * nat))) tt} |= φ AU ψ ]>))).
+    (ts @ i := K (Some tt)) (Some i) m (memory,(ctx,S c))}, {Obs (Log (inl (inr (stamp (tag,value) c) : CSLObs (nat * nat)))) tt} |= φ AU ψ ]>))).
 Proof.
   rewrite interp_rr_emit_log.
   apply aur_log_iff.
@@ -3013,14 +3012,14 @@ Qed.
 
 Lemma ag_csl_rr_emit n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   tag value (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CEmit tag value) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= AG φ )> <->
-   (<( {log (inr (stamp (tag,value) c) : CSLObs (nat * nat));;
+   (<( {log (inl (inr (stamp (tag,value) c)) : CSLObs (nat * nat) + nat);;
     interp_schedule_rr sh (S n)
     (ts @ i := K (Some tt)) (Some i) m (memory,(ctx,S c))}, {w} |= φ )> /\
     <( {interp_schedule_rr sh (S n)
-    (ts @ i := K (Some tt)) (Some i) m (memory,(ctx,S c))}, {Obs (Log (inr (stamp (tag,value) c) : CSLObs (nat * nat))) tt} |= AG φ )>)).
+    (ts @ i := K (Some tt)) (Some i) m (memory,(ctx,S c))}, {Obs (Log (inl (inr (stamp (tag,value) c) : CSLObs (nat * nat)))) tt} |= AG φ )>)).
 Proof.
   rewrite interp_rr_emit_log.
   apply ag_log_iff.
@@ -3112,17 +3111,18 @@ Proof.
   apply ag_csl_nd_select.
 Qed.
 
-(** A round-robin yield costs the scheduler's one visible [Step] before the
+(** A round-robin yield costs the scheduler's one logged pick before the
     picked slot runs: the shapes mirror [anl/anr/aul/aur/ag_csl_rr_select]. *)
 Lemma anl_csl_rr_yield n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
    (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CYield) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AN ψ )> <->
-   (<( {Step (interp_schedule_rr sh (S n)
+   (<( {Vis (Log (inr (slot_index (rr_pick n m)))) (fun _ => interp_schedule_rr sh (S n)
     (ts @ i := K (Some tt)) (Some (rr_pick n m)) (S m) (memory,(ctx,c)))}, {w} |= φ )> /\
     <( {interp_schedule_rr sh (S n)
-    (ts @ i := K (Some tt)) (Some (rr_pick n m)) (S m) (memory,(ctx,c))}, {w} |= ψ )>)).
+    (ts @ i := K (Some tt)) (Some (rr_pick n m)) (S m) (memory,(ctx,c))},
+      {Obs (Log (inr (slot_index (rr_pick n m)))) tt} |= ψ )>)).
 Proof.
   rewrite interp_rr_yield.
   apply anl_csl_rr_select.
@@ -3130,13 +3130,14 @@ Qed.
 
 Lemma anr_csl_rr_yield n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
    (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CYield) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AN ψ ]> <->
-   (<( {Step (interp_schedule_rr sh (S n)
+   (<( {Vis (Log (inr (slot_index (rr_pick n m)))) (fun _ => interp_schedule_rr sh (S n)
     (ts @ i := K (Some tt)) (Some (rr_pick n m)) (S m) (memory,(ctx,c)))}, {w} |= φ )> /\
     <[ {interp_schedule_rr sh (S n)
-    (ts @ i := K (Some tt)) (Some (rr_pick n m)) (S m) (memory,(ctx,c))}, {w} |= ψ ]>)).
+    (ts @ i := K (Some tt)) (Some (rr_pick n m)) (S m) (memory,(ctx,c))},
+      {Obs (Log (inr (slot_index (rr_pick n m)))) tt} |= ψ ]>)).
 Proof.
   rewrite interp_rr_yield.
   apply anr_csl_rr_select.
@@ -3144,15 +3145,16 @@ Qed.
 
 Lemma aul_csl_rr_yield n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
    (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CYield) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AU ψ )> <->
-   (<( {Step (interp_schedule_rr sh (S n)
+   (<( {Vis (Log (inr (slot_index (rr_pick n m)))) (fun _ => interp_schedule_rr sh (S n)
     (ts @ i := K (Some tt)) (Some (rr_pick n m)) (S m) (memory,(ctx,c)))}, {w} |= ψ )> \/
-   (<( {Step (interp_schedule_rr sh (S n)
+   (<( {Vis (Log (inr (slot_index (rr_pick n m)))) (fun _ => interp_schedule_rr sh (S n)
     (ts @ i := K (Some tt)) (Some (rr_pick n m)) (S m) (memory,(ctx,c)))}, {w} |= φ )> /\
     <( {interp_schedule_rr sh (S n)
-    (ts @ i := K (Some tt)) (Some (rr_pick n m)) (S m) (memory,(ctx,c))}, {w} |= φ AU ψ )>))).
+    (ts @ i := K (Some tt)) (Some (rr_pick n m)) (S m) (memory,(ctx,c))},
+      {Obs (Log (inr (slot_index (rr_pick n m)))) tt} |= φ AU ψ )>))).
 Proof.
   rewrite interp_rr_yield.
   apply aul_csl_rr_select.
@@ -3160,15 +3162,16 @@ Qed.
 
 Lemma aur_csl_rr_yield n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
    (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CYield) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AU ψ ]> <->
-   (<[ {Step (interp_schedule_rr sh (S n)
+   (<[ {Vis (Log (inr (slot_index (rr_pick n m)))) (fun _ => interp_schedule_rr sh (S n)
     (ts @ i := K (Some tt)) (Some (rr_pick n m)) (S m) (memory,(ctx,c)))}, {w} |= ψ ]> \/
-   (<( {Step (interp_schedule_rr sh (S n)
+   (<( {Vis (Log (inr (slot_index (rr_pick n m)))) (fun _ => interp_schedule_rr sh (S n)
     (ts @ i := K (Some tt)) (Some (rr_pick n m)) (S m) (memory,(ctx,c)))}, {w} |= φ )> /\
     <[ {interp_schedule_rr sh (S n)
-    (ts @ i := K (Some tt)) (Some (rr_pick n m)) (S m) (memory,(ctx,c))}, {w} |= φ AU ψ ]>))).
+    (ts @ i := K (Some tt)) (Some (rr_pick n m)) (S m) (memory,(ctx,c))},
+      {Obs (Log (inr (slot_index (rr_pick n m)))) tt} |= φ AU ψ ]>))).
 Proof.
   rewrite interp_rr_yield.
   apply aur_csl_rr_select.
@@ -3176,13 +3179,14 @@ Qed.
 
 Lemma ag_csl_rr_yield n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
    (K : option unit -> thread sE Bn) m memory ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CYield) >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= AG φ )> <->
-   (<( {Step (interp_schedule_rr sh (S n)
+   (<( {Vis (Log (inr (slot_index (rr_pick n m)))) (fun _ => interp_schedule_rr sh (S n)
     (ts @ i := K (Some tt)) (Some (rr_pick n m)) (S m) (memory,(ctx,c)))}, {w} |= φ )> /\
     <( {interp_schedule_rr sh (S n)
-    (ts @ i := K (Some tt)) (Some (rr_pick n m)) (S m) (memory,(ctx,c))}, {w} |= AG φ )>)).
+    (ts @ i := K (Some tt)) (Some (rr_pick n m)) (S m) (memory,(ctx,c))},
+      {Obs (Log (inr (slot_index (rr_pick n m)))) tt} |= AG φ )>)).
 Proof.
   rewrite interp_rr_yield.
   apply ag_csl_rr_select.
@@ -3297,7 +3301,7 @@ Qed.
 
 Lemma anl_csl_rr_alloc_finite n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   size (K : option nat -> thread sE Bn) m h allocs ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   heap_finite h -> Nat.lt 0 size ->
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CAlloc size) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AN ψ )> <->
@@ -3318,7 +3322,7 @@ Qed.
 
 Lemma anr_csl_rr_alloc_finite n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   size (K : option nat -> thread sE Bn) m h allocs ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   heap_finite h -> Nat.lt 0 size ->
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CAlloc size) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AN ψ ]> <->
@@ -3339,7 +3343,7 @@ Qed.
 
 Lemma aul_csl_rr_alloc_finite n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   size (K : option nat -> thread sE Bn) m h allocs ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   heap_finite h -> Nat.lt 0 size ->
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CAlloc size) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AU ψ )> <->
@@ -3360,7 +3364,7 @@ Qed.
 
 Lemma aur_csl_rr_alloc_finite n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   size (K : option nat -> thread sE Bn) m h allocs ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   heap_finite h -> Nat.lt 0 size ->
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CAlloc size) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= φ AU ψ ]> <->
@@ -3381,7 +3385,7 @@ Qed.
 
 Lemma ag_csl_rr_alloc_finite n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   size (K : option nat -> thread sE Bn) m h allocs ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) :
   heap_finite h -> Nat.lt 0 size ->
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CAlloc size) >>= K)) (Some i) m ((h,allocs),(ctx,c))}, {w} |= AG φ )> <->
@@ -3461,7 +3465,7 @@ Proof.
     apply ktrans_vis in Htr as ([] & -> & Heq & Hnd).
     rewrite <- Heq.
     rewrite interp_rr_ret.
-    erewrite interp_schedule_rr_guard by reflexivity.
+    erewrite interp_schedule_fair_guard by reflexivity.
     cbn [Vector.replace].
     apply CIH.
     constructor.
@@ -3528,12 +3532,9 @@ Proof.
   assert (Hguard : run_rr p s ≅ Guard (run_rr p s)).
   { rewrite run_rr_unfold.
     etransitivity.
-    - apply (interp_schedule_rr_equ sh 1 _ [Guard (denote p)]).
+    - apply (interp_schedule_fair_equ rr_scheduler sh 1 _ [Guard (denote p)]).
       apply cons_pool_equ; [exact Hraw | apply pool_equ_refl].
-    - unfold interp_schedule_rr.
-      rewrite unfold_run_round_robin,
-        (schedule_focused_guard 0 [Guard (denote p)] Fin.F1 (denote p) eq_refl).
-      rewrite interp_erase_guard, interp_state_guard.
+    - rewrite (interp_schedule_fair_guard_exact rr_scheduler sh 0 [Guard (denote p)] Fin.F1 (denote p) 0 s eq_refl).
       reflexivity. }
   exact (guard_fixed_no_ag _ _ _ Hguard).
 Qed.
@@ -4193,15 +4194,18 @@ Proof. exact (segment_pool_nd_loop sh n (csl_pool ps) i s logs s'). Qed.
 Lemma run_rr_pool_turn {n} (ps : Vector.t (CProg unit) (S n)) (i : Fin.t (S n))
   cursor (s s' : SSig) logs :
   segment_to sh csl_equ (csl_pool ps $ i) s logs (csl_pool ps $ i) s' ->
-  run_rr_pool ps (Some i) cursor s ~ emit_list logs (run_rr_pool ps None cursor s').
-Proof. exact (segment_pool_rr_loop sh n (csl_pool ps) i cursor s logs s'). Qed.
+  run_rr_pool ps (Some i) cursor s ~
+  emit_list (List.map inl logs) (run_rr_pool ps None cursor s').
+Proof. exact (segment_pool_fair_loop rr_scheduler sh n (csl_pool ps) i cursor s logs s'). Qed.
 
 Lemma run_nd_pool_select {n} (ps : Vector.t (CProg unit) (S n)) (s : SSig) :
   run_nd_pool ps None s ~ brS (branchn (S n)) (fun i => run_nd_pool ps (Some i) s).
 Proof. exact (interp_schedule_nd_select sh n (csl_pool ps) s). Qed.
 
 Lemma run_rr_pool_select {n} (ps : Vector.t (CProg unit) (S n)) cursor (s : SSig) :
-  run_rr_pool ps None cursor s ~ Step (run_rr_pool ps (Some (rr_pick n cursor)) (S cursor) s).
+  run_rr_pool ps None cursor s ~
+  Vis (Log (inr (slot_index (rr_pick n cursor))))
+    (fun _ => run_rr_pool ps (Some (rr_pick n cursor)) (S cursor) s).
 Proof. exact (interp_schedule_rr_select sh n (csl_pool ps) cursor s). Qed.
 
 Lemma ag_csl_nd_invariance {G n} (ps : Vector.t (CProg unit) (S n))
@@ -4214,7 +4218,7 @@ Lemma ag_csl_nd_invariance {G n} (ps : Vector.t (CProg unit) (S n))
 Proof. exact (ag_pool_nd_invariance sh (csl_pool ps) Inv φ). Qed.
 
 Lemma ag_csl_rr_invariance {G n} (ps : Vector.t (CProg unit) (S n))
-    (Inv : G -> SSig -> Prop) (φ : ticllW (CSLObs (nat * nat))) :
+    (Inv : G -> SSig -> Prop) (φ : ticllW (CSLObs (nat * nat) + nat)) :
   ClosedTurns sh (csl_pool ps) Inv ->
   (forall g s focus cursor w, Inv g s -> not_done w ->
      <( {run_rr_pool ps focus cursor s}, {w} |= φ )>) ->
@@ -4235,7 +4239,7 @@ Lemma aul_csl_rr_eventually {G V n} (ps : Vector.t (CProg unit) (S n))
     (P : CSLObs (nat * nat) -> Prop) :
   well_founded ltV -> RankedTurns sh (csl_pool ps) Inv rank ltV P ->
   forall g s focus cursor w, Inv g s -> not_done w ->
-    <( {run_rr_pool ps focus cursor s}, {w} |= AF visW {P} )>.
+    <( {run_rr_pool ps focus cursor s}, {w} |= AF visW {fair_obs P} )>.
 Proof. exact (aul_pool_rr_eventually sh (csl_pool ps) Inv rank ltV P). Qed.
 
 (** *** Two-child startup
@@ -4278,7 +4282,7 @@ Proof.
   rewrite interp_rr_bind, interp_rr_fork; cbv beta iota.
   rewrite replace_cons, interp_rr_bind, interp_rr_fork; cbv beta iota.
   rewrite replace_cons, interp_rr_ret; cbv beta iota.
-  rewrite (interp_schedule_rr_ret sh 2 _ (Fin.FS (Fin.FS Fin.F1)) 0 s) by reflexivity.
+  rewrite (interp_schedule_fair_ret rr_scheduler sh 2 _ (Fin.FS (Fin.FS Fin.F1)) 0 s) by reflexivity.
   cbn [Vector.replace Vector.caseS'].
   rewrite !vector_remove_tail, vector_remove_head.
   reflexivity.

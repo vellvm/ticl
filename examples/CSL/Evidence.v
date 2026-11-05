@@ -29,8 +29,8 @@ From examples Require Import
   CSL.Allocator.Counterexamples
   CSL.Frame.Separation.
 
-Check TICL.CTree.Interp.CSL.Frame.csim_interp_sh_frame.
-Print Assumptions TICL.CTree.Interp.CSL.Frame.csim_interp_sh_frame.
+Check TICL.CTree.Interp.CSL.Frame.csim_interp_frame.
+Print Assumptions TICL.CTree.Interp.CSL.Frame.csim_interp_frame.
 
 Check TICL.CTree.Interp.CSL.Frame.ticll_csl_frame.
 Print Assumptions TICL.CTree.Interp.CSL.Frame.ticll_csl_frame.
@@ -149,6 +149,9 @@ Print Assumptions examples.HiddenBr.refine_rr_branch10_zero.
 Check examples.HiddenBr.refine_rr_not_sbisim_congruent.
 Print Assumptions examples.HiddenBr.refine_rr_not_sbisim_congruent.
 
+Check examples.HiddenBr.rr_preserves_thread_branch.
+Print Assumptions examples.HiddenBr.rr_preserves_thread_branch.
+
 Check examples.CSL.Allocator.Execution.allocator_simulation.
 Print Assumptions examples.CSL.Allocator.Execution.allocator_simulation.
 
@@ -173,8 +176,8 @@ Print Assumptions TICL.Logic.Simulation.ticll_sim.
 Check TICL.Logic.Simulation.ticlr_sim.
 Print Assumptions TICL.Logic.Simulation.ticlr_sim.
 
-Check TICL.CTree.Interp.Yield.RoundRobin.interp_schedule_rr_user_bind.
-Print Assumptions TICL.CTree.Interp.Yield.RoundRobin.interp_schedule_rr_user_bind.
+Check TICL.CTree.Interp.Yield.Policy.interp_schedule_fair_user_bind.
+Print Assumptions TICL.CTree.Interp.Yield.Policy.interp_schedule_fair_user_bind.
 
 Check TICL.Lang.CoCSL.Mod.run_rr_fork_bind.
 Print Assumptions TICL.Lang.CoCSL.Mod.run_rr_fork_bind.

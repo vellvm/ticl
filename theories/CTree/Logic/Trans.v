@@ -6,6 +6,8 @@ From Stdlib Require Import
 From TICL Require Import
   CTree.Core
   CTree.Events.Writer
+  CTree.Interp.Yield.Mod
+  Utils.Vectors
   Logic.Kripke
   Logic.Setoid.
 
@@ -172,6 +174,18 @@ Section CTreeTrans.
       + apply KtransFinish; eapply trans_br; eauto; reflexivity.
   Qed.
   Hint Resolve ktrans_br: ticl.
+
+  (** Policy alternatives: a single alternative is the body itself, more are
+      a delayed branch; either way a step of [br_alts] is a step of one
+      alternative. *)
+  Lemma ktrans_br_alts {X} `{Bn -< B}: forall m (k: Fin.t (S m) -> ctree E B X) (t: ctree E B X) w w',
+      |br_alts m k, w| ↦ |t, w'| <-> (exists a, |k a, w| ↦ |t, w'|).
+  Proof.
+    intros [|m] k t w w'; cbn [br_alts].
+    - split; [intro TR; exists Fin.F1; exact TR|].
+      intros (a & TR); rewrite (fin1_eq a) in TR; exact TR.
+    - apply ktrans_br.
+  Qed.
 
   (** [Step t] is a single [τ] step. *)
   Lemma ktrans_step {X}: forall (t t': ctree E B X) w w',

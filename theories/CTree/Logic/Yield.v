@@ -21,6 +21,7 @@ From TICL Require Import
   CTree.Interp.State.Mod
   CTree.Interp.Yield.Mod
   CTree.Interp.Yield.Nondeterministic
+  CTree.Interp.Yield.Policy
   CTree.Interp.Yield.RoundRobin
   CTree.Interp.Yield.Segments
   CTree.Interp.Yield.Execution
@@ -313,146 +314,11 @@ Section RawThreadRules.
   Qed.
 End RawThreadRules.
 
-(** ** Recurrence for repeating turn batches.
-
-    The turn-structured twin of [CTree.Logic.Trace.emit_batches_agaf]: every
-    turn is one visible [Step] carrying at most one observation. *)
-Section EmitTurnBatches.
-  Context {W I X : Type} {B : Type -> Type}
-    (batch : I -> list (option W)) (next : I -> I)
-    (Inv : I -> Prop) (rank : I -> nat) (P : W -> Prop)
-    (Hnext : forall i, Inv i -> Inv (next i))
-    (Hnonempty : forall i, Inv i -> batch i <> Datatypes.nil)
-    (Hprogress : forall i, Inv i ->
-      (exists o, List.In (Some o) (batch i) /\ P o) \/ rank (next i) < rank i).
-
-  Local Lemma after_logs_app (xs ys : list W) w :
-    after_logs (xs ++ ys) w = after_logs ys (after_logs xs w).
-  Proof.
-    revert w; induction xs as [|o xs IH]; intro w; cbn [after_logs List.app];
-      [reflexivity | apply IH].
-  Qed.
-
-  Local Lemma afr_emit_list {Y} xs (t : ctreeW W B Y) w (Q : Y -> World (writerE W) -> Prop) :
-    not_done w ->
-    <[ t, {after_logs xs w} |= AF ret {Q} ]> ->
-    <[ {emit_list xs t}, w |= AF ret {Q} ]>.
-  Proof.
-    revert w; induction xs as [|o rest IH]; intros w Hd H; [exact H|].
-    change <[ {log o ;; emit_list rest t}, w |= AF ret {Q} ]>.
-    apply afr_log; [exact Hd|].
-    apply IH; [constructor|exact H].
-  Qed.
-
-  Lemma af_emit_turns {Y} turns (t : ctreeW W B Y) w :
-    not_done w ->
-    <( t, {after_logs (List.flat_map event_obs turns) w} |= AF visW {P} )> ->
-    <( {emit_turns turns t}, w |= AF visW {P} )>.
-  Proof.
-    revert w; induction turns as [|ev rest IH]; intros w Hd H; [exact H|].
-    cbn [emit_turns List.flat_map] in *.
-    rewrite after_logs_app in H.
-    apply aul_step; right; split; [apply ticll_top; exact Hd|].
-    apply af_emit_list; [exact Hd|].
-    apply IH; [apply after_logs_not_done; exact Hd|exact H].
-  Qed.
-
-  Lemma af_emit_turns_member {Y} turns (t : ctreeW W B Y) w o :
-    not_done w -> List.In (Some o) turns -> P o ->
-    <( {emit_turns turns t}, w |= AF visW {P} )>.
-  Proof.
-    revert w; induction turns as [|ev rest IH]; intros w Hd Hin HP;
-      [contradiction|].
-    cbn [emit_turns].
-    apply aul_step; right; split; [apply ticll_top; exact Hd|].
-    destruct Hin as [Heq|Hin]; [subst ev|].
-    - apply af_emit_list_member with o; [exact Hd|left; reflexivity|exact HP].
-    - apply af_emit_list; [exact Hd|].
-      apply IH; [apply after_logs_not_done; exact Hd|exact Hin|exact HP].
-  Qed.
-
-  Lemma af_emit_turns_ret {Y} turns (r : Y) w (Q : Y -> World (writerE W) -> Prop) :
-    not_done w -> Q r (after_logs (List.flat_map event_obs turns) w) ->
-    <[ {emit_turns turns (Ret r) : ctreeW W B Y}, w |= AF ret {Q} ]>.
-  Proof.
-    revert w; induction turns as [|ev rest IH]; intros w Hd HQ.
-    - cleft; apply ret_ret; assumption.
-    - cbn [emit_turns List.flat_map] in *.
-      rewrite after_logs_app in HQ.
-      apply aur_step; right; split; [apply ticll_top; exact Hd|].
-      apply afr_emit_list; [exact Hd|].
-      apply IH; [apply after_logs_not_done; exact Hd|exact HQ].
-  Qed.
-
-  Lemma emit_turn_batches_af : forall i w, Inv i -> not_done w ->
-    <( {(emit_turn_batches batch next i : ctreeW W B X)}, {w} |= AF visW {P} )>.
-  Proof.
-    intros i w Hi Hd; unfold emit_turn_batches.
-    eapply aul_iter_nat with (Ri := fun j (_ : World (writerE W)) => Inv j)
-      (f := fun j (_ : World (writerE W)) => rank j).
-    - exact Hd.
-    - exact Hi.
-    - intros j v Hv Hj.
-      destruct (Hprogress j Hj) as [(o & Hin & HP) | Hlt].
-      + left; eapply af_emit_turns_member; [exact Hv | exact Hin | exact HP].
-      + right; apply af_emit_turns_ret; [exact Hv |].
-        exists (next j); split; [reflexivity |].
-        split; [apply after_logs_not_done; exact Hv |].
-        split; [apply Hnext; exact Hj | exact Hlt].
-  Qed.
-
-  (** The coinductive invariant: a tree bisimilar to a remaining log prefix,
-      then a remaining turn suffix of the current batch, then the loop.  Each
-      step is guarded by a real log or a real turn step. *)
-  Lemma emit_turn_batches_agaf : forall i w, Inv i -> not_done w ->
-    <( {(emit_turn_batches batch next i : ctreeW W B X)}, {w} |= AG (AF visW {P}) )>.
-  Proof.
-    intros i w Hi Hd.
-    assert (Hsuffix : forall (t : ctreeW W B X) v,
-      (exists j logs suffix, Inv j /\ not_done v /\
-        t ~ emit_list logs (emit_turns suffix (emit_turn_batches batch next j : ctreeW W B X))) ->
-      <( t, v |= AG (AF visW {P}) )>).
-    { coinduction R CIH; intros t v (j & logs & suffix & Hj & Hv & Ht).
-      assert (Haf : <( t, v |= AF visW {P} )>).
-      { rewrite Ht; apply af_emit_list; [exact Hv|].
-        apply af_emit_turns; [apply after_logs_not_done; exact Hv|].
-        apply emit_turn_batches_af; [exact Hj|].
-        apply after_logs_not_done, after_logs_not_done; exact Hv. }
-      destruct logs as [|o logs].
-      - (* no pending log: the next turn is a visible step *)
-        assert (Hexp : exists ev rest j', Inv j' /\
-          t ~ Step (emit_list (event_obs ev)
-                 (emit_turns rest (emit_turn_batches batch next j' : ctreeW W B X)))).
-        { destruct suffix as [|ev rest].
-          - destruct (batch j) as [|ev rest] eqn:Eb; [exfalso; exact (Hnonempty j Hj Eb)|].
-            exists ev, rest, (next j); split; [apply Hnext, Hj|].
-            rewrite Ht; unfold emit_list; cbn [List.fold_right emit_turns].
-            rewrite emit_turn_batches_unfold_sbisim, Eb; reflexivity.
-          - exists ev, rest, j; split; [exact Hj|exact Ht]. }
-        destruct Hexp as (ev & rest & j' & Hj' & Ht').
-        rewrite Ht'; rewrite Ht' in Haf; split; [exact Haf|]; split.
-        + apply can_step_step; exact Hv.
-        + intros t' w' Htr.
-          apply ktrans_step in Htr as (Heq & <- & _).
-          rewrite Heq; apply CIH; exists j', (event_obs ev), rest.
-          split; [exact Hj'|]; split; [exact Hv|reflexivity].
-      - (* a pending log is a visible observation *)
-        rewrite Ht, emit_list_cons; rewrite Ht, emit_list_cons in Haf; split; [exact Haf|]; split.
-        + apply can_step_vis; [exact tt|exact Hv].
-        + intros t' w' Htr.
-          apply ktrans_vis in Htr as ([] & -> & Heq & _).
-          rewrite <- Heq; apply CIH; exists j, logs, suffix.
-          split; [exact Hj|]; split; [constructor|reflexivity]. }
-    apply Hsuffix; exists i, Datatypes.nil, Datatypes.nil.
-    split; [exact Hi|]; split; [exact Hd|reflexivity].
-  Qed.
-End EmitTurnBatches.
-
 (** ** Round-robin recurrence from executable cycle certificates.
 
     The top-level entry point for clients holding finite RR cycle runs
     rather than a preconstructed log loop: transport through
-    [model_rr_emit_batches], then [emit_turn_batches_agaf]. *)
+    [model_rr_emit_batches], then [emit_batches_agaf]. *)
 Section ModelRRRecurrence.
   Context {St Act W X I : Type} {B : Type -> Type}
     (n : nat) (actor : Fin.t (S n) -> Act)
@@ -472,13 +338,18 @@ Section ModelRRRecurrence.
       (exists o, List.In (Some o) (batch i) /\ P o) \/ rank (next i) < rank i).
 
   Lemma model_rr_agaf : forall i w, Inv i -> not_done w ->
-    <( {(model_rr n actor step (boundary i) cursor : ctreeW W B X)}, {w}
-      |= AG (AF visW {P}) )>.
+    <( {(model_rr n actor step (boundary i) cursor : ctreeW (W + nat) B X)}, {w}
+      |= AG (AF visW {fair_obs P}) )>.
   Proof.
     intros i w Hi Hd.
     rewrite (model_rr_emit_batches n actor step R Hstep boundary batch next Inv
       cursor period Hcursor Hnext Hnonempty Hcycle i Hi).
-    exact (emit_turn_batches_agaf batch next Inv rank P Hnext Hnonempty Hprogress i w Hi Hd).
+    apply (emit_batches_agaf (fun j => rr_run_obs n cursor (batch j)) next Inv rank (fair_obs P) Hnext).
+    - intros j Hj Hnil; apply (Hnonempty j Hj), (proj1 (rr_run_obs_nil_iff n cursor (batch j))), Hnil.
+    - intros j Hj; destruct (Hprogress j Hj) as [(o & Hin & HP)|Hlt]; [left|right; exact Hlt].
+      exists (inl o); split; [apply in_rr_run_obs; exact Hin|exact HP].
+    - exact Hi.
+    - exact Hd.
   Qed.
 End ModelRRRecurrence.
 
@@ -583,7 +454,8 @@ Section PoolRules.
   Qed.
 End PoolRules.
 
-(** The round-robin scheduler refines finite branches, so it lives at [Bn]. *)
+(** The round-robin runner lives at [Bn]; its observations are the program's
+    under [inl] and the scheduling decisions under [inr]. *)
 Section PoolRulesRR.
   Context {E : Type -> Type} {W Sigma : Type}
     (handler : E ~> stateT Sigma (ctreeW W Bn)).
@@ -591,7 +463,7 @@ Section PoolRulesRR.
   Abbreviation exactW := (fun X (t u : ctreeW W Bn X) => t ≅ u).
 
   Lemma ag_pool_rr_invariance {G n} (ts : pool E Bn (S n))
-      (Inv : G -> Sigma -> Prop) (φ : ticllW W) :
+      (Inv : G -> Sigma -> Prop) (φ : ticllW (W + nat)) :
     ClosedTurns handler ts Inv ->
     (forall g sigma focus cursor w, Inv g sigma -> not_done w ->
        <( {interp_schedule_rr handler (S n) ts focus cursor sigma}, {w} |= φ )>) ->
@@ -603,8 +475,8 @@ Section PoolRulesRR.
     pose proof (Hφ g sigma focus cursor w Hinv Hw) as Hnow.
     destruct focus as [i|].
     - destruct (Hclosed g sigma i Hinv) as (g' & sigma' & o & Hseg & Hinv').
-      rewrite (segment_pool_rr_loop handler n ts i cursor sigma (List.cons o List.nil) sigma' Hseg),
-        emit_list_cons in Hnow |- *.
+      rewrite (segment_pool_fair_loop rr_scheduler handler n ts i cursor sigma (List.cons o List.nil) sigma' Hseg) in Hnow |- *.
+      cbn [List.map] in Hnow |- *; rewrite emit_list_cons in Hnow |- *.
       split; [exact Hnow|]; split.
       + apply can_step_vis; [exact tt|exact Hw].
       + intros t' w' Htr.
@@ -613,11 +485,11 @@ Section PoolRulesRR.
         apply (CIH g' sigma' None cursor); [exact Hinv'|constructor].
     - rewrite (interp_schedule_rr_select handler n ts cursor sigma) in Hnow |- *.
       split; [exact Hnow|]; split.
-      + apply can_step_step; exact Hw.
+      + apply can_step_vis; [exact tt|exact Hw].
       + intros t' w' Htr.
-        apply ktrans_step in Htr as (Heq & <- & _).
-        rewrite Heq.
-        apply (CIH g sigma (Some (rr_pick n cursor)) (S cursor)); assumption.
+        apply ktrans_vis in Htr as ([] & -> & Heq & _).
+        rewrite <- Heq.
+        apply (CIH g sigma (Some (rr_pick n cursor)) (S cursor)); [exact Hinv|constructor].
   Qed.
 
   Lemma aul_pool_rr_eventually {G V n} (ts : pool E Bn (S n))
@@ -625,28 +497,28 @@ Section PoolRulesRR.
       (ltV : V -> V -> Prop) (P : W -> Prop) :
     well_founded ltV -> RankedTurns handler ts Inv rank ltV P ->
     forall g sigma focus cursor w, Inv g sigma -> not_done w ->
-      <( {interp_schedule_rr handler (S n) ts focus cursor sigma}, {w} |= AF visW {P} )>.
+      <( {interp_schedule_rr handler (S n) ts focus cursor sigma}, {w} |= AF visW {fair_obs P} )>.
   Proof.
     intros Hwf Hranked g.
     induction g as [g IH] using
       (well_founded_induction (wf_inverse_image G V ltV rank Hwf)).
     intros sigma focus cursor w Hinv Hw.
     assert (Hsome : forall i c w, not_done w ->
-      <( {interp_schedule_rr handler (S n) ts (Some i) c sigma}, {w} |= AF visW {P} )>).
+      <( {interp_schedule_rr handler (S n) ts (Some i) c sigma}, {w} |= AF visW {fair_obs P} )>).
     { intros i c w0 Hw0.
       destruct (Hranked g sigma i Hinv) as (g' & sigma' & o & Hseg & Hinv' & [HP|Hlt]).
-      - rewrite (segment_pool_rr_loop handler n ts i c sigma (List.cons o List.nil) sigma' Hseg).
-        cbn [emit_list List.fold_right].
+      - rewrite (segment_pool_fair_loop rr_scheduler handler n ts i c sigma (List.cons o List.nil) sigma' Hseg).
+        cbn [List.map emit_list List.fold_right].
         apply afl_log; [exact Hw0|].
         cleft; apply ticll_vis; constructor; exact HP.
-      - rewrite (segment_pool_rr_loop handler n ts i c sigma (List.cons o List.nil) sigma' Hseg).
-        cbn [emit_list List.fold_right].
+      - rewrite (segment_pool_fair_loop rr_scheduler handler n ts i c sigma (List.cons o List.nil) sigma' Hseg).
+        cbn [List.map emit_list List.fold_right].
         apply afl_log; [exact Hw0|].
         apply (IH g' Hlt sigma' None c); [exact Hinv'|constructor]. }
     destruct focus as [i|]; [apply Hsome, Hw|].
     rewrite (interp_schedule_rr_select handler n ts cursor sigma).
-    apply aul_step; right; split.
+    apply (aul_vis _ _ tt); right; split.
     - apply ticll_top; exact Hw.
-    - apply Hsome, Hw.
+    - intros []; apply Hsome; constructor.
   Qed.
 End PoolRulesRR.

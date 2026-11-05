@@ -17,6 +17,7 @@ From TICL Require Export
   CTree.Logic.Sim
   CTree.Interp.State.Mod
   CTree.Interp.Yield.Mod
+  CTree.Interp.Yield.Policy
   CTree.Interp.Yield.RoundRobin
   CTree.Interp.Yield.Nondeterministic
   CTree.Interp.CSL.Mod
@@ -142,8 +143,8 @@ Lemma work_af i a ctx c w : not_done w ->
 Proof. intro Hw; apply af_ret_done, work_af_ret; exact Hw. Qed.
 
 (** A standalone write preserves context, counter, and observation world. *)
-Definition Qwrite (i : nat) (ctx : Ctx.Ctx) (c : nat) (w : World (writerE (CSLObs (nat * nat))))
-  : SSig * option unit -> World (writerE (CSLObs (nat * nat))) -> Prop :=
+Definition Qwrite {Wo : Type} (i : nat) (ctx : Ctx.Ctx) (c : nat) (w : World (writerE Wo))
+  : SSig * option unit -> World (writerE Wo) -> Prop :=
   fun '(s', r) w' => r = Some tt /\ csl_memory s' ≈ region i 1 /\ snd s' = (ctx, c) /\ w' = w.
 
 (** Standalone writing returns [Qwrite] without an intervening transition. *)
@@ -170,7 +171,7 @@ Lemma work_af_framed_ret i j a b ctx c s' w : not_done w ->
   <[ {instr_flow_erased (work i) s'}, w |= AF ret {frame_post (region j b) (Qwork i a ctx c)} ]>.
 Proof.
   intros Hw HR.
-  apply (aur_csl_frame_ret (region j b) _ _ _
+  apply (aur_csl_frame_ret sh _ sh_frame_handler (region j b) _ _ _
     (instr_flow_framable (work i) ltac:(cbn; tauto)) HR); auto using work_af_ret.
 Qed.
 
@@ -188,7 +189,7 @@ Lemma write_ret_framed i j a b ctx c s' w : not_done w ->
   <[ {instr_flow_erased (CWrite i 1) s'}, w |= ret {frame_post (region j b) (Qwrite i ctx c w)} ]>.
 Proof.
   intros Hw HR.
-  exact (ticlr_csl_frame (region j b) _ _ _
+  exact (ticlr_csl_frame sh _ sh_frame_handler (region j b) _ _ _
     (instr_flow_framable (CWrite i 1) I) HR
     <[ ret {Qwrite i ctx c w} ]> w Hw (write_ret i a ctx c w Hw)).
 Qed.
@@ -215,9 +216,90 @@ Lemma frame_post_work i j a b ctx c s'' r w' :
 Proof. unpack_frame_post. Qed.
 
 (** Unpack a framed write into memory, auxiliary state, and world facts. *)
-Lemma frame_post_write i j b ctx c w s'' r w' :
+Lemma frame_post_write {Wo : Type} i j b ctx c (w : World (writerE Wo)) s'' r w' :
   frame_post (region j b) (Qwrite i ctx c w) (s'', r) w' ->
   r = Some tt /\ csl_memory s'' ≈ region i 1 ⊎ region j b /\ snd s'' = (ctx, c) /\ w' = w.
+Proof. unpack_frame_post. Qed.
+
+(** ** Round-robin views of the standalone facts.
+
+    The round-robin runner relabels program observations under [inl] and
+    logs scheduling decisions under [inr]; the standalone facts are
+    transported through [translate relabel_log]. *)
+Abbreviation rr_obs := (CSLObs (nat * nat) + nat)%type.
+
+(** [Qwork] with its emission relabelled under [inl]. *)
+Definition QworkW (i a : nat) (ctx : Ctx.Ctx) (c : nat)
+  : SSig * option unit -> World (writerE rr_obs) -> Prop :=
+  fun '(s', r) w' => r = Some tt /\ csl_memory s' ≈ region i (S a) /\ snd s' = (ctx, S c) /\
+                     w' = Obs (Log (inl (inr (stamp (i, S a) c)))) tt.
+
+(** The relabelled standalone worker emits once under [inl]. *)
+Lemma work_run_W i a ctx c :
+  translate relabel_log (instr_flow_erased (work i) (own i a ctx c)) ~
+  (log (inl (inr (stamp (i, S a) c)) : rr_obs);;
+   Ret (((upd (fst (region i a)) i (S a), snd (region i a)), (ctx, S c)), Some tt)
+    : ctreeW rr_obs Bn (SSig * option unit)).
+Proof.
+  rewrite work_run, (translate_log_bind _ _).
+  unfold log; rewrite !bind_trigger; apply sb_vis; intros []; rewrite translate_ret; reflexivity.
+Qed.
+
+(** Relabelled standalone work eventually returns its postcondition. *)
+Lemma work_af_ret_W i a ctx c w : not_done w ->
+  <[ {translate relabel_log (instr_flow_erased (work i) (own i a ctx c))}, w
+     |= AF ret {QworkW i a ctx c} ]>.
+Proof.
+  intro Hw; rewrite work_run_W.
+  apply afr_log; [exact Hw|].
+  close_ret.
+  split; [reflexivity|split; [apply upd_region|split; reflexivity]].
+Qed.
+
+(** Relabelled standalone writing returns [Qwrite] without an intervening transition. *)
+Lemma write_ret_W i a ctx c w : not_done w ->
+  <[ {translate relabel_log (instr_flow_erased (CWrite i 1) (own i a ctx c))}, w
+     |= ret {Qwrite i ctx c w} ]>.
+Proof.
+  intro Hw.
+  rewrite instr_flow_write_single; [|cbn; rewrite hsingle_eq; discriminate].
+  rewrite translate_ret.
+  apply ret_ret; [exact Hw|]; cbn.
+  split; [reflexivity|split; [apply upd_region|split; reflexivity]].
+Qed.
+
+(** Relabelled work on a framed state eventually returns the framed postcondition. *)
+Lemma work_af_framed_ret_W i j a b ctx c s' w : not_done w ->
+  frame_rel (region j b) (own i a ctx c) s' ->
+  <[ {translate relabel_log (instr_flow_erased (work i) s')}, w
+     |= AF ret {frame_post (region j b) (QworkW i a ctx c)} ]>.
+Proof.
+  intros Hw HR.
+  rewrite instr_flow_sched_interp.
+  apply (aur_csl_frame_ret (policy_handler sh) _ (policy_handler_frame sh _ sh_frame_handler)
+    (region j b) _ _ _ (instr_flow_sched_framable (work i) ltac:(cbn; tauto)) HR); [exact Hw|].
+  rewrite <- instr_flow_sched_interp; apply work_af_ret_W; exact Hw.
+Qed.
+
+(** Relabelled writing on a framed state returns without an intervening transition. *)
+Lemma write_ret_framed_W i j a b ctx c s' w : not_done w ->
+  frame_rel (region j b) (own i a ctx c) s' ->
+  <[ {translate relabel_log (instr_flow_erased (CWrite i 1) s')}, w
+     |= ret {frame_post (region j b) (Qwrite i ctx c w)} ]>.
+Proof.
+  intros Hw HR.
+  rewrite instr_flow_sched_interp.
+  apply (ticlr_csl_frame (policy_handler sh) _ (policy_handler_frame sh _ sh_frame_handler)
+    (region j b) _ _ _ (instr_flow_sched_framable (CWrite i 1) I) HR
+    <[ ret {Qwrite i ctx c w} ]> w Hw).
+  rewrite <- instr_flow_sched_interp; apply write_ret_W; exact Hw.
+Qed.
+
+(** Unpacking a framed round-robin work postcondition. *)
+Lemma frame_post_work_W i j a b ctx c s'' r w' :
+  frame_post (region j b) (QworkW i a ctx c) (s'', r) w' ->
+  r = Some tt /\ csl_memory s'' ≈ region i (S a) ⊎ region j b /\ snd s'' = (ctx, S c) /\
+  w' = Obs (Log (inl (inr (stamp (i, S a) c)))) tt.
 Proof. unpack_frame_post. Qed.
 
 (** The shared state frames each own state. *)

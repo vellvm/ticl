@@ -37,7 +37,7 @@ retained as compatibility re-export files.
 | `Utils.Vectors` | Pointwise update/removal/cons laws shared by pool equivalence and bisimulation |
 | `ICTree.Interp.CSL.Mod` | CSL effects, managed state, the shared handler instance, raw free and select rules |
 | `ICTree.Interp.Yield.Segments` | Exact and bisimilar first-yield segments, guard transport, arbitrary-pool ND/RR equations |
-| `ICTree.Interp.Yield.SBisim` | Guard alignment (`galigned`), its preservation by erasure/state/round-robin interpretation, guard-equivalent pool congruence |
+| `ICTree.Interp.Yield.SBisim` | Guard alignment (`galigned`), its preservation by erasure/state/policy interpretation, guard-equivalent pool congruence |
 | `ICTree.Logic.Yield` | Thread rules over arbitrary handlers; `ClosedTurns`/`RankedTurns` pool invariance and eventuality rules (ND and RR) |
 | `Utils.Maps` | The variable context `Ctx.Ctx` shared by languages and the CSL interpreter |
 | `Lang.CoCSL.Mod` | CoCSL syntax, denotation, source execution equations, source segment rules, structural matrix, Yield-fragment and source-pool rules |
@@ -89,25 +89,30 @@ The source execution is:
 
 ```text
 raw source denotations
-  -> existing Yield vector scheduler
-  -> modulo-cursor branch refinement
-  -> Spawn/Yield erasure
-  -> one shared checked heap handler
+  -> event-only policy pool scheduler (`schedule_with`, round robin = `rr_scheduler`)
+  -> one shared checked heap handler, relabelled under `inl`; picks logged under `inr`
 ```
 
-`ICTree.Interp.Refine` owns the stateful cursor API, erasing runner, observational
-`BranchFree` predicate and closure proofs, and parity picker facts.
-`ICTree.Interp.Yield.RoundRobin` owns the handler-parametric pool interpreter and
-its eight execution equations. Neither module imports a language or example.
-`Lang.CoCSL.Mod` instantiates that API with `sh`; it owns source-constructor
-execution equations and scoped-fork startup. No example-local pool interpreter
-or bridge module is used.
+`ICTree.Interp.Yield.Mod` owns the `Scheduler` policy record, `rr_scheduler`,
+and the pool cofixpoint `schedule_with`, which interprets `Yield`/`Fork` itself
+and leaves a `Scheduled i` event at every scheduling decision; it never
+inspects a thread's `Br` nodes (`interp_schedule_fair_br`,
+`examples.HiddenBr.rr_preserves_thread_branch`). `ICTree.Interp.Yield.Policy`
+owns the instrumented policy runner `interp_schedule_fair` with observation
+type `W + nat` and its execution equations; `ICTree.Interp.Yield.RoundRobin`
+is its `rr_scheduler` instance (`interp_schedule_rr`, an abbreviation of `interp_schedule_fair rr_scheduler`), whose selection is one
+logged `Log (inr (slot_index (rr_pick n m)))` event
+(`interp_schedule_rr_select`) with no extra visible step.
+`ICTree.Interp.Refine` keeps the standalone branch refiner `refine_rr` only for
+the hidden-branching counterexamples and the parity picker facts.  Neither
+module imports a language or example. `Lang.CoCSL.Mod` instantiates that API
+with `sh`; it owns source-constructor execution equations and scoped-fork
+startup. No example-local pool interpreter or bridge module is used.
 
-Every encountered `Br` is refined, including source branches in a generic raw
-pool. `Br 0` has one alternative and still advances the cursor. Guards, events,
-and Spawn do not advance it. `denote_branchfree` proves that CSL source trees
-have no branch nodes. This policy does not force a nonyielding worker to yield,
-and no universal fairness theorem for arbitrary or changing pools is claimed.
+`rr_pick n m` is the cursor modulo the pool size; guards, events, yields and
+forks do not advance it. Round robin does not force a nonyielding worker to
+yield, and no universal fairness theorem for arbitrary or changing pools is
+claimed; `rr_fair` certifies the policy's own pick stream.
 
 Fork prepends the child while retaining parent focus. Thus the initial queue
 pool is `[queue2; queue1]`, slot 1 is focused, and cursor 0 has not yet been used
@@ -138,7 +143,7 @@ It also covers empty input lists. No initialized heap is assumed.
 policy**: each theorem takes `(S : Scheduler) `{FairScheduler S}` and a policy
 state `st`, and runs `run_fair S (allocated_parallel_queues values1 values2) st
 (managed_empty,(ctx,c))` (`CTree.Interp.Yield.Fair`; `rr_scheduler` is a
-`FairScheduler` instance, `nd_scheduler` deliberately is not):
+`FairScheduler` instance, `nd_scheduler` provably is not: `nd_not_fair`):
 
 - `rotate_agaf_pop_alloc`: queue 1 ordinary recurrence.
 - `rotate_agaf_pop_alloc_q2`: queue 2 ordinary recurrence.
@@ -333,11 +338,16 @@ simulation `csim` preserves every prefix formula; right-unique return relations
 preserve suffix formulas, with native `ret` postconditions rewritten by `framer`) →
 `CTree.Logic.Sim` (`csim` on ctrees, `Framable okE` trees: no hidden `Br`
 whose branches are not guarded by a visible `Step`, and only `okE` events) →
-`CTree.Interp.CSL.Frame` (`csim_interp_sh_frame`: `interp_state sh u` is a
-conditional simulation between `s` and any `s'` with `frame_rel fr s s'`;
-`ticll_csl_frame`, `ticlr_csl_frame`, `a{n,u}r_csl_frame_ret`, and semantic `a{n,u}r_csl_frame_done`) →
-`CTree.Interp.Yield.Frame` (both schedulers' erased trees of a `Framable`
-pool are `Framable`) → `Lang.CoCSL.Frame` (`run_{nd,rr}_framable`,
+`CTree.Interp.CSL.Frame` (`FrameHandler`: a handler frames when its
+responses in frame-related states agree up to the frame; `sh_frame_handler`
+and `policy_handler_frame` are the two instances; `csim_interp_frame`:
+`interp_state h u` of a framing handler is a conditional simulation between
+`s` and any `s'` with `frame_rel fr s s'`; `ticll_csl_frame`,
+`ticlr_csl_frame`, `a{n,u}r_csl_frame_ret`, and semantic
+`a{n,u}r_csl_frame_done`) →
+`CTree.Interp.Yield.Frame` (the erased nondeterministic tree and the
+round-robin scheduled tree of a `Framable` pool are `Framable`;
+`framable_translate_inr1`) → `Lang.CoCSL.Frame` (`run_{nd,rr}_framable`,
 `run_{nd,rr}_pool_framable`, `instr_flow_framable`, and `frame_post_iff`).
 Clients apply the generic `CTree.Interp.CSL.Frame` rules directly with
 the runner's framability certificate and a `frame_rel` proof; there are no
@@ -534,7 +544,7 @@ lifecycle consumer of the source language:
   its body), `context_resume_preserves_updates` (one yield per variable read,
   late context read in assignment, separate counter), and
   `missing_variable_stuck`.
-  `cas_arithmetic_rr` checks pure arithmetic operands without a scheduling step;
+  `cas_arithmetic_rr` checks pure arithmetic operands without a scheduling decision;
   `cas_interleaving_rr` checks four captured reads, the exact interleaved trace,
   and a heap update after the desired value is captured but before comparison.
   The four `cas_missing_*_rr` proofs check the exact operand and heap fault

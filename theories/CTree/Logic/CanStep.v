@@ -6,6 +6,7 @@ From Coinduction Require Import all.
 From TICL Require Import
   CTree.Core
   CTree.Logic.Trans
+  CTree.Interp.Yield.Mod
   CTree.Interp.State.Mod
   CTree.Events.Writer
   Logic.Core
@@ -46,6 +47,18 @@ Section CanStepCtrees.
       apply ktrans_br; exists y; auto.
   Qed.
   Hint Resolve can_step_br: ticl.
+
+  Lemma can_step_br_alts{X} `{Bn -< B}: forall m (k: Fin.t (S m) -> ctree E B X) w,
+      can_step (br_alts m k) w <-> exists a, can_step (k a) w.
+  Proof.
+    split; intros.
+    - destruct H0 as (t' & w' & TR).
+      apply ktrans_br_alts in TR as (a & TR).
+      exists a, t', w'; auto.
+    - destruct H0 as (a & t' & w' & TR).
+      exists t', w'.
+      apply ktrans_br_alts; exists a; auto.
+  Qed.
 
   (** A visible branch can always step, if world [w] is not done. *)
   Lemma can_step_brS{X Y}: forall (c: B Y) (k: Y -> ctree E B X) (y: Y) w,

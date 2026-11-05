@@ -22,6 +22,7 @@ From TICL Require Import
   CTree.Interp.Refine
   CTree.Interp.Yield.Mod
   CTree.Interp.Yield.SBisim
+  CTree.Interp.Yield.Policy
   CTree.Interp.Yield.RoundRobin
   CTree.Interp.Yield.Nondeterministic
   Utils.Vectors.
@@ -495,115 +496,24 @@ Section FocusedCongruenceND.
   Qed.
 End FocusedCongruenceND.
 
-Section FocusedCongruenceRR.
-  Context {E : Type -> Type} {W Sigma : Type}
+(** Exact equations retain the finite administrative guard path: a user
+    event's response is followed by one administrative guard. *)
+Section FocusedCongruencePolicy.
+  Context {E : Type -> Type} {W Sigma : Type} (sch : Scheduler)
     (handler : E ~> stateT Sigma (ctreeW W Bn)).
 
-  Lemma segment_rr_replace_equ n (ts : pool E Bn (S n)) (i : Fin.t (S n))
-    t u focus m sigma :
-    t ≅ u ->
-    interp_schedule_rr handler (S n) (ts @ i := t) focus m sigma ~
-    interp_schedule_rr handler (S n) (ts @ i := u) focus m sigma.
-  Proof.
-    intro Eq.
-    pose proof (interp_schedule_rr_equ handler (S n) (ts @ i := t) (ts @ i := u)
-      focus m sigma (replace_pool_equ ts ts i t u (pool_equ_refl ts) Eq)) as Ep.
-    rewrite Ep; reflexivity.
-  Qed.
-
-  Lemma segment_rr_focused_guard n (ts : pool E Bn (S n)) (i : Fin.t (S n)) t m sigma :
-    interp_schedule_rr handler (S n) (ts @ i := Guard t) (Some i) m sigma ~
-    interp_schedule_rr handler (S n) (ts @ i := t) (Some i) m sigma.
-  Proof.
-    erewrite interp_schedule_rr_guard
-      by (rewrite Vector.nth_replace_eq; reflexivity).
-    rewrite Vector.replace_replace_eq; reflexivity.
-  Qed.
-
-  Lemma segment_rr_focused_user n (ts : pool E Bn (S n)) (i : Fin.t (S n))
-    {Y} (e : E Y) (k : Y -> thread E Bn) m sigma :
-    interp_schedule_rr handler (S n) (ts @ i := Vis (inr1 (inr1 e)) k) (Some i) m sigma ~
-    (handler _ e sigma >>= fun '(sigma',x) =>
-      interp_schedule_rr handler (S n) (ts @ i := k x) (Some i) m sigma').
-  Proof.
-    erewrite interp_schedule_rr_user
-      by (rewrite Vector.nth_replace_eq; reflexivity).
-    __upto_bind_sbisim_eq; intros [sigma' x].
-    rewrite Vector.replace_replace_eq; reflexivity.
-  Qed.
-
-  (** Exact equations retain the finite administrative guard path.  RR
-      selection is one visible step surrounded by administrative guards. *)
-  Lemma segment_rr_guard_exact n (ts : pool E Bn (S n)) (i : Fin.t (S n)) t m sigma :
-    observe (ts $ i) = GuardF t ->
-    interp_schedule_rr handler (S n) ts (Some i) m sigma ≅
-    Guard (interp_schedule_rr handler (S n) (ts @ i := t) (Some i) m sigma).
-  Proof.
-    intro Hobs; unfold interp_schedule_rr at 1.
-    rewrite unfold_run_round_robin, (schedule_focused_guard n ts i t Hobs).
-    rewrite interp_erase_guard, interp_state_guard; reflexivity.
-  Qed.
-
-  Lemma segment_rr_yield_exact n (ts : pool E Bn (S n)) (i : Fin.t (S n)) k m sigma :
-    observe (ts $ i) = VisF (inl1 Yield) k ->
-    interp_schedule_rr handler (S n) ts (Some i) m sigma ≅
-    Guard (interp_schedule_rr handler (S n) (ts @ i := k tt) None m sigma).
-  Proof.
-    intro Hobs; unfold interp_schedule_rr at 1.
-    rewrite unfold_run_round_robin, (schedule_focused_yield n ts i k Hobs).
-    rewrite interp_erase_guard, interp_state_guard; reflexivity.
-  Qed.
-
-  Lemma segment_rr_user_exact n (ts : pool E Bn (S n)) (i : Fin.t (S n))
-    {Y} (e : E Y) (k : Y -> thread E Bn) m sigma :
-    observe (ts $ i) = VisF (inr1 (inr1 e)) k ->
-    interp_schedule_rr handler (S n) ts (Some i) m sigma ≅
-    (handler _ e sigma >>= fun '(sigma',x) =>
-      rr_guards 3 (interp_schedule_rr handler (S n) (ts @ i := k x) (Some i) m sigma')).
-  Proof.
-    intro Hobs; unfold interp_schedule_rr at 1.
-    rewrite unfold_run_round_robin, (schedule_focused_user_event n ts i e k Hobs).
-    rewrite interp_erase_user, interp_state_vis.
-    apply equ_clo_bind with (S := eq); [reflexivity|].
-    intros [sigma' x] r <-; cbn [fst snd rr_guards]; apply guard_equ_node.
-    etransitivity; [apply interp_state_guard|].
-    apply guard_equ_node, interp_state_guard.
-  Qed.
-
-  Lemma segment_rr_select_exact n (ts : pool E Bn (S n)) m sigma :
-    interp_schedule_rr handler (S n) ts None m sigma ≅
-    rr_guards 3 (Step (rr_guards 3
-      (interp_schedule_rr handler (S n) ts (Some (rr_pick n m)) (S m) sigma))).
-  Proof.
-    unfold interp_schedule_rr at 1.
-    rewrite unfold_run_round_robin, schedule_no_focus_nonempty.
-    rewrite interp_erase_yield, interp_state_guard, interp_state_guard.
-    cbn [rr_guards]; do 2 apply guard_equ_node.
-    rewrite (unfold_run_round_robin
-      (brS (branchn (S n)) (fun i => schedule (S n) ts (Some i))) m).
-    cbn [observe _observe subevent CategoryOps.resum CategoryOps.ReSum_id
-         CategoryOps.id_ Id_IFun].
-    rewrite interp_erase_guard, interp_state_guard; apply guard_equ_node.
-    rewrite unfold_run_round_robin; cbn [observe _observe].
-    rewrite interp_erase_step, interp_state_step.
-    apply step_equ_node.
-    apply guard_equ_node.
-    rewrite interp_state_guard; apply guard_equ_node.
-    rewrite interp_state_guard; reflexivity.
-  Qed.
-
-  Lemma exact_rr_user_replaced n (ts : pool E Bn (S n)) (i : Fin.t (S n))
-    {Y} (e : E Y) (k : Y -> thread E Bn) m sigma :
-    interp_schedule_rr handler (S n) (ts @ i := Vis (inr1 (inr1 e)) k) (Some i) m sigma ≅
-    (handler _ e sigma >>= fun '(sigma',x) =>
-      rr_guards 3 (interp_schedule_rr handler (S n) (ts @ i := k x) (Some i) m sigma')).
+  Lemma exact_fair_user_replaced n (ts : pool E Bn (S n)) (i : Fin.t (S n))
+    {Y} (e : E Y) (k : Y -> thread E Bn) st sigma :
+    interp_schedule_fair sch handler (S n) (ts @ i := Vis (inr1 (inr1 e)) k) (Some i) st sigma ≅
+    (translate relabel_log (handler _ e sigma) >>= fun '(sigma',x) =>
+      rr_guards 1 (interp_schedule_fair sch handler (S n) (ts @ i := k x) (Some i) st sigma')).
   Proof.
     etransitivity.
-    - eapply segment_rr_user_exact; rewrite Vector.nth_replace_eq; reflexivity.
+    - eapply interp_schedule_fair_user_exact; rewrite Vector.nth_replace_eq; reflexivity.
     - apply equ_clo_bind with (S := eq); [reflexivity|].
       intros [sigma' x] y <-; rewrite Vector.replace_replace_eq; reflexivity.
   Qed.
-End FocusedCongruenceRR.
+End FocusedCongruencePolicy.
 
 (** ** Segment-driven scheduling.
 
@@ -695,73 +605,79 @@ Section SegmentInterpretationND.
   Qed.
 End SegmentInterpretationND.
 
-Section SegmentInterpretationRR.
-  Context {E : Type -> Type} {W Sigma : Type}
+(** The policy runner relabels program observations under [inl]; the
+    response relation must be bisimulation evidence, transported through
+    [translate_sbisim]. *)
+Section SegmentInterpretationPolicy.
+  Context {E : Type -> Type} {W Sigma : Type} (sch : Scheduler)
     (handler : E ~> stateT Sigma (ctreeW W Bn))
     (R : forall X : Type, ctreeW W Bn X -> ctreeW W Bn X -> Prop)
     (HR : forall X (t u : ctreeW W Bn X), R X t u -> t ~ u).
 
-  Lemma segment_interp_rr n (ts : pool E Bn (S n)) (i : Fin.t (S n))
-    m sigma xs residual sigma' :
+  Lemma segment_interp_fair n (ts : pool E Bn (S n)) (i : Fin.t (S n))
+    st sigma xs residual sigma' :
     ThreadSegment handler R (ts $ i) sigma xs residual sigma' ->
-    interp_schedule_rr handler (S n) ts (Some i) m sigma ~
-    emit_list xs
-      (interp_schedule_rr handler (S n) (ts @ i := residual) None m sigma').
+    interp_schedule_fair sch handler (S n) ts (Some i) st sigma ~
+    emit_list (List.map inl xs)
+      (interp_schedule_fair sch handler (S n) (ts @ i := residual) None st sigma').
   Proof.
     intro Hseg.
     assert (Hgen : forall t s0 ys r0 s1,
       ThreadSegment handler R t s0 ys r0 s1 ->
-      forall p (us : pool E Bn (S p)) (j : Fin.t (S p)) c,
-        interp_schedule_rr handler (S p) (us @ j := t) (Some j) c s0 ~
-        emit_list ys (interp_schedule_rr handler (S p) (us @ j := r0) None c s1)).
+      forall p (us : pool E Bn (S p)) (j : Fin.t (S p)),
+        interp_schedule_fair sch handler (S p) (us @ j := t) (Some j) st s0 ~
+        emit_list (List.map inl ys)
+          (interp_schedule_fair sch handler (S p) (us @ j := r0) None st s1)).
     {
       intros t s0 ys r0 s1 H; induction H as
         [k sigma0
         |t0 sigma0 xs0 residual0 sigma0' H IH
         |Y e k sigma0 result sigma1 before after residual0 sigma0' Eh H IH
-        |t0 u sigma0 xs0 u' residual0 sigma0' Etu H IH Eout]; intros p us j c.
-      - cbn [emit_list List.fold_right].
-        erewrite interp_schedule_rr_yield
+        |t0 u sigma0 xs0 u' residual0 sigma0' Etu H IH Eout]; intros p us j.
+      - cbn [List.map emit_list List.fold_right].
+        erewrite interp_schedule_fair_yield
           by (rewrite Vector.nth_replace_eq; reflexivity).
         rewrite Vector.replace_replace_eq; reflexivity.
-      - etransitivity; [apply segment_rr_focused_guard|apply IH].
-      - etransitivity; [apply segment_rr_focused_user|].
-        transitivity (emit_list before (Ret (sigma1,result)) >>=
+      - etransitivity; [apply segment_fair_focused_guard|apply IH].
+      - etransitivity; [apply interp_schedule_fair_user_bind; reflexivity|].
+        transitivity (emit_list (List.map inl before) (Ret (sigma1,result)) >>=
           fun '(sigma2,x) =>
-            interp_schedule_rr handler (S p) (us @ j := k x) (Some j) c sigma2).
-        + apply HR in Eh; rewrite Eh; reflexivity.
-        + rewrite emit_list_ret_bind, emit_list_app.
+            interp_schedule_fair sch handler (S p) (us @ j := k x) (Some j) st sigma2).
+        + apply HR in Eh; rewrite Eh, translate_emit_list,
+            (emit_list_equ _ _ _ (translate_ret (sigma1,result) relabel_log)); reflexivity.
+        + rewrite emit_list_ret_bind, List.map_app, emit_list_app.
           apply emit_list_sbisim; apply IH.
-      - etransitivity; [apply segment_rr_replace_equ; exact Etu|].
+      - etransitivity; [apply segment_fair_replace_equ; exact Etu|].
         etransitivity; [apply IH|].
-        apply emit_list_sbisim, segment_rr_replace_equ; exact Eout.
+        apply emit_list_sbisim, segment_fair_replace_equ; exact Eout.
     }
     transitivity
-      (interp_schedule_rr handler (S n) (ts @ i := (ts $ i)) (Some i) m sigma).
+      (interp_schedule_fair sch handler (S n) (ts @ i := (ts $ i)) (Some i) st sigma).
     - symmetry; apply equ_sbisim;
-        exact (interp_schedule_rr_equ handler (S n) (ts @ i := (ts $ i)) ts
-          (Some i) m sigma (pool_replace_current ts i)).
+        exact (interp_schedule_fair_equ sch handler (S n) (ts @ i := (ts $ i)) ts
+          (Some i) st sigma (pool_replace_current ts i)).
     - apply Hgen; exact Hseg.
   Qed.
-End SegmentInterpretationRR.
+End SegmentInterpretationPolicy.
 
-(** ** Exact-mode round-robin prefixes.
+(** ** Exact-mode policy prefixes.
 
     Restricted to the [equ] instance: the administrative guard path is real
     and must not be weakened to [sbisim]. *)
-Section ExactRoundRobinPrefix.
-  Context {E : Type -> Type} {W Sigma : Type}
+Section ExactPolicyPrefix.
+  Context {E : Type -> Type} {W Sigma : Type} (sch : Scheduler)
     (handler : E ~> stateT Sigma (ctreeW W Bn)).
 
   Abbreviation Rexact := (fun X (t u : ctreeW W Bn X) => t ≅ u).
 
-  Lemma exact_segment_rr_prefix n (ts : pool E Bn (S n)) (i : Fin.t (S n))
+  Lemma exact_segment_fair_prefix n (ts : pool E Bn (S n)) (i : Fin.t (S n))
     t m sigma logs residual sigma' :
     ThreadSegment handler Rexact t sigma logs residual sigma' ->
-    exists word, rr_prefix_events word = logs /\
-    interp_schedule_rr handler (S n) (ts @ i := t) (Some i) m sigma ≅
+    exists word : list (@rr_token (W + nat)),
+    rr_prefix_events word = List.map inl logs /\
+    interp_schedule_fair sch handler (S n) (ts @ i := t) (Some i) m sigma ≅
       rr_prefix word (Guard
-        (interp_schedule_rr handler (S n) (ts @ i := residual) None m sigma')).
+        (interp_schedule_fair sch handler (S n) (ts @ i := residual) None m sigma')).
   Proof.
     intro H; revert n ts i m.
     induction H as
@@ -771,28 +687,29 @@ Section ExactRoundRobinPrefix.
       |t u sigma logs u' residual sigma' Etu H IH Eout]; intros n ts i m.
     - exists []; split; [reflexivity|]; cbn [rr_prefix].
       etransitivity.
-      + eapply segment_rr_yield_exact; rewrite Vector.nth_replace_eq; reflexivity.
+      + eapply interp_schedule_fair_yield_exact; rewrite Vector.nth_replace_eq; reflexivity.
       + rewrite Vector.replace_replace_eq; reflexivity.
     - destruct (IH n ts i m) as (word & Ew & Et).
       exists (RRGuard :: word); split; [exact Ew|]; cbn [rr_prefix].
       etransitivity.
-      + eapply segment_rr_guard_exact; rewrite Vector.nth_replace_eq; reflexivity.
+      + eapply interp_schedule_fair_guard_exact; rewrite Vector.nth_replace_eq; reflexivity.
       + apply guard_equ_node; rewrite Vector.replace_replace_eq; exact Et.
     - destruct (IH n ts i m) as (word & Ew & Et).
-      exists (List.map RRLog before ++ RRGuard :: RRGuard :: RRGuard :: word); split.
+      exists (List.map RRLog (List.map inl before) ++ RRGuard :: word); split.
       + rewrite rr_prefix_events_app, rr_prefix_events_logs; cbn [rr_prefix_events].
-        now rewrite Ew.
-      + etransitivity; [apply exact_rr_user_replaced|].
+        now rewrite Ew, List.map_app.
+      + etransitivity; [apply exact_fair_user_replaced|].
         set (resume := fun response : (Sigma * Y)%type =>
           let '(sigma0,x) := response in
-          rr_guards 3
-            (interp_schedule_rr handler (S n) (ts @ i := k x) (Some i) m sigma0)).
-        transitivity (emit_list before (Ret (sigma1,result)) >>= resume).
-        * apply equ_clo_bind with (S := eq); [exact Eh|intros x y <-; reflexivity].
+          rr_guards 1
+            (interp_schedule_fair sch handler (S n) (ts @ i := k x) (Some i) m sigma0)).
+        transitivity (emit_list (List.map inl before) (Ret (sigma1,result)) >>= resume).
+        * apply equ_clo_bind with (S := eq); [|intros x y <-; reflexivity].
+          rewrite Eh, translate_emit_list; apply emit_list_equ, translate_ret.
         * etransitivity; [apply emit_list_ret_bind|]; unfold resume.
-          transitivity (emit_list before
-            (rr_guards 3 (rr_prefix word (Guard
-              (interp_schedule_rr handler (S n)
+          transitivity (emit_list (List.map inl before)
+            (rr_guards 1 (rr_prefix word (Guard
+              (interp_schedule_fair sch handler (S n)
                  (ts @ i := residual) None m sigma'))))).
           -- apply emit_list_equ, rr_guards_equ; exact Et.
           -- rewrite rr_prefix_app; cbn [rr_prefix rr_guards].
@@ -800,14 +717,13 @@ Section ExactRoundRobinPrefix.
     - destruct (IH n ts i m) as (word & Ew & Et).
       exists word; split; [exact Ew|].
       etransitivity.
-      + apply interp_schedule_rr_equ, replace_pool_equ;
+      + apply interp_schedule_fair_equ, replace_pool_equ;
           [apply pool_equ_refl|exact Etu].
       + etransitivity; [exact Et|].
-        apply rr_prefix_equ, guard_equ_node, interp_schedule_rr_equ,
+        apply rr_prefix_equ, guard_equ_node, interp_schedule_fair_equ,
           replace_pool_equ; [apply pool_equ_refl|exact Eout].
   Qed.
-End ExactRoundRobinPrefix.
-
+End ExactPolicyPrefix.
 
 (** ** Closed turns.
 
@@ -846,25 +762,22 @@ Section SegmentPoolLoopND.
   Qed.
 End SegmentPoolLoopND.
 
-Section SegmentPoolLoopRR.
-  Context {E : Type -> Type} {W Sigma : Type}
+Section SegmentPoolLoopPolicy.
+  Context {E : Type -> Type} {W Sigma : Type} (sch : Scheduler)
     (handler : E ~> stateT Sigma (ctreeW W Bn)).
 
   Abbreviation Rexact := (fun X (t u : ctreeW W Bn X) => t ≅ u).
-  Abbreviation Rsb := (fun X (t u : ctreeW W Bn X) => t ~ u).
 
-  Lemma segment_pool_rr_loop n (ts : pool E Bn (S n)) (i : Fin.t (S n))
-    m sigma logs sigma' :
+  Lemma segment_pool_fair_loop n (ts : pool E Bn (S n)) (i : Fin.t (S n))
+    st sigma logs sigma' :
     segment_to handler Rexact (ts $ i) sigma logs (ts $ i) sigma' ->
-    interp_schedule_rr handler (S n) ts (Some i) m sigma ~
-    emit_list logs (interp_schedule_rr handler (S n) ts None m sigma').
+    interp_schedule_fair sch handler (S n) ts (Some i) st sigma ~
+    emit_list (List.map inl logs) (interp_schedule_fair sch handler (S n) ts None st sigma').
   Proof.
     intros (residual & Hseg & Htail).
     etransitivity.
-    - apply (segment_interp_rr handler Rsb (fun Y t u (H : t ~ u) => H)).
-      exact (ThreadSegment_mono handler Rexact Rsb (fun Y t u => equ_sbisim t u)
-        _ _ _ _ _ Hseg).
-    - apply emit_list_sbisim, interp_schedule_rr_guard_equ.
+    - apply (segment_interp_fair sch handler Rexact (fun Y t u H => equ_sbisim t u H)); exact Hseg.
+    - apply emit_list_sbisim, interp_schedule_fair_guard_equ.
       apply closed_pool_guard_equ, Htail.
   Qed.
-End SegmentPoolLoopRR.
+End SegmentPoolLoopPolicy.

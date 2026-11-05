@@ -7,9 +7,11 @@
     ("every transition returns some value satisfying [R]"). The second
     goal is the regression that must fail if native [ret] is ever weakened
     to that terminal-next property. *)
-From Stdlib Require Import Fin Arith.PeanoNat Relations.Relation_Definitions Wellfounded Lia.
+From Stdlib Require Import Fin Vector Arith.PeanoNat Relations.Relation_Definitions Wellfounded Lia.
 From Coinduction Require Import all.
-From TICL Require Import CTree.Interp.Refine.
+From TICL Require Import CTree.Interp.Refine CTree.Interp.Yield.RoundRobin
+  CTree.Interp.Yield.Policy CTree.Events.Writer CTree.Events.State CTree.Events.Yield
+  CTree.Interp.Yield.Mod CTree.Interp.State.Mod Utils.Vectors.
 
 From TICL Require Import
   CTree.Core
@@ -22,7 +24,7 @@ From TICL Require Import
   CTree.Logic.Iter
   Logic.Core.
 
-Import CTreeNotations TiclNotations.
+Import CTreeNotations TiclNotations VectorNotations.
 Local Open Scope ticl_scope.
 Local Open Scope ctree_scope.
 
@@ -200,6 +202,30 @@ Proof.
   destruct (Hf _ _ Hret) as (l & u & TR & _ & <-).
   apply trans_ret_inv in TR as (_ & Hv).
   apply val_eq_inv in Hv; discriminate.
+Qed.
+
+(** The event-only round-robin scheduler never inspects a thread's hidden
+    branches: both alternatives of a branching thread survive scheduling, and
+    each one still logs its own value.  Contrast [refine_rr_branch01_zero],
+    where the standalone refiner collapses the branch to its first alternative. *)
+Definition rr_branch_thread : thread (stateE nat) Bn :=
+  Br (branchn 2) (fun i => Vis (inr1 (inr1 (Put (slot_index i)))) (fun _ => Ret tt)).
+
+Lemma rr_preserves_thread_branch (σ : nat) :
+  interp_schedule_rr h_stateW 1 [rr_branch_thread]%vector (Some Fin.F1) 0 σ ~
+  Br (branchn 2) (fun i => log (inl (slot_index i));; Ret (slot_index i, tt)).
+Proof.
+  rewrite (interp_schedule_fair_br rr_scheduler h_stateW 0 [rr_branch_thread]%vector Fin.F1 (branchn 2)
+    (fun i => Vis (inr1 (inr1 (Put (slot_index i)))) (fun _ => Ret tt)) 0 σ eq_refl).
+  apply sb_br_id; intro i; rewrite sb_guard.
+  erewrite interp_schedule_fair_user with (e := Put (slot_index i)) by reflexivity.
+  cbn [h_stateW]; change (Monad.bind ?a ?b) with (CTree.bind a b).
+  rewrite translate_log_bind, bind_bind.
+  unfold log; rewrite !bind_trigger; apply sb_vis; intros [].
+  rewrite translate_ret, bind_ret_l.
+  erewrite interp_schedule_fair_ret by reflexivity.
+  cbn [Vector.replace vector_remove].
+  rewrite interp_schedule_fair_empty; reflexivity.
 Qed.
 
 (** Visible iteration takes a real step in every continuing round. *)

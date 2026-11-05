@@ -20,34 +20,34 @@ Proof.
   change ([denote_flow (proc 1);; Ret tt; denote_flow (proc 2);; Ret tt]%vector)
     with (([denote_flow (proc 1);; Ret tt; Ret tt]%vector : pool sE Bn 2) @ parent := (denote_flow (proc 2) >>= fun _ => Ret tt)).
   unfold proc at 2; rr_prefix work_yield_fork_free.
-  eapply aur_bind_r; [apply (work_af_framed_ret 2 1 b a ctx c); [constructor|apply frame_rel_shared_2] |].
-  intros [s1 r] w1 HP; apply frame_post_work in HP as (-> & HM1 & HS1 & ->).
+  eapply aur_bind_r; [apply (work_af_framed_ret_W 2 1 b a ctx c); [constructor|apply frame_rel_shared_2] |].
+  intros [s1 r] w1 HP; apply frame_post_work_W in HP as (-> & HM1 & HS1 & ->).
   rewrite interp_rr_bind, interp_rr_yield.
-  rewrite interp_schedule_rr_select; cright; apply anr_step; split; [csplit; auto with ticl|].
+  rewrite interp_schedule_rr_select; cright; apply (anr_vis _ _ tt); split; [csplit; auto with ticl|intros []].
   rewrite rr_pick_1_0.
   change (([denote_flow (proc 1);; Ret tt; Ret tt]%vector : pool sE Bn 2) @ parent := (denote_flow (CRet tt);; Ret tt))
     with (([Ret tt; denote_flow (CRet tt);; Ret tt]%vector : pool sE Bn 2) @ child := (denote_flow (proc 1) >>= fun _ => Ret tt)).
   unfold proc; rr_prefix work_yield_fork_free.
-  eapply aur_bind_r; [apply (work_af_framed_ret 1 2 a (S b) ctx (S c)); [constructor|apply frame_rel_both_1; [|exact HS1]] |].
+  eapply aur_bind_r; [apply (work_af_framed_ret_W 1 2 a (S b) ctx (S c)); [constructor|apply frame_rel_both_1; [|exact HS1]] |].
   { eapply peq_trans; [exact HM1|apply pop_comm, region_disj; auto]. }
-  intros [s2 r] w2 HP; apply frame_post_work in HP as (-> & HM2 & _ & ->).
+  intros [s2 r] w2 HP; apply frame_post_work_W in HP as (-> & HM2 & _ & ->).
   rewrite interp_rr_bind, interp_rr_yield.
-  rewrite interp_schedule_rr_select; cright; apply anr_step; split; [csplit; auto with ticl|].
+  rewrite interp_schedule_rr_select; cright; apply (anr_vis _ _ tt); split; [csplit; auto with ticl|intros []].
   rewrite rr_pick_1_1.
   change (([Ret tt; denote_flow (CRet tt);; Ret tt]%vector : pool sE Bn 2) @ child := (denote_flow (CRet tt);; Ret tt))
     with (([denote_flow (CRet tt);; Ret tt; Ret tt]%vector : pool sE Bn 2) @ parent := (denote_flow (CRet tt) >>= fun _ => Ret tt)).
   rewrite interp_rr_ret.
-  rewrite (interp_schedule_rr_ret sh) by reflexivity.
+  rewrite (interp_schedule_fair_ret rr_scheduler sh) by reflexivity.
   change ((([denote_flow (CRet tt);; Ret tt; Ret tt]%vector : pool sE Bn 2) @ parent := Ret tt) -- parent)
     with (vector_remove ([denote_flow (CRet tt);; Ret tt; Ret tt]%vector : pool sE Bn 2) (Fin.FS Fin.F1)).
   rewrite vector_remove_tail, vector_remove_head.
-  rewrite interp_schedule_rr_select; cright; apply anr_step; split; [csplit; auto with ticl|].
+  rewrite interp_schedule_rr_select; cright; apply (anr_vis _ _ tt); split; [csplit; auto with ticl|intros []].
   rewrite rr_pick_0.
   change ([denote_flow (CRet tt);; Ret tt]%vector : pool sE Bn 1)
     with (([Ret tt]%vector : pool sE Bn 1) @ Fin.F1 := (denote_flow (CRet tt) >>= fun _ => Ret tt)).
   rewrite interp_rr_ret.
-  rewrite (interp_schedule_rr_ret sh) by reflexivity.
-  rewrite (interp_schedule_rr_empty sh).
+  rewrite (interp_schedule_fair_ret rr_scheduler sh) by reflexivity.
+  rewrite (interp_schedule_fair_empty rr_scheduler sh).
   close_ret.
   exact HM2.
 Qed.

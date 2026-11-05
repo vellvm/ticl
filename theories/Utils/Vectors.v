@@ -34,6 +34,15 @@ Proof.
   reflexivity.
 Qed.
 
+(** The numeric index of a finite slot. *)
+Definition slot_index {n} (j : Fin.t n) : nat := proj1_sig (Fin.to_nat j).
+
+Lemma fin1_eq (a : Fin.t 1) : a = Fin.F1.
+Proof.
+  refine (Fin.caseS' a (fun a => a = Fin.F1) eq_refl (fun b => _)).
+  inversion b.
+Qed.
+
 Program Definition of_nat_lt' {n p: nat} (H: p < n): fin' n :=
   (_ (Fin.of_nat_lt H)).
 Next Obligation.

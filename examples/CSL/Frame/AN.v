@@ -1,9 +1,10 @@
 (** * Regression: two silently-writing processes joined through [CYield].
 
     [fork2 (wproc 1) (wproc 2)]: each process writes [1] into its own cell
-    and yields.  Writes are silent, so the only visible steps are the
-    scheduler's; exactly three of them precede the native return. Each write is proved
-    on the process's own region and framed by the other one. *)
+    and yields.  Writes are silent, so the only visible transitions under
+    round robin are the scheduler's logged picks; exactly three of them
+    precede the native return. Each write is proved on the process's own
+    region and framed by the other one. *)
 
 (** [run_rr_prefix]/[run_nd_prefix] expose the standalone write in a bind.
     [write_ret_framed] transports its native return through framing, and
@@ -56,7 +57,11 @@ Proof.
   eapply peq_trans; [exact Hm|apply pop_comm, region_disj; auto].
 Qed.
 
-(** Native return follows three round-robin scheduler steps. *)
+(** One logged round-robin pick: a universal-next layer. *)
+Local Ltac rr_pick_step :=
+  rewrite interp_schedule_rr_select; apply (anr_vis _ _ tt); split; [csplit; auto with ticl|intros []].
+
+(** Native return follows three logged round-robin picks. *)
 Local Lemma an_two_procs_rr_ret a b ctx c :
   <[ {run_rr (fork2 (wproc 1) (wproc 2)) (shared a b ctx c)}, Pure |=
      AX (AX (AX ret {fun '(s', _) _ => both 1 1 (csl_memory s')})) ]>.
@@ -64,28 +69,28 @@ Proof.
   unfold fork2; rewrite run_rr_fork_bind; unfold denote.
   (* parent: write 2, yield *)
   focus_parent; unfold wproc at 2; rr_prefix write_yield_fork_free.
-  eapply anr_bind_r; [apply (write_ret_framed 2 1 b a ctx c _ Pure); [constructor|apply frame_rel_shared_2]|].
+  eapply anr_bind_r; [apply (write_ret_framed_W 2 1 b a ctx c _ Pure); [constructor|apply frame_rel_shared_2]|].
   intros [s1 r] w1 HP; apply frame_post_write in HP as (-> & Hm1 & Hs1 & ->); unfocus.
   focus_parent; rewrite interp_rr_bind, interp_rr_yield.
-  rewrite interp_schedule_rr_select; apply anr_step; split; [csplit; auto with ticl|].
+  rr_pick_step.
   rewrite rr_pick_1_0; unfocus.
   (* child: write 1, yield *)
   focus_child; unfold wproc; rr_prefix write_yield_fork_free.
-  eapply anr_bind_r; [apply (write_ret_framed 1 2 a 1 ctx c _ Pure); [constructor|apply frame_rel_after_2; assumption]|].
+  eapply anr_bind_r; [apply (write_ret_framed_W 1 2 a 1 ctx c _ _); [constructor|apply frame_rel_after_2; assumption]|].
   intros [s2 r] w2 HP; apply frame_post_write in HP as (-> & Hm2 & _ & ->); unfocus.
   focus_child; rewrite interp_rr_bind, interp_rr_yield.
-  rewrite interp_schedule_rr_select; apply anr_step; split; [csplit; auto with ticl|].
+  rr_pick_step.
   rewrite rr_pick_1_1; unfocus.
   (* parent returns *)
   focus_parent; rewrite interp_rr_ret; unfocus.
-  rewrite (interp_schedule_rr_ret sh) by reflexivity.
+  rewrite (interp_schedule_fair_ret rr_scheduler sh) by reflexivity.
   unfold parent; rewrite vector_remove_tail, vector_remove_head.
-  rewrite interp_schedule_rr_select; apply anr_step; split; [csplit; auto with ticl|].
+  rr_pick_step.
   rewrite rr_pick_0.
   (* child returns *)
   focus_single; rewrite interp_rr_ret; unfocus.
-  rewrite (interp_schedule_rr_ret sh) by reflexivity.
-  rewrite vector_remove_head, (interp_schedule_rr_empty sh).
+  rewrite (interp_schedule_fair_ret rr_scheduler sh) by reflexivity.
+  rewrite vector_remove_head, (interp_schedule_fair_empty rr_scheduler sh).
   apply ret_ret; [constructor|exact Hm2].
 Qed.
 
@@ -103,8 +108,8 @@ Local Ltac fin2_cases := fin_case; [|fin_case; [|fin_none]].
 Local Ltac fin1_case := fin_case; [|fin_none].
 
 (** Consequence under four [AX] layers. *)
-Lemma ax4_done_mono {X} (t : ctreeW (CSLObs (nat * nat)) Bn X) w
-  (P Q : X -> World (writerE (CSLObs (nat * nat))) -> Prop) :
+Lemma ax4_done_mono {W X} (t : ctreeW W Bn X) w
+  (P Q : X -> World (writerE W) -> Prop) :
   (forall x w, P x w -> Q x w) ->
   anc (entailsL X (CNow (fun _ => True)))
     (anc (entailsL X (CNow (fun _ => True)))
@@ -224,18 +229,18 @@ Qed.
 
 (** ** Negative control: without region [1] the child's write faults. *)
 
-(** The parent's write and yield are silent; the first scheduler step hands
-    the child a heap without cell [1], where [CWrite 1 1] is [Stuck]. *)
+(** The parent's write and yield are silent; the first logged scheduler pick
+    hands the child a heap without cell [1], where [CWrite 1 1] is [Stuck]. *)
 Lemma wproc_own_2_stuck b ctx c :
   run_rr (fork2 (wproc 1) (wproc 2)) (own 2 b ctx c) ~
-  (Step Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+  (log (inr 0 : rr_obs);; Stuck : ctreeW rr_obs Bn (SSig * unit)).
 Proof.
   unfold fork2; rewrite run_rr_fork_bind; unfold denote.
   focus_parent; unfold wproc at 2; rr_prefix write_yield_fork_free.
   rewrite instr_flow_write_single by (cbn; discriminate).
-  rewrite bind_ret_l; cbn [Vector.replace caseS' parent own region csl_memory fst snd].
+  rewrite translate_ret, bind_ret_l; cbn [Vector.replace caseS' parent own region csl_memory fst snd].
   focus_parent; rewrite interp_rr_bind, interp_rr_yield, interp_schedule_rr_select, rr_pick_1_0.
-  apply sb_step; unfocus.
+  unfold log; rewrite bind_trigger; apply sb_vis; intros []; unfocus.
   focus_child; unfold wproc; rewrite interp_rr_bind.
   rewrite interp_rr_write_missing; reflexivity.
 Qed.
@@ -251,7 +256,9 @@ Proof.
   intros b ctx c H.
   rewrite wproc_own_2_stuck in H.
   destruct H as (_ & _ & H).
-  specialize (H Stuck Pure ltac:(apply ktrans_step; split; [reflexivity|split; [reflexivity|constructor]])).
+  specialize (H Stuck (Obs (Log (inr 0 : rr_obs)) tt)
+    ltac:(unfold log; rewrite bind_trigger; apply ktrans_vis; exists tt;
+          split; [reflexivity|split; [reflexivity|constructor]])).
   destruct H as (_ & Hs & _); exact (can_step_stuck _ Hs).
 Qed.
 

@@ -12,9 +12,11 @@
     re-exported from here.
 
     The whole CSL stack is fixed at the finite branch signature [Bn]: the
-    round-robin refinement ([CTree.Interp.Refine]) only exists at [Bn], and
-    the non-deterministic scheduler is instantiated at the same signature so
-    one denotation serves both schedulers. *)
+    policy runner ([CTree.Interp.Yield.Policy]) only exists at [Bn], and the
+    non-deterministic scheduler is instantiated at the same signature so one
+    denotation serves both schedulers.  Under round robin the observations
+    are [CSLObs (nat * nat) + nat]: program observations under [inl], logged
+    scheduling decisions under [inr]. *)
 
 From Stdlib Require Import List Lia Arith.PeanoNat Fin Vector.
 
@@ -39,6 +41,7 @@ From TICL Require Import
   CTree.Interp.State.Mod
   CTree.Interp.Yield.Mod
   CTree.Interp.Yield.SBisim
+  CTree.Interp.Yield.Policy
   CTree.Interp.Yield.RoundRobin
   CTree.Logic.Trans
   CTree.Logic.CanStep
@@ -193,10 +196,11 @@ Lemma interp_rr_heap_free n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
     (ts @ i := K tt) (Some i) m (memory',(ctx,c)).
 Proof.
   intro Free.
-  rewrite (interp_schedule_rr_user_bind sh n ts i _
+  rewrite (interp_schedule_fair_user_bind rr_scheduler sh n ts i _
     (inl1 (HFree base)) K m (memory,(ctx,c)) (raw_heap_free_head base K)).
-  rewrite interp_state_trigger_bind; cbn [sh h_sum].
-  rewrite (heap_handler_free base memory memory' (ctx,c) Free), bind_ret_l; reflexivity.
+  cbn [sh h_sum].
+  rewrite (heap_handler_free base memory memory' (ctx,c) Free), translate_ret, bind_ret_l;
+    reflexivity.
 Qed.
 
 Lemma interp_rr_heap_free_invalid n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
@@ -204,13 +208,14 @@ Lemma interp_rr_heap_free_invalid n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   managed_free memory base = None ->
   interp_schedule_rr sh (S n)
     (ts @ i := (heap_free (E:=CEff) base >>= K)) (Some i) m (memory,(ctx,c)) ~
-  (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+  (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
 Proof.
   intro Invalid.
-  rewrite (interp_schedule_rr_user_bind sh n ts i _
+  rewrite (interp_schedule_fair_user_bind rr_scheduler sh n ts i _
     (inl1 (HFree base)) K m (memory,(ctx,c)) (raw_heap_free_head base K)).
-  rewrite interp_state_trigger_bind; cbn [sh h_sum].
-  rewrite (heap_handler_free_invalid base memory (ctx,c) Invalid), bind_stuck; reflexivity.
+  cbn [sh h_sum].
+  rewrite (heap_handler_free_invalid base memory (ctx,c) Invalid), translate_stuck_node,
+    bind_stuck; reflexivity.
 Qed.
 
 Lemma interp_nd_heap_free n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
@@ -278,10 +283,10 @@ Lemma interp_rr_get_ctx n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   interp_schedule_rr sh (S n) (ts @ i := K (csl_context s)) (Some i) cursor s.
 Proof.
   destruct s as [memory [ctx c]].
-  rewrite (interp_schedule_rr_user_bind sh n ts i _
+  rewrite (interp_schedule_fair_user_bind rr_scheduler sh n ts i _
     (inr1 (inl1 Get)) K cursor (memory,(ctx,c)) (raw_source_get_head K)).
-  rewrite interp_state_trigger_bind; cbn [sh h_sum].
-  rewrite csl_context_handler_get, bind_ret_l; reflexivity.
+  cbn [sh h_sum].
+  rewrite csl_context_handler_get, translate_ret, bind_ret_l; reflexivity.
 Qed.
 
 Lemma interp_nd_put_ctx n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
@@ -302,16 +307,16 @@ Qed.
 Lemma interp_rr_put_ctx n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   (ctx' : Ctx.Ctx) (K : unit -> thread sE Bn) (cursor : nat) (s : SSig) :
   interp_schedule_rr sh (S n) (ts @ i := (source_put ctx' >>= K)) (Some i) cursor s ~
-  (log (inl ctx' : CSLObs (nat * nat));;
+  (log (inl (inl ctx') : CSLObs (nat * nat) + nat);;
    interp_schedule_rr sh (S n) (ts @ i := K tt) (Some i) cursor
      (csl_set_context s ctx')).
 Proof.
   destruct s as [memory [ctx c]].
-  rewrite (interp_schedule_rr_user_bind sh n ts i _
+  rewrite (interp_schedule_fair_user_bind rr_scheduler sh n ts i _
     (inr1 (inl1 (Put ctx'))) K cursor (memory,(ctx,c)) (raw_source_put_head ctx' K)).
-  rewrite interp_state_trigger_bind; cbn [sh h_sum].
-  rewrite csl_context_handler_put, bind_bind.
-  setoid_rewrite bind_ret_l; reflexivity.
+  cbn [sh h_sum].
+  rewrite csl_context_handler_put, translate_log_bind, bind_bind.
+  setoid_rewrite translate_ret; setoid_rewrite bind_ret_l; reflexivity.
 Qed.
 
 (** ** Standalone erased threads over the CSL handler
@@ -359,8 +364,8 @@ Qed.
 (** ** Selection from an unfocused nonempty pool
 
     The non-deterministic scheduler picks with one visible branch; the
-    round-robin scheduler picks with one visible step.  Both are exposed
-    through the [_brS]/[_step] lemma families. *)
+    round-robin scheduler picks with one logged [Scheduled] slot.  Both are
+    exposed through the [_brS]/[_vis] lemma families. *)
 
 Lemma anl_csl_nd_select n (ts : pool sE Bn (S n)) (memory : ManagedHeap) ctx c w
   (φ ψ : ticllW (CSLObs (nat * nat))) :
@@ -444,72 +449,74 @@ Proof.
 Qed.
 
 Lemma anl_csl_rr_select n (ts : pool sE Bn (S n)) m (memory : ManagedHeap) ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     ts (None) m (memory,(ctx,c))}, {w} |= φ AN ψ )> <->
-   (<( {Step (interp_schedule_rr sh (S n)
+   (<( {Vis (Log (inr (slot_index (rr_pick n m)))) (fun _ => interp_schedule_rr sh (S n)
     ts (Some (rr_pick n m)) (S m) (memory,(ctx,c)))}, {w} |= φ )> /\
     <( {interp_schedule_rr sh (S n)
-    ts (Some (rr_pick n m)) (S m) (memory,(ctx,c))}, {w} |= ψ )>)).
+    ts (Some (rr_pick n m)) (S m) (memory,(ctx,c))}, {Obs (Log (inr (slot_index (rr_pick n m)))) tt} |= ψ )>)).
 Proof.
   rewrite interp_schedule_rr_select.
-  apply anl_step.
+  rewrite (anl_vis _ _ tt); split; intros [H1 H2]; (split; [exact H1|]); [exact (H2 tt)|intros []; exact H2].
 Qed.
 
 Lemma anr_csl_rr_select n (ts : pool sE Bn (S n)) m (memory : ManagedHeap) ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   (<[ {interp_schedule_rr sh (S n)
     ts (None) m (memory,(ctx,c))}, {w} |= φ AN ψ ]> <->
-   (<( {Step (interp_schedule_rr sh (S n)
+   (<( {Vis (Log (inr (slot_index (rr_pick n m)))) (fun _ => interp_schedule_rr sh (S n)
     ts (Some (rr_pick n m)) (S m) (memory,(ctx,c)))}, {w} |= φ )> /\
     <[ {interp_schedule_rr sh (S n)
-    ts (Some (rr_pick n m)) (S m) (memory,(ctx,c))}, {w} |= ψ ]>)).
+    ts (Some (rr_pick n m)) (S m) (memory,(ctx,c))}, {Obs (Log (inr (slot_index (rr_pick n m)))) tt} |= ψ ]>)).
 Proof.
   rewrite interp_schedule_rr_select.
-  apply anr_step.
+  rewrite (anr_vis _ _ tt); split; intros [H1 H2]; (split; [exact H1|]); [exact (H2 tt)|intros []; exact H2].
 Qed.
 
 Lemma aul_csl_rr_select n (ts : pool sE Bn (S n)) m (memory : ManagedHeap) ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     ts (None) m (memory,(ctx,c))}, {w} |= φ AU ψ )> <->
-   (<( {Step (interp_schedule_rr sh (S n)
+   (<( {Vis (Log (inr (slot_index (rr_pick n m)))) (fun _ => interp_schedule_rr sh (S n)
     ts (Some (rr_pick n m)) (S m) (memory,(ctx,c)))}, {w} |= ψ )> \/
-   (<( {Step (interp_schedule_rr sh (S n)
+   (<( {Vis (Log (inr (slot_index (rr_pick n m)))) (fun _ => interp_schedule_rr sh (S n)
     ts (Some (rr_pick n m)) (S m) (memory,(ctx,c)))}, {w} |= φ )> /\
     <( {interp_schedule_rr sh (S n)
-    ts (Some (rr_pick n m)) (S m) (memory,(ctx,c))}, {w} |= φ AU ψ )>))).
+    ts (Some (rr_pick n m)) (S m) (memory,(ctx,c))}, {Obs (Log (inr (slot_index (rr_pick n m)))) tt} |= φ AU ψ )>))).
 Proof.
   rewrite interp_schedule_rr_select.
-  symmetry; apply aul_step.
+  rewrite <- (aul_vis _ _ tt); split; (intros [H|[H1 H2]]; [left; exact H|right; (split; [exact H1|])]);
+    [exact (H2 tt)|intros []; exact H2].
 Qed.
 
 Lemma aur_csl_rr_select n (ts : pool sE Bn (S n)) m (memory : ManagedHeap) ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   (<[ {interp_schedule_rr sh (S n)
     ts (None) m (memory,(ctx,c))}, {w} |= φ AU ψ ]> <->
-   (<[ {Step (interp_schedule_rr sh (S n)
+   (<[ {Vis (Log (inr (slot_index (rr_pick n m)))) (fun _ => interp_schedule_rr sh (S n)
     ts (Some (rr_pick n m)) (S m) (memory,(ctx,c)))}, {w} |= ψ ]> \/
-   (<( {Step (interp_schedule_rr sh (S n)
+   (<( {Vis (Log (inr (slot_index (rr_pick n m)))) (fun _ => interp_schedule_rr sh (S n)
     ts (Some (rr_pick n m)) (S m) (memory,(ctx,c)))}, {w} |= φ )> /\
     <[ {interp_schedule_rr sh (S n)
-    ts (Some (rr_pick n m)) (S m) (memory,(ctx,c))}, {w} |= φ AU ψ ]>))).
+    ts (Some (rr_pick n m)) (S m) (memory,(ctx,c))}, {Obs (Log (inr (slot_index (rr_pick n m)))) tt} |= φ AU ψ ]>))).
 Proof.
   rewrite interp_schedule_rr_select.
-  symmetry; apply aur_step.
+  rewrite <- (aur_vis _ _ tt); split; (intros [H|[H1 H2]]; [left; exact H|right; (split; [exact H1|])]);
+    [exact (H2 tt)|intros []; exact H2].
 Qed.
 
 Lemma ag_csl_rr_select n (ts : pool sE Bn (S n)) m (memory : ManagedHeap) ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) :
   (<( {interp_schedule_rr sh (S n)
     ts (None) m (memory,(ctx,c))}, {w} |= AG φ )> <->
-   (<( {Step (interp_schedule_rr sh (S n)
+   (<( {Vis (Log (inr (slot_index (rr_pick n m)))) (fun _ => interp_schedule_rr sh (S n)
     ts (Some (rr_pick n m)) (S m) (memory,(ctx,c)))}, {w} |= φ )> /\
     <( {interp_schedule_rr sh (S n)
-    ts (Some (rr_pick n m)) (S m) (memory,(ctx,c))}, {w} |= AG φ )>)).
+    ts (Some (rr_pick n m)) (S m) (memory,(ctx,c))}, {Obs (Log (inr (slot_index (rr_pick n m)))) tt} |= AG φ )>)).
 Proof.
   rewrite interp_schedule_rr_select.
-  symmetry; apply ag_step.
+  rewrite <- (ag_vis _ _ tt); split; intros [H1 H2]; (split; [exact H1|]); [exact (H2 tt)|intros []; exact H2].
 Qed.
 
 (** ** Valid whole-block free through the shared raw heap event *)
@@ -576,7 +583,7 @@ Qed.
 
 Lemma anl_csl_rr_heap_free n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   base (K : unit -> thread sE Bn) m (memory memory' : ManagedHeap) ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   managed_free memory base = Some memory' ->
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (heap_free (E:=CEff) base >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AN ψ )> <->
@@ -588,7 +595,7 @@ Qed.
 
 Lemma anr_csl_rr_heap_free n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   base (K : unit -> thread sE Bn) m (memory memory' : ManagedHeap) ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   managed_free memory base = Some memory' ->
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (heap_free (E:=CEff) base >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AN ψ ]> <->
@@ -600,7 +607,7 @@ Qed.
 
 Lemma aul_csl_rr_heap_free n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   base (K : unit -> thread sE Bn) m (memory memory' : ManagedHeap) ctx c w
-  (φ ψ : ticllW (CSLObs (nat * nat))) :
+  (φ ψ : ticllW (CSLObs (nat * nat) + nat)) :
   managed_free memory base = Some memory' ->
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (heap_free (E:=CEff) base >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AU ψ )> <->
@@ -612,7 +619,7 @@ Qed.
 
 Lemma aur_csl_rr_heap_free n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   base (K : unit -> thread sE Bn) m (memory memory' : ManagedHeap) ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) (ψ : ticlrW (CSLObs (nat * nat)) (SSig * unit)) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) (ψ : ticlrW (CSLObs (nat * nat) + nat) (SSig * unit)) :
   managed_free memory base = Some memory' ->
   (<[ {interp_schedule_rr sh (S n)
     (ts @ i := (heap_free (E:=CEff) base >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= φ AU ψ ]> <->
@@ -624,7 +631,7 @@ Qed.
 
 Lemma ag_csl_rr_heap_free n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   base (K : unit -> thread sE Bn) m (memory memory' : ManagedHeap) ctx c w
-  (φ : ticllW (CSLObs (nat * nat))) :
+  (φ : ticllW (CSLObs (nat * nat) + nat)) :
   managed_free memory base = Some memory' ->
   (<( {interp_schedule_rr sh (S n)
     (ts @ i := (heap_free (E:=CEff) base >>= K)) (Some i) m (memory,(ctx,c))}, {w} |= AG φ )> <->

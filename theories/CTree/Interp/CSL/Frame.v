@@ -1,7 +1,8 @@
 From Stdlib Require Import FunctionalExtensionality.
 From TICL Require Export CTree.Interp.CSL.Mod CTree.Logic.Sim Logic.Simulation.
 From TICL Require Import CTree.Core Logic.Kripke Logic.Semantics
-  CTree.Logic.Trans CTree.Interp.State.Mod Utils.Pcm.
+  CTree.Logic.Trans CTree.Interp.State.Mod CTree.Interp.Yield.Mod
+  CTree.Interp.Yield.Policy CTree.Interp.Yield.Frame Utils.Pcm.
 
 Import CTree CTreeNotations TiclNotations CoindNotations.
 Local Open Scope ctree_scope.
@@ -42,8 +43,8 @@ Proof.
   subst h2 al2 x1 x2; f_equal; f_equal; congruence.
 Qed.
 (** Existentially frame a result postcondition. *)
-Definition frame_post {A X} (fr: ManagedHeap)
-  (P: SSig * X -> World (writerE (CSLObs A)) -> Prop) :=
+Definition frame_post {Wo X} (fr: ManagedHeap)
+  (P: SSig * X -> World (writerE Wo) -> Prop) :=
   fun x' w => exists x, frameRV fr x x' /\ P x w.
 
 (** A disjoint well-formed source is related to its explicitly framed state. *)
@@ -84,169 +85,235 @@ Proof.
   - exact HEa.
 Qed.
 
-(** Structural invariant: both trees interpret the same source under frame-related states. *)
-Definition frame_tree {X} (fr: ManagedHeap)
-  (t t': ctreeW (CSLObs (nat * nat)) Bn (SSig * X)) : Prop :=
-  exists (u: ctree sE Bn X) s s', Framable no_alloc_sE u /\ frame_rel fr s s' /\
-    t ≅ interp_state sh u s /\ t' ≅ interp_state sh u s'.
-
-(** The interpreter invariant respects equivalence of both trees. *)
-#[global] Instance frame_tree_equ {X} fr :
-  Proper (equ eq ==> equ eq ==> iff) (@frame_tree X fr).
-Proof.
-  intros t u Htu t' u' Htu'; unfold frame_tree; split;
-    intros (v & s & s' & HF & HR & HE & HE'); exists v, s, s'.
-  all: split; [exact HF|split; [exact HR|split]].
-  - now rewrite <- Htu.
-  - now rewrite <- Htu'.
-  - now rewrite Htu.
-  - now rewrite Htu'.
-Qed.
-
-(** The same framable source in related states establishes the invariant. *)
-Lemma frame_tree_intro {X} fr (u: ctree sE Bn X) s s' :
-  Framable no_alloc_sE u -> frame_rel fr s s' ->
-  frame_tree fr (interp_state sh u s) (interp_state sh u s').
-Proof.
-  intros HF HR; exists u, s, s'; split; [exact HF|split; [exact HR|split; reflexivity]].
-Qed.
-
-(** Leading guards preserve the interpreter invariant. *)
-Lemma frame_tree_guard {X} fr (u: ctree sE Bn X) s s' :
-  Framable no_alloc_sE u -> frame_rel fr s s' ->
-  frame_tree fr (Guard (interp_state sh u s)) (Guard (interp_state sh u s')).
-Proof.
-  intros; rewrite <- !interp_state_guard; apply frame_tree_intro; auto using fr_guard.
-Qed.
-
 (** Auxiliary-state updates preserve the frame relation. *)
 Lemma frame_rel_aux fr s s' a : frame_rel fr s s' ->
   frame_rel fr (csl_memory s, a) (csl_memory s', a).
 Proof. intros [HI [HA HE]]; split; [exact HI|split; [reflexivity|exact HE]]. Qed.
 
-Local Ltac stuck_shape := rewrite bind_stuck; apply CsStuckF.
-Local Ltac guard_shape := apply CsGuardF, frame_tree_intro; [eauto|].
-(** One interpreter step preserves [frame_tree], by cases on the framable source node. *)
-Lemma frame_shape {X} (fr: ManagedHeap) (u: ctree sE Bn X) s s' :
-  Framable no_alloc_sE u -> frame_rel fr s s' ->
-  csim_shape (frameRV fr) (frame_tree fr)
-    (observe (interp_state sh u s)) (observe (interp_state sh u s')).
+(** ** Framing is a property of the handler.
+
+    A handler frames when, in frame-related states, every admitted event
+    responds with the same shape on both sides: a return with frame-related
+    states, or one logged observation followed by such a return; a stuck
+    source response simulates anything.  The CSL heap handler frames; the policy handler of a framing
+    handler frames, since it only relabels responses and logs picks. *)
+Variant frame_resp {Wo Y} (fr: ManagedHeap)
+  : ctreeW Wo Bn (SSig * Y) -> ctreeW Wo Bn (SSig * Y) -> Prop :=
+| frame_resp_stuck t t' : t ≅ Stuck -> frame_resp fr t t'
+| frame_resp_ret t t' s x s' : frame_rel fr s s' ->
+    t ≅ Ret (s,x) -> t' ≅ Ret (s',x) -> frame_resp fr t t'
+| frame_resp_log t t' o s x s' : frame_rel fr s s' ->
+    t ≅ Vis (Log o) (fun _ => Ret (s,x)) -> t' ≅ Vis (Log o) (fun _ => Ret (s',x)) ->
+    frame_resp fr t t'.
+
+Definition FrameHandler {Es Wo} (h: Es ~> stateT SSig (ctreeW Wo Bn))
+  (okE: forall Y, Es Y -> Prop) : Prop :=
+  forall fr Y (e: Es Y) s s', okE Y e -> frame_rel fr s s' -> frame_resp fr (h Y e s) (h Y e s').
+
+(** The CSL handler frames on every event but deterministic allocation. *)
+Lemma sh_frame_handler : FrameHandler (@sh (nat * nat)) no_alloc_sE.
 Proof.
-  intros HF HR;
-  apply framable_unfold in HF.
-  rewrite !unfold_interp_state; cbn.
-  destruct HF; cbn.
-  - apply CsRetF; split; auto.
-  - apply CsStuckF.
-  - apply CsStepF, frame_tree_guard; auto.
-  - apply CsGuardF, frame_tree_intro; auto.
-  - destruct e as [e|[e|e]].
-    + destruct e; cbn [no_alloc_sE] in H; try contradiction;
-        cbn [sh h_sum heap_handler].
-      * destruct (fst (fst s) a) eqn:HV.
-        -- assert (HV': fst (fst s') a = Some n) by (eapply frame_rel_read; eauto).
-           rewrite HV'; rewrite !bind_ret_l.
-           apply CsGuardF, frame_tree_intro; auto.
-        -- stuck_shape.
-      * destruct (fst (fst s) a) eqn:HV.
-        -- assert (HV': fst (fst s') a = Some n) by (eapply frame_rel_read; eauto).
-           rewrite HV'; rewrite !bind_ret_l.
-           guard_shape.
-           eapply frame_rel_write; [exact HR|unfold csl_memory; congruence].
-        -- stuck_shape.
-      * destruct (managed_free (fst s) a) as [m|] eqn:HM.
-        -- destruct HR as [[HD HW] [HA HE]].
-           destruct (managed_free_pop _ _ _ _ HD HW HM) as [[mf [HF HEf]] HDf].
-           destruct (managed_free_peq _ _ _ _ (peq_sym _ _ HE) HF) as [mb [HB HEb]].
-           unfold csl_memory in HB; rewrite HB, !bind_ret_l.
-           guard_shape.
-           split; [split; [exact HDf|eapply managed_free_preserves_wf; eauto]|].
-           split; [exact HA|eapply peq_trans; [apply peq_sym; exact HEb|exact HEf]].
-        -- stuck_shape.
-      * destruct (fst (fst s) a) eqn:HV.
-        -- assert (HV': fst (fst s') a = Some n) by (eapply frame_rel_read; eauto).
-           rewrite HV'; destruct (Nat.eqb n expected); rewrite !bind_ret_l;
-             guard_shape; [|exact HR].
-           eapply frame_rel_write; [exact HR|unfold csl_memory; congruence].
-        -- stuck_shape.
-    + destruct e; cbn [sh h_sum csl_context_handler].
-      * assert (HC: csl_context s' = csl_context s) by (unfold csl_context; now rewrite (proj1 (proj2 HR))).
-        rewrite HC, !bind_ret_l; apply CsGuardF, frame_tree_intro; auto.
-      * unfold log, CTree.trigger; rewrite !bind_bind, !bind_vis.
-        apply CsVisF; intros []; rewrite !bind_ret_l.
-        apply frame_tree_guard; [apply H0|].
-        unfold csl_set_context, csl_counter; cbn.
-        rewrite (proj1 (proj2 HR)); apply frame_rel_aux, HR.
-    + destruct e; cbn [sh h_sum csl_emit_handler].
-      assert (HC: csl_counter s' = csl_counter s) by (unfold csl_counter; now rewrite (proj1 (proj2 HR))).
-      rewrite HC; unfold log, CTree.trigger; rewrite !bind_bind, !bind_vis.
-      apply CsVisF; intros []; rewrite !bind_ret_l.
-      apply frame_tree_guard; [apply H0|].
-      unfold csl_context; cbn.
+  intros fr Y e s s' H HR.
+  destruct e as [e|[e|e]].
+  - destruct e; cbn [no_alloc_sE] in H; try contradiction;
+      cbn [sh h_sum heap_handler].
+    + destruct (fst (fst s) a) eqn:HV.
+      * assert (HV': fst (fst s') a = Some n) by (eapply frame_rel_read; eauto).
+        rewrite HV'; apply (frame_resp_ret fr _ _ s n s' HR); reflexivity.
+      * apply frame_resp_stuck; reflexivity.
+    + destruct (fst (fst s) a) eqn:HV.
+      * assert (HV': fst (fst s') a = Some n) by (eapply frame_rel_read; eauto).
+        rewrite HV'; eapply frame_resp_ret; [|reflexivity|reflexivity].
+        eapply frame_rel_write; [exact HR|unfold csl_memory; congruence].
+      * apply frame_resp_stuck; reflexivity.
+    + destruct (managed_free (fst s) a) as [m|] eqn:HM.
+      * destruct HR as [[HD HW] [HA HE]].
+        destruct (managed_free_pop _ _ _ _ HD HW HM) as [[mf [HF HEf]] HDf].
+        destruct (managed_free_peq _ _ _ _ (peq_sym _ _ HE) HF) as [mb [HB HEb]].
+        unfold csl_memory in HB; rewrite HB.
+        eapply frame_resp_ret; [|reflexivity|reflexivity].
+        split; [split; [exact HDf|eapply managed_free_preserves_wf; eauto]|].
+        split; [exact HA|eapply peq_trans; [apply peq_sym; exact HEb|exact HEf]].
+      * apply frame_resp_stuck; reflexivity.
+    + destruct (fst (fst s) a) eqn:HV.
+      * assert (HV': fst (fst s') a = Some n) by (eapply frame_rel_read; eauto).
+        rewrite HV'; destruct (Nat.eqb n expected);
+          eapply frame_resp_ret; [|reflexivity|reflexivity| |reflexivity|reflexivity];
+          [|exact HR].
+        eapply frame_rel_write; [exact HR|unfold csl_memory; congruence].
+      * apply frame_resp_stuck; reflexivity.
+  - destruct e; cbn [sh h_sum csl_context_handler].
+    + assert (HC: csl_context s' = csl_context s)
+        by (unfold csl_context; now rewrite (proj1 (proj2 HR))).
+      rewrite HC; apply (frame_resp_ret fr _ _ s (csl_context s) s' HR); reflexivity.
+    + eapply frame_resp_log;
+        [|unfold log, CTree.trigger; rewrite bind_vis; apply vis_equ_node; intros [];
+          rewrite bind_ret_l; reflexivity
+         |unfold log, CTree.trigger; rewrite bind_vis; apply vis_equ_node; intros [];
+          rewrite bind_ret_l; reflexivity].
+      unfold csl_set_context, csl_counter; cbn.
       rewrite (proj1 (proj2 HR)); apply frame_rel_aux, HR.
-  - cbn; apply CsBrF; intro y;
-      change (subst ?g (subst ?f (Ret y))) with (CTree.bind (CTree.bind (Ret y) f) g);
-      rewrite !bind_ret_l.
-    + apply guards_to_step_can_trans, guards_to_step_guard,
-        guards_to_step_interp_state, H.
-    + apply frame_tree_guard; auto.
+  - destruct e; cbn [sh h_sum csl_emit_handler].
+    assert (HC: csl_counter s' = csl_counter s)
+      by (unfold csl_counter; now rewrite (proj1 (proj2 HR))).
+    rewrite HC; eapply frame_resp_log;
+      [|unfold log, CTree.trigger; rewrite bind_vis; apply vis_equ_node; intros [];
+        rewrite bind_ret_l; reflexivity
+       |unfold log, CTree.trigger; rewrite bind_vis; apply vis_equ_node; intros [];
+        rewrite bind_ret_l; reflexivity].
+    unfold csl_context; cbn.
+    rewrite (proj1 (proj2 HR)); apply frame_rel_aux, HR.
 Qed.
 
-(** Interpreting a framable source in related states gives a conditional simulation. *)
-Theorem csim_interp_sh_frame {X} (fr: ManagedHeap) :
-  forall (u: ctree sE Bn X) (s s': SSig), Framable no_alloc_sE u -> frame_rel fr s s' ->
-  csim (frameRV fr) (interp_state sh u s) (interp_state sh u s').
+(** Relabelling preserves a framing response shape. *)
+Lemma frame_resp_translate {W Y} fr (t t' : ctreeW W Bn (SSig * Y)) :
+  frame_resp fr t t' -> frame_resp fr (translate relabel_log t) (translate relabel_log t').
 Proof.
-  intros u s s' HF HR; eapply (csim_structural (frameRV fr) (frame_tree fr)).
-  - intros t t' (v & σ & σ' & HV & Hσ & HE & HE').
-    rewrite HE, HE'; now apply frame_shape.
-  - now apply frame_tree_intro.
+  intros [u u' Eu|u u' s x s' HR Eu Eu'|u u' o s x s' HR Eu Eu'].
+  - apply frame_resp_stuck; rewrite Eu; apply translate_stuck_node.
+  - apply (frame_resp_ret fr _ _ s x s' HR); [rewrite Eu|rewrite Eu']; apply translate_ret.
+  - apply (frame_resp_log fr _ _ (inl o) s x s' HR);
+      [rewrite Eu|rewrite Eu']; rewrite translate_vis; cbn [relabel_log];
+      apply vis_equ_node; intros []; apply translate_ret.
 Qed.
 
+(** The policy handler of a framing handler frames: scheduling events log
+    their slot and leave the state alone. *)
+Lemma policy_handler_frame {E W} (h: E ~> stateT SSig (ctreeW W Bn)) okE :
+  FrameHandler h okE -> FrameHandler (policy_handler h) (okE_lift okE).
+Proof.
+  intros HH fr Y e s s' Hok HR.
+  destruct e as [e|e].
+  - destruct e as [i]; cbn [policy_handler h_sum sched_handler].
+    apply (frame_resp_log fr _ _ (inr i) s tt s' HR); reflexivity.
+  - cbn [policy_handler h_sum]; apply frame_resp_translate, HH; [exact Hok|exact HR].
+Qed.
+
+Section FrameCore.
+  Context {Es : Type -> Type} {Wo : Type}
+    (h: Es ~> stateT SSig (ctreeW Wo Bn)) (okE: forall Y, Es Y -> Prop)
+    (HH: FrameHandler h okE).
+
+  (** Structural invariant: both trees interpret the same source under frame-related states. *)
+  Definition frame_tree {X} (fr: ManagedHeap)
+    (t t': ctreeW Wo Bn (SSig * X)) : Prop :=
+    exists (u: ctree Es Bn X) s s', Framable okE u /\ frame_rel fr s s' /\
+      t ≅ interp_state h u s /\ t' ≅ interp_state h u s'.
+
+  (** The interpreter invariant respects equivalence of both trees. *)
+  #[global] Instance frame_tree_equ {X} fr :
+    Proper (equ eq ==> equ eq ==> iff) (@frame_tree X fr).
+  Proof.
+    intros t u Htu t' u' Htu'; unfold frame_tree; split;
+      intros (v & s & s' & HF & HR & HE & HE'); exists v, s, s'.
+    all: split; [exact HF|split; [exact HR|split]].
+    - now rewrite <- Htu.
+    - now rewrite <- Htu'.
+    - now rewrite Htu.
+    - now rewrite Htu'.
+  Qed.
+
+  (** The same framable source in related states establishes the invariant. *)
+  Lemma frame_tree_intro {X} fr (u: ctree Es Bn X) s s' :
+    Framable okE u -> frame_rel fr s s' ->
+    frame_tree fr (interp_state h u s) (interp_state h u s').
+  Proof.
+    intros HF HR; exists u, s, s'; split; [exact HF|split; [exact HR|split; reflexivity]].
+  Qed.
+
+  (** Leading guards preserve the interpreter invariant. *)
+  Lemma frame_tree_guard {X} fr (u: ctree Es Bn X) s s' :
+    Framable okE u -> frame_rel fr s s' ->
+    frame_tree fr (Guard (interp_state h u s)) (Guard (interp_state h u s')).
+  Proof.
+    intros; rewrite <- !interp_state_guard; apply frame_tree_intro; auto using fr_guard.
+  Qed.
+
+  (** One interpreter step preserves [frame_tree], by cases on the framable source node. *)
+  Lemma frame_shape {X} (fr: ManagedHeap) (u: ctree Es Bn X) s s' :
+    Framable okE u -> frame_rel fr s s' ->
+    csim_shape (frameRV fr) (frame_tree fr)
+      (observe (interp_state h u s)) (observe (interp_state h u s')).
+  Proof.
+    intros HF HR;
+    apply framable_unfold in HF.
+    rewrite !unfold_interp_state; cbn.
+    destruct HF; cbn.
+    - apply CsRetF; split; auto.
+    - apply CsStuckF.
+    - apply CsStepF, frame_tree_guard; auto.
+    - apply CsGuardF, frame_tree_intro; auto.
+    - destruct (HH fr _ e s s' H HR) as [r r' Er|r r' s0 x s0' HR0 Er Er'|r r' o s0 x s0' HR0 Er Er'].
+      + rewrite Er, bind_stuck; apply CsStuckF.
+      + rewrite Er, Er', !bind_ret_l; apply CsGuardF, frame_tree_intro; auto.
+      + rewrite Er, Er', !bind_vis; apply CsVisF; intros []; rewrite !bind_ret_l.
+        apply frame_tree_guard; auto.
+    - cbn; apply CsBrF; intro y;
+        change (subst ?g (subst ?f (Ret y))) with (CTree.bind (CTree.bind (Ret y) f) g);
+        rewrite !bind_ret_l.
+      + apply guards_to_step_can_trans, guards_to_step_guard,
+          guards_to_step_interp_state, H.
+      + apply frame_tree_guard; auto.
+  Qed.
+
+  (** Interpreting a framable source in related states gives a conditional simulation. *)
+  Theorem csim_interp_frame {X} (fr: ManagedHeap) :
+    forall (u: ctree Es Bn X) (s s': SSig), Framable okE u -> frame_rel fr s s' ->
+    csim (frameRV fr) (interp_state h u s) (interp_state h u s').
+  Proof.
+    intros u s s' HF HR; eapply (csim_structural (frameRV fr) (frame_tree fr)).
+    - intros t t' (v & σ & σ' & HV & Hσ & HE & HE').
+      rewrite HE, HE'; now apply frame_shape.
+    - now apply frame_tree_intro.
+  Qed.
+End FrameCore.
 
 (** Client API: prefixes transport unchanged; native returns and terminal
     semantic postconditions are transported by [frame_post]. *)
 Section FrameLogic.
-  Context {X: Type} (fr: ManagedHeap) (u: ctree sE Bn X) (s s': SSig).
-  Hypothesis HF: Framable no_alloc_sE u.
+  Context {Es : Type -> Type} {Wo : Type}
+    (h: Es ~> stateT SSig (ctreeW Wo Bn)) (okE: forall Y, Es Y -> Prop)
+    (HH: FrameHandler h okE)
+    {X: Type} (fr: ManagedHeap) (u: ctree Es Bn X) (s s': SSig).
+  Hypothesis HF: Framable okE u.
   Hypothesis HR: frame_rel fr s s'.
 
   (** Transport a prefix formula unchanged through heap framing. *)
-  Theorem ticll_csl_frame (φ: ticll (writerE (CSLObs (nat * nat)))) w :
-    <( {interp_state sh u s}, w |= φ )> -> <( {interp_state sh u s'}, w |= φ )>.
-  Proof. apply (ticll_csim (frameRV fr)); now apply csim_interp_sh_frame. Qed.
+  Theorem ticll_csl_frame (φ: ticll (writerE Wo)) w :
+    <( {interp_state h u s}, w |= φ )> -> <( {interp_state h u s'}, w |= φ )>.
+  Proof. apply (ticll_csim (frameRV fr)); now apply (csim_interp_frame h okE HH). Qed.
 
   (** Transport a suffix formula through heap framing. *)
-  Theorem ticlr_csl_frame (ψ: ticlr (writerE (CSLObs (nat * nat))) (SSig * X)) w :
+  Theorem ticlr_csl_frame (ψ: ticlr (writerE Wo) (SSig * X)) w :
     not_done w ->
-    <[ {interp_state sh u s}, w |= ψ ]> ->
-    <[ {interp_state sh u s'}, w |= {framer (frameRV fr) ψ} ]>.
+    <[ {interp_state h u s}, w |= ψ ]> ->
+    <[ {interp_state h u s'}, w |= {framer (frameRV fr) ψ} ]>.
   Proof.
     intros Hnd; eapply ticlr_csim.
     - apply frameRV_right_unique.
-    - now apply csim_interp_sh_frame.
+    - now apply (csim_interp_frame h okE HH).
     - now apply simW_refl.
   Qed.
 
   (** Frame a native return postcondition under universal next. *)
   Corollary anr_csl_frame_ret φ P w : not_done w ->
-    <[ {interp_state sh u s}, w |= φ AN ret P ]> ->
-    <[ {interp_state sh u s'}, w |= φ AN ret {frame_post fr P} ]>.
+    <[ {interp_state h u s}, w |= φ AN ret P ]> ->
+    <[ {interp_state h u s'}, w |= φ AN ret {frame_post fr P} ]>.
   Proof. intros Hnd; apply (ticlr_csl_frame (CxR Q_A φ (CRet P))); exact Hnd. Qed.
 
   (** Frame a native return postcondition under universal until. *)
   Corollary aur_csl_frame_ret φ P w : not_done w ->
-    <[ {interp_state sh u s}, w |= φ AU ret P ]> ->
-    <[ {interp_state sh u s'}, w |= φ AU ret {frame_post fr P} ]>.
+    <[ {interp_state h u s}, w |= φ AU ret P ]> ->
+    <[ {interp_state h u s'}, w |= φ AU ret {frame_post fr P} ]>.
   Proof. intros Hnd; apply (ticlr_csl_frame (CuR Q_A φ (CRet P))); exact Hnd. Qed.
 
   (** Frame the terminal postcondition under universal next. *)
   Corollary anr_csl_frame_done φ
-      (P : SSig * X -> World (writerE (CSLObs (nat * nat))) -> Prop) w : not_done w ->
+      (P : SSig * X -> World (writerE Wo) -> Prop) w : not_done w ->
     anc (entailsL (SSig * X) φ) (fun _ wd => done_with P wd)
-      (interp_state sh u s) w ->
+      (interp_state h u s) w ->
     anc (entailsL (SSig * X) φ) (fun _ wd => done_with (frame_post fr P) wd)
-      (interp_state sh u s') w.
+      (interp_state h u s') w.
   Proof.
     intros Hnd H.
     eapply sim_anc with (RV := frameRV fr) (Fr := csim (frameRV fr)).
@@ -255,18 +322,17 @@ Section FrameLogic.
     - intros t t' z HS HP; eapply ticll_csim; eauto.
     - intros t t' z z' HS HW HP.
       exact (sim_done_with (frameRV fr) P z z' HW HP).
-    - exact (csim_interp_sh_frame fr u s s' HF HR).
+    - exact (csim_interp_frame h okE HH fr u s s' HF HR).
     - exact H.
   Qed.
 
-
   (** Frame the terminal postcondition under universal until. *)
   Corollary aur_csl_frame_done φ
-      (P : SSig * X -> World (writerE (CSLObs (nat * nat))) -> Prop) w : not_done w ->
+      (P : SSig * X -> World (writerE Wo) -> Prop) w : not_done w ->
     auc (entailsL (SSig * X) φ) (fun _ wd => done_with P wd)
-      (interp_state sh u s) w ->
+      (interp_state h u s) w ->
     auc (entailsL (SSig * X) φ) (fun _ wd => done_with (frame_post fr P) wd)
-      (interp_state sh u s') w.
+      (interp_state h u s') w.
   Proof.
     intros Hnd H.
     eapply sim_auc with (RV := frameRV fr) (Fr := csim (frameRV fr)).
@@ -275,9 +341,8 @@ Section FrameLogic.
     - intros t t' z HS HP; eapply ticll_csim; eauto.
     - intros t t' z z' HS HW HP.
       exact (sim_done_with (frameRV fr) P z z' HW HP).
-    - exact (csim_interp_sh_frame fr u s s' HF HR).
+    - exact (csim_interp_frame h okE HH fr u s s' HF HR).
     - now apply simW_refl.
     - exact H.
   Qed.
-
 End FrameLogic.
