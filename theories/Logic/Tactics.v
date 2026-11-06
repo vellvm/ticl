@@ -1,9 +1,7 @@
-From Coinduction Require Import
-  coinduction tactics.
+From Coinduction Require Import all.
 
 From TICL Require Import
   Utils.Utils
-  Events.Core
   Logic.Syntax
   Logic.Semantics
   Logic.Congruence.
@@ -21,167 +19,118 @@ Generalizable All Variables.
     the [cdestruct] tactic is used to destruct conjunctions and disjunctions under a ticl entailment in a hypothesis.
     *)
 #[global] Ltac csplit :=
+  ticl_normalize;
   lazymatch goal with
-  | |- @entailsL ?M ?W ?HE ?KMS ?X (CAndL ?p ?q) ?t ?w =>
-      rewrite ticll_and; split
-  | |- @entailsR ?M ?W ?HE ?KMS ?X (CAndR ?p ?q) ?t ?w =>
-      rewrite ticlr_and; split
-                                 
-  | |- @entailsL ?M ?W ?HE ?KMS ?X (CxL Q_A ?p ?q) ?t ?w =>      
-      rewrite ticll_an; split2
-  | |- @entailsR ?M ?W ?HE ?KMS ?X (CxR Q_A ?p ?q) ?t ?w =>
-      rewrite ticlr_an; split2
-  | |- @entailsL ?M ?W ?HE ?KMS ?X (CxL Q_E ?p ?q) ?t ?w =>
-      rewrite ticll_en; split
-  | |- @entailsR ?M ?W ?HE ?KMS ?X (CxR Q_E ?p ?q) ?t ?w =>
-      rewrite ticlr_en; split
-  (* Quantifier is a variable, destruct it *)
-  | |- @entailsL ?M ?W ?HE ?KMS ?X (CxL ?c ?p ?q) ?t ?w =>
+  | |- @entails ?M ?E ?B ?KMS ?X ?b (CAnd ?p ?q) ?t ?w =>
+      rewrite ticl_and; split
+  | |- @entails ?M ?E ?B ?KMS ?X ?b (Cx Q_A ?p ?q) ?t ?w =>
+      rewrite ticl_an; split2
+  | |- @entails ?M ?E ?B ?KMS ?X ?b (Cx Q_E ?p ?q) ?t ?w =>
+      rewrite ticl_en; split
+  (* Quantifier is a variable, destruct it. *)
+  | |- @entails ?M ?E ?B ?KMS ?X ?b (Cx ?c ?p ?q) ?t ?w =>
       is_var c; destruct c; csplit
-  | |- @entailsR ?M ?W ?HE ?KMS ?X (CxR ?c ?p ?q) ?t ?w =>
+  | |- @entails ?M ?E ?B ?KMS ?X false (Cg Q_A ?p) ?t ?w =>
+      rewrite (@equivl_ag_an M E B KMS X p), ticl_an; split2
+  | |- @entails ?M ?E ?B ?KMS ?X false (Cg Q_E ?p) ?t ?w =>
+      rewrite (@equivl_eg_en M E B KMS X p), ticl_en; split
+  | |- @entails ?M ?E ?B ?KMS ?X false (Cg ?c ?p) ?t ?w =>
       is_var c; destruct c; csplit
-                              
-  | |- @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_A ?p) ?t ?w =>
-      rewrite equivl_ag_an, ticll_an; split2
-  | |- @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_E ?p) ?t ?w =>
-      rewrite equivl_eg_en, ticll_en; split
-  (* Quantifier is a variable, destruct it *)
-  | |- @entailsL ?M ?W ?HE ?KMS ?X (Cg ?c ?p ?q) ?t ?w =>
-      is_var c; destruct c; csplit
-                              
-  | |- @entailsL ?M ?W ?HE ?KMS ?X <( pure )> ?t ?w =>
-      rewrite ticll_pure
-  | |- @entailsL ?M ?W ?HE ?KMS ?X <( vis ?φ )> ?t ?w =>
-      rewrite ticll_vis; econstructor
-  | |- @entailsL ?M ?W ?HE ?KMS ?X <( now ?φ )> ?t ?w =>
-      rewrite ticll_now
-  | |- @entailsR ?M ?W ?HE ?KMS ?X <[ finish ?φ ]> ?t ?w =>
-      rewrite ticlr_finish; econstructor
-  | |- @entailsR ?M ?W ?HE ?KMS ?X <[ done ?φ ]> ?t ?w =>
-      rewrite ticlr_done; econstructor
+  | |- @entails ?M ?E ?B ?KMS ?X false <( pure )> ?t ?w =>
+      change <( t, w |=L pure )>; rewrite ticl_pure
+  | |- @entails ?M ?E ?B ?KMS ?X false <( vis ?φ )> ?t ?w =>
+      change <( t, w |=L vis φ )>; rewrite ticl_vis; econstructor
+  | |- @entails ?M ?E ?B ?KMS ?X false (CNow ?φ) ?t ?w =>
+      rewrite ticl_now
+  | |- @entails ?M ?E ?B ?KMS ?X true (CRet ?φ) ?t ?w =>
+      rewrite ticl_ret; eexists; split; [| split; [| split]]
   end.
 
 #[global] Ltac cleft :=
+  ticl_normalize;
   match goal with
-  | |- @entailsL ?M ?W ?HE ?KMS ?X (COrL ?p ?q) ?t ?w =>
-      rewrite ticll_or; left
-  | |- @entailsR ?M ?W ?HE ?KMS ?X (COrR ?p ?q) ?t ?w =>
-      rewrite ticlr_or; left                          
-  | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_A ?p ?q) ?t ?w =>
-      rewrite equivl_au_an, ticll_or; left
-  | |- @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_A ?p ?q) ?t ?w =>
-      rewrite equivr_au_an, ticlr_or; left
-  | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_E ?p ?q) ?t ?w =>
-      rewrite equivl_eu_en, ticll_or; left
-  | |- @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_E ?p ?q) ?t ?w =>
-      rewrite equivr_eu_en, ticlr_or; left
-  (* Quantifier is a variable, destruct it *)
-  | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL ?c ?p ?q) ?t ?w =>
+  | |- @entails ?M ?E ?B ?KMS ?X ?b (COr ?p ?q) ?t ?w =>
+      rewrite ticl_or; left
+  | |- @entails ?M ?E ?B ?KMS ?X ?b (Cu Q_A ?p ?q) ?t ?w =>
+      rewrite (@equiv_au_an M E B KMS X b p q), ticl_or; left
+  | |- @entails ?M ?E ?B ?KMS ?X ?b (Cu Q_E ?p ?q) ?t ?w =>
+      rewrite (@equiv_eu_en M E B KMS X b p q), ticl_or; left
+  (* Quantifier is a variable, destruct it. *)
+  | |- @entails ?M ?E ?B ?KMS ?X ?b (Cu ?c ?p ?q) ?t ?w =>
       is_var c; destruct c; cleft
-  | |- @entailsR ?M ?W ?HE ?KMS ?X (CuR ?c ?p ?q) ?t ?w =>
-      is_var c; destruct c; cleft
-end.
+  end.
 
 #[global] Ltac cright :=
+  ticl_normalize;
   match goal with
-  | |- @entailsL ?M ?W ?HE ?KMS ?X (COrL ?p ?q) ?t ?w =>
-      rewrite ticll_or; right
-  | |- @entailsR ?M ?W ?HE ?KMS ?X (COrR ?p ?q) ?t ?w =>
-      rewrite ticlr_or; right
-  | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_A ?p ?q) ?t ?w =>
-      rewrite equivl_au_an, ticll_or; right
-  | |- @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_A ?p ?q) ?t ?w =>
-      rewrite equivr_au_an, ticlr_or; right
-  | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_E ?p ?q) ?t ?w =>
-      rewrite equivl_eu_en, ticll_or; right
-  | |- @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_E ?p ?q) ?t ?w =>
-      rewrite equivr_eu_en, ticlr_or; right
-  (* Quantifier is a variable, destruct it *)
-  | |- @entailsL ?M ?W ?HE ?KMS ?X (CuL ?c ?p ?q) ?t ?w =>
+  | |- @entails ?M ?E ?B ?KMS ?X ?b (COr ?p ?q) ?t ?w =>
+      rewrite ticl_or; right
+  | |- @entails ?M ?E ?B ?KMS ?X ?b (Cu Q_A ?p ?q) ?t ?w =>
+      rewrite (@equiv_au_an M E B KMS X b p q), ticl_or; right
+  | |- @entails ?M ?E ?B ?KMS ?X ?b (Cu Q_E ?p ?q) ?t ?w =>
+      rewrite (@equiv_eu_en M E B KMS X b p q), ticl_or; right
+  (* Quantifier is a variable, destruct it. *)
+  | |- @entails ?M ?E ?B ?KMS ?X ?b (Cu ?c ?p ?q) ?t ?w =>
       is_var c; destruct c; cright
-  | |- @entailsR ?M ?W ?HE ?KMS ?X (CuR ?c ?p ?q) ?t ?w =>
-      is_var c; destruct c; cright                              
   end.
 
 #[global] Ltac cdestruct H :=
+  ticl_normalize in H;
   match type of H with
-  | <( ?t, ?w |= pure )> => rewrite ticll_pure in H; destruct H; subst
-  | <( ?t, ?w |= vis ?φ )> =>
-      rewrite ticll_vis in H; ddestruction H
-  | <( ?t, ?w |= now ?φ )> => rewrite ticll_now in H; destruct H
-  | <[ ?t, ?w |= finish ?φ ]> =>
-      rewrite ticlr_finish in H; ddestruction H
-  | <[ ?t, ?w |= done ?φ ]> => rewrite ticlr_done in H; ddestruction H
+  | @entails ?M ?E ?B ?KMS ?X false <( pure )> ?t ?w =>
+      change <( t, w |=L pure )> in H; rewrite ticl_pure in H; destruct H; subst
+  | @entails ?M ?E ?B ?KMS ?X false <( vis ?φ )> ?t ?w =>
+      change <( t, w |=L vis φ )> in H; rewrite ticl_vis in H; ddestruction H
+  | @entails ?M ?E ?B ?KMS ?X false (CNow ?φ) ?t ?w =>
+      rewrite ticl_now in H; destruct H
+  | @entails ?M ?E ?B ?KMS ?X true (CRet ?φ) ?t ?w =>
+      let x := fresh "x" in
+      let HR := fresh "HR" in
+      let Hd := fresh "Hd" in
+      let Hs := fresh "Hs" in
+      rewrite ticl_ret in H; destruct H as (x & HR & Hd & Hs & H)
   (* AND *)
-  | <( ?t, ?w |= ?p /\ ?q )> =>
+  | @entails ?M ?E ?B ?KMS ?X ?b (CAnd ?p ?q) ?t ?w =>
       let Hp := fresh "H"p in
       let Hq := fresh "H"q in
-      rewrite ticll_and in H; destruct H as [Hp Hq]            
-  | <[ ?t, ?w |= ?p /\ ?q ]> =>
-      let Hp := fresh "H"p in
-      let Hq := fresh "H"q in
-      rewrite ticlr_and in H; destruct H as [Hp Hq]
-  (* OR *)                                         
-  | <( ?t, ?w |= ?p \/ ?q )> =>
-      rewrite ticll_or in H; destruct H as [H | H]
-  | <[ ?t, ?w |= ?p \/ ?q ]> =>
-      rewrite ticlr_or in H; destruct H as [H | H]
-  (* IMPL *)
-  | <[ ?t, ?w |= ?p -> ?q ]> =>
-      rewrite ticlr_impll in H
+      rewrite ticl_and in H; destruct H as [Hp Hq]
+  (* OR *)
+  | @entails ?M ?E ?B ?KMS ?X ?b (COr ?p ?q) ?t ?w =>
+      rewrite ticl_or in H; destruct H as [H | H]
   (* X *)
-  | @entailsL ?M ?W ?HE ?KMS ?X (CxL Q_A ?p ?q) ?t ?w =>
-      let Hs' := fresh "Hs" in
-      let Hp' := fresh "Hp" in
-      rewrite ticll_an in H; destruct H as (Hp' & Hs' & H)
-  | @entailsL ?M ?W ?HE ?KMS ?X (CxL Q_E ?p ?q) ?t ?w =>
+  | @entails ?M ?E ?B ?KMS ?X ?b (Cx Q_A ?p ?q) ?t ?w =>
+      let Hs := fresh "Hs" in
+      let Hp := fresh "Hp" in
+      rewrite ticl_an in H; destruct H as (Hp & Hs & H)
+  | @entails ?M ?E ?B ?KMS ?X ?b (Cx Q_E ?p ?q) ?t ?w =>
       let t' := fresh "t" in
       let w' := fresh "w" in
-      let TR' := fresh "TR" in
+      let TR := fresh "TR" in
       let Hp := fresh "Hp" in
-      rewrite ticll_en in H; destruct H as (Hp & t' & w' & TR' & H)
-  | @entailsR ?M ?W ?HE ?KMS ?X (CxR Q_A ?p ?q) ?t ?w =>
-      let Hs' := fresh "Hs" in
-      let Hp := fresh "Hp" in
-      rewrite ticlr_an in H; destruct H as (Hp & Hs' & H)
-  | @entailsR ?M ?W ?HE ?KMS ?X (CxR Q_E ?p ?q) ?t ?w =>
-      let t' := fresh "t" in
-      let w' := fresh "w" in
-      let TR' := fresh "TR" in
-      let Hp := fresh "Hp" in
-      rewrite ticlr_en in H; destruct H as (Hp & t' & w' & TR' & H)
-  (* Quantifier is a variable, destruct it *)
-  | @entailsL ?M ?W ?HE ?KMS ?X (CxL ?c ?p ?q) ?t ?w =>
-      is_var c; destruct c; cdestruct H
-  | @entailsR ?M ?W ?HE ?KMS ?X (CxR ?c ?p ?q) ?t ?w =>
+      rewrite ticl_en in H; destruct H as (Hp & t' & w' & TR & H)
+  (* Quantifier is a variable, destruct it. *)
+  | @entails ?M ?E ?B ?KMS ?X ?b (Cx ?c ?p ?q) ?t ?w =>
       is_var c; destruct c; cdestruct H
   (* U *)
-  | @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_A ?p ?q) ?t ?w =>
-      rewrite equivl_au_an, ticll_or in H; destruct H
-  | @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_A ?p ?q) ?t ?w =>
-      rewrite equivr_au_an, ticlr_or in H; destruct H
-  | @entailsL ?M ?W ?HE ?KMS ?X (CuL Q_E ?p ?q) ?t ?w =>
-      rewrite equivl_eu_en, ticll_or in H; destruct H
-  | @entailsR ?M ?W ?HE ?KMS ?X (CuR Q_E ?p ?q) ?t ?w =>
-      rewrite equivr_eu_en, ticlr_or in H; destruct H
-  (* Quantifier is a variable, destruct it *)
-  | @entailsL ?M ?W ?HE ?KMS ?X (CuL ?c ?p ?q) ?t ?w =>
+  | @entails ?M ?E ?B ?KMS ?X ?b (Cu Q_A ?p ?q) ?t ?w =>
+      rewrite (@equiv_au_an M E B KMS X b p q), ticl_or in H; destruct H
+  | @entails ?M ?E ?B ?KMS ?X ?b (Cu Q_E ?p ?q) ?t ?w =>
+      rewrite (@equiv_eu_en M E B KMS X b p q), ticl_or in H; destruct H
+  (* Quantifier is a variable, destruct it. *)
+  | @entails ?M ?E ?B ?KMS ?X ?b (Cu ?c ?p ?q) ?t ?w =>
       is_var c; destruct c; cdestruct H
-  | @entailsR ?M ?W ?HE ?KMS ?X (CuR ?c ?p ?q) ?t ?w =>
-      is_var c; destruct c; cdestruct H
-
-  (* G *)          
-  | @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_A ?φ) ?t ?w =>
+  (* G *)
+  | @entails ?M ?E ?B ?KMS ?X false (Cg Q_A ?φ) ?t ?w =>
       let Hp := fresh "Hp" in
       let Hs := fresh "Hs" in
-      rewrite equivl_ag_an, unfold_entailsL in H; destruct H as (Hp & Hs & H)
-  | @entailsL ?M ?W ?HE ?KMS ?X (Cg Q_E ?φ) ?t ?w =>
+      rewrite (@equivl_ag_an M E B KMS X φ), ticl_an in H; destruct H as (Hp & Hs & H)
+  | @entails ?M ?E ?B ?KMS ?X false (Cg Q_E ?φ) ?t ?w =>
       let Hp := fresh "Hp" in
-      let Hs := fresh "Hs" in
       let t' := fresh "t" in
       let w' := fresh "w" in
-      let TR' := fresh "TR" in
-      rewrite equivl_eg_en, unfold_entailsL in H; destruct H as (Hp & t' & w' & TR' & H)
-  | @entailsL ?M ?W ?HE ?KMS ?X (Cg ?c ?p) ?t ?w =>
+      let TR := fresh "TR" in
+      rewrite (@equivl_eg_en M E B KMS X φ), ticl_en in H;
+      destruct H as (Hp & t' & w' & TR & H)
+  | @entails ?M ?E ?B ?KMS ?X false (Cg ?c ?p) ?t ?w =>
       is_var c; destruct c; cdestruct H
   end.
