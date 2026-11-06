@@ -26,10 +26,10 @@ Local Open Scope ctree_scope.
 Section BasicLemmas.
   Context {E B: Type -> Type} {X: Type}.
 
-  (** Stuckness lemma for prefix eventually [AU_L] *)
-  Lemma aul_stuck: forall w φ ψ,
-      <( {Stuck: ctree E B X}, w |= ψ )> <->
-      <( {Stuck: ctree E B X}, w |= φ AU ψ )>.
+  (** Stuckness preserves precisely the indexed until target. *)
+  Lemma au_stuck: forall {b: bool} w (phi: ticll E) (psi: ticl_at E X b),
+      entails X b psi (Stuck: ctree E B X) w <->
+      entails X b (Cu Q_A phi psi) (Stuck: ctree E B X) w.
   Proof.
     split; intros * H.
     - now cleft.
@@ -39,29 +39,16 @@ Section BasicLemmas.
       + now apply can_step_stuck in Hs.
   Qed.
 
-  (** Stuckness lemma for prefix eventually [AU_R] *)
-  Lemma aur_stuck: forall w φ ψ,
-      <[ {Stuck: ctree E B X}, w |= ψ ]> <->
-      <[ {Stuck: ctree E B X}, w |= φ AU ψ ]>.
-  Proof.
-    split; intros * H.
-    - now cleft.
-    - remember (Stuck) as S.
-      cinduction H; subst.
-      + apply Hp.
-      + now apply can_step_stuck in Hs.
-  Qed.
-
-  (** Return iff lemma for prefix eventually [AU_L] *)
-  Lemma aul_ret: forall (r: X) w φ ψ,
-      <( {Ret r: ctree E B X}, w |= ψ \/ φ AN ψ )> <->
-      <( {Ret r: ctree E B X}, w |= φ AU ψ )>.
+  (** Return-until retains the target-or-next decomposition. *)
+  Lemma au_ret: forall {b: bool} (r: X) w (phi: ticll E) (psi: ticl_at E X b),
+      entails X b (COr psi (Cx Q_A phi psi)) (Ret r: ctree E B X) w <->
+      entails X b (Cu Q_A phi psi) (Ret r: ctree E B X) w.
   Proof.
     split; intros H; cdestruct H.
     - now cleft.
     - cright; csplit; cdestruct H; auto with ticl.
       intros t' w' TR.
-      apply ticll_not_done in Hp.
+      apply ticl_not_done in Hp.
       specialize (H _ _ TR).
       inv Hp.
       + apply ktrans_done in TR as (-> & ?).
@@ -74,181 +61,88 @@ Section BasicLemmas.
     - cdestruct H.
       cright; csplit; auto with ticl.
       intros t' w' TR.
-      apply ticll_not_done in Hp.
+      apply ticl_not_done in Hp.
       specialize (H _ _ TR).
       inv Hp.
       + apply ktrans_done in TR as (-> & ?).
         rewrite H0 in H |- *.
-        now apply aul_stuck in H.
+        now apply au_stuck in H.
       + apply ktrans_finish in TR as (-> & ?).
         rewrite H0 in H |- *.
-        now apply aul_stuck in H.
+        now apply au_stuck in H.
   Qed.
 
-  (** Return iff lemma for prefix eventually [AU_R] *)
-  Lemma aur_ret: forall (r: X) w φ ψ,
-      <[ {Ret r: ctree E B X}, w |= ψ \/ φ AN ψ ]> <->
-      <[ {Ret r: ctree E B X}, w |= φ AU ψ ]>.
-  Proof.
-    split; intros H; cdestruct H.
-    - now cleft.
-    - cright; csplit; cdestruct H; auto with ticl.
-      intros t' w' TR.
-      apply ticll_not_done in Hp.
-      specialize (H _ _ TR).
-      inv Hp.
-      + apply ktrans_done in TR as (-> & ?).
-        rewrite H0 in H |- *.
-        now cleft.
-      + apply ktrans_finish in TR as (-> & ?).
-        rewrite H0 in H |- *.
-        now cleft.
-    - now cleft.
-    - cdestruct H.
-      cright; csplit; auto with ticl.
-      intros t' w' TR.
-      apply ticll_not_done in Hp.
-      specialize (H _ _ TR).
-      inv Hp.
-      + apply ktrans_done in TR as (-> & ?).
-        rewrite H0 in H |- *.
-        now apply aur_stuck in H.
-      + apply ktrans_finish in TR as (-> & ?).
-        rewrite H0 in H |- *.
-        now apply aur_stuck in H.
-  Qed.
-
-  (** Hidden branch lemma for prefix eventually [AU_L]: [Br c k] is not a step,
-      so the obligations are on the successors of the branches. *)
-  Lemma aul_br: forall {Y} (c: B Y) (k: Y -> ctree E B X) w φ ψ,
-      <( {Br c k}, w |= φ )> ->
+  (** Hidden branching requires actual transitions from its branches. *)
+  Lemma au_br: forall {b: bool} {Y} (c: B Y) (k: Y -> ctree E B X)
+      w (phi: ticll E) (psi: ticl_at E X b),
+      entails X false phi (Br c k) w ->
       (exists y, can_step (k y) w) ->
-      (forall y t' w', |k y, w| ↦ |t', w'| -> <( t', w' |= φ AU ψ )>) ->
-      <( {Br c k}, w |= φ AU ψ )>.
+      (forall y t' w', |k y, w| ↦ |t', w'| ->
+        entails X b (Cu Q_A phi psi) t' w') ->
+      entails X b (Cu Q_A phi psi) (Br c k) w.
   Proof.
-    intros; cright; now apply anl_br.
+    intros; cright; now apply an_br.
   Qed.
 
-  (** Policy alternatives: the single-alternative case is the body itself,
-      otherwise [aul_br]. *)
-  Lemma aul_br_alts `{Bn -< B}: forall m (k: Fin.t (S m) -> ctree E B X) w φ ψ,
-      <( {br_alts m k}, w |= φ )> ->
+  (** Until through a nonempty family of policy alternatives. *)
+  Lemma au_br_alts `{Bn -< B}: forall {b : bool} m
+      (k : Fin.t (S m) -> ctree E B X) w (phi : ticll E) (psi : ticl_at E X b),
+      entails X false phi (br_alts m k) w ->
       (exists a, can_step (k a) w) ->
-      (forall a t' w', |k a, w| ↦ |t', w'| -> <( t', w' |= φ AU ψ )>) ->
-      <( {br_alts m k}, w |= φ AU ψ )>.
+      (forall a t' w', |k a, w| ↦ |t', w'| -> entails X b (Cu Q_A phi psi) t' w') ->
+      entails X b (Cu Q_A phi psi) (br_alts m k) w.
   Proof.
-    intros; cright; now apply anl_br_alts.
+    intros; cright; now apply an_br_alts.
   Qed.
 
-  (** Visible branch iff lemma for prefix eventually [AU_L] *)
-  Lemma aul_brS: forall {Y} (c: B Y) (k: Y -> ctree E B X) (y: Y) w ψ φ,
-      (<( {BrS c k}, w |= φ )> \/
-         <( {BrS c k}, w |= ψ )> /\
-           forall (y: Y), <( {k y}, w |= ψ AU φ )>) <->
-      <( {BrS c k}, w |= ψ AU φ )>.
+  (** Visible branching keeps an explicit inhabitant to witness progress. *)
+  Lemma au_brS: forall {b: bool} {Y} (c: B Y) (k: Y -> ctree E B X)
+      (y: Y) w (phi: ticll E) (psi: ticl_at E X b),
+      (entails X b psi (BrS c k) w \/
+         entails X false phi (BrS c k) w /\
+           forall (y: Y), entails X b (Cu Q_A phi psi) (k y) w) <->
+      entails X b (Cu Q_A phi psi) (BrS c k) w.
   Proof.
     intros; symmetry.
-    rewrite equivl_au_an at 1.
-    now rewrite ticll_or, (anl_brS c k y).
+    rewrite equiv_au_an at 1.
+    now rewrite ticl_or, (an_brS (b:=b) c k y).
   Qed.
 
-  (** Visible step iff lemma for prefix eventually [AU_L] *)
-  Lemma aul_step: forall (t: ctree E B X) w ψ φ,
-      (<( {Step t}, w |= φ )> \/
-         <( {Step t}, w |= ψ )> /\ <( t, w |= ψ AU φ )>) <->
-      <( {Step t}, w |= ψ AU φ )>.
+  (** Visible step iff lemma for indexed until. *)
+  Lemma au_step: forall {b: bool} (t: ctree E B X)
+      w (phi: ticll E) (psi: ticl_at E X b),
+      (entails X b psi (Step t) w \/
+         entails X false phi (Step t) w /\ entails X b (Cu Q_A phi psi) t w) <->
+      entails X b (Cu Q_A phi psi) (Step t) w.
   Proof.
     intros; symmetry.
-    rewrite equivl_au_an at 1.
-    now rewrite ticll_or, anl_step.
+    rewrite equiv_au_an at 1.
+    now rewrite ticl_or, (an_step (b:=b)).
   Qed.
 
-  (** Vis iff emma for prefix eventually [AU_L] *)
-  Lemma aul_vis: forall {Y} (e: E Y) (k: Y -> ctree E B X) (_: Y) w ψ φ,
-      (<( {Vis e k}, w |= φ )> \/
-         <( {Vis e k}, w |= ψ )> /\
-           forall (v: Y), <( {k v}, {Obs e v} |= ψ AU φ )>) <->
-      <( {Vis e k}, w |= ψ AU φ )>.
+  (** Visible events keep an explicit result inhabitant to witness progress. *)
+  Lemma au_vis: forall {b: bool} {Y} (e: E Y) (k: Y -> ctree E B X)
+      (_: Y) w (phi: ticll E) (psi: ticl_at E X b),
+      (entails X b psi (Vis e k) w \/
+         entails X false phi (Vis e k) w /\
+           forall (v: Y), entails X b (Cu Q_A phi psi) (k v) (Obs e v)) <->
+      entails X b (Cu Q_A phi psi) (Vis e k) w.
   Proof.
-    intros Y e k v0 w ψ φ; symmetry.
-    rewrite equivl_au_an at 1.
-    now rewrite ticll_or, (anl_vis e k v0).
+    intros b Y e k v0 w phi psi; symmetry.
+    rewrite equiv_au_an at 1.
+    now rewrite ticl_or, (an_vis (b:=b) e k v0).
   Qed.
 
-  (** Helper version of [aul_vis] for [AF] = [T AU]*)
-  Lemma afl_vis: forall {Y} (e: E Y) (k: Y -> ctree E B X) (_: Y) w φ,
-      <( {Vis e k}, w |= φ )> \/
-         (not_done w /\ forall (v: Y), <( {k v}, {Obs e v} |= AF φ )>) <->
-      <( {Vis e k}, w |= AF φ )>.
+  (** Helper version of [au_vis] for [AF] = [T AU]. *)
+  Lemma af_vis: forall {b: bool} {Y} (e: E Y) (k: Y -> ctree E B X)
+      (_: Y) w (psi: ticl_at E X b),
+      entails X b psi (Vis e k) w \/
+         (not_done w /\ forall (v: Y),
+           entails X b (Cu Q_A (CNow (fun _ => True)) psi) (k v) (Obs e v)) <->
+      entails X b (Cu Q_A (CNow (fun _ => True)) psi) (Vis e k) w.
   Proof.
-    intros Y e k v0 w φ; symmetry.
-    rewrite equivl_au_an at 1.
-    rewrite ticll_or, (anl_vis e k v0), ticll_now; tauto.
-  Qed.
-
-  (** Hidden branch lemma for suffix eventually [AU_R] *)
-  Lemma aur_br: forall {Y} (c: B Y) (k: Y -> ctree E B X) w φ ψ,
-      <( {Br c k}, w |= φ )> ->
-      (exists y, can_step (k y) w) ->
-      (forall y t' w', |k y, w| ↦ |t', w'| -> <[ t', w' |= φ AU ψ ]>) ->
-      <[ {Br c k}, w |= φ AU ψ ]>.
-  Proof.
-    intros; cright; now apply anr_br.
-  Qed.
-
-  (** Visible branch iff lemma for suffix eventually [AU_R] *)
-  Lemma aur_brS: forall {Y} (c: B Y) (k: Y -> ctree E B X) (y: Y) w ψ φ,
-      (<[ {BrS c k}, w |= φ ]> \/
-         <( {BrS c k}, w |= ψ )> /\
-           forall (y: Y), <[ {k y}, w |= ψ AU φ ]>) <->
-      <[ {BrS c k}, w |= ψ AU φ ]>.
-  Proof.
-    intros; symmetry.
-    rewrite equivr_au_an at 1.
-    now rewrite ticlr_or, (anr_brS c k y).
-  Qed.
-
-  (** Visible step iff lemma for suffix eventually [AU_R] *)
-  Lemma aur_step: forall (t: ctree E B X) w ψ φ,
-      (<[ {Step t}, w |= φ ]> \/
-         <( {Step t}, w |= ψ )> /\ <[ t, w |= ψ AU φ ]>) <->
-      <[ {Step t}, w |= ψ AU φ ]>.
-  Proof.
-    intros; symmetry.
-    rewrite equivr_au_an at 1.
-    now rewrite ticlr_or, anr_step.
-  Qed.
-
-  (** Vis iff lemma for suffix eventually [AU_R] *)
-  Lemma aur_vis: forall {Y} (e: E Y) (k: Y -> ctree E B X) (_: Y) w ψ φ,
-      (<[ {Vis e k}, w |= φ ]> \/
-         <( {Vis e k}, w |= ψ )> /\
-           forall (v: Y), <[ {k v}, {Obs e v} |= ψ AU φ ]>) <->
-      <[ {Vis e k}, w |= ψ AU φ ]>.
-  Proof.
-    intros Y e k v0 w ψ φ; symmetry.
-    rewrite equivr_au_an at 1.
-    now rewrite ticlr_or, (anr_vis e k v0).
-  Qed.
-
-  (** Helper version of [aur_vis] for [AF] = [T AU]*)
-  Lemma afr_vis: forall {Y} (e: E Y) (k: Y -> ctree E B X) (_: Y) w φ,
-      <[ {Vis e k}, w |= φ ]> \/
-         (not_done w /\ forall (v: Y), <[ {k v}, {Obs e v} |= AF φ ]>) <->
-      <[ {Vis e k}, w |= AF φ ]>.
-  Proof.
-    intros Y e k v0 w φ; symmetry.
-    rewrite equivr_au_an at 1.
-    rewrite ticlr_or, (anr_vis e k v0), ticll_now; tauto.
-  Qed.
-
-  (** Not done lemma for suffix eventually [AU_R] *)
-  Lemma aur_not_done: forall φ ψ ξ (t: ctree E B X) (w: World E),
-      <[ t, w |= φ AU (ψ AN ξ) ]> ->
-      not_done w.
-  Proof.
-    intros.
-    cdestruct H; cdestruct H;
-      now apply can_step_not_done with t.
+    intros b Y e k v0 w psi; symmetry.
+    rewrite equiv_au_an at 1.
+    rewrite ticl_or, (an_vis (b:=b) e k v0), ticl_now; tauto.
   Qed.
 End BasicLemmas.

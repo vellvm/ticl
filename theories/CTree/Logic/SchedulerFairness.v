@@ -13,6 +13,7 @@ From TICL Require Import
   Logic.Kripke
   CTree.Events.Yield
   CTree.Interp.Yield.Mod
+  CTree.Interp.Yield.Policy
   CTree.Interp.Yield.SBisim
   Utils.Vectors
   CTree.Interp.Yield.Observed.
@@ -29,7 +30,7 @@ Generalizable All Variables.
     scheduling point, conditional on [SchedulerProgress]. *)
 
 Definition offer_live_slot {E : Type -> Type}
-    (n : nat) (i : LiveSlot n) : ticll (scheduler_observedE E) :=
+    (n : nat) (i : LiveSlot n) : ticl (scheduler_observedE E) None :=
   CNow (fun w => w = Obs (inl1 (ObsOffered (live_slot_ref i)) : scheduler_observedE E unit) tt).
 
 Section ObservedScheduler.
@@ -39,7 +40,7 @@ Section ObservedScheduler.
 
   Lemma offer_live_slot_now n (i : LiveSlot n)
       (t : observed_completed E B) :
-    <( {t}, {Obs (SchedObs (ObsOffered (live_slot_ref i))) tt} |=
+    <( {t}, {Obs (SchedObs (ObsOffered (live_slot_ref i))) tt} |=L
          {offer_live_slot n i} )>.
   Proof.
     unfold offer_live_slot.
@@ -70,7 +71,7 @@ Section ObservedScheduler.
     SchedulerEquChain bridge u ->
     not_done w ->
     offered_in_scheduler_prefix n i u ->
-    <( {actual}, w |= AF {offer_live_slot n i} )>.
+    <( {actual}, w |=L AF {offer_live_slot n i} )>.
   Proof.
     intros Hbridge Hchain Hnd Hprefix.
     revert actual bridge w Hbridge Hchain Hnd.
@@ -78,9 +79,9 @@ Section ObservedScheduler.
       intros actual bridge w Hbridge Hchain Hnd;
       destruct (scheduler_equ_chain_scheduler_vis_inv_no_eqdep
         _ k bridge u Hchain Hobs) as [k_actual [Hactual Hcont]];
-      rewrite (ctree_eta actual), <- Hbridge, Hactual;
-      apply (afl_vis _ _ tt); right; split; [exact Hnd | intros [] | exact Hnd | intros []].
-    - rewrite unfold_entailsL.
+      ticl_normalize; rewrite (ctree_eta actual), <- Hbridge, Hactual;
+      apply (af_vis (b:=false) _ _ tt); right; split; [exact Hnd | intros [] | exact Hnd | intros []].
+    - apply ticl_au.
       apply MatchA.
       apply offer_live_slot_now.
     - apply (IH (k_actual tt) (k_actual tt) _ eq_refl Hcont).
@@ -91,7 +92,7 @@ Section ObservedScheduler.
       (i : LiveSlot n) (t : observed_completed E B) w :
     not_done w ->
     offered_in_scheduler_prefix n i t ->
-    <( {t}, w |= AF {offer_live_slot n i} )>.
+    <( {t}, w |=L AF {offer_live_slot n i} )>.
   Proof.
     intros Hnd Hprefix.
     eapply offered_in_scheduler_prefix_chain_implies_AF.
@@ -103,7 +104,7 @@ Section ObservedScheduler.
 
   Theorem show_no_focus_offers_every_live_slot n
       (v : pool E B (S n)) (i : LiveSlot (S n)) :
-    <( {schedule_with_offers (S n) v None}, Pure |=
+    <( {schedule_with_offers (S n) v None}, Pure |=L
          AF {offer_live_slot (S n) i} )>.
   Proof.
     apply offered_in_scheduler_prefix_implies_AF.
@@ -113,7 +114,7 @@ Section ObservedScheduler.
 
   Theorem no_focus_offers_every_live_slot n
       (v : pool E B (S n)) (i : LiveSlot (S n)) :
-    <( {schedule_with_offers (S n) v None}, Pure |=
+    <( {schedule_with_offers (S n) v None}, Pure |=L
          AF {offer_live_slot (S n) i} )>.
   Proof.
     apply show_no_focus_offers_every_live_slot.
@@ -125,7 +126,7 @@ Section ObservedScheduler.
     forall n,
       w = Obs (SchedObs (ObsSchedulingPoint (S n))) tt ->
       forall i : LiveSlot (S n),
-        <( {t}, w |= AF {offer_live_slot (S n) i} )>.
+        <( {t}, w |=L AF {offer_live_slot (S n) i} )>.
 
   (** Worlds that are not a nonempty scheduling point. *)
   Local Definition non_scheduling_point_world
@@ -144,7 +145,7 @@ Section ObservedScheduler.
   Proof. exact I. Qed.
 
   Local Lemma obs_non_scheduler_non_scheduling_point {Y}
-      (event : (yieldE +' (spawnE +' E)) Y) (value : Y) :
+      (event : (E +' schedE) Y) (value : Y) :
     non_scheduling_point_world (Obs (inr1 event : scheduler_observedE E Y) value).
   Proof. exact I. Qed.
 
@@ -166,16 +167,18 @@ Section ObservedScheduler.
       SchedulerOfferCanonical
         (schedule_with_offers_offer_prefix m r embed v) w
   | scheduler_offer_canonical_choice : forall n
-      (v : pool E B (S n)) w,
+      (v : pool E B (S (S n))) w,
       non_scheduling_point_world w ->
       SchedulerOfferCanonical
-        (brS (branchn (S n)) (fun i =>
-          schedule_with_offers (S n) v (Some i))) w
+        (Br (subevent _ (branchn (S (S n)))) (fun i =>
+          Vis (inr1 (inr1 (Scheduled (slot_index i))) : scheduler_observedE E unit)
+            (fun _ => schedule_with_offers (S (S n)) v (Some i)))) w
   | scheduler_offer_canonical_picked : forall n
       (v : pool E B (S n)) (i : Fin.t (S n)) w,
       non_scheduling_point_world w ->
       SchedulerOfferCanonical
-        (Step (schedule_with_offers (S n) v (Some i))) w
+        (Vis (inr1 (inr1 (Scheduled (slot_index i))) : scheduler_observedE E unit)
+          (fun _ => schedule_with_offers (S n) v (Some i))) w
   | scheduler_offer_canonical_done : forall t (x : unit),
       SchedulerOfferCanonical t (Done x)
   | scheduler_offer_canonical_finish : forall t {Y}
@@ -243,11 +246,12 @@ Section ObservedScheduler.
   Qed.
 
   Local Lemma scheduler_offer_shape_choice n
-      (v : pool E B (S n)) w :
+      (v : pool E B (S (S n))) w :
     non_scheduling_point_world w ->
     SchedulerOfferShape
-      (brS (branchn (S n)) (fun i =>
-        schedule_with_offers (S n) v (Some i))) w.
+      (Br (subevent _ (branchn (S (S n)))) (fun i =>
+        Vis (inr1 (inr1 (Scheduled (slot_index i))) : scheduler_observedE E unit)
+          (fun _ => schedule_with_offers (S (S n)) v (Some i)))) w.
   Proof.
     intro Hworld.
     apply scheduler_offer_shape_canonical.
@@ -257,7 +261,9 @@ Section ObservedScheduler.
   Local Lemma scheduler_offer_shape_picked n
       (v : pool E B (S n)) (i : Fin.t (S n)) w :
     non_scheduling_point_world w ->
-    SchedulerOfferShape (Step (schedule_with_offers (S n) v (Some i))) w.
+    SchedulerOfferShape
+      (Vis (inr1 (inr1 (Scheduled (slot_index i))) : scheduler_observedE E unit)
+        (fun _ => schedule_with_offers (S n) v (Some i))) w.
   Proof.
     intro Hworld.
     apply scheduler_offer_shape_canonical.
@@ -304,7 +310,7 @@ Section ObservedScheduler.
     SchedulerOfferShape t w -> scheduling_point_offer_obligation t w.
   Proof.
     intros [u [Htu Hcanonical]] k Hsched i.
-    rewrite Htu.
+    ticl_normalize; rewrite Htu.
     eapply scheduler_offer_canonical_obligation; eauto.
   Qed.
 
@@ -343,10 +349,13 @@ Section ObservedScheduler.
       cbn; auto; constructor.
   Qed.
 
-  Local Lemma observe_brS_schedule n (v : pool E B (S n)) :
-    observe (brS (branchn (S n)) (fun i => schedule_with_offers (S n) v (Some i)))
-    = BrF (subevent _ (branchn (S n)))
-        (fun i => Step (schedule_with_offers (S n) v (Some i))).
+  Local Lemma observe_choice_schedule n (v : pool E B (S (S n))) :
+    observe (Br (subevent _ (branchn (S (S n)))) (fun i =>
+      Vis (inr1 (inr1 (Scheduled (slot_index i))) : scheduler_observedE E unit)
+        (fun _ => schedule_with_offers (S (S n)) v (Some i))))
+    = BrF (subevent _ (branchn (S (S n)))) (fun i =>
+        Vis (inr1 (inr1 (Scheduled (slot_index i))) : scheduler_observedE E unit)
+          (fun _ => schedule_with_offers (S (S n)) v (Some i))).
   Proof. reflexivity. Qed.
 
   Local Lemma observe_prefix_zero_empty
@@ -354,9 +363,11 @@ Section ObservedScheduler.
     observe (schedule_with_offers_offer_prefix 0 0 embed v) = RetF tt.
   Proof. reflexivity. Qed.
 
-  Local Lemma observe_step_schedule n (v : pool E B (S n)) (i : Fin.t (S n)) :
-    observe (Step (schedule_with_offers (S n) v (Some i)))
-    = StepF (schedule_with_offers (S n) v (Some i)).
+  Local Lemma observe_picked_schedule n (v : pool E B (S n)) (i : Fin.t (S n)) :
+    observe (Vis (inr1 (inr1 (Scheduled (slot_index i))) : scheduler_observedE E unit)
+      (fun _ => schedule_with_offers (S n) v (Some i)))
+    = VisF (inr1 (inr1 (Scheduled (slot_index i))) : scheduler_observedE E unit)
+        (fun _ => schedule_with_offers (S n) v (Some i)).
   Proof. reflexivity. Qed.
 
   (** Dispatch the head of the focused thread against the scheduler head
@@ -395,12 +406,13 @@ Section ObservedScheduler.
       [ rewrite (schedule_with_offers_empty_none v) in Hos
       | rewrite (schedule_with_offers_no_focus_nonempty n v) in Hos ]
     | rewrite (schedule_with_offers_offer_prefix_succ _ _ _ v) in Hos
-    | destruct m as [| m];
+    | destruct m as [|[| m]];
       [ rewrite (observe_prefix_zero_empty embed v) in Hos
+      | rewrite (schedule_with_offers_offer_prefix_zero_nonempty _ embed v) in Hos
       | rewrite (schedule_with_offers_offer_prefix_zero_nonempty _ embed v) in Hos ]
     | rewrite (schedule_with_offers_offer_prefix_succ _ _ _ v) in Hos
-    | rewrite (observe_brS_schedule n v) in Hos
-    | rewrite (observe_step_schedule n v i) in Hos
+    | rewrite (observe_choice_schedule n v) in Hos
+    | rewrite (observe_picked_schedule n v i) in Hos
     | exact (label_world_is_done _ _ _ _ (DoneDone _ xd) Hlw)
     | exact (label_world_is_done _ _ _ _ (DoneFinish _ ed vd xd) Hlw)
     ]; try discriminate Hos.
@@ -415,7 +427,7 @@ Section ObservedScheduler.
     intros l os ot' TR.
     induction TR as [Y c x k l u TR IH | u u' l TR IH | u u2 Equ | Y e k x u Equ | r];
       intros t t' w w' Hos Hot' Hcan Hlw.
-    - (* Transbr: hidden branch of the focused thread, or the scheduling pick *)
+    - (* Program branches preserve focus; boundary branches expose Scheduled. *)
       canonical_heads Hcan Hos Hlw.
       + focused_heads v i Hos Hvi.
         dependent destruction Hos.
@@ -424,57 +436,51 @@ Section ObservedScheduler.
       + dependent destruction Hos.
         eapply IH; [reflexivity | exact Hot' | | exact Hlw].
         apply scheduler_offer_canonical_picked; exact Hworld.
-    - (* Transguard *)
+      + dependent destruction Hos.
+        eapply IH; [reflexivity | exact Hot' | | exact Hlw].
+        apply scheduler_offer_canonical_picked; exact Hworld.
+    - (* Return, Guard, Yield, and Fork are consumed without an observation. *)
       canonical_heads Hcan Hos Hlw.
       focused_heads v i Hos Hvi; injection Hos as ->.
-      + eapply IH; [reflexivity | exact Hot' | | exact Hlw].
-        apply scheduler_offer_canonical_schedule; exact Hworld.
-      + eapply IH; [reflexivity | exact Hot' | | exact Hlw].
-        apply scheduler_offer_canonical_schedule; exact Hworld.
-      + eapply IH; [reflexivity | exact Hot' | | exact Hlw].
-        apply scheduler_offer_canonical_schedule; exact Hworld.
-    - (* Transtau: a visible step of the focused thread, or of the pick *)
+      all: eapply IH; [reflexivity | exact Hot' | | exact Hlw].
+      all: apply scheduler_offer_canonical_schedule; exact Hworld.
+    - (* Only a focused program Step contributes tau. *)
       canonical_heads Hcan Hos Hlw; destruct Hlw as [Hnd ->].
-      + focused_heads v i Hos Hvi; injection Hos as ->.
-        eapply scheduler_offer_shape_observe; [exact Hot' |].
-        eapply scheduler_offer_shape_equ; [exact Equ |].
-        apply scheduler_offer_shape_schedule; exact Hworld.
-      + injection Hos as ->.
-        eapply scheduler_offer_shape_observe; [exact Hot' |].
-        eapply scheduler_offer_shape_equ; [exact Equ |].
-        apply scheduler_offer_shape_schedule; exact Hworld.
-    - (* Transobs *)
+      focused_heads v i Hos Hvi; injection Hos as ->.
+      eapply scheduler_offer_shape_observe; [exact Hot' |].
+      eapply scheduler_offer_shape_equ; [exact Equ |].
+      apply scheduler_offer_shape_schedule; exact Hworld.
+    - (* Program observations, proof observations, and native selections. *)
       canonical_heads Hcan Hos Hlw; destruct Hlw as [Hnd ->].
       + focused_heads v i Hos Hvi; dependent destruction Hos.
-        * (* Fork *)
-          destruct x.
-          eapply scheduler_offer_shape_observe; [exact Hot' |].
-          eapply scheduler_offer_shape_equ; [symmetry; exact Equ |].
-          apply scheduler_offer_shape_schedule; exact I.
-        * (* user event *)
-          eapply scheduler_offer_shape_observe; [exact Hot' |].
-          eapply scheduler_offer_shape_equ; [symmetry; exact Equ |].
-          apply scheduler_offer_shape_schedule; exact I.
+        eapply scheduler_offer_shape_observe; [exact Hot' |].
+        eapply scheduler_offer_shape_equ; [symmetry; exact Equ |].
+        apply scheduler_offer_shape_schedule; apply obs_non_scheduler_non_scheduling_point.
       + (* scheduling point *)
         dependent destruction Hos. destruct x.
         eapply scheduler_offer_shape_observe; [exact Hot' |].
         eapply scheduler_offer_shape_equ; [symmetry; exact Equ |].
         apply scheduler_offer_shape_prefix_at_point.
-      + (* offer at the scheduling point *)
+      + (* first offer after the scheduling point *)
         dependent destruction Hos. destruct x.
         eapply scheduler_offer_shape_observe; [exact Hot' |].
         eapply scheduler_offer_shape_equ; [symmetry; exact Equ |].
-        apply scheduler_offer_shape_prefix_elsewhere; exact I.
-      + (* exhausted prefix: the scheduling Yield *)
+        apply scheduler_offer_shape_prefix_elsewhere; apply obs_offered_non_scheduling_point.
+      + (* exhausted singleton prefix: Scheduled directly, not a Step *)
         dependent destruction Hos. destruct x.
         eapply scheduler_offer_shape_observe; [exact Hot' |].
         eapply scheduler_offer_shape_equ; [symmetry; exact Equ |].
-        apply scheduler_offer_shape_choice; exact I.
-      + (* offer elsewhere *)
+        apply scheduler_offer_shape_schedule; apply obs_non_scheduler_non_scheduling_point.
+      + (* remaining offers *)
         dependent destruction Hos. destruct x.
         eapply scheduler_offer_shape_observe; [exact Hot' |].
         eapply scheduler_offer_shape_equ; [symmetry; exact Equ |].
-        apply scheduler_offer_shape_prefix_elsewhere; exact I.
+        apply scheduler_offer_shape_prefix_elsewhere; apply obs_offered_non_scheduling_point.
+      + (* the selected slot resumes at a Scheduled world *)
+        dependent destruction Hos. destruct x.
+        eapply scheduler_offer_shape_observe; [exact Hot' |].
+        eapply scheduler_offer_shape_equ; [symmetry; exact Equ |].
+        apply scheduler_offer_shape_schedule; apply obs_non_scheduler_non_scheduling_point.
     - (* Transval *)
       destruct Hlw as [x | Y e v x].
       + apply scheduler_offer_shape_done.

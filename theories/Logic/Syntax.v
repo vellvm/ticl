@@ -2,166 +2,156 @@ From TICL Require Import
   Logic.Kripke
   Utils.Utils.
 
-From TICL Require Import
-  Events.WriterE.
-
+From TICL Require Import Events.WriterE.
 From Equations Require Import Equations.
 Generalizable All Variables.
 
 Variant ticlq := Q_A | Q_E.
 
-(** * TICL syntax *)
-(** This section defines the syntax of TICL formulas.
-    We define two syntaxes, one for prefix formulas [ticll] and one for suffix formulas [ticlr].
-    The prefix syntax is used to define the semantics of TICL formulas that hold in [not_done] worlds.
-    The suffix syntax describes deterministic pre-return postconditions and
-    temporal formulas ending in such returns.
+(** * Indexed TICL syntax
+    [None] describes prefix properties; [Some X] describes native-return
+    postconditions over [X]. Temporal guards are always prefix properties. *)
+Inductive ticl (E : Type -> Type) : option Type -> Type :=
+| CNow (p : World E -> Prop) : ticl E None
+| CRet {X : Type} (p : X -> World E -> Prop) : ticl E (Some X)
+| Cu {i : option Type} (q : ticlq)
+    (p : ticl E None) (r : ticl E i) : ticl E i
+| Cx {i : option Type} (q : ticlq)
+    (p : ticl E None) (r : ticl E i) : ticl E i
+| Cg (q : ticlq) (p : ticl E None) : ticl E None
+| CAnd {i : option Type} (p r : ticl E i) : ticl E i
+| COr {i : option Type} (p r : ticl E i) : ticl E i.
 
-    The syntax is parameterized by the indexed event signature [E], which
-    gives us the type of worlds [World E].
-    *)
-Section TiclSyntax.
-  Context {E: Type -> Type}.
+Arguments CNow {E} p.
+Arguments CRet {E X} p.
+Arguments Cu {E i} q p r.
+Arguments Cx {E i} q p r.
+Arguments Cg {E} q p.
+Arguments CAnd {E i} p r.
+Arguments COr {E i} p r.
 
-  Inductive ticll: Type :=
-  (* Property [φ] holds right now, while in [not_done] world *)
-  | CNow (φ: World E -> Prop): ticll
-  (* Path quantifier [q]; property [φ: ticll] holds finitely, until [ψ: ticlr] stops it *)
-  | CuL (q: ticlq) (φ ψ: ticll): ticll
-  | CxL (q: ticlq) (φ ψ: ticll): ticll
-  (* Path quantifier [q]; property [φ] holds always (strong always) *)
-  | Cg (q: ticlq) (φ: ticll) : ticll
-  (* Boolean combinators *)
-  | CAndL (p q: ticll): ticll
-  | COrL (p q: ticll): ticll.
+Notation ticll E := (ticl E None).
+Notation ticlr E X := (ticl E (Some (X : Type))).
+Notation ticl_at E X suffix :=
+  (ticl E (if (suffix : bool) then Some (X : Type) else None)).
 
-  Inductive ticlr {X: Type} : Type :=
-  (* Model can step and every transition returns the same value [x], with [φ x w] *)
-  | CRet (φ: X -> World E -> Prop): ticlr
-  | CuR (q: ticlq) (φ: ticll) (ψ: ticlr): ticlr
-  | CxR (q: ticlq) (φ: ticll) (ψ: ticlr): ticlr
-  (* Boolean combinators *)
-  | CAndR (p: ticlr) (q: ticlr): ticlr
-  | COrR (p: ticlr) (q: ticlr): ticlr.
+Section IndexedInduction.
+  Context {E : Type -> Type} {X : Type}.
+  Variable P : forall b, ticl_at E X b -> Prop.
+  Variable Hnow : forall p, P false (CNow p).
+  Variable Hret : forall p, P true (CRet p).
+  Variable Hu : forall b q p, P false p -> forall r, P b r -> P b (Cu q p r).
+  Variable Hx : forall b q p, P false p -> forall r, P b r -> P b (Cx q p r).
+  Variable Hg : forall q p, P false p -> P false (Cg q p).
+  Variable Hand : forall b p, P b p -> forall r, P b r -> P b (CAnd p r).
+  Variable Hor : forall b p, P b p -> forall r, P b r -> P b (COr p r).
 
-  Arguments ticlr: clear implicits.
+  Equations ticl_at_ind (b : bool) (p : ticl_at E X b) : P b p :=
+  ticl_at_ind false (CNow p) := Hnow p;
+  ticl_at_ind true (CRet p) := Hret p;
+  ticl_at_ind b (Cu q p r) := Hu b q p (ticl_at_ind false p) r (ticl_at_ind b r);
+  ticl_at_ind b (Cx q p r) := Hx b q p (ticl_at_ind false p) r (ticl_at_ind b r);
+  ticl_at_ind false (Cg q p) := Hg q p (ticl_at_ind false p);
+  ticl_at_ind b (CAnd p r) := Hand b p (ticl_at_ind b p) r (ticl_at_ind b r);
+  ticl_at_ind b (COr p r) := Hor b p (ticl_at_ind b p) r (ticl_at_ind b r).
+End IndexedInduction.
 
-End TiclSyntax.
+Section PrefixInduction.
+  Context {E : Type -> Type}.
+  Variable P : ticll E -> Prop.
+  Variable Hnow : forall p, P (CNow p).
+  Variable Hu : forall q p, P p -> forall r, P r -> P (Cu q p r).
+  Variable Hx : forall q p, P p -> forall r, P r -> P (Cx q p r).
+  Variable Hg : forall q p, P p -> P (Cg q p).
+  Variable Hand : forall p, P p -> forall r, P r -> P (CAnd p r).
+  Variable Hor : forall p, P p -> forall r, P r -> P (COr p r).
 
-Arguments ticll E : clear implicits.
-Arguments ticlr E X : clear implicits.
+  Equations ticll_ind (p : ticll E) : P p :=
+  ticll_ind (CNow p) := Hnow p;
+  ticll_ind (Cu q p r) := Hu q p (ticll_ind p) r (ticll_ind r);
+  ticll_ind (Cx q p r) := Hx q p (ticll_ind p) r (ticll_ind r);
+  ticll_ind (Cg q p) := Hg q p (ticll_ind p);
+  ticll_ind (CAnd p r) := Hand p (ticll_ind p) r (ticll_ind r);
+  ticll_ind (COr p r) := Hor p (ticll_ind p) r (ticll_ind r).
+End PrefixInduction.
 
-(** * Contramap *)
-(** This definition transforms a suffix formula [φ] over return types [X] into a suffix formula over return types [Y],
-given a function [f: Y -> X]. *)
-Section Contramap.
-  Context {E: Type -> Type} {X Y: Type}.
-  Definition contramap(f: Y -> X): ticlr E X -> ticlr E Y :=
-    fix F φ :=
-      match φ with
-      | CRet p => CRet (fun y w => p (f y) w)
-      | CuR q φ ψ => CuR q φ (F ψ)
-      | CxR q φ ψ => CxR q φ (F ψ)
-      | CAndR φ ψ => CAndR (F φ) (F ψ)
-      | COrR φ ψ => COrR (F φ) (F ψ)
-      end.
+(** * Return-predicate traversal. Prefix guards are unchanged. *)
+Equations map_ret {E : Type -> Type} {X Y : Type}
+    (f : (X -> World E -> Prop) -> (Y -> World E -> Prop))
+    (p : ticlr E X) : ticlr E Y :=
+map_ret f (CRet p) := CRet (f p);
+map_ret f (Cu q p r) := Cu q p (map_ret f r);
+map_ret f (Cx q p r) := Cx q p (map_ret f r);
+map_ret f (CAnd p r) := CAnd (map_ret f p) (map_ret f r);
+map_ret f (COr p r) := COr (map_ret f p) (map_ret f r).
 
-End Contramap.
+(** Transform every atom, including prefix guards, without changing indices. *)
+Equations map_atoms {E : Type -> Type} {X : Type}
+  (now_map : (World E -> Prop) -> World E -> Prop)
+  (ret_map : (X -> World E -> Prop) -> X -> World E -> Prop)
+  (b : bool) (p : ticl E (if b then Some X else None))
+  : ticl E (if b then Some X else None) :=
+map_atoms now_map ret_map false (CNow P) := CNow (now_map P);
+map_atoms now_map ret_map true (CRet P) := CRet (ret_map P);
+map_atoms now_map ret_map b (Cu q p r) :=
+  Cu q (map_atoms now_map ret_map false p) (map_atoms now_map ret_map b r);
+map_atoms now_map ret_map b (Cx q p r) :=
+  Cx q (map_atoms now_map ret_map false p) (map_atoms now_map ret_map b r);
+map_atoms now_map ret_map false (Cg q p) := Cg q (map_atoms now_map ret_map false p);
+map_atoms now_map ret_map b (CAnd p r) :=
+  CAnd (map_atoms now_map ret_map b p) (map_atoms now_map ret_map b r);
+map_atoms now_map ret_map b (COr p r) :=
+  COr (map_atoms now_map ret_map b p) (map_atoms now_map ret_map b r).
 
-(** * Coq notation for TICL formulas *)
-Bind Scope ticl_scope with ticll ticlr.
+Definition contramap {E : Type -> Type} {X Y : Type}
+    (f : Y -> X) : ticlr E X -> ticlr E Y :=
+  map_ret (fun p y w => p (f y) w).
+
+(** * One grammar for formulas and judgments. Constructor indices enforce sorts. *)
+Bind Scope ticl_scope with ticl.
 Module TiclNotations.
   Local Open Scope ticl_scope.
+  Declare Custom Entry ticl.
+  Notation "<( e )>" := e
+    (at level 0, e custom ticl at level 95) : ticl_scope.
+  Notation "( x )" := x
+    (in custom ticl, x at level 99) : ticl_scope.
+  Notation "{ x }" := x
+    (in custom ticl at level 0, x constr) : ticl_scope.
+  Notation "x" := x
+    (in custom ticl at level 0, x constr at level 0) : ticl_scope.
 
-  (* left TICL syntax (no termination) *)
-  Declare Custom Entry ticll.
-
-  Notation "<( e )>" := e (at level 0, e custom ticll at level 95) : ticl_scope.
-  Notation "( x )" := x (in custom ticll, x at level 99) : ticl_scope.
-  Notation "{ x }" := x (in custom ticll at level 0, x constr): ticl_scope.
-  Notation "x" := x (in custom ticll at level 0, x constr at level 0) : ticl_scope.
-
-  (* Right TICL syntax (with termination) *)
-  Declare Custom Entry ticlr.
-
-  Notation "<[ e ]>" := e (at level 0, e custom ticlr at level 95) : ticl_scope.
-  Notation "( x )" := x (in custom ticlr, x at level 99) : ticl_scope.
-  Notation "{ x }" := x (in custom ticlr at level 0, x constr): ticl_scope.
-  Notation "x" := x (in custom ticlr at level 0, x constr at level 0) : ticl_scope.
-
-  (* Temporal syntax: base predicates *)
-  Notation "'now' p" :=
-    (CNow p)
-      (in custom ticll at level 74): ticl_scope.
-
-  Notation "'pure'" :=
-    (CNow (fun w => w = Pure))
-      (in custom ticll at level 74): ticl_scope.
-
-  Notation "'vis' R" :=
-    (CNow (vis_with R))
-      (in custom ticll at level 74): ticl_scope.
-
+  Notation "'now' p" := (CNow p) (in custom ticl at level 74) : ticl_scope.
+  Notation "'pure'" := (CNow (fun w => w = Pure))
+    (in custom ticl at level 74) : ticl_scope.
+  Notation "'vis' R" := (CNow (vis_with R))
+    (in custom ticl at level 74) : ticl_scope.
   Notation "'visW' R" :=
     (CNow (vis_with (fun Y (pat : writerE _ Y) =>
-                       match pat in writerE _ Y return Y -> Prop with
-                       | Log v => fun 'tt => R v
-                       end)))
-      (in custom ticll at level 74): ticl_scope.
-
-  Notation "'ret' R" :=
-    (CRet R)
-      (in custom ticlr at level 74): ticl_scope.
-
-  Notation "'ret=' r w" :=
-    (CRet (fun r' w' => r = r' /\ w = w'))
-      (in custom ticlr at level 74): ticl_scope.
-
-  Notation "⊤" := (CNow (fun _ => True)) (in custom ticll): ticl_scope.
-  Notation "⊥" := (CNow (fun _ => False)) (in custom ticll): ticl_scope.
-  Notation "⊤" := (CNow (fun _ => True)) (in custom ticlr): ticl_scope.
-  Notation "⊥" := (CNow (fun _ => False)) (in custom ticlr): ticl_scope.
-
-  (* Temporal syntax *)
-  Notation "p 'EN' q" := (CxL Q_E p q) (in custom ticll at level 75): ticl_scope.
-  Notation "p 'AN' q" := (CxL Q_A p q) (in custom ticll at level 75): ticl_scope.
-
-  Notation "p 'EN' q" := (CxR Q_E p q) (in custom ticlr at level 75): ticl_scope.
-  Notation "p 'AN' q" := (CxR Q_A p q) (in custom ticlr at level 75): ticl_scope.
-
-  Notation "p 'EU' q" := (CuL Q_E p q) (in custom ticll at level 75): ticl_scope.
-  Notation "p 'AU' q" := (CuL Q_A p q) (in custom ticll at level 75): ticl_scope.
-
-  Notation "p 'EU' q" := (CuR Q_E p q) (in custom ticlr at level 75): ticl_scope.
-  Notation "p 'AU' q" := (CuR Q_A p q) (in custom ticlr at level 75): ticl_scope.
-
-  Notation "'EG' p" := (Cg Q_E p) (in custom ticll at level 75): ticl_scope.
-  Notation "'AG' p" := (Cg Q_A p) (in custom ticll at level 75): ticl_scope.
-
-  Notation "'EG' p" := (Cg Q_E p) (in custom ticll at level 75): ticl_scope.
-  Notation "'AG' p" := (Cg Q_A p) (in custom ticll at level 75): ticl_scope.
-
-  (* Syntactic sugar [AF, EF] is finally *)
-  Notation "'EF' p" := <( ⊤ EU p )> (in custom ticll at level 74, p at level 74): ticl_scope.
-  Notation "'AF' p" := <( ⊤ AU p )> (in custom ticll at level 74, p at level 74): ticl_scope.
-
-  Notation "'EF' p" := <[ ⊤ EU p ]> (in custom ticlr at level 74, p at level 74): ticl_scope.
-  Notation "'AF' p" := <[ ⊤ AU p ]> (in custom ticlr at level 74, p at level 74): ticl_scope.
-
-  Notation "'EX' p" := <( ⊤ EN p )> (in custom ticll at level 74, p at level 74): ticl_scope.
-  Notation "'AX' p" := <( ⊤ AN p )> (in custom ticll at level 74, p at level 74): ticl_scope.
-
-  Notation "'EX' p" := <[ ⊤ EN p ]> (in custom ticlr at level 74, p at level 74): ticl_scope.
-  Notation "'AX' p" := <[ ⊤ AN p ]> (in custom ticlr at level 74, p at level 74): ticl_scope.
-
-  (* Propositional syntax *)
-  Notation "p '/\' q" := (CAndL p q)
-                           (in custom ticll at level 77, left associativity): ticl_scope.
-  Notation "p '\/' q" := (COrL p q)
-                           (in custom ticll at level 77, left associativity): ticl_scope.
-
-  Notation "p '/\' q" := (CAndR p q)
-                           (in custom ticlr at level 77, left associativity): ticl_scope.
-  Notation "p '\/' q" := (COrR p q)
-                           (in custom ticlr at level 77, left associativity): ticl_scope.
+      match pat in writerE _ Y return Y -> Prop with
+      | Log v => fun 'tt => R v
+      end))) (in custom ticl at level 74) : ticl_scope.
+  Notation "'ret' R" := (CRet R) (in custom ticl at level 74) : ticl_scope.
+  Notation "'ret=' r w" := (CRet (fun r' w' => r = r' /\ w = w'))
+    (in custom ticl at level 74) : ticl_scope.
+  Notation "⊤" := (CNow (fun _ => True)) (in custom ticl) : ticl_scope.
+  Notation "⊥" := (CNow (fun _ => False)) (in custom ticl) : ticl_scope.
+  Notation "p 'EN' q" := (Cx Q_E p q) (in custom ticl at level 75) : ticl_scope.
+  Notation "p 'AN' q" := (Cx Q_A p q) (in custom ticl at level 75) : ticl_scope.
+  Notation "p 'EU' q" := (Cu Q_E p q) (in custom ticl at level 75) : ticl_scope.
+  Notation "p 'AU' q" := (Cu Q_A p q) (in custom ticl at level 75) : ticl_scope.
+  Notation "'EG' p" := (Cg Q_E p) (in custom ticl at level 75) : ticl_scope.
+  Notation "'AG' p" := (Cg Q_A p) (in custom ticl at level 75) : ticl_scope.
+  Notation "'EF' p" := <( ⊤ EU p )>
+    (in custom ticl at level 74, p at level 74) : ticl_scope.
+  Notation "'AF' p" := <( ⊤ AU p )>
+    (in custom ticl at level 74, p at level 74) : ticl_scope.
+  Notation "'EX' p" := <( ⊤ EN p )>
+    (in custom ticl at level 74, p at level 74) : ticl_scope.
+  Notation "'AX' p" := <( ⊤ AN p )>
+    (in custom ticl at level 74, p at level 74) : ticl_scope.
+  Notation "p '/\' q" := (CAnd p q)
+    (in custom ticl at level 77, left associativity) : ticl_scope.
+  Notation "p '\/' q" := (COr p q)
+    (in custom ticl at level 77, left associativity) : ticl_scope.
 End TiclNotations.

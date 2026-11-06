@@ -26,6 +26,7 @@ From Stdlib Require Import
   Sorting.Permutation.
 
 From TICL Require Export Utils.Pcm.
+From TICL Require Import Utils.Lists.
 
 Import ListNotations.
 Local Open Scope pcm_scope.
@@ -113,6 +114,115 @@ Qed.
 Lemma upd_heq: forall h k a v, heq h k -> heq (upd h a v) (upd k a v).
 Proof.
   intros h k a v H x; unfold upd; destruct (Nat.eqb x a); [reflexivity | apply H].
+Qed.
+
+(** Chronological writes: repeated keys emit repeated source writes, and their
+    pure result keeps the last value.  Unlike checked source writes, this fold
+    may allocate previously absent cells. *)
+Fixpoint apply_writes (ws : list (nat * nat)) (h : Heap) : Heap :=
+  match ws with
+  | [] => h
+  | (a,v)::rest => apply_writes rest (upd h a v)
+  end.
+
+Lemma apply_writes_cons a v ws h :
+  apply_writes ((a,v)::ws) h = apply_writes ws (upd h a v).
+Proof. reflexivity. Qed.
+
+Lemma apply_writes_app xs ys h :
+  apply_writes (xs ++ ys) h = apply_writes ys (apply_writes xs h).
+Proof.
+  revert h; induction xs as [|[a v] xs IH]; intro h;
+    cbn [app apply_writes]; [reflexivity | apply IH].
+Qed.
+
+Lemma apply_writes_lookup ws h a :
+  apply_writes ws h a =
+    match find (fun av => Nat.eqb a (fst av)) (rev ws) with
+    | Some (_,v) => Some v | None => h a end.
+Proof.
+  revert h; induction ws as [|[b v] ws IH] using rev_ind; intro h.
+  - reflexivity.
+  - rewrite apply_writes_app, rev_app_distr.
+    cbn [apply_writes rev app find fst snd].
+    unfold upd; destruct (Nat.eqb a b); [reflexivity | apply IH].
+Qed.
+
+Lemma apply_writes_rev_lookup ws h a :
+  apply_writes (rev ws) h a =
+    match find (fun av => Nat.eqb a (fst av)) ws with
+    | Some (_,v) => Some v | None => h a end.
+Proof. rewrite apply_writes_lookup, rev_involutive; reflexivity. Qed.
+
+Lemma apply_writes_outside ws h a :
+  ~ In a (map fst ws) -> apply_writes ws h a = h a.
+Proof.
+  revert h; induction ws as [|[b v] ws IH]; intros h Hout; [reflexivity |].
+  rewrite apply_writes_cons, IH.
+  - apply upd_neq; intro E; apply Hout; cbn; now left.
+  - intro H; apply Hout; cbn; now right.
+Qed.
+
+Lemma apply_writes_allocated ws h a :
+  h a <> None -> apply_writes ws h a <> None.
+Proof.
+  revert h; induction ws as [|[b v] ws IH]; intros h H; [exact H |].
+  rewrite apply_writes_cons; apply IH, upd_mono, H.
+Qed.
+
+Lemma apply_writes_dom_exact ws h a :
+  apply_writes ws h a <> None <-> In a (map fst ws) \/ h a <> None.
+Proof.
+  revert h; induction ws as [|[b v] ws IH]; intro h; [cbn; tauto |].
+  rewrite apply_writes_cons, IH; cbn [map fst In]; unfold upd.
+  destruct (Nat.eqb_spec a b) as [->|Hne].
+  - split; intros; [left; now left | right; discriminate].
+  - split.
+    + intros [H|H]; [left; now right | now right].
+    + intros [[E|H]|H]; [congruence | now left | now right].
+Qed.
+
+Lemma apply_writes_dom ws h a :
+  (forall x v, In (x,v) ws -> h x <> None) ->
+  (apply_writes ws h a <> None <-> h a <> None).
+Proof.
+  intro Hall; rewrite apply_writes_dom_exact; split; [|now right].
+  intros [Hin|H]; [|exact H].
+  apply in_map_iff in Hin as ([x v] & E & Hin); cbn in E; subst x.
+  now apply (Hall a v).
+Qed.
+
+Lemma apply_writes_lookup_agree ws h f a :
+  h a = f a -> apply_writes ws h a = apply_writes ws f a.
+Proof.
+  intro H; rewrite !apply_writes_lookup.
+  destruct (find (fun av => Nat.eqb a (fst av)) (rev ws)); [reflexivity | exact H].
+Qed.
+
+Lemma apply_writes_contents ws h a v :
+  NoDup (map fst ws) -> In (a,v) ws -> apply_writes ws h a = Some v.
+Proof.
+  revert h; induction ws as [|[b u] ws IH]; intros h Hnd Hin; [contradiction |].
+  cbn [map fst] in Hnd; inversion Hnd as [|? ? Hout Htail]; subst.
+  destruct Hin as [E|Hin].
+  - injection E as E1 E2; subst b u.
+    rewrite apply_writes_cons, apply_writes_outside by exact Hout; apply upd_eq.
+  - rewrite apply_writes_cons; now apply IH.
+Qed.
+
+Lemma apply_writes_rev ws h :
+  NoDup (map fst ws) -> heq (apply_writes (rev ws) h) (apply_writes ws h).
+Proof.
+  intros Hnd a; destruct (in_dec Nat.eq_dec a (map fst ws)) as [Hin|Hout].
+  - apply in_map_iff in Hin as ([b v] & E & Hin); cbn in E; subst b.
+    rewrite (apply_writes_contents ws h a v Hnd Hin).
+    apply apply_writes_contents.
+    + rewrite map_rev; now apply NoDup_rev.
+    + exact (proj1 (in_rev ws (a,v)) Hin).
+  - assert (Hrev : ~ In a (map fst (rev ws))).
+    { rewrite map_rev; intro H; apply Hout; exact (proj2 (in_rev (map fst ws) a) H). }
+    rewrite (apply_writes_outside (rev ws) h a Hrev),
+      (apply_writes_outside ws h a Hout); reflexivity.
 Qed.
 
 (** Elementary lookup consequences of [hunion]/[hdisj].  These read a single
@@ -393,6 +503,12 @@ Lemma heap_finite_upd h a v : heap_finite h -> heap_finite (upd h a v).
 Proof.
   intros [B Bound]; exists (Nat.max B (S a)); intros x X.
   unfold upd; destruct (Nat.eqb_spec x a); [lia | apply Bound; lia].
+Qed.
+
+Lemma apply_writes_finite ws h : heap_finite h -> heap_finite (apply_writes ws h).
+Proof.
+  revert h; induction ws as [|[a v] ws IH]; intros h H; [exact H |].
+  rewrite apply_writes_cons; apply IH, heap_finite_upd, H.
 Qed.
 
 Lemma heap_bounded_block_free bound h base size :
@@ -777,6 +893,105 @@ Proof.
     cbn; destruct Hx as [-> | ->]; auto.
 Qed.
 
+Lemma cells_length ns : length (cells ns) = 2 * length ns.
+Proof. unfold cells; apply flat_map_fixed_length; intros; reflexivity. Qed.
+
+Lemma cells_nodup ns :
+  NoDup ns -> (forall a b, In a ns -> In b ns -> a <> S b) -> NoDup (cells ns).
+Proof.
+  intros Hnd; induction Hnd as [|a ns Hout Hnd IH]; intro Hdisj.
+  - constructor.
+  - change (NoDup (a :: S a :: cells ns)); constructor.
+    + intros [E|Hin]; [lia |].
+      apply in_cells in Hin as (b & Hb & [E|E]).
+      * subst b; contradiction.
+      * exact (Hdisj a b (or_introl eq_refl) (or_intror Hb) E).
+    + constructor.
+      * intro Hin; apply in_cells in Hin as (b & Hb & [E|E]).
+        -- exact (Hdisj b a (or_intror Hb) (or_introl eq_refl) (eq_sym E)).
+        -- apply Hout; replace a with b by lia; exact Hb.
+      * apply IH; intros b c Hb Hc; apply Hdisj; now right.
+Qed.
+
+(** Payload/link pairs in source order.  Both combines deliberately truncate
+    when values or successor lists are shorter. *)
+Definition node_writes (ns vs : list nat) : list (nat * nat) :=
+  flat_map (fun '(a,(v,next)) => [(a,v);(S a,next)])
+    (combine ns (combine vs (tl ns ++ [0]))).
+
+Lemma node_writes_cons a ns v vs :
+  node_writes (a::ns) (v::vs) =
+    (a,v) :: (S a,hd 0 ns) :: node_writes ns vs.
+Proof. destruct ns; reflexivity. Qed.
+
+Lemma node_writes_keys ns vs :
+  map fst (node_writes ns vs) = cells (firstn (length vs) ns).
+Proof.
+  revert vs; induction ns as [|a ns IH]; intro vs.
+  - rewrite firstn_nil; reflexivity.
+  - destruct vs as [|v vs]; [reflexivity|].
+    rewrite node_writes_cons.
+    change (a :: S a :: map fst (node_writes ns vs) =
+      a :: S a :: cells (firstn (length vs) ns)).
+    now rewrite IH.
+Qed.
+
+Lemma node_writes_cells ns vs :
+  length ns = length vs -> map fst (node_writes ns vs) = cells ns.
+Proof.
+  intro Hlen; rewrite node_writes_keys, <- Hlen, firstn_all; reflexivity.
+Qed.
+
+Lemma node_writes_nodup ns vs :
+  length ns = length vs -> NoDup (cells ns) -> NoDup (map fst (node_writes ns vs)).
+Proof. intros Hlen Hnd; now rewrite node_writes_cells. Qed.
+
+Lemma node_writes_keys_subset ns vs a :
+  In a (map fst (node_writes ns vs)) -> In a (cells ns).
+Proof.
+  intros Hin; apply in_map_iff in Hin as ([b v] & E & Hin); cbn in E; subst b.
+  unfold node_writes in Hin; apply in_flat_map in Hin as ([b [u next]] & Hpair & Hin).
+  apply in_cells; exists b; split; [eapply in_combine_l; exact Hpair |].
+  cbn in Hin; destruct Hin as [E|[E|[]]]; injection E as E1 E2; [left|right]; congruence.
+Qed.
+
+Lemma node_writes_dom ns vs a :
+  length ns = length vs ->
+  (apply_writes (rev (node_writes ns vs)) hemp a <> None <-> In a (cells ns)).
+Proof.
+  intro Hlen; rewrite apply_writes_dom_exact, map_rev, node_writes_cells by exact Hlen.
+  rewrite <- in_rev; unfold hemp; split; [intros [H|H]; [exact H|contradiction] | now left].
+Qed.
+
+Lemma node_writes_contents ns vs :
+  length ns = length vs -> NoDup (cells ns) ->
+  Forall2 (fun a '(v,next) =>
+    apply_writes (rev (node_writes ns vs)) hemp a = Some v /\
+    apply_writes (rev (node_writes ns vs)) hemp (S a) = Some next)
+    ns (combine vs (tl ns ++ [0])).
+Proof.
+  intros Hlen Hnd.
+  assert (Hkeys : NoDup (map fst (rev (node_writes ns vs)))).
+  { rewrite map_rev, node_writes_cells by exact Hlen; now apply NoDup_rev. }
+  assert (Hpair : forall a v next, In (a,(v,next))
+      (combine ns (combine vs (tl ns ++ [0]))) ->
+      apply_writes (rev (node_writes ns vs)) hemp a = Some v /\
+      apply_writes (rev (node_writes ns vs)) hemp (S a) = Some next).
+  { intros a v next Hin.
+    assert (Hpayload : In (a,v) (rev (node_writes ns vs))).
+    { apply (proj1 (in_rev (node_writes ns vs) (a,v))); unfold node_writes; apply in_flat_map.
+      exists (a,(v,next)); split; [exact Hin|cbn; auto]. }
+    assert (Hlink : In (S a,next) (rev (node_writes ns vs))).
+    { apply (proj1 (in_rev (node_writes ns vs) (S a,next))); unfold node_writes; apply in_flat_map.
+      exists (a,(v,next)); split; [exact Hin|cbn; auto]. }
+    split; now apply apply_writes_contents. }
+  assert (Hlength : length ns = length (combine vs (tl ns ++ [0]))).
+  { rewrite length_combine, Nat.min_l; [exact Hlen|].
+    rewrite length_app; destruct ns; cbn [tl length] in *; lia. }
+  apply Forall2_in_combine; split; [exact Hlength|].
+  intros a [v next] Hin; now apply Hpair.
+Qed.
+
 Fixpoint node_addrs (first count : nat) : list nat :=
   match count with
   | 0 => []
@@ -852,6 +1067,82 @@ Proof.
       * apply IH.
 Qed.
 
+(** Null-terminated successor updates.  The extra null has no key when the
+    node list is empty; [combine] consequently emits exactly [count] writes. *)
+Definition link_updates (first count : nat) : list (nat * nat) :=
+  combine (node_addrs first count) (tl (node_addrs first count) ++ [0]).
+
+Local Lemma combine_successors_cons a ns :
+  combine (a::ns) (tl (a::ns) ++ [0]) =
+    (a,hd 0 ns) :: combine ns (tl ns ++ [0]).
+Proof. destruct ns; reflexivity. Qed.
+
+Lemma link_updates_cons first count :
+  link_updates first (S count) =
+    (first,hd 0 (node_addrs (first+2) count)) :: link_updates (first+2) count.
+Proof. unfold link_updates; cbn [node_addrs]; apply combine_successors_cons. Qed.
+
+Lemma link_updates_keys first count : map fst (link_updates first count) = node_addrs first count.
+Proof.
+  revert first; induction count as [|count IH]; intro first; [reflexivity|].
+  rewrite link_updates_cons; cbn [map fst node_addrs]; now rewrite IH.
+Qed.
+
+Lemma link_updates_length first count : length (link_updates first count) = count.
+Proof.
+  pose proof (length_map fst (link_updates first count)) as H.
+  rewrite link_updates_keys, node_addrs_length in H; symmetry; exact H.
+Qed.
+
+Local Lemma combine_successors_in prefix b rest :
+  In (b,hd 0 rest) (combine (prefix ++ b::rest) (tl (prefix ++ b::rest) ++ [0])).
+Proof.
+  induction prefix as [|a prefix IH].
+  - cbn [app]; rewrite combine_successors_cons; now left.
+  - cbn [app]; rewrite combine_successors_cons; now right.
+Qed.
+
+Lemma link_updates_contents first count h prefix b rest :
+  node_addrs first count = prefix ++ b::rest ->
+  apply_writes (link_updates first count) h b = Some (hd 0 rest).
+Proof.
+  intro Hnodes; apply apply_writes_contents.
+  - rewrite link_updates_keys; apply node_addrs_nodup.
+  - unfold link_updates; rewrite Hnodes; apply combine_successors_in.
+Qed.
+
+Lemma link_updates_null first count h prefix b :
+  node_addrs first count = prefix ++ [b] ->
+  apply_writes (link_updates first count) h b = Some 0.
+Proof. intro H; exact (link_updates_contents first count h prefix b [] H). Qed.
+
+Lemma link_updates_index first count j :
+  Nat.lt j count ->
+  In (first + 2*j, if Nat.ltb (S j) count then first + 2*S j else 0)
+    (link_updates first count).
+Proof.
+  revert first j; induction count as [|count IH]; intros first j Hj; [lia|].
+  rewrite link_updates_cons; destruct j as [|j].
+  - left; destruct count; cbn [node_addrs hd Nat.ltb]; f_equal; lia.
+  - right.
+    replace (first + 2*S j) with (first + 2 + 2*j) by lia.
+    change (In (first+2+2*j,
+      if Nat.ltb (S j) count then first+2*S (S j) else 0)
+      (link_updates (first+2) count)).
+    replace (first+2*S (S j)) with (first+2+2*S j) by lia.
+    apply IH; lia.
+Qed.
+
+Lemma link_updates_contents_index first count h j :
+  Nat.lt j count ->
+  apply_writes (link_updates first count) h (first + 2*j) =
+    Some (if Nat.ltb (S j) count then first + 2*S j else 0).
+Proof.
+  intro Hj; apply apply_writes_contents.
+  - rewrite link_updates_keys; apply node_addrs_nodup.
+  - now apply link_updates_index.
+Qed.
+
 (** ** Pure link initialization over a stride-two node list.
 
     Links run low to high; the last node's link is the null terminator zero.
@@ -859,30 +1150,20 @@ Qed.
     pure initializer may EXTEND a domain; the exact domain law below makes that
     explicit.  Checked source writes still require allocated cells. *)
 
-Fixpoint init_links_heap (first count : nat) (h : Heap) : Heap :=
-  match count with
-  | 0 => h
-  | S rest =>
-      init_links_heap (first + 2) rest
-        (upd h first (match rest with 0 => 0 | S _ => first + 2 end))
-  end.
+Definition init_links_heap (first count : nat) (h : Heap) : Heap :=
+  apply_writes (link_updates first count) h.
 
 Lemma init_links_heap_lookup_agree first count h f x :
   h x = f x -> init_links_heap first count h x = init_links_heap first count f x.
 Proof.
-  revert first h f; induction count as [| count IH]; intros first h f H.
-  - exact H.
-  - cbn [init_links_heap]; apply IH, upd_lookup_agree, H.
+  unfold init_links_heap; apply apply_writes_lookup_agree.
 Qed.
 
 Lemma init_links_heap_frame first count h x :
   ~ In x (node_addrs first count) -> init_links_heap first count h x = h x.
 Proof.
-  revert first h; induction count as [| count IH]; intros first h Hout.
-  - reflexivity.
-  - cbn [init_links_heap]; rewrite IH.
-    + apply upd_neq; intro H; apply Hout; cbn [node_addrs]; now left.
-    + intro Hin; apply Hout; cbn [node_addrs]; now right.
+  intro Hout; unfold init_links_heap; apply apply_writes_outside.
+  now rewrite link_updates_keys.
 Qed.
 
 Lemma init_links_heap_out first count h x :
@@ -904,14 +1185,7 @@ Lemma init_links_heap_dom first count h x :
   init_links_heap first count h x <> None <->
     In x (node_addrs first count) \/ h x <> None.
 Proof.
-  revert first h x; induction count as [| count IH]; intros first h x.
-  - cbn [init_links_heap node_addrs In]; tauto.
-  - cbn [init_links_heap node_addrs In]; rewrite IH; unfold upd.
-    destruct (Nat.eqb_spec x first) as [Hx | Hne].
-    + subst x; split; intro H.
-      * left; now left.
-      * right; discriminate.
-    + intuition congruence.
+  unfold init_links_heap; now rewrite apply_writes_dom_exact, link_updates_keys.
 Qed.
 
 (** A list-suffix lookup is independent of the incoming heap.  In particular
@@ -921,18 +1195,7 @@ Lemma init_links_heap_link first count h prefix b rest :
   node_addrs first count = prefix ++ b :: rest ->
   init_links_heap first count h b = Some (hd 0 rest).
 Proof.
-  revert first h prefix b rest; induction count as [| count IH];
-    intros first h prefix b rest Hnodes.
-  - destruct prefix; discriminate.
-  - destruct prefix as [| a prefix].
-    + cbn [node_addrs app] in Hnodes.
-      injection Hnodes as Hb Hrest; subst b; subst rest.
-      cbn [init_links_heap].
-      rewrite init_links_heap_out by (left; lia).
-      rewrite upd_eq; destruct count; reflexivity.
-    + cbn [node_addrs app] in Hnodes.
-      injection Hnodes as Ha Htail.
-      cbn [init_links_heap]; eapply IH; exact Htail.
+  unfold init_links_heap; apply link_updates_contents.
 Qed.
 
 Lemma init_links_heap_link_index first count h j :
@@ -940,25 +1203,11 @@ Lemma init_links_heap_link_index first count h j :
   init_links_heap first count h (first + 2 * j) =
     Some (if Nat.ltb (S j) count then first + 2 * S j else 0).
 Proof.
-  revert first h j; induction count as [| count IH]; intros first h j Hj.
-  - lia.
-  - destruct j as [| j].
-    + replace (first + 2 * 0) with first by lia.
-      cbn [init_links_heap].
-      rewrite init_links_heap_out by (left; lia).
-      rewrite upd_eq; destruct count; reflexivity.
-    + cbn [init_links_heap].
-      replace (first + 2 * S j) with (first + 2 + 2 * j) by lia.
-      rewrite IH by lia.
-      change (Some (if Nat.ltb (S j) count then first + 2 + 2 * S j else 0) =
-        Some (if Nat.ltb (S j) count then first + 2 * S (S j) else 0)).
-      destruct (Nat.ltb (S j) count); f_equal; lia.
+  unfold init_links_heap; apply link_updates_contents_index.
 Qed.
 
 Lemma init_links_heap_finite first count h :
   heap_finite h -> heap_finite (init_links_heap first count h).
 Proof.
-  revert first h; induction count as [| count IH]; intros first h Hh.
-  - exact Hh.
-  - cbn [init_links_heap]; apply IH, heap_finite_upd, Hh.
+  unfold init_links_heap; apply apply_writes_finite.
 Qed.

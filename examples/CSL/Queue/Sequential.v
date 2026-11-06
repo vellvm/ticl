@@ -10,11 +10,9 @@
        silently corrupting an unrelated cell.  The footprint discipline is
        therefore forced by the temporal proof, not assumed alongside it.
 
-    2. **The observation is heap-free.**  [HeapImp] logs the WHOLE memory on
-       every write, which puts numeric addresses into the world and makes any
-       world-literal specification frame-unstable.  Here the only logged event
-       is the (fun o => indexed_value o = payload) together with an occurrence index, so the world
-       never mentions an address.
+    2. **Every successful mutation is observable.**  A rotation logs its
+       occurrence-tagged payload followed by four post-write managed heaps.
+       Reads remain silent; each snapshot retains passive cells and extents.
 
     3. **The observation is occurrence-tagged.**  [stamp v k] carries the number
        of pops that preceded it.  A retained [Obs (Log (stamp v k)) tt] world
@@ -42,6 +40,7 @@ From TICL Require Import
   CTree.Interp.State.Mod
   CTree.Events.State
   CTree.Events.Writer
+  CTree.Trace
   CTree.Logic.Trans
   CTree.Logic.CanStep
   CTree.Logic.AX
@@ -99,34 +98,21 @@ Definition run (hdr: nat) (s: SSig) : ctreeW (CSLObs nat) Bn (SSig * unit) :=
 
 (** ** The body correspondence.
 
-    ONE completed rotation is strongly bisimilar to a SINGLE logged step
-    followed by a return.  Three things are packed into this one statement:
-
-    - **hidden-segment termination.**  Every read and write in the body is
-      silent and finite, so the whole heap segment collapses; there is no
-      stuttering to reason about, and in particular no next-sensitive
-      stuttering theorem is needed.  This holds ONLY because every access is
-      inside the footprint: an out-of-footprint access would leave [Stuck]
-      in place of a [Ret] and the collapse would fail ([interp_heap_rd_nostep]).
-
-    - **operation correctness.**  The resulting heap is [rot_heap], which
-      [Representation.rot_heap_spec] proves implements the abstract pop-and-push.
-
-    - **the observation.**  The single event is [stamp v c] where [v] is the
-      payload READ OUT OF the head node's cell and [c] is the occurrence
-      counter before the pop. *)
+    One rotation emits its payload and the four successive post-write heaps,
+    then returns the rotated representation.  All accesses must be inside
+    the footprint; invalid accesses remain stuck. *)
 Theorem rot_body_spec: forall hdr a ns v vs h allocs ctx c,
     qrep hdr (a :: ns) (v :: vs) h ->
     interp_state (sh (A:=nat)) (rot_body hdr) ((h, allocs), (ctx, c))
-    ~ (log (inr (stamp v c) : CSLObs nat) ;;
-       Ret (((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, allocs), (ctx, S c)),
-            @inl unit unit tt) : ctreeW (CSLObs nat) Bn (SSig * (unit + unit))).
+    ~ (emit_list (queue_turn_logs (CSLEmit (stamp v c)) hdr a
+         (List.hd 0 ns) (last (a :: ns) 0) (h,allocs))
+       (Ret (((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, allocs), (ctx, S c)),
+            @inl unit unit tt)) : ctreeW (CSLObs nat) Bn (SSig * (unit + unit))).
 Proof.
   intros hdr a ns v vs h allocs ctx c Hq; unfold rot_body.
   etransitivity.
-  - eapply (queue_turn_spec emit (fun v c => inr (stamp v c))).
+  - eapply (queue_turn_spec emit (fun v c => CSLEmit (stamp v c))).
     + intros; apply interp_csl_emit.
     + exact Hq.
-  - rewrite !log_vis; apply sb_vis; intros _.
-    rewrite interp_state_ret; reflexivity.
+  - apply emit_list_sbisim; rewrite interp_state_ret; reflexivity.
 Qed.

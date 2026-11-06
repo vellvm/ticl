@@ -199,105 +199,107 @@ Module ME.
 
   (** We lift the structural Ticl lemmas to the level of MeS programs. *)
   (** Bind lemmas *)
-  Lemma aur_cprog_bind_r{X Y}: forall (h: CProg X) (k: X -> CProg Y) m w φ ψ R,
-      (forall r m w, R r m w -> <[ {instr_cprog (k r) m}, w |= φ AU ψ ]>) ->
-      <[ {instr_cprog h m}, w |= φ AU ret {fun '(m, r) w => R r m w} ]> ->
-      <[ {instr_cprog (CBind h k) m}, w |= φ AU ψ ]>.
+  Lemma au_cprog_bind_r{X Y} {b : bool}: forall (h: CProg X) (k: X -> CProg Y) m w (φ : ticll (writerE SecObs)) (ψ : ticl_at (writerE SecObs) (St * Y) b) R,
+      (forall r m w, R r m w -> entails (St * Y) b <( φ AU ψ )> (instr_cprog (k r) m) w) ->
+      entails (St * X) true <( φ AU ret {fun '(m, r) w => R r m w} )> (instr_cprog h m) w ->
+      entails (St * Y) b <( φ AU ψ )> (instr_cprog (CBind h k) m) w.
   Proof.
     unfold instr_cprog; cbn; intros.
-    eapply aur_state_bind_r; eauto with ticl.
+    eapply au_state_bind_r; eauto with ticl.
   Qed.
   
-  Lemma aur_cprog_bind_r_eq{X Y}: forall (h: CProg X) (k: X -> CProg Y) m w r w' m' φ ψ,
-      <[ {instr_cprog h m}, w |= φ AU ret={(m', r)} w' ]> ->
-      <[ {instr_cprog (k r) m'}, w' |= φ AU ψ ]> ->
-      <[ {instr_cprog (CBind h k) m}, w |= φ AU ψ ]>.
+  Lemma au_cprog_bind_r_eq{X Y} {b : bool}: forall (h: CProg X) (k: X -> CProg Y) m w r w' m' (φ : ticll (writerE SecObs)) (ψ : ticl_at (writerE SecObs) (St * Y) b),
+      entails (St * X) true <( φ AU ret={(m', r)} w' )> (instr_cprog h m) w ->
+      entails (St * Y) b <( φ AU ψ )> (instr_cprog (k r) m') w' ->
+      entails (St * Y) b <( φ AU ψ )> (instr_cprog (CBind h k) m) w.
   Proof.
     unfold instr_cprog; cbn; intros.
-    eapply aur_state_bind_r_eq; eauto with ticl.
+    eapply au_state_bind_r_eq; eauto with ticl.
   Qed.
   
-  Lemma aur_sprog_bind_r{X Y}: forall (h: SProg X) (k: X -> SProg Y) m w φ ψ R,
-      (forall r m w, R r m w -> <[ {instr_sprog (k r) m}, w |= φ AU ψ ]>) ->
-      <[ {instr_sprog h m}, w |= φ AU ret {fun '(m, r) w => R r m w} ]> ->
-      <[ {instr_sprog (SBind h k) m}, w |= φ AU ψ ]>.
+  Lemma au_sprog_bind_r{X Y} {b : bool}: forall (h: SProg X) (k: X -> SProg Y) m w (φ : ticll (writerE SecObs)) (ψ : ticl_at (writerE SecObs) (St * Y) b) R,
+      (forall r m w, R r m w -> entails (St * Y) b <( φ AU ψ )> (instr_sprog (k r) m) w) ->
+      entails (St * X) true <( φ AU ret {fun '(m, r) w => R r m w} )> (instr_sprog h m) w ->
+      entails (St * Y) b <( φ AU ψ )> (instr_sprog (SBind h k) m) w.
   Proof.
     unfold instr_sprog; cbn; intros.
-    eapply aur_state_bind_r; eauto with ticl.
+    eapply au_state_bind_r; eauto with ticl.
   Qed.
   
-  Lemma aur_sprog_bind_r_eq{X Y}: forall (h: SProg X) (k: X -> SProg Y) m m' (r: X) w w' φ ψ,
-      <[ {instr_sprog h m}, w |= φ AU ret={(m', r)} w' ]> ->
-      <[ {instr_sprog (k r) m'}, w' |= φ AU ψ ]> ->
-      <[ {instr_sprog (SBind h k) m}, w |= φ AU ψ ]>.
+  Lemma au_sprog_bind_r_eq{X Y} {b : bool}: forall (h: SProg X) (k: X -> SProg Y) m m' (r: X) w w' (φ : ticll (writerE SecObs)) (ψ : ticl_at (writerE SecObs) (St * Y) b),
+      entails (St * X) true <( φ AU ret={(m', r)} w' )> (instr_sprog h m) w ->
+      entails (St * Y) b <( φ AU ψ )> (instr_sprog (k r) m') w' ->
+      entails (St * Y) b <( φ AU ψ )> (instr_sprog (SBind h k) m) w.
   Proof.
     unfold instr_sprog; cbn; intros.
-    eapply aur_state_bind_r_eq; eauto with ticl.
+    eapply au_state_bind_r_eq; eauto with ticl.
   Qed.  
   
-  Lemma anr_sprog_bind_l{X Y}: forall (h: SProg X) (k: X -> SProg Y) m m' (r: X) w w' φ ψ,
-      <[ {instr_sprog h m}, w |= φ AN ret={(m', r)} w' ]> ->
-      <[ {instr_sprog (k r) m'}, w' |= ψ ]> ->
-      <[ {instr_sprog (SBind h k) m}, w |= φ AN ψ ]>.
+  Lemma an_sprog_bind_l{X Y} {b : bool}: forall (h: SProg X) (k: X -> SProg Y) m m' (r: X) w w' (φ : ticll (writerE SecObs)) (ψ : ticl_at (writerE SecObs) (St * Y) b),
+      entails (St * X) true <( φ AN ret={(m', r)} w' )> (instr_sprog h m) w ->
+      entails (St * Y) b ψ (instr_sprog (k r) m') w' ->
+      entails (St * Y) b <( φ AN ψ )> (instr_sprog (SBind h k) m) w.
   Proof.
     unfold instr_sprog; cbn; intros.
-    eapply anr_state_bind_l_eq; eauto with ticl.
+    eapply an_state_bind_l_eq; eauto with ticl.
   Qed.
 
   (** Branch lemmas *)
-  Lemma anr_sprog_br{X}: forall (a b: SProg X) m w φ ψ,
-      <( {instr_sprog (SBr a b) m}, w |= φ )> ->
-      <[ {instr_sprog a m}, w |= ψ ]> ->
-      <[ {instr_sprog b m}, w |= ψ ]> ->
-      <[ {instr_sprog (SBr a b) m}, w |= φ AN ψ ]>.
+  Lemma an_sprog_br{X} {suffix : bool}: forall (a b: SProg X) m w (φ : ticll (writerE SecObs)) (ψ : ticl_at (writerE SecObs) (St * X) suffix),
+      entails (St * X) false <( φ )> (instr_sprog (SBr a b) m) w ->
+      entails (St * X) suffix <( ψ )> (instr_sprog a m) w ->
+      entails (St * X) suffix <( ψ )> (instr_sprog b m) w ->
+      entails (St * X) suffix <( φ AN ψ )> (instr_sprog (SBr a b) m) w.
   Proof.
     unfold instr_sprog; cbn; intros.
     unfold brS2.
-    apply (anr_state_brS _ _ _ true); split; eauto with ticl.
+    apply (an_state_brS _ _ _ true); split; eauto with ticl.
     intros []; eauto with ticl.
   Qed.
 
   (** Call lemmas, call from [SProg] into the client [CProg]. *)
-  Lemma ticlr_sprog_call{X}: forall (p: CProg X) m w ψ,
-      <[ {instr_cprog p m}, w |= ψ ]> ->
-      <[ {instr_sprog (SCall p) m}, w |= ψ ]>.
+  Lemma ticl_sprog_call{X} {b : bool}: forall (p: CProg X) m w (ψ : ticl_at (writerE SecObs) (St * X) b),
+      entails (St * X) b <( ψ )> (instr_cprog p m) w ->
+      entails (St * X) b <( ψ )> (instr_sprog (SCall p) m) w.
   Proof.
     unfold instr_sprog, instr_cprog; cbn; intros; eauto with ticl.
   Qed.
 
-  Lemma ticlr_cprog_if{P Q X}: forall (c: {P} + {Q}) (t e: CProg X) m w ψ,
+  Lemma ticl_cprog_if{P Q X} {b : bool}: forall (c: {P} + {Q}) (t e: CProg X) m w (ψ : ticl_at (writerE SecObs) (St * X) b),
       match c with
-      | left _ => <[ {instr_cprog t m}, w |= ψ ]>
-      | right _ => <[ {instr_cprog e m}, w |= ψ ]>
+      | left _ => entails (St * X) b <( ψ )> (instr_cprog t m) w
+      | right _ => entails (St * X) b <( ψ )> (instr_cprog e m) w
       end ->
-      <[ {instr_cprog (CIf c t e) m}, w |= ψ ]>.
+      entails (St * X) b <( ψ )> (instr_cprog (CIf c t e) m) w.
   Proof.
     unfold instr_cprog; cbn; intros []; intros; eauto with ticl.
   Qed.
   
   (** Invariance lemmas, uses [ag_state_iter] from [State.v] *)
-  Lemma ag_sprog_invariance{X}: forall (b: X -> SProg X) R m s (i:X) φ,
+  Lemma ag_sprog_invariance{X}: forall (b: X -> SProg X) R m s (i:X) (φ : ticll (writerE SecObs)),
       R i m s ->
       (forall i m s,
           R i m s ->
-          <( {instr_sprog (SLoop i b) m}, {Obs (Log s) tt} |= φ )> /\
-            <[ {instr_sprog (b i) m}, {Obs (Log s) tt} |= AX (φ AU ret {fun '(m', i') w' =>
-              exists s', w' = Obs (Log s') tt /\ R i' m' s' }) ]>) ->
-      <( {instr_sprog (SLoop i b) m}, {Obs (Log s) tt} |= AG φ )>.
+          <( {instr_sprog (SLoop i b) m}, {Obs (Log s) tt} |=L φ )> /\
+            <( {instr_sprog (b i) m}, {Obs (Log s) tt} |=R AX (φ AU ret {fun '(m', i') w' =>
+              exists s', w' = Obs (Log s') tt /\ R i' m' s' }) )>) ->
+      <( {instr_sprog (SLoop i b) m}, {Obs (Log s) tt} |=L AG φ )>.
   Proof.
     unfold instr_sprog; cbn.
     intros.
     eapply ag_state_iter with
-      (R:=fun i m w =>
+      (R:=fun (i : X) (m : St) (w : WorldW SecObs) =>
             exists s, w = Obs (Log s) tt /\
-              <( {interp_state h_secE (denote_sprog (SLoop i b)) m}, {Obs (Log s) tt} |= φ )> /\
-              <[ {interp_state h_secE (denote_sprog (b i)) m}, {Obs (Log s) tt}
-                             |= AX (φ AU ret {fun '(m', i') w' => exists s', w' = Obs (Log s') tt /\ R i' m' s'}) ]>); eauto with ticl.
-    intros i' m' w' _ (s' & -> & Hb & HR); split; eauto with ticl.
+              entails (St * unit) false φ (interp_state h_secE (denote_sprog (SLoop i b)) m) (Obs (Log s) tt) /\ 
+              entails (St * X) true
+                <( AX (φ AU ret {fun '(m', i') w' => exists s', w' = Obs (Log s') tt /\ R i' m' s'}) )>
+                (interp_state h_secE (denote_sprog (b i)) m) (Obs (Log s) tt)); eauto with ticl.
+    intros i' m' w' _ (s' & -> & Hb & HR); split; [exact Hb |].
+    ticl_normalize.
     rewrite interp_state_bind.
-    eapply axr_aur_bind_r; [exact HR |].
+    eapply (ax_au_bind_r (b:=true)); [exact HR |].
     intros [m_ r_] w'' (s'' & -> & HR').
-    apply aur_state_ret; eauto with ticl.
+    apply (au_state_ret h_secE m_ (b:=true)); apply ret_ret; eauto with ticl.
     exists r_; split2; [reflexivity | constructor |].
     exists s''; split; eauto with ticl.
   Qed.

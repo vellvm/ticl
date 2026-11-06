@@ -1,23 +1,20 @@
 (** * Scheduler-generic fairness for yielding pools.
 
-    The policy runner [interp_schedule_fair] ([Policy.v]) logs a
-    [Scheduled i] event at every pick of the [Scheduler] record driving it.
-    Fairness is a property of the policy's own pick stream ([FairScheduler]);
-    the pool rules at the end conclude [AG (AF _)] on the instrumented runner
-    for any fair policy from an invariant, a well-founded rank and a helpful
-    slot. *)
+    The direct policy scheduler logs one selected-slot observation per turn.
+    User logs are relabelled into the program side of [W + nat]; selections
+    occupy the other side. Fairness is a property of the policy's own pick
+    stream, conditional on reaching cooperative scheduling boundaries. *)
 
 From Stdlib Require Import List Arith.PeanoNat Lia Fin Vector Morphisms
-  Program.Equality Wellfounded.Inverse_Image.
+  Program.Equality Wellfounded.Inverse_Image Eqdep.
 From Coinduction Require Import all.
 From TICL Require Import
   CTree.Core
   CTree.Events.Yield
   CTree.Events.Writer
-  CTree.Interp.Refine
+  CTree.Interp.Yield.Policy
   CTree.Interp.Yield.Mod
   CTree.Interp.Yield.SBisim
-  CTree.Interp.Yield.Policy
   CTree.Interp.Yield.Segments
   CTree.Interp.Yield.Sequential
   CTree.Interp.Yield.Execution
@@ -41,27 +38,92 @@ Local Open Scope ticl_scope.
 
 Generalizable All Variables.
 
+
+(** Raw handler equations remain valid after relabelling. *)
+Lemma relabel_equ_sb {W X} (t u : ctreeW W Bn X) :
+  t ≅ u -> translate relabel_log t ~ translate relabel_log u.
+Proof. intro Eq; rewrite Eq; reflexivity. Qed.
+
 (** * Policy traces and fairness *)
 
 (** The policy's own pick stream for a live pool of size [S n]. *)
 CoFixpoint sched_trace (sch : Scheduler) (n : nat) (st : sched_state sch) : ctreeW nat Bn unit :=
-  Br (branchn (S (sched_arity sch n st))) (fun a =>
-    Vis (Log (slot_index (fst (sched_pick sch n st a))))
-      (fun _ => sched_trace sch n (snd (sched_pick sch n st a)))).
+  match sched_arity sch n st as a return
+    (Fin.t (S a) -> Fin.t (S n) * sched_state sch) -> ctreeW nat Bn unit with
+  | 0 => fun pick => let '(i, st') := pick Fin.F1 in
+      Vis (Log (slot_index i)) (fun _ => sched_trace sch n st')
+  | S a => fun pick => Br (branchn (S (S a))) (fun x =>
+      let '(i, st') := pick x in
+      Vis (Log (slot_index i)) (fun _ => sched_trace sch n st'))
+  end (sched_pick sch n st).
 
 Lemma unfold_sched_trace sch n st :
   sched_trace sch n st ≅
+  match sched_arity sch n st as a return
+    (Fin.t (S a) -> Fin.t (S n) * sched_state sch) -> ctreeW nat Bn unit with
+  | 0 => fun pick => let '(i, st') := pick Fin.F1 in
+      Vis (Log (slot_index i)) (fun _ => sched_trace sch n st')
+  | S a => fun pick => Br (branchn (S (S a))) (fun x =>
+      let '(i, st') := pick x in
+      Vis (Log (slot_index i)) (fun _ => sched_trace sch n st'))
+  end (sched_pick sch n st).
+Proof. step; cbn; reflexivity. Qed.
+
+Lemma sched_trace_select sch n st :
+  sched_trace sch n st ~
   Br (branchn (S (sched_arity sch n st))) (fun a =>
     Vis (Log (slot_index (fst (sched_pick sch n st a))))
       (fun _ => sched_trace sch n (snd (sched_pick sch n st a)))).
-Proof. step; now cbn. Qed.
+Proof.
+  rewrite unfold_sched_trace.
+  generalize (sched_pick sch n st); destruct (sched_arity sch n st) as [|a]; intro pick.
+  - symmetry; apply sb_br_l with (y:=Fin.F1); intro i.
+    assert (Hi : i = Fin.F1) by (dependent destruction i; [reflexivity|inversion i]).
+    subst i; destruct (pick Fin.F1); reflexivity.
+  - apply sb_br_id; intro i; destruct (pick i); reflexivity.
+Qed.
+
+(** Exact residuals matter for transition induction: the uniform selection
+    bisimulation is not a replacement for these native trace transitions. *)
+Lemma sched_trace_pick sch n st a w :
+  not_done w ->
+  |sched_trace sch n st, w| ↦
+    |sched_trace sch n (snd (sched_pick sch n st a)),
+      Obs (Log (slot_index (fst (sched_pick sch n st a)))) tt|.
+Proof.
+  rewrite unfold_sched_trace.
+  revert a; generalize (sched_pick sch n st).
+  destruct (sched_arity sch n st) as [|arity]; intros pick a Hw.
+  - assert (Ha : a = Fin.F1) by (dependent destruction a; [reflexivity|inversion a]).
+    subst a; destruct (pick Fin.F1) as [i st']; cbn.
+    apply ktrans_vis; exists tt; split; [reflexivity|split; [reflexivity|exact Hw]].
+  - apply ktrans_br; exists a; destruct (pick a) as [i st']; cbn.
+    apply ktrans_vis; exists tt; split; [reflexivity|split; [reflexivity|exact Hw]].
+Qed.
+
+Lemma sched_trace_pick_inv sch n st w t' w' :
+  |sched_trace sch n st, w| ↦ |t', w'| ->
+  exists a, w' = Obs (Log (slot_index (fst (sched_pick sch n st a)))) tt /\
+    sched_trace sch n (snd (sched_pick sch n st a)) ≅ t'.
+Proof.
+  rewrite unfold_sched_trace.
+  generalize (sched_pick sch n st).
+  destruct (sched_arity sch n st) as [|arity]; intros pick TR.
+  - destruct (pick Fin.F1) as [i st'] eqn:Hpick; cbn in TR.
+    apply ktrans_vis in TR as ([] & -> & Heq & _).
+    exists Fin.F1; rewrite Hpick; cbn; split; [reflexivity|exact Heq].
+  - apply ktrans_br in TR as (a & TR).
+    destruct (pick a) as [i st'] eqn:Hpick; cbn in TR.
+    apply ktrans_vis in TR as ([] & -> & Heq & _).
+    exists a; rewrite Hpick; cbn; split; [reflexivity|exact Heq].
+Qed.
 
 (** Fairness: from every policy state, every slot of a fixed-size pool is
     picked again and again. *)
 Class FairScheduler (sch : Scheduler) : Prop :=
   fair_scheduled : forall n (i : Fin.t (S n)) (st : sched_state sch) (w : World (writerE nat)),
     not_done w ->
-    <( {sched_trace sch n st}, w |= AG (AF visW {eq (slot_index i)}) )>.
+    <( {sched_trace sch n st}, w |=L AG (AF visW {eq (slot_index i)}) )>.
 
 (** Induction-friendly witness: along every alternative that avoids slot
     [i], slot [i] is still picked after finitely many scheduling points. *)
@@ -71,26 +133,55 @@ Inductive EventuallyPicks (sch : Scheduler) (n : nat) (i : Fin.t (S n)) : sched_
                EventuallyPicks sch n i (snd (sched_pick sch n st a))) ->
     EventuallyPicks sch n i st.
 
+(** A destination policy may duplicate a source scheduling point only while
+    strictly decreasing its own well-founded rank. Every offered destination
+    choice must match a source choice, including its selected slot. *)
+Lemma eventually_picks_simulation {V} (source target: Scheduler)
+  (n: nat) (i: Fin.t (S n))
+  (Rel: sched_state target -> sched_state source -> Prop)
+  (rank: sched_state target -> V) (ltV: relation V) :
+  well_founded ltV ->
+  (forall dst src offer, Rel dst src -> exists offer',
+    fst (sched_pick target n dst offer) = fst (sched_pick source n src offer') /\
+    (Rel (snd (sched_pick target n dst offer))
+         (snd (sched_pick source n src offer')) \/
+     (Rel (snd (sched_pick target n dst offer)) src /\
+      ltV (rank (snd (sched_pick target n dst offer))) (rank dst)))) ->
+  forall src dst, EventuallyPicks source n i src -> Rel dst src ->
+    EventuallyPicks target n i dst.
+Proof.
+  intros Wf Hsim src dst Hep; revert dst.
+  induction Hep as [src Hnext IH].
+  apply (well_founded_induction
+    (wf_inverse_image (sched_state target) V ltV rank Wf)
+    (fun dst => Rel dst src -> EventuallyPicks target n i dst)).
+  intros dst IHrank Hrel; constructor; intros offer Hmiss.
+  destruct (Hsim dst src offer Hrel) as
+    (offer' & Hpick & [Hadvance | [Hstay Hlt]]).
+  - apply (IH offer'); [now rewrite <- Hpick | exact Hadvance].
+  - apply (IHrank _ Hlt Hstay).
+Qed.
+
 Section FairBridge.
   Context (sch : Scheduler) (n : nat) (i : Fin.t (S n)).
 
   Lemma eventually_picks_af st w :
     EventuallyPicks sch n i st -> not_done w ->
-    <( {sched_trace sch n st}, w |= AF visW {eq (slot_index i)} )>.
+    <( {sched_trace sch n st}, w |=L AF visW {eq (slot_index i)} )>.
   Proof.
     intro Hep; revert w; induction Hep as [st Hst IH]; intros w Hw.
-    rewrite unfold_sched_trace.
-    apply aul_br; [apply ticll_top; exact Hw|exists Fin.F1; apply can_step_vis; [exact tt|exact Hw]|].
+    ticl_normalize; rewrite sched_trace_select.
+    apply (au_br (b:=false)); [apply ticll_top; exact Hw|exists Fin.F1; apply can_step_vis; [exact tt|exact Hw]|].
     intros a t' w' TR.
     apply ktrans_vis in TR as ([] & -> & Heq & _); rewrite <- Heq.
     destruct (Fin.eq_dec (fst (sched_pick sch n st a)) i) as [Hpick|Hne].
-    - cleft; apply ticll_vis; constructor; rewrite Hpick; reflexivity.
+    - cleft; apply ticl_vis; constructor; rewrite Hpick; reflexivity.
     - apply IH; [exact Hne|constructor].
   Qed.
 
   Lemma af_trace_eventually_picks :
     forall (t : ctreeW nat Bn unit) w,
-      <( t, w |= AF visW {eq (slot_index i)} )> ->
+      <( t, w |=L AF visW {eq (slot_index i)} )> ->
       forall st, t ≅ sched_trace sch n st ->
       w <> Obs (Log (slot_index i)) tt ->
       EventuallyPicks sch n i st.
@@ -98,14 +189,13 @@ Section FairBridge.
     intros t w H.
     cinduction H; intros st Et Hw.
     - exfalso; apply Hw.
-      apply ticll_vis in Hp; inversion Hp as [Y e v Hv Ew]; clear Hp.
+      apply ticl_vis in Hp; inversion Hp as [Y e v Hv Ew]; clear Hp.
       destruct e as [k]; destruct v; cbn in Hv; subst; reflexivity.
     - constructor; intros a Hne.
-      apply ticll_not_done in Hp.
+      apply ticl_not_done in Hp.
       apply (HInd (sched_trace sch n (snd (sched_pick sch n st a)))
         (Obs (Log (slot_index (fst (sched_pick sch n st a)))) tt)).
-      + rewrite Et, unfold_sched_trace; apply ktrans_br; exists a.
-        apply ktrans_vis; exists tt; split; [reflexivity|split; [reflexivity|exact Hp]].
+      + rewrite Et; apply sched_trace_pick; exact Hp.
       + reflexivity.
       + intro Ew; apply Hne, Fin.to_nat_inj.
         injection Ew as Ek; exact Ek.
@@ -127,12 +217,10 @@ Proof.
   coinduction R CIH; intros st w Hw.
   split; [apply eventually_picks_af; [apply Hep|exact Hw]|].
   split.
-  - rewrite unfold_sched_trace; apply can_step_br; exists Fin.F1.
+  - rewrite sched_trace_select; apply can_step_br; exists Fin.F1.
     apply can_step_vis; [exact tt|exact Hw].
   - intros t' w' TR.
-    rewrite unfold_sched_trace in TR.
-    apply ktrans_br in TR as (a & TR).
-    apply ktrans_vis in TR as ([] & -> & Heq & _); rewrite <- Heq.
+    apply sched_trace_pick_inv in TR as (a & -> & Heq); rewrite <- Heq.
     apply CIH; constructor.
 Qed.
 
@@ -226,28 +314,28 @@ Section PoolRulesFair.
 
   (** ** The [AG] half: closed turns keep [φ] invariant on the fair runner. *)
   Lemma ag_pool_fair_invariance {G} (Inv : G -> pool E Bn (S n) -> Sigma -> Prop)
-      (φ : ticllW (W + nat)) :
+      (φ : ticl (writerE (W + nat)) None) :
     ClosedPool Inv ->
     (forall (o : W) (t : ctreeW (W + nat) Bn (Sigma * unit)) w, not_done w ->
-       <( t, {Obs (Log (inl o)) tt} |= φ )> -> <( {Vis (Log (inl o)) (fun _ => t)}, w |= φ )>) ->
+       <( t, {Obs (Log (inl o)) tt} |=L φ )> -> <( {Vis (Log (inl o)) (fun _ => t)}, w |=L φ )>) ->
     (forall g ts sigma st w, Inv g ts sigma -> not_done w ->
-       <( {fair ts None st sigma}, w |= φ )>) ->
+       <( {fair ts None st sigma}, w |=L φ )>) ->
     forall g ts sigma focus st w, Inv g ts sigma -> not_done w ->
-      <( {fair ts focus st sigma}, w |= AG φ )>.
+      <( {fair ts focus st sigma}, w |=L AG φ )>.
   Proof.
     intros Hclosed Hlog Hφ.
     assert (Hpref : forall xs (t : ctreeW (W + nat) Bn (Sigma * unit)),
-      (forall w, not_done w -> <( t, w |= φ )>) ->
-      forall w, not_done w -> <( {emit_list (List.map inl xs) t}, w |= φ )>).
+      (forall w, not_done w -> <( t, w |=L φ )>) ->
+      forall w, not_done w -> <( {emit_list (List.map inl xs) t}, w |=L φ )>).
     { induction xs as [|o xs IH]; intros t Ht w Hw; [apply Ht, Hw|].
-      cbn [List.map]; rewrite emit_list_cons.
+      ticl_normalize; cbn [List.map]; rewrite emit_list_cons.
       apply Hlog; [exact Hw|]; apply IH; [exact Ht|constructor]. }
     coinduction R CIH; intros g ts sigma focus st w Hinv Hw.
     assert (Hnone : forall g ts sigma st w, Inv g ts sigma -> not_done w ->
-      agcF (entailsL (Sigma * unit) φ) (elem R) (fair ts None st sigma) w).
+      agcF (entails (Sigma * unit) false φ) (elem R) (fair ts None st sigma) w).
     { clear g ts sigma focus st w Hinv Hw; intros g ts sigma st w Hinv Hw.
       pose proof (Hφ g ts sigma st w Hinv Hw) as Hnow.
-      rewrite interp_schedule_fair_select in Hnow |- *.
+      ticl_normalize in Hnow; rewrite interp_schedule_fair_select in Hnow |- *.
       split; [exact Hnow|]; split.
       - apply can_step_br_alts; exists Fin.F1; apply can_step_vis; [exact tt|exact Hw].
       - intros t' w' Htr.
@@ -256,7 +344,7 @@ Section PoolRulesFair.
         apply (CIH g ts sigma (Some _)); [exact Hinv|constructor]. }
     destruct focus as [i|]; [|apply (Hnone g ts sigma st w Hinv Hw)].
     destruct (Hclosed g ts sigma i Hinv) as (g' & logs & residual & sigma' & Hseg & Hinv').
-    rewrite (segment_interp_fair sch handler exactW (fun X t u => equ_sbisim t u)
+    rewrite (segment_interp_fair sch handler exactW (fun X t u => relabel_equ_sb t u)
       n ts i st sigma logs residual sigma' Hseg).
     clear Hseg; revert w Hw.
     induction logs as [|o logs IH]; intros w Hw.
@@ -277,21 +365,21 @@ Section PoolRulesFair.
   Lemma aul_pool_fair_eventually `{FairScheduler sch} {G V} Inv rank ltV target P :
     @FairCertificate G V Inv rank ltV target P ->
     forall g ts sigma focus st w, Inv g ts sigma -> not_done w ->
-      <( {fair ts focus st sigma}, w |= AF visW {fair_obs P} )>.
+      <( {fair ts focus st sigma}, w |=L AF visW {fair_obs P} )>.
   Proof.
     intros Hcert g.
     induction g as [g IHrank] using
       (well_founded_induction (wf_inverse_image G V ltV rank (fair_wf Hcert))).
-    intros ts sigma focus st w Hinv Hw.
+    intros ts sigma focus st w Hinv Hw; ticl_normalize.
     (* A turn of the helpful slot: a hit or a strict rank drop. *)
     assert (Htarget : forall g0 ts sigma st w,
       Inv g0 ts sigma -> rank g0 = rank g -> target g0 = target g -> not_done w ->
-      <( {fair ts (Some (target g)) st sigma}, w |= AF visW {fair_obs P} )>).
-    { intros g0 ts0 sigma0 st0 w0 Hinv0 Hrank Htgt Hw0.
+      <( {fair ts (Some (target g)) st sigma}, w |=L AF visW {fair_obs P} )>).
+    { intros g0 ts0 sigma0 st0 w0 Hinv0 Hrank Htgt Hw0; ticl_normalize.
       destruct (fair_turn Hcert g0 ts0 sigma0 (target g) Hinv0)
         as (g' & logs & residual & sigma' & Hseg & Hinv' & [HP|[Hlt|(Hne & _)]]);
         [| |exfalso; apply Hne; symmetry; exact Htgt];
-        rewrite (segment_interp_fair sch handler exactW (fun X t u => equ_sbisim t u)
+        rewrite (segment_interp_fair sch handler exactW (fun X t u => relabel_equ_sb t u)
           n ts0 _ st0 sigma0 logs residual sigma' Hseg).
       - apply List.Exists_exists in HP as (o & Hin & HP).
         eapply af_emit_list_member with (o := inl o);
@@ -303,23 +391,23 @@ Section PoolRulesFair.
     assert (Hinner : forall st, EventuallyPicks sch n (target g) st ->
       forall g0 ts sigma focus w,
         Inv g0 ts sigma -> rank g0 = rank g -> target g0 = target g -> not_done w ->
-        <( {fair ts focus st sigma}, w |= AF visW {fair_obs P} )>).
+        <( {fair ts focus st sigma}, w |=L AF visW {fair_obs P} )>).
     { intros st0 Hep; induction Hep as [st0 Hst0 IH].
       assert (Hnone : forall g0 ts sigma w,
         Inv g0 ts sigma -> rank g0 = rank g -> target g0 = target g -> not_done w ->
-        <( {fair ts None st0 sigma}, w |= AF visW {fair_obs P} )>).
-      { intros g0 ts0 sigma0 w0 Hinv0 Hrank Htgt Hw0.
+        <( {fair ts None st0 sigma}, w |=L AF visW {fair_obs P} )>).
+      { intros g0 ts0 sigma0 w0 Hinv0 Hrank Htgt Hw0; ticl_normalize.
         rewrite interp_schedule_fair_select.
-        apply aul_br_alts; [apply ticll_top; exact Hw0|exists Fin.F1; apply can_step_vis; [exact tt|exact Hw0]|].
+        apply (au_br_alts (b:=false)); [apply ticll_top; exact Hw0|exists Fin.F1; apply can_step_vis; [exact tt|exact Hw0]|].
         intros a t' w' TR.
         apply ktrans_vis in TR as ([] & -> & Heq & _); rewrite <- Heq.
         destruct (Fin.eq_dec (fst (sched_pick sch n st0 a)) (target g)) as [Hj|Hj].
         - rewrite Hj; apply (Htarget g0); [exact Hinv0|exact Hrank|exact Htgt|constructor].
         - apply (IH a Hj g0); [exact Hinv0|exact Hrank|exact Htgt|constructor]. }
-      intros g0 ts0 sigma0 [j|] w0 Hinv0 Hrank Htgt Hw0; [|apply (Hnone g0); assumption].
+      intros g0 ts0 sigma0 [j|] w0 Hinv0 Hrank Htgt Hw0; ticl_normalize; [|apply (Hnone g0); assumption].
       destruct (fair_turn Hcert g0 ts0 sigma0 j Hinv0)
         as (g' & logs & residual & sigma' & Hseg & Hinv' & [HP|[Hlt|(Hne & Hrank' & Htgt')]]);
-        rewrite (segment_interp_fair sch handler exactW (fun X t u => equ_sbisim t u)
+        rewrite (segment_interp_fair sch handler exactW (fun X t u => relabel_equ_sb t u)
           n ts0 j st0 sigma0 logs residual sigma' Hseg).
       - apply List.Exists_exists in HP as (o & Hin & HP).
         eapply af_emit_list_member with (o := inl o);
@@ -339,53 +427,62 @@ Section PoolRulesFair.
   Theorem agaf_pool_fair `{FairScheduler sch} {G V} Inv rank ltV target P :
     @FairCertificate G V Inv rank ltV target P ->
     forall g ts sigma focus st w, Inv g ts sigma -> not_done w ->
-      <( {fair ts focus st sigma}, w |= AG (AF visW {fair_obs P}) )>.
+      <( {fair ts focus st sigma}, w |=L AG (AF visW {fair_obs P}) )>.
   Proof.
     intro Hcert.
     apply ag_pool_fair_invariance.
     - exact (fair_certificate_closed _ _ _ _ _ Hcert).
-    - intros o t w Hw Ht; apply (aul_vis _ _ tt); right; split;
+    - intros o t w Hw Ht; apply ((au_vis (b:=false)) _ _ tt); right; split;
         [apply ticll_top; exact Hw|intros []; exact Ht].
     - intros g ts sigma st w Hinv Hw.
       apply (aul_pool_fair_eventually _ _ _ _ _ Hcert g ts sigma None st w Hinv Hw).
   Qed.
 
-  (** ** Fixed pool text, one log per turn, constant helpful slot. *)
+  (** ** Fixed pool text, finite log lists, constant helpful slot. *)
   Definition FairTurns {G V} (ts : pool E Bn (S n)) (i : Fin.t (S n))
       (Inv : G -> Sigma -> Prop) (rank : G -> V) (ltV : V -> V -> Prop) (P : W -> Prop) : Prop :=
     forall g sigma (j : Fin.t (S n)), Inv g sigma ->
-    exists g' sigma' o,
-      segment_to handler exactW (ts $ j) sigma (List.cons o List.nil) (ts $ j) sigma' /\
+    exists g' sigma' logs,
+      segment_to handler exactW (ts $ j) sigma logs (ts $ j) sigma' /\
       Inv g' sigma' /\
-      (P o \/ ltV (rank g') (rank g) \/ (j <> i /\ rank g' = rank g)).
+      (List.Exists P logs \/ ltV (rank g') (rank g) \/ (j <> i /\ rank g' = rank g)).
 
-  Theorem agaf_fair_turns `{FairScheduler sch} {G V} ts i Inv rank ltV P :
+  Lemma fair_turns_certificate {G V} ts i Inv rank ltV P :
     well_founded ltV -> @FairTurns G V ts i Inv rank ltV P ->
-    forall g sigma focus st w, Inv g sigma -> not_done w ->
-      <( {fair ts focus st sigma}, w |= AG (AF visW {fair_obs P}) )>.
+    FairCertificate (fun g ts' sigma => Inv g sigma /\ pool_guard_equ ts' ts)
+      rank ltV (fun _ => i) P.
   Proof.
-    intros Hwf Hturns g sigma focus st w Hinv Hw.
-    refine (agaf_pool_fair (fun g ts' σ => Inv g σ /\ pool_guard_equ ts' ts) rank ltV (fun _ => i) P
-      _ g ts sigma focus st w (conj Hinv (fun j => guard_equ_equ _ _ (reflexivity _))) Hw).
-    constructor; [exact Hwf|].
-    intros g0 ts' σ j (Hinv0 & Hpool).
-    destruct (Hturns g0 σ j Hinv0) as (g' & σ' & o & (residual & Hseg & Htail) & Hinv' & Hcase).
+    intros Hwf Hturns; constructor; [exact Hwf|].
+    intros g0 ts' sigma j (Hinv0 & Hpool).
+    destruct (Hturns g0 sigma j Hinv0) as (g' & sigma' & logs & (residual & Hseg & Htail) & Hinv' & Hcase).
     apply (proj2 (guard_equ_segment_iff handler exactW (ts' $ j) (ts $ j) (Hpool j)
-      σ (List.cons o List.nil) residual σ')) in Hseg.
-    exists g', (List.cons o List.nil), residual, σ'; split; [exact Hseg|]; split.
+      sigma logs residual sigma')) in Hseg.
+    exists g',logs,residual,sigma'; split; [exact Hseg|split].
     - split; [exact Hinv'|].
       intro k; destruct (Fin.eq_dec k j) as [->|Hne].
       + rewrite Vector.nth_replace_eq; exact Htail.
       + rewrite Vector.nth_replace_neq by congruence; apply Hpool.
     - destruct Hcase as [HP|[Hlt|(Hne & Hrank)]];
-        [left; constructor; exact HP|right; left; exact Hlt|right; right; auto].
+        [left; exact HP|right; left; exact Hlt|right; right; auto].
+  Qed.
+
+  Theorem agaf_fair_turns `{FairScheduler sch} {G V} ts i Inv rank ltV P :
+    well_founded ltV -> @FairTurns G V ts i Inv rank ltV P ->
+    forall g sigma focus st w, Inv g sigma -> not_done w ->
+      <( {fair ts focus st sigma}, w |=L AG (AF visW {fair_obs P}) )>.
+  Proof.
+    intros Hwf Hturns g sigma focus st w Hinv Hw.
+    exact (agaf_pool_fair (fun g ts' sigma => Inv g sigma /\ pool_guard_equ ts' ts)
+      rank ltV (fun _ => i) P
+      (fair_turns_certificate ts i Inv rank ltV P Hwf Hturns)
+      g ts sigma focus st w (conj Hinv (fun j => guard_equ_equ _ _ (reflexivity _))) Hw).
   Qed.
 
   (** ** Abstract-model clients: ghost data projects to model states. *)
   Theorem agaf_pool_simulation_fair `{FairScheduler sch} {St Act G V}
       (actor : Fin.t (S n) -> Act) (slot : Act -> Fin.t (S n))
       (slot_actor : forall i, slot (actor i) = i)
-      (step : Act -> St -> option (St * option W)) (pool_of : St -> pool E Bn (S n))
+      (step : Act -> St -> option (St * list W)) (pool_of : St -> pool E Bn (S n))
       (agree : Sigma -> St -> Prop) (Inv : St -> Prop)
       (Hsim : PoolSimulation n handler slot step pool_of agree Inv)
       (st_of : G -> St) (InvG : G -> Prop) (rank : G -> V) (ltV : V -> V -> Prop)
@@ -394,11 +491,11 @@ Section PoolRulesFair.
     (forall g, InvG g -> Inv (st_of g)) ->
     (forall g who s' event, InvG g -> step who (st_of g) = Some (s', event) ->
        exists g', st_of g' = s' /\ InvG g' /\
-         ((exists o, event = Some o /\ P o) \/ ltV (rank g') (rank g) \/
+         (List.Exists P event \/ ltV (rank g') (rank g) \/
           (slot who <> target g /\ rank g' = rank g /\ target g' = target g))) ->
     forall g ts sigma focus st w,
       InvG g -> agree sigma (st_of g) -> pool_guard_equ ts (pool_of (st_of g)) -> not_done w ->
-      <( {fair ts focus st sigma}, w |= AG (AF visW {fair_obs P}) )>.
+      <( {fair ts focus st sigma}, w |=L AG (AF visW {fair_obs P}) )>.
   Proof.
     intros Hwf HInv Hturn g ts sigma focus st w Hg Hagree Hpool Hw.
     refine (agaf_pool_fair
@@ -411,8 +508,8 @@ Section PoolRulesFair.
     destruct (selected_turn_segment Hsim ts0 (st_of g0) (actor j) s' event σ
       (HInv g0 Hg0) Hagree0 Hpool0 Hstep) as (residual & σ' & Hseg & Hagree' & Hpool').
     rewrite slot_actor in Hseg, Hpool', Hcase.
-    exists g', (event_obs event), residual, σ'; split; [exact Hseg|]; split.
+    exists g', event, residual, σ'; split; [exact Hseg|]; split.
     - split; [exact Hg'|rewrite Es'; split; assumption].
-    - destruct Hcase as [(o & -> & HP)|Hcase]; [left; constructor; exact HP|right; exact Hcase].
+    - exact Hcase.
   Qed.
 End PoolRulesFair.

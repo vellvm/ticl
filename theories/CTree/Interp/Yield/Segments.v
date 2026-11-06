@@ -1,3 +1,4 @@
+From TICL Require Import CTree.Interp.Yield.Policy.
 (** * First-yield thread segments, parameterized by handler and response relation.
 
     One finite derivation stops at the first source yield.  The handler premise
@@ -15,14 +16,13 @@ From Stdlib Require Import List Arith.PeanoNat Fin Vector
   Classes.Morphisms Classes.RelationClasses Program.Equality.
 From TICL Require Import
   CTree.Core
+  CTree.Interp.Refine
   CTree.Trace
   CTree.Events.Writer
   CTree.Events.Yield
   CTree.Interp.State.Mod
-  CTree.Interp.Refine
   CTree.Interp.Yield.Mod
   CTree.Interp.Yield.SBisim
-  CTree.Interp.Yield.Policy
   CTree.Interp.Yield.RoundRobin
   CTree.Interp.Yield.Nondeterministic
   Utils.Vectors.
@@ -496,8 +496,6 @@ Section FocusedCongruenceND.
   Qed.
 End FocusedCongruenceND.
 
-(** Exact equations retain the finite administrative guard path: a user
-    event's response is followed by one administrative guard. *)
 Section FocusedCongruencePolicy.
   Context {E : Type -> Type} {W Sigma : Type} (sch : Scheduler)
     (handler : E ~> stateT Sigma (ctreeW W Bn)).
@@ -515,9 +513,80 @@ Section FocusedCongruencePolicy.
   Qed.
 End FocusedCongruencePolicy.
 
-(** ** Segment-driven scheduling.
+Section FocusedCongruenceRR.
+  Context {E : Type -> Type} {W Sigma : Type}
+    (handler : E ~> stateT Sigma (ctreeW W Bn)).
 
-    These need the response relation to imply strong bisimulation. *)
+  Lemma segment_rr_replace_equ n (ts : pool E Bn (S n)) (i : Fin.t (S n))
+    t u focus m sigma :
+    t ≅ u ->
+    interp_schedule_rr handler (S n) (ts @ i := t) focus m sigma ~
+    interp_schedule_rr handler (S n) (ts @ i := u) focus m sigma.
+  Proof. apply segment_fair_replace_equ. Qed.
+
+  Lemma segment_rr_focused_guard n (ts : pool E Bn (S n)) (i : Fin.t (S n)) t m sigma :
+    interp_schedule_rr handler (S n) (ts @ i := Guard t) (Some i) m sigma ~
+    interp_schedule_rr handler (S n) (ts @ i := t) (Some i) m sigma.
+  Proof. apply segment_fair_focused_guard. Qed.
+
+  Lemma segment_rr_focused_user n (ts : pool E Bn (S n)) (i : Fin.t (S n))
+    {Y} (e : E Y) (k : Y -> thread E Bn) m sigma :
+    interp_schedule_rr handler (S n) (ts @ i := Vis (inr1 (inr1 e)) k) (Some i) m sigma ~
+    (translate relabel_log (handler _ e sigma) >>= fun '(sigma',x) =>
+      interp_schedule_rr handler (S n) (ts @ i := k x) (Some i) m sigma').
+  Proof. erewrite interp_schedule_rr_user by (rewrite Vector.nth_replace_eq; reflexivity).
+    __upto_bind_sbisim_eq; intros [sigma' x].
+    rewrite Vector.replace_replace_eq; reflexivity. Qed.
+
+  Lemma segment_rr_ret_exact n (ts : pool E Bn (S n)) (i : Fin.t (S n)) m sigma :
+    observe (ts $ i) = RetF tt ->
+    interp_schedule_rr handler (S n) ts (Some i) m sigma ≅
+    Guard (interp_schedule_rr handler n (ts -- i) None m sigma).
+  Proof. apply interp_schedule_fair_ret_exact. Qed.
+
+  Lemma segment_rr_guard_exact n (ts : pool E Bn (S n)) (i : Fin.t (S n)) t m sigma :
+    observe (ts $ i) = GuardF t ->
+    interp_schedule_rr handler (S n) ts (Some i) m sigma ≅
+    Guard (interp_schedule_rr handler (S n) (ts @ i := t) (Some i) m sigma).
+  Proof. apply interp_schedule_fair_guard_exact. Qed.
+
+  Lemma segment_rr_yield_exact n (ts : pool E Bn (S n)) (i : Fin.t (S n)) k m sigma :
+    observe (ts $ i) = VisF (inl1 Yield) k ->
+    interp_schedule_rr handler (S n) ts (Some i) m sigma ≅
+    Guard (interp_schedule_rr handler (S n) (ts @ i := k tt) None m sigma).
+  Proof. apply interp_schedule_fair_yield_exact. Qed.
+
+  Lemma segment_rr_fork_exact n (ts : pool E Bn (S n)) (i : Fin.t (S n)) k m sigma :
+    observe (ts $ i) = VisF (inr1 (inl1 Fork)) k ->
+    interp_schedule_rr handler (S n) ts (Some i) m sigma ≅
+    Guard (interp_schedule_rr handler (S (S n))
+      (k true :: (ts @ i := k false))%vector (Some (Fin.FS i)) m sigma).
+  Proof. apply interp_schedule_fair_fork_exact. Qed.
+
+  Lemma segment_rr_user_exact n (ts : pool E Bn (S n)) (i : Fin.t (S n))
+    {Y} (e : E Y) (k : Y -> thread E Bn) m sigma :
+    observe (ts $ i) = VisF (inr1 (inr1 e)) k ->
+    interp_schedule_rr handler (S n) ts (Some i) m sigma ≅
+    (translate relabel_log (handler _ e sigma) >>= fun '(sigma',x) =>
+      rr_guards 1 (interp_schedule_rr handler (S n) (ts @ i := k x) (Some i) m sigma')).
+  Proof. intro Hobs; rewrite (interp_schedule_fair_user_exact rr_scheduler handler n ts i e k m sigma Hobs).
+    reflexivity. Qed.
+
+  Lemma segment_rr_select_exact n (ts : pool E Bn (S n)) m sigma :
+    interp_schedule_rr handler (S n) ts None m sigma ≅
+    Vis (Log (inr (slot_index (rr_pick n m))))
+      (fun _ => Guard (interp_schedule_rr handler (S n) ts (Some (rr_pick n m)) (S m) sigma)).
+  Proof. apply interp_schedule_rr_select_exact. Qed.
+
+  Lemma exact_rr_user_replaced n (ts : pool E Bn (S n)) (i : Fin.t (S n))
+    {Y} (e : E Y) (k : Y -> thread E Bn) m sigma :
+    interp_schedule_rr handler (S n) (ts @ i := Vis (inr1 (inr1 e)) k) (Some i) m sigma ≅
+    (translate relabel_log (handler _ e sigma) >>= fun '(sigma',x) =>
+      rr_guards 1 (interp_schedule_rr handler (S n) (ts @ i := k x) (Some i) m sigma')).
+  Proof. apply exact_fair_user_replaced. Qed.
+
+End FocusedCongruenceRR.
+
 Section SegmentInterpretationND.
   Context {E B : Type -> Type} `{Bn -< B} {W Sigma : Type}
     (handler : E ~> stateT Sigma (ctreeW W B))
@@ -605,14 +674,12 @@ Section SegmentInterpretationND.
   Qed.
 End SegmentInterpretationND.
 
-(** The policy runner relabels program observations under [inl]; the
-    response relation must be bisimulation evidence, transported through
-    [translate_sbisim]. *)
 Section SegmentInterpretationPolicy.
   Context {E : Type -> Type} {W Sigma : Type} (sch : Scheduler)
     (handler : E ~> stateT Sigma (ctreeW W Bn))
     (R : forall X : Type, ctreeW W Bn X -> ctreeW W Bn X -> Prop)
-    (HR : forall X (t u : ctreeW W Bn X), R X t u -> t ~ u).
+    (HR : forall X (t u : ctreeW W Bn X), R X t u ->
+      translate relabel_log t ~ translate relabel_log u).
 
   Lemma segment_interp_fair n (ts : pool E Bn (S n)) (i : Fin.t (S n))
     st sigma xs residual sigma' :
@@ -660,10 +727,25 @@ Section SegmentInterpretationPolicy.
   Qed.
 End SegmentInterpretationPolicy.
 
-(** ** Exact-mode policy prefixes.
+Section SegmentInterpretationRR.
+  Context {E : Type -> Type} {W Sigma : Type}
+    (handler : E ~> stateT Sigma (ctreeW W Bn))
+    (R : forall X : Type, ctreeW W Bn X -> ctreeW W Bn X -> Prop)
+    (HR : forall X (t u : ctreeW W Bn X), R X t u -> t ~ u).
 
-    Restricted to the [equ] instance: the administrative guard path is real
-    and must not be weakened to [sbisim]. *)
+  Lemma segment_interp_rr n (ts : pool E Bn (S n)) (i : Fin.t (S n))
+    m sigma xs residual sigma' :
+    ThreadSegment handler R (ts $ i) sigma xs residual sigma' ->
+    interp_schedule_rr handler (S n) ts (Some i) m sigma ~
+    emit_list (List.map inl xs)
+      (interp_schedule_rr handler (S n) (ts @ i := residual) None m sigma').
+  Proof.
+    intro Hseg; apply (segment_interp_fair rr_scheduler handler R).
+    - intros X t u H; apply translate_sbisim, HR, H.
+    - exact Hseg.
+  Qed.
+End SegmentInterpretationRR.
+
 Section ExactPolicyPrefix.
   Context {E : Type -> Type} {W Sigma : Type} (sch : Scheduler)
     (handler : E ~> stateT Sigma (ctreeW W Bn)).
@@ -725,6 +807,21 @@ Section ExactPolicyPrefix.
   Qed.
 End ExactPolicyPrefix.
 
+Section ExactRoundRobinPrefix.
+  Context {E : Type -> Type} {W Sigma : Type}
+    (handler : E ~> stateT Sigma (ctreeW W Bn)).
+  Abbreviation Rexact := (fun X (t u : ctreeW W Bn X) => t ≅ u).
+
+  Lemma exact_segment_rr_prefix n (ts : pool E Bn (S n)) (i : Fin.t (S n))
+    t m sigma logs residual sigma' :
+    ThreadSegment handler Rexact t sigma logs residual sigma' ->
+    exists word : list (@rr_token (W + nat)), rr_prefix_events word = List.map inl logs /\
+    interp_schedule_rr handler (S n) (ts @ i := t) (Some i) m sigma ≅
+      rr_prefix word (Guard
+        (interp_schedule_rr handler (S n) (ts @ i := residual) None m sigma')).
+  Proof. apply exact_segment_fair_prefix. Qed.
+End ExactRoundRobinPrefix.
+
 (** ** Closed turns.
 
     A focused first-yield segment that returns its slot to the SAME thread
@@ -776,8 +873,21 @@ Section SegmentPoolLoopPolicy.
   Proof.
     intros (residual & Hseg & Htail).
     etransitivity.
-    - apply (segment_interp_fair sch handler Rexact (fun Y t u H => equ_sbisim t u H)); exact Hseg.
+    - apply (segment_interp_fair sch handler Rexact (fun Y t u H => ltac:(rewrite H; reflexivity))); exact Hseg.
     - apply emit_list_sbisim, interp_schedule_fair_guard_equ.
       apply closed_pool_guard_equ, Htail.
   Qed.
 End SegmentPoolLoopPolicy.
+
+Section SegmentPoolLoopRR.
+  Context {E : Type -> Type} {W Sigma : Type}
+    (handler : E ~> stateT Sigma (ctreeW W Bn)).
+  Abbreviation Rexact := (fun X (t u : ctreeW W Bn X) => t ≅ u).
+
+  Lemma segment_pool_rr_loop n (ts : pool E Bn (S n)) (i : Fin.t (S n))
+    m sigma logs sigma' :
+    segment_to handler Rexact (ts $ i) sigma logs (ts $ i) sigma' ->
+    interp_schedule_rr handler (S n) ts (Some i) m sigma ~
+    emit_list (List.map inl logs) (interp_schedule_rr handler (S n) ts None m sigma').
+  Proof. apply segment_pool_fair_loop. Qed.
+End SegmentPoolLoopRR.

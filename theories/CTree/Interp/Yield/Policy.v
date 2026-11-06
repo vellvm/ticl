@@ -1,6 +1,6 @@
 (** * The policy-scheduled, instrumented runner.
 
-    [schedule_with sch] is the event-only pool scheduler: it never inspects a
+    [schedule_policy sch] is the event-only pool scheduler: it never inspects a
     thread's [Br] nodes, interprets [Yield]/[Fork] itself, and leaves a
     [Scheduled i] event at every scheduling decision.  Here the decision is
     logged as [Log (inr i)] next to the program's own observations
@@ -38,13 +38,17 @@ Definition sched_handler {W Σ} : schedE ~> stateT Σ (ctreeW (W + nat) Bn) :=
                | Scheduled i => Vis (Log (inr i)) (fun _ => Ret (σ, tt)) end.
 
 Definition policy_handler {E W Σ} (h : E ~> stateT Σ (ctreeW W Bn))
-  : (schedE +' E) ~> stateT Σ (ctreeW (W + nat) Bn) :=
-  h_sum sched_handler (fun _ e σ => translate relabel_log (h _ e σ)).
+  : (E +' schedE) ~> stateT Σ (ctreeW (W + nat) Bn) :=
+  fun X e σ =>
+    match e with
+    | inl1 e => translate relabel_log (h _ e σ)
+    | inr1 e => sched_handler _ e σ
+    end.
 
 Definition interp_schedule_fair {E W Σ} (sch : Scheduler) (h : E ~> stateT Σ (ctreeW W Bn))
     (n : nat) (ts : pool E Bn n) (focus : option (Fin.t n)) (st : sched_state sch) (σ : Σ)
     : ctreeW (W + nat) Bn (Σ * unit) :=
-  interp_state (policy_handler h) (schedule_with sch n ts focus st) σ.
+  interp_state (policy_handler h) (schedule_policy sch n ts focus st) σ.
 
 (** Program observations only: scheduling logs never satisfy [fair_obs P]. *)
 Definition fair_obs {W} (P : W -> Prop) (o : W + nat) : Prop :=
@@ -81,15 +85,8 @@ Qed.
 Lemma translate_log_bind {W : Type} {X : Type} (o : W) (t : ctreeW W Bn X) :
   translate relabel_log (log o;; t) ≅ (log (inl o);; translate relabel_log t).
 Proof.
-  unfold log; rewrite !bind_trigger, translate_vis; cbn [relabel_log].
+  rewrite !log_vis, translate_vis; cbn [relabel_log].
   apply vis_equ_node; intros []; reflexivity.
-Qed.
-
-Lemma translate_guards {E F B : Type -> Type} {X : Type} (f : E ~> F) k (t : ctree E B X) :
-  translate f (guards k t) ≅ guards k (translate f t).
-Proof.
-  induction k as [|k IH]; cbn [guards]; [reflexivity|].
-  rewrite translate_guard; apply guard_equ_node; exact IH.
 Qed.
 
 (** A relabelled trigger interpretation is the relabelled handler response up
@@ -208,14 +205,14 @@ Section FairInterpretation.
     fair n ts focus st σ ≅ fair n ts' focus st σ.
   Proof.
     intro Hts; unfold interp_schedule_fair.
-    now rewrite (schedule_with_pool_proper sch n ts ts' focus st Hts).
+    now rewrite (schedule_policy_pool_proper sch n ts ts' focus st Hts).
   Qed.
 
   Lemma interp_schedule_fair_empty (ts : pool E Bn 0) st σ :
     fair 0 ts None st σ ~ (Ret (σ,tt) : ctreeW (W + nat) Bn (Σ * unit)).
   Proof.
     unfold interp_schedule_fair.
-    rewrite (observe_equ_go _ _ (schedule_with_empty_none sch ts st)), interp_state_ret.
+    rewrite (observe_equ_go _ _ (schedule_policy_empty_none sch ts st)), interp_state_ret.
     reflexivity.
   Qed.
 
@@ -226,7 +223,7 @@ Section FairInterpretation.
     fair (S n) ts (Some i) st σ ≅ Guard (fair n (ts -- i) None st σ).
   Proof.
     intro Hobs; unfold interp_schedule_fair at 1.
-    rewrite (observe_equ_go _ _ (schedule_with_focused_ret sch n ts i st Hobs)).
+    rewrite (observe_equ_go _ _ (schedule_policy_focused_ret sch n ts i st Hobs)).
     apply interp_state_guard.
   Qed.
 
@@ -235,7 +232,7 @@ Section FairInterpretation.
     fair (S n) ts (Some i) st σ ≅ Guard (fair (S n) (ts @ i := t) (Some i) st σ).
   Proof.
     intro Hobs; unfold interp_schedule_fair at 1.
-    rewrite (observe_equ_go _ _ (schedule_with_focused_guard sch n ts i t st Hobs)).
+    rewrite (observe_equ_go _ _ (schedule_policy_focused_guard sch n ts i t st Hobs)).
     apply interp_state_guard.
   Qed.
 
@@ -244,7 +241,7 @@ Section FairInterpretation.
     fair (S n) ts (Some i) st σ ≅ Step (Guard (fair (S n) (ts @ i := t) (Some i) st σ)).
   Proof.
     intro Hobs; unfold interp_schedule_fair at 1.
-    rewrite (observe_equ_go _ _ (schedule_with_focused_step sch n ts i t st Hobs)).
+    rewrite (observe_equ_go _ _ (schedule_policy_focused_step sch n ts i t st Hobs)).
     apply interp_state_step.
   Qed.
 
@@ -256,7 +253,7 @@ Section FairInterpretation.
     Br c (fun j => Guard (fair (S n) (ts @ i := k j) (Some i) st σ)).
   Proof.
     intro Hobs; unfold interp_schedule_fair at 1.
-    rewrite (observe_equ_go _ _ (schedule_with_focused_br sch n ts i c k st Hobs)).
+    rewrite (observe_equ_go _ _ (schedule_policy_focused_br sch n ts i c k st Hobs)).
     apply interp_state_br_node.
   Qed.
 
@@ -265,7 +262,7 @@ Section FairInterpretation.
     fair (S n) ts (Some i) st σ ≅ Guard (fair (S n) (ts @ i := k tt) None st σ).
   Proof.
     intro Hobs; unfold interp_schedule_fair at 1.
-    rewrite (observe_equ_go _ _ (schedule_with_focused_yield sch n ts i k st Hobs)).
+    rewrite (observe_equ_go _ _ (schedule_policy_focused_yield sch n ts i k st Hobs)).
     apply interp_state_guard.
   Qed.
 
@@ -275,7 +272,7 @@ Section FairInterpretation.
     Guard (fair (S (S n)) (k true :: (ts @ i := k false)) (Some (Fin.FS i)) st σ).
   Proof.
     intro Hobs; unfold interp_schedule_fair at 1.
-    rewrite (observe_equ_go _ _ (schedule_with_focused_fork sch n ts i k st Hobs)).
+    rewrite (observe_equ_go _ _ (schedule_policy_focused_fork sch n ts i k st Hobs)).
     apply interp_state_guard.
   Qed.
 
@@ -287,7 +284,7 @@ Section FairInterpretation.
        Guard (fair (S n) (ts @ i := k x) (Some i) st σ')).
   Proof.
     intro Hobs; unfold interp_schedule_fair at 1.
-    rewrite (observe_equ_go _ _ (schedule_with_focused_user_event sch n ts i e k st Hobs)).
+    rewrite (observe_equ_go _ _ (schedule_policy_focused_user_event sch n ts i e k st Hobs)).
     rewrite interp_state_vis; cbn [policy_handler h_sum].
     upto_bind_eq; intros [σ' x]; reflexivity.
   Qed.
@@ -302,7 +299,7 @@ Section FairInterpretation.
           [rewrite Vector.nth_replace_eq; exact Hstuck
           |rewrite Vector.nth_replace_neq by congruence; reflexivity]).
     unfold interp_schedule_fair.
-    rewrite (observe_equ_go _ _ (schedule_with_focused_stuck sch n (ts @ i := Stuck) i st
+    rewrite (observe_equ_go _ _ (schedule_policy_focused_stuck sch n (ts @ i := Stuck) i st
       ltac:(rewrite Vector.nth_replace_eq; reflexivity))).
     apply interp_state_stuck.
   Qed.
@@ -358,7 +355,7 @@ Section FairInterpretation.
         (fun _ => fair (S n) ts (Some (fst (sched_pick sch n st a))) (snd (sched_pick sch n st a)) σ)).
   Proof.
     unfold interp_schedule_fair at 1.
-    rewrite (schedule_with_no_focus_nonempty sch n ts st), interp_state_br_alts_sb.
+    rewrite (schedule_policy_no_focus_nonempty sch n ts st), interp_state_br_alts_sb.
     apply br_alts_sbisim; intro a.
     rewrite interp_state_vis; cbn [policy_handler h_sum sched_handler].
     change (Monad.bind ?a ?b) with (CTree.bind a b); rewrite bind_vis.
@@ -391,7 +388,7 @@ Section FairInterpretation.
     fair n ts focus st σ ~ fair n us focus st σ.
   Proof.
     intro H'; unfold interp_schedule_fair.
-    apply galigned_sbisim, interp_state_galigned, schedule_with_galigned, H'.
+    apply galigned_sbisim, interp_state_galigned, schedule_policy_galigned, H'.
   Qed.
 
   (** ** Focused-slot congruence *)
@@ -419,7 +416,7 @@ End FairInterpretation.
     user-event responses. *)
 Lemma interp_state_policy_translate {E W Σ} (h : E ~> stateT Σ (ctreeW W Bn)) {X} :
   forall (u : ctree E Bn X) σ,
-    interp_state (policy_handler h) (translate inr1 u) σ ≅
+    interp_state (policy_handler h) (translate inl1 u) σ ≅
     translate relabel_log (interp_state h u σ).
 Proof.
   __coinduction_equ R IH; intros u σ.

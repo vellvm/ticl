@@ -169,14 +169,15 @@ Section CanStepCtrees.
 
   (** A bind can always step, if the right-hand side can step. *)
   Lemma can_step_bind_r{X Y}: forall (t: ctree E B Y) (k: Y -> ctree E B X) w R,      
-      <[ t, w |= AF ret R ]> ->
+      <( t, w |=R AF ret R )> ->
       (forall y w, R y w -> can_step (k y) w) ->
       can_step (x <- t ;; k x) w.
   Proof. 
     intros * Hau Hk.
     apply can_step_bind.
+    apply ticl_au in Hau.
     induction Hau.
-    - apply ticlr_ret in H as (x & HR & Hd & (t' & w' & TR') & Hdone).
+    - apply ticl_ret in H as (x & HR & Hd & (t' & w' & TR') & Hdone).
       specialize (Hdone _ _ TR'); inversion Hdone; subst.
       + apply ktrans_to_done_inv in TR' as Hinv; destruct Hinv as (Heq & _).
         right; exists x, (Done x); split2; eauto with ticl.
@@ -192,12 +193,12 @@ Section CanStepCtrees.
       + exfalso.
         specialize (Htr _ _ TR') as Hs.
         inv Hs.
-        * apply ticlr_ret in H0 as (? & _ & Hd & _); inversion Hd.
+        * apply ticl_ret in H0 as (? & _ & Hd & _); inversion Hd.
         * destruct H0 as ((_ & Hd) & _); inversion Hd.
       + exfalso.
         specialize (Htr _ _ TR') as Hs.
         inv Hs.
-        * apply ticlr_ret in H0 as (? & _ & Hd & _); inversion Hd.
+        * apply ticl_ret in H0 as (? & _ & Hd & _); inversion Hd.
         * destruct H0 as ((_ & Hd) & _); inversion Hd.
   Qed.
   Hint Resolve can_step_bind_r: ticl.
@@ -233,7 +234,7 @@ Section CanStepInterp.
 
   (** A stateful bind can always step, if the right-hand side can step. *)
   Lemma can_step_state_bind_r{X Y}: forall (k: X -> ctree E B Y) (s s': S) (t: ctree E B X) x w w',
-      <[ {interp_state h t s}, w |= AF ret= {(s', x)} w' ]> ->
+      <( {interp_state h t s}, w |=R AF ret= {(s', x)} w' )> ->
       can_step (interp_state h (k x) s') w' ->
       can_step (interp_state h (x <- t ;; k x) s) w.
   Proof.
@@ -290,7 +291,7 @@ Proof.
 Qed.
 
 (** * The [ret] atom on ctrees *)
-(** [<[ t, w |= ret R ]>] says every transition of [t] returns the same value
+(** [<( t, w |=R ret R )>] says every transition of [t] returns the same value
     [x] with [R x w]. On ctrees this is exactly strong bisimilarity to [Ret x]:
     hidden branches that return different values can satisfy a universal
     terminal postcondition after one step, but not [ret R]. *)
@@ -318,11 +319,11 @@ Section CTreeRet.
   Qed.
 
   Lemma ret_sbisim: forall (t: ctree E B X) w (R: X -> World E -> Prop),
-      <[ t, w |= ret R ]> ->
+      <( t, w |=R ret R )> ->
       exists x, R x w /\ t ~ (Ret x : ctree E B X).
   Proof.
     intros * H.
-    apply ticlr_ret in H as (x & HR & Hd & Hs & Htr).
+    apply ticl_ret in H as (x & HR & Hd & Hs & Htr).
     exists x; split; auto.
     assert (Htr': forall t' w', |t, w| ↦ |t', w'| -> done_eq (E:=E) x w').
     { intros t' w' TR; specialize (Htr t' w' TR).
@@ -356,10 +357,10 @@ Section CTreeRet.
   Lemma ret_ret: forall (x: X) w (R: X -> World E -> Prop),
       not_done w ->
       R x w ->
-      <[ {Ret x : ctree E B X}, w |= ret R ]>.
+      <( {Ret x : ctree E B X}, w |=R ret R )>.
   Proof.
     intros * Hd HR.
-    apply ticlr_ret; exists x; split; [exact HR|]; split; [exact Hd|]; split.
+    apply ticl_ret; exists x; split; [exact HR|]; split; [exact Hd|]; split.
     - now apply can_step_ret.
     - intros t' w' TR.
       inv Hd.
@@ -369,26 +370,26 @@ Section CTreeRet.
 
   (** [ret] is invariant under strong bisimulation; in particular under [Guard]. *)
   Lemma ret_guard: forall (t: ctree E B X) w (R: X -> World E -> Prop),
-      <[ {Guard t}, w |= ret R ]> <-> <[ t, w |= ret R ]>.
+      <( {Guard t}, w |=R ret R )> <-> <( t, w |=R ret R )>.
   Proof.
-    intros; now rewrite sb_guard.
+    intros; ticl_normalize; now rewrite sb_guard.
   Qed.
 
   (** A hidden branch whose every branch returns exactly [x] returns [x]. *)
   Lemma ret_br: forall {Y} (c: B Y) (k: Y -> ctree E B X) (y: Y) w (x: X) (R: X -> World E -> Prop),
       not_done w ->
       R x w ->
-      (forall y, <[ {k y}, w |= ret= x w ]>) ->
-      <[ {Br c k}, w |= ret R ]>.
+      (forall y, <( {k y}, w |=R ret= x w )>) ->
+      <( {Br c k}, w |=R ret R )>.
   Proof.
     intros Y c k y w x R Hd HR Hk.
-    apply ticlr_ret; exists x; split; [exact HR|]; split; [exact Hd|]; split.
+    apply ticl_ret; exists x; split; [exact HR|]; split; [exact Hd|]; split.
     - apply can_step_br; exists y.
-      specialize (Hk y); apply ticlr_ret in Hk as (x' & _ & _ & Hs & _).
+      specialize (Hk y); apply ticl_ret in Hk as (x' & _ & _ & Hs & _).
       exact Hs.
     - intros t' w' TR.
       apply ktrans_br in TR as (y' & TR).
-      specialize (Hk y'); apply ticlr_ret in Hk as (x' & (-> & _) & _ & _ & Htr).
+      specialize (Hk y'); apply ticl_ret in Hk as (x' & (-> & _) & _ & _ & Htr).
       exact (Htr t' w' TR).
   Qed.
 End CTreeRet.

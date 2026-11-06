@@ -1,31 +1,15 @@
-From Stdlib Require Import Arith.PeanoNat Fin Morphisms Program.Equality.
+From Stdlib Require Import Morphisms Program.Equality.
 From Coinduction Require Import all.
-From TICL Require Import CTree.Core Utils.Vectors.
+From TICL Require Import CTree.Core CTree.Interp.Yield.Mod.
 
 Import CTreeNotations CoindNotations.
 Local Open Scope ctree_scope.
 
-Definition rr_pick (n cursor : nat) : Fin.t (S n) :=
-  @Fin.of_nat_lt (cursor mod S n) (S n)
-    (Nat.mod_upper_bound cursor (S n) (Nat.neq_succ_0 n)).
-
-(** Compare numeric choices, not the proof arguments of finite indices. *)
-Lemma rr_pick_mod_congr n cursor cursor' :
-  cursor mod S n = cursor' mod S n -> rr_pick n cursor = rr_pick n cursor'.
-Proof.
-  intro Hmod; apply Fin.to_nat_inj; unfold rr_pick.
-  rewrite !Fin.to_nat_of_nat; exact Hmod.
-Qed.
-
-Lemma slot_index_rr_pick n m : slot_index (rr_pick n m) = m mod S n.
-Proof. unfold slot_index, rr_pick; rewrite Fin.to_nat_of_nat; reflexivity. Qed.
-
 (** Round-robin refinement of finite ([Bn]) branches: every branch node picks
     the alternative selected by the cursor and advances it; a branch with no
-    alternative is [Stuck].  Guards, steps and events leave the cursor alone.
-    This is a standalone branch refiner kept for the hidden-branching
-    counterexamples ([examples/HiddenBr.v]); it is no longer part of any
-    scheduler. *)
+    alternative is [Stuck]. Guards, steps and events leave the cursor alone.
+    This standalone branch refiner supports hidden-branching counterexamples;
+    ordinary pool scheduling uses the event-only policy interpreter instead. *)
 CoFixpoint refine_rr {E : Type -> Type} {A : Type}
   (t : ctree E Bn A) (cursor : nat) : ctree E Bn (A * nat) :=
   match observe t with
@@ -40,6 +24,15 @@ CoFixpoint refine_rr {E : Type -> Type} {A : Type}
       | branchn (S n) => fun k => Guard (refine_rr (k (rr_pick n cursor)) (S cursor))
       end k
   end.
+
+(** The cursor as state: ITree's [stateT S M A := S -> M (S * A)]. *)
+Definition round_robin {E : Type -> Type} {A : Type}
+  (t : ctree E Bn A) : stateT nat (ctree E Bn) A :=
+  fun cursor => CTree.map (fun r => (snd r, fst r)) (refine_rr t cursor).
+
+Definition run_round_robin {E : Type -> Type} {A : Type}
+  (t : ctree E Bn A) (cursor : nat) : ctree E Bn A :=
+  CTree.map fst (refine_rr t cursor).
 
 Lemma unfold_refine_rr {E : Type -> Type} {A : Type}
   (t : ctree E Bn A) (cursor : nat) :
@@ -58,6 +51,30 @@ Lemma unfold_refine_rr {E : Type -> Type} {A : Type}
   end.
 Proof. step; now cbn. Qed.
 
+Lemma unfold_run_round_robin {E : Type -> Type} {A : Type}
+  (t : ctree E Bn A) (m : nat) :
+  run_round_robin t m ≅
+  match observe t with
+  | RetF x => Ret x
+  | StuckF => Stuck
+  | StepF t' => Step (run_round_robin t' m)
+  | GuardF t' => Guard (run_round_robin t' m)
+  | VisF e k => Vis e (fun x => run_round_robin (k x) m)
+  | BrF c k =>
+      match c in Bn Y return (Y -> ctree E Bn A) -> ctree E Bn A with
+      | branchn 0 => fun _ => Stuck
+      | branchn (S n) => fun k => Guard (run_round_robin (k (rr_pick n m)) (S m))
+      end k
+  end.
+Proof.
+  unfold run_round_robin, CTree.map.
+  rewrite unfold_refine_rr.
+  destruct (observe t) as [x| |t'|t'|Y e k|Y c k]; cbn [fst];
+    rewrite ?bind_ret_l, ?bind_stuck, ?bind_step, ?bind_guard, ?bind_vis;
+    try reflexivity.
+  destruct c as [[|n]]; rewrite ?bind_stuck, ?bind_guard; reflexivity.
+Qed.
+
 #[global] Instance refine_rr_equ {E : Type -> Type} {A : Type} :
   Proper (equ eq ==> eq ==> equ eq) (@refine_rr E A).
 Proof.
@@ -72,6 +89,12 @@ Proof.
   - constructor; apply IH; [exact Ht|reflexivity].
   - constructor; intro x; apply IH; [exact (Hk x)|reflexivity].
   - destruct c as [[|n]]; constructor; apply IH; [exact (Hk _)|reflexivity].
+Qed.
+
+#[global] Instance run_round_robin_equ {E : Type -> Type} {A : Type} :
+  Proper (equ eq ==> eq ==> equ eq) (@run_round_robin E A).
+Proof.
+  intros t u Htu m m' <-; unfold run_round_robin; now rewrite Htu.
 Qed.
 
 (** * Branch-free trees: no [Br] node anywhere (steps and [Stuck] allowed). *)
@@ -96,6 +119,17 @@ Section BranchFreedom.
   Lemma branchfree_unfold {A} (t : ctree E B A) :
     BranchFree t <-> branchfreeF BranchFree (observe t).
   Proof. symmetry; exact (gfp_fp fbranchfree t). Qed.
+
+  (** A finite one-node invariant establishes branch freedom of the whole
+      tree; clients need only classify their program's phases. *)
+  Lemma branchfree_invariant {A} (R: ctree E B A -> Prop) :
+    (forall t, R t -> branchfreeF R (observe t)) ->
+    forall t, R t -> BranchFree t.
+  Proof.
+    intro Hstep; unfold BranchFree; coinduction S IH; intros t Ht.
+    change (branchfreeF (`S) (observe t)).
+    destruct (Hstep t Ht); constructor; intros; apply IH; auto.
+  Qed.
 
   (** Every element of the tower is closed under [≅]. *)
   #[global] Instance branchfree_chain_equ {A} {R : Chain (@fbranchfree A)} :
@@ -162,22 +196,3 @@ Section BranchFreedom.
   Qed.
 End BranchFreedom.
 
-Lemma rr_pick_even n : Nat.even n = true -> rr_pick 1 n = Fin.F1.
-Proof.
-  intro Hn; apply Nat.even_spec in Hn; destruct Hn as [k ->].
-  transitivity (rr_pick 1 0); [apply rr_pick_mod_congr|reflexivity].
-  change ((2 * k) mod 2 = 0).
-  rewrite Nat.mul_comm; apply Nat.Div0.mod_mul.
-Qed.
-
-Lemma rr_pick_odd n : Nat.even n = false -> rr_pick 1 n = Fin.FS Fin.F1.
-Proof.
-  intro Hn.
-  assert (Ho : Nat.odd n = true) by (unfold Nat.odd; now rewrite Hn).
-  apply Nat.odd_spec in Ho; destruct Ho as [k ->].
-  transitivity (rr_pick 1 1); [apply rr_pick_mod_congr|reflexivity].
-  change ((2 * k + 1) mod 2 = 1).
-  rewrite Nat.Div0.add_mod.
-  rewrite (Nat.mul_comm 2 k), Nat.Div0.mod_mul.
-  reflexivity.
-Qed.

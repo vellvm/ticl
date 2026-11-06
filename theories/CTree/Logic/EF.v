@@ -23,199 +23,81 @@ Local Open Scope ctree_scope.
 Section BasicLemmas.
   Context {E B: Type -> Type} {X: Type}.
 
-  (** A stuck tree satisfies prefix [φ EU ψ] if and only if it satisfies [ψ]. *)
-  Lemma eul_stuck: forall w φ ψ,
-      <( {Stuck: ctree E B X}, w |= φ EU ψ )> <->
-      <( {Stuck: ctree E B X}, w |= ψ )>.
+  (** A stuck tree satisfies [φ EU ψ] if and only if it satisfies [ψ]. *)
+  Lemma eu_stuck: forall {b: bool} w (φ: ticll E) (ψ: ticl_at E X b),
+      entails X b (Cu Q_E φ ψ) (Stuck: ctree E B X) w <->
+      entails X b ψ (Stuck: ctree E B X) w.
   Proof.
     split; intros.
     - cdestruct H; auto with ticl.
       cdestruct H.
       now apply ktrans_stuck in TR.
-    - now cleft. 
+    - now cleft.
   Qed.
 
-  (** A stuck tree satisfies suffix [φ EU ψ] if and only if it satisfies [ψ]. *)
-  Lemma eur_stuck: forall w φ ψ,
-      <[ {Stuck: ctree E B X}, w |= φ EU ψ ]> <->
-      <[ {Stuck: ctree E B X}, w |= ψ ]>.
+  (** A return tree satisfies [φ EU ψ] if and only if it satisfies [ψ] or [φ EN ψ]. *)
+  Lemma eu_ret: forall {b: bool} (r: X) w (φ: ticll E) (ψ: ticl_at E X b),
+      entails X b (COr ψ (Cx Q_E φ ψ)) (Ret r: ctree E B X) w <->
+      entails X b (Cu Q_E φ ψ) (Ret r: ctree E B X) w.
   Proof.
-    split; intros.
-    - cdestruct H; auto with ticl.
-      cdestruct H.
-      now apply ktrans_stuck in TR.
-    - now cleft. 
+    intros b r w φ ψ; split; intro H; cdestruct H.
+    - now cleft.
+    - exfalso; eapply (en_ret (b:=b)); exact H.
+    - now cleft.
+    - exfalso; eapply (en_ret (b:=b)); exact H.
   Qed.
 
-  (** A return tree satisfies prefix [φ EU ψ] if and only if it satisfies [ψ] or [φ EN ψ]. *)
-  Lemma eul_ret: forall (r: X) w φ ψ,
-      <( {Ret r: ctree E B X}, w |= ψ \/ φ EN ψ )> <->
-      <( {Ret r: ctree E B X}, w |= φ EU ψ )>.
-  Proof.
-    split; intros H; cdestruct H.
-    - now cleft.
-    - cright; csplit; cdestruct H; auto with ticl.
-      assert (Hd: not_done w) by now apply ktrans_not_done in TR.
-      inv Hd.
-      + apply ktrans_done in TR as (-> & ?).
-        exists (Stuck), (Done r); split.
-        * apply ktrans_done; auto with ticl.
-        * rewrite H0 in H.
-          now cleft.
-      + apply ktrans_finish in TR as (-> & ?).
-        exists (Stuck), (Finish e v r); split.
-        * apply ktrans_finish; auto with ticl.
-        * rewrite H0 in H.
-          now cleft.
-    - now cleft.
-    - cdestruct H.
-      cright; csplit; auto with ticl.
-      assert (Hd: not_done w) by now apply ktrans_not_done in TR.
-      inv Hd.
-      + apply ktrans_done in TR as (-> & ?).
-        rewrite H0 in H.
-        apply eul_stuck in H.
-        apply ticll_not_done in H; inv H.
-      + apply ktrans_finish in TR as (-> & ?).
-        rewrite H0 in H.
-        apply eul_stuck in H.
-        apply ticll_not_done in H; inv H.
-  Qed.
-
-  (** A return tree satisfies suffix [φ EU ψ] if and only if it satisfies [ψ] or [φ EN ψ]. *)
-  Lemma eur_ret: forall (r: X) w φ ψ,
-      <[ {Ret r: ctree E B X}, w |= ψ \/ φ EN ψ ]> <->
-      <[ {Ret r: ctree E B X}, w |= φ EU ψ ]>.
-  Proof.
-    split; intros H; cdestruct H.
-    - now cleft.
-    - cright; csplit; cdestruct H; auto with ticl.
-      assert (Hd: not_done w) by now apply ktrans_not_done in TR.
-      inv Hd.
-      + apply ktrans_done in TR as (-> & ?).
-        exists (Stuck), (Done r); split.
-        * apply ktrans_done; auto with ticl.
-        * rewrite H0 in H.
-          now cleft.
-      + apply ktrans_finish in TR as (-> & ?).
-        exists (Stuck), (Finish e v r); split.
-        * apply ktrans_finish; auto with ticl.
-        * rewrite H0 in H.
-          now cleft.
-    - now cleft.
-    - cdestruct H.
-      assert (Hd: not_done w) by now apply ktrans_not_done in TR.
-      inv Hd.
-      + apply ktrans_done in TR as (-> & ?).
-        rewrite H0 in H.
-        apply eur_stuck in H.
-        cright; csplit; auto with ticl.
-        exists (Stuck), (Done r); split; auto with ticl.
-        apply ktrans_done; auto with ticl.
-      + apply ktrans_finish in TR as (-> & ?).
-        rewrite H0 in H.
-        apply eur_stuck in H.
-        cright; csplit; auto with ticl.
-        exists (Stuck), (Finish e v r); split; auto with ticl.
-        apply ktrans_finish; auto with ticl.
-  Qed.
-
-  (** A hidden branch satisfies prefix [φ EU ψ] if it satisfies [φ] and some
+  (** A hidden branch satisfies [φ EU ψ] if it satisfies [φ] and some
       successor of some branch satisfies [φ EU ψ]. *)
-  Lemma eul_br: forall {Y} (c: B Y) (k: Y -> ctree E B X) w φ ψ,
-      <( {Br c k}, w |= φ )> ->
-      (exists (y: Y) t' w', |k y, w| ↦ |t', w'| /\ <( t', w' |= φ EU ψ )>) ->
-      <( {Br c k}, w |= φ EU ψ )>.
+  Lemma eu_br: forall {b: bool} {Y} (c: B Y) (k: Y -> ctree E B X)
+      w (φ: ticll E) (ψ: ticl_at E X b),
+      entails X false φ (Br c k) w ->
+      (exists (y: Y) t' w', |k y, w| ↦ |t', w'| /\
+        entails X b (Cu Q_E φ ψ) t' w') ->
+      entails X b (Cu Q_E φ ψ) (Br c k) w.
   Proof.
-    intros; cright; now apply enl_br.
+    intros b Y c k w φ ψ Hφ Hnext.
+    cright; apply (en_br (b:=b)); split; assumption.
   Qed.
 
-  (** A hidden branch satisfies suffix [φ EU ψ] if it satisfies [φ] and some
-      successor of some branch satisfies [φ EU ψ]. *)
-  Lemma eur_br: forall {Y} (c: B Y) (k: Y -> ctree E B X) w φ ψ,
-      <( {Br c k}, w |= φ )> ->
-      (exists (y: Y) t' w', |k y, w| ↦ |t', w'| /\ <[ t', w' |= φ EU ψ ]>) ->
-      <[ {Br c k}, w |= φ EU ψ ]>.
-  Proof.
-    intros; cright; now apply enr_br.
-  Qed.
-
-  (** A visible choice satisfies prefix [φ EU ψ] if and only if it satisfies [ψ] or [φ EU ψ] for some [y]. *)
-  Lemma eul_brS: forall {Y} (c: B Y) (k: Y -> ctree E B X) w φ ψ,
-      (<( {BrS c k}, w |= φ )> \/
-         <( {BrS c k}, w |= ψ )> /\
-           exists (y: Y), <( {k y}, w |= ψ EU φ )>) <->
-        <( {BrS c k}, w |= ψ EU φ )>.
+  (** A visible choice satisfies [φ EU ψ] if and only if it satisfies [ψ]
+      or it satisfies [φ] and some branch satisfies [φ EU ψ]. *)
+  Lemma eu_brS: forall {b: bool} {Y} (c: B Y) (k: Y -> ctree E B X)
+      w (φ: ticll E) (ψ: ticl_at E X b),
+      (entails X b ψ (BrS c k) w \/
+         entails X false φ (BrS c k) w /\
+           exists (y: Y), entails X b (Cu Q_E φ ψ) (k y) w) <->
+        entails X b (Cu Q_E φ ψ) (BrS c k) w.
   Proof.
     intros; symmetry.
-    rewrite equivl_eu_en at 1.
-    now rewrite ticll_or, enl_brS.
+    rewrite (equiv_eu_en (b:=b)) at 1.
+    now rewrite ticl_or, (en_brS (b:=b)).
   Qed.
 
-  (** A visible choice satisfies suffix [φ EU ψ] if and only if it satisfies [ψ] or [φ EU ψ] for some [y]. *)
-  Lemma eur_brS: forall {Y} (c: B Y) (k: Y -> ctree E B X) w φ ψ,
-      (<[ {BrS c k}, w |= φ ]> \/
-         <( {BrS c k}, w |= ψ )> /\
-           exists (y: Y), <[ {k y}, w |= ψ EU φ ]>) <->
-        <[ {BrS c k}, w |= ψ EU φ ]>.
+  (** A visible step satisfies [φ EU ψ] if and only if it satisfies [ψ]
+      or it satisfies [φ] and its continuation satisfies [φ EU ψ]. *)
+  Lemma eu_step: forall {b: bool} (t: ctree E B X)
+      w (φ: ticll E) (ψ: ticl_at E X b),
+      (entails X b ψ (Step t) w \/
+         entails X false φ (Step t) w /\ entails X b (Cu Q_E φ ψ) t w) <->
+        entails X b (Cu Q_E φ ψ) (Step t) w.
   Proof.
     intros; symmetry.
-    rewrite equivr_eu_en at 1.
-    now rewrite ticlr_or, enr_brS.
+    rewrite (equiv_eu_en (b:=b)) at 1.
+    now rewrite ticl_or, (en_step (b:=b)).
   Qed.
 
-  (** A visible step satisfies prefix [φ EU ψ] if and only if it satisfies [ψ] or [t] satisfies [φ EU ψ]. *)
-  Lemma eul_step: forall (t: ctree E B X) w φ ψ,
-      (<( {Step t}, w |= φ )> \/
-         <( {Step t}, w |= ψ )> /\ <( t, w |= ψ EU φ )>) <->
-        <( {Step t}, w |= ψ EU φ )>.
+  (** A visible event satisfies [φ EU ψ] if and only if it satisfies [ψ]
+      or it satisfies [φ] and some response satisfies [φ EU ψ]. *)
+  Lemma eu_vis: forall {b: bool} {Y} (e: E Y) (k: Y -> ctree E B X)
+      w (φ: ticll E) (ψ: ticl_at E X b),
+      (entails X b ψ (Vis e k) w \/
+         entails X false φ (Vis e k) w /\
+           exists (v: Y), entails X b (Cu Q_E φ ψ) (k v) (Obs e v)) <->
+        entails X b (Cu Q_E φ ψ) (Vis e k) w.
   Proof.
     intros; symmetry.
-    rewrite equivl_eu_en at 1.
-    now rewrite ticll_or, enl_step.
-  Qed.
-
-  (** A visible step satisfies suffix [φ EU ψ] if and only if it satisfies [ψ] or [t] satisfies [φ EU ψ]. *)
-  Lemma eur_step: forall (t: ctree E B X) w φ ψ,
-      (<[ {Step t}, w |= φ ]> \/
-         <( {Step t}, w |= ψ )> /\ <[ t, w |= ψ EU φ ]>) <->
-        <[ {Step t}, w |= ψ EU φ ]>.
-  Proof.
-    intros; symmetry.
-    rewrite equivr_eu_en at 1.
-    now rewrite ticlr_or, enr_step.
-  Qed.
-
-  (** A visible event satisfies prefix [φ EU ψ] if and only if it satisfies [ψ] or [φ EU ψ] for some [v]. *)
-  Lemma eul_vis: forall {Y} (e: E Y) (k: Y -> ctree E B X) w φ ψ,
-      (<( {Vis e k}, w |= φ )> \/
-         <( {Vis e k}, w |= ψ )> /\
-           exists (v: Y), <( {k v}, {Obs e v} |= ψ EU φ )>) <->
-        <( {Vis e k}, w |= ψ EU φ )>.
-  Proof.
-    intros; symmetry.
-    rewrite equivl_eu_en at 1.
-    now rewrite ticll_or, enl_vis.
-  Qed.
-
-  (** A visible event satisfies suffix [φ EU ψ] if and only if it satisfies [ψ] or [φ EU ψ] for some [v]. *)
-  Lemma eur_vis: forall {Y} (e: E Y) (k: Y -> ctree E B X) w φ ψ,
-      (<[ {Vis e k}, w |= φ ]> \/
-         <( {Vis e k}, w |= ψ )> /\
-           exists (v: Y), <[ {k v}, {Obs e v} |= ψ EU φ ]>) <->
-        <[ {Vis e k}, w |= ψ EU φ ]>.
-  Proof.
-    intros; symmetry.
-    rewrite equivr_eu_en at 1.
-    now rewrite ticlr_or, enr_vis.
-  Qed.
-
-  Lemma eur_not_done: forall φ ψ (t: ctree E B X) (w: World E),
-      <[ t, w |= φ EU EX ψ ]> ->
-      not_done w.
-  Proof.
-    intros.
-    cdestruct H; cdestruct H;
-      now apply ktrans_not_done with t t0 w0.
+    rewrite (equiv_eu_en (b:=b)) at 1.
+    now rewrite ticl_or, (en_vis (b:=b)).
   Qed.
 End BasicLemmas.

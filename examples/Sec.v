@@ -63,7 +63,7 @@ Module Sec.
   Theorem ag_safety_sec {B: Type -> Type} `{HB: B2 -< B}: forall (secret: nat) (m: St),
       (forall i, no_leak i m) ->
       <( {instr_sprog (B:=B) (sched secret) m}, {Obs (Log {| ml := L; al := L |}) tt}
-           |= AG visW {fun obs => obs.(al) ⪯ obs.(ml)} )>.
+           |=L AG visW {fun obs => obs.(al) ⪯ obs.(ml)} )>.
   Proof.
     intros.    
     unfold sched. 
@@ -72,11 +72,11 @@ Module Sec.
     unfold no_leak in *.
     intros i m' s' (Hobs & Hm0).
     split;[csplit; auto|].
-    apply anr_sprog_br. 
+    apply (an_sprog_br (suffix:=true)).
     - csplit; eauto with ticl.
     - (* Alice goes *)
       unfold alice.
-      eapply aur_sprog_bind_r with (R:=fun 'tt m w => exists s'0 : SecObs,
+      eapply (au_sprog_bind_r (b:=true)) with (R:=fun 'tt m w => exists s'0 : SecObs,
                                              w = Obs (Log s'0) tt /\ al s'0 ⪯ ml s'0
                                              /\ (forall i0 : Addr, no_leak i0 m)); eauto with ticl. 
       + intros [] * HR.
@@ -84,7 +84,7 @@ Module Sec.
         unfold instr_sprog; cbn.
         apply axr_state_ret; eauto with ticl.
         destruct HR as (s_ & -> & ?); eauto with ticl.
-      + apply ticlr_sprog_call, ticlr_cprog_if.
+      + apply (ticl_sprog_call (b:=true)), (ticl_cprog_if (b:=true)).
         destruct (Nat.Even_Odd_dec i); unfold instr_cprog; cbn.
         * (* Alice runs, [i] is even *)
           rewrite interp_state_trigger; cbn.
@@ -123,15 +123,15 @@ Module Sec.
                now rewrite <- mapsto_lookup.
     - (* Bob runs, [i] is even *)
       unfold bob.
-      eapply aur_sprog_bind_r with (R:=fun 'tt m w => exists s'0 : SecObs,
+      eapply (au_sprog_bind_r (b:=true)) with (R:=fun 'tt m w => exists s'0 : SecObs,
                                            w = Obs (Log s'0) tt /\ al s'0 ⪯ ml s'0
                                            /\ (forall i0 : Addr, no_leak i0 m)); eauto with ticl.
       + intros [] * HR.
         cleft.
         apply axr_state_ret; eauto with ticl.
         destruct HR as (s_ & -> & ?); eauto with ticl.
-      + eapply ticlr_sprog_call.        
-        eapply aur_cprog_bind_r with (R:=fun _ m w =>
+      + eapply (ticl_sprog_call (b:=true)).        
+        eapply (au_cprog_bind_r (b:=true)) with (R:=fun _ m w =>
                                            exists s'0 : SecObs,
                                              w = Obs (Log s'0) tt /\ al s'0 ⪯ ml s'0
                                              /\ (forall i0 : Addr, no_leak i0 m)); eauto with ticl.
@@ -139,7 +139,7 @@ Module Sec.
           cleft.
           apply axr_state_ret; eauto with ticl.
           destruct H1 as (? & -> & ?); eauto with ticl.
-        * apply ticlr_cprog_if.          
+        * apply (ticl_cprog_if (b:=true)).          
           destruct (Nat.Even_Odd_dec i); unfold instr_cprog; cbn.
           -- (* Bob runs, [i] is even *)
              rewrite interp_state_trigger; cbn.
@@ -147,7 +147,7 @@ Module Sec.
              rewrite H1.
              change (Monad.bind ?a ?b) with (CTree.bind a b).
              rewrite bind_bind.
-             eapply aur_log; eauto with ticl.
+             eapply (au_log (b:=true)); eauto with ticl.
              ++ rewrite bind_ret_l, sb_guard.
                 cleft.
                 apply ret_ret; eauto with ticl.
@@ -158,7 +158,7 @@ Module Sec.
             destruct (lookup (S i) m') eqn:Hlook.
             ++ destruct p as (l, a).
                rewrite bind_bind.
-               eapply aur_log; eauto with ticl.
+               eapply (au_log (b:=true)); eauto with ticl.
                ** rewrite bind_ret_l, sb_guard.
                   cleft.
                   apply ret_ret; eauto with ticl.

@@ -1,4 +1,7 @@
 From Stdlib Require Import
+  List
+  Arith.PeanoNat
+  Program.Equality
   Fin
   Vector
   Morphisms.
@@ -6,7 +9,6 @@ From Stdlib Require Import
 From TICL Require Import
   CTree.Core
   CTree.Interp.State.Mod
-  CTree.Interp.Refine
   CTree.Events.Yield
   CTree.Events.State
   CTree.Events.Writer
@@ -23,60 +25,43 @@ Generalizable All Variables.
     the event-erasure handlers, and the instrumentation algebra that lifts a
     raw thread or a raw scheduled pool into the writer-instrumented view. *)
 
-Section Scheduler.
-  Context {E B : Type -> Type} `{Bn -< B}.
-
-  (** Cooperative scheduler for a finite pool.
-
-      [None] focus means the scheduler chooses a runnable thread after emitting
-      a scheduling [Yield]; the choice is one observable step ([brS]).
-      [Some i] observes one node of thread [i], removing finished threads,
-      clearing focus on source yields, and turning source forks into
-      scheduler-visible [Spawn] events.  Hidden branches of the thread stay
-      hidden, visible steps stay visible. *)
-  CoFixpoint schedule (n : nat) (v : pool E B n) (focus : option (Fin.t n)) : completed E B :=
-    match focus with
-    | None =>
-        match n return pool E B n -> completed E B with
-        | 0 => fun _ => Ret tt
-        | S n' => fun v =>
-            Vis (inl1 Yield)
-              (fun _ => brS (branchn (S n')) (fun i => schedule (S n') v (Some i)))
-        end v
-    | Some i =>
-        match n return pool E B n -> Fin.t n -> completed E B with
-        | 0 => fun _ i => match i with end
-        | S n' => fun v i =>
-            match observe (v $ i) with
-            | RetF _ => Guard (schedule n' (v -- i) None)
-            | StuckF => Stuck
-            | BrF c k => Br c (fun j => schedule (S n') (v @ i := (k j)) (Some i))
-            | StepF t => Step (schedule (S n') (v @ i := t) (Some i))
-            | GuardF t => Guard (schedule (S n') (v @ i := t) (Some i))
-            | @VisF _ _ _ _ Y e k =>
-                match e with
-                | inl1 y =>
-                    match y in yieldE Y0 return (Y0 -> thread E B) -> completed E B with
-                    | Yield => fun k => Guard (schedule (S n') (v @ i := (k tt)) None)
-                    end k
-                | inr1 (inl1 f) =>
-                    match f in forkE Y0 return (Y0 -> thread E B) -> completed E B with
-                    | Fork => fun k =>
-                        Vis (inr1 (inl1 Spawn) : (yieldE +' (spawnE +' E)) unit)
-                          (fun _ => schedule (S (S n'))
-                                      ((k true :: (v @ i := (k false)))%vector)
-                                      (Some (FS i)))
-                    end k
-                | inr1 (inr1 e') =>
-                    Vis (inr1 (inr1 e') : (yieldE +' (spawnE +' E)) Y)
-                      (fun x => schedule (S n') (v @ i := (k x)) (Some i))
-                end
-            end
-        end v i
-    end.
-End Scheduler.
-
 (** * Scheduling policies *)
+
+Definition rr_pick (n cursor : nat) : Fin.t (S n) :=
+  @Fin.of_nat_lt (cursor mod S n) (S n)
+    (Nat.mod_upper_bound cursor (S n) (Nat.neq_succ_0 n)).
+
+(** A singleton round-robin pool always picks its only slot. *)
+Lemma rr_pick_0 m : rr_pick 0 m = Fin.F1.
+Proof. apply Fin.to_nat_inj; unfold rr_pick; rewrite Fin.to_nat_of_nat; cbn; reflexivity. Qed.
+
+(** Compare numeric choices, not the proof arguments of finite indices. *)
+Lemma rr_pick_mod_congr n cursor cursor' :
+  cursor mod S n = cursor' mod S n -> rr_pick n cursor = rr_pick n cursor'.
+Proof.
+  intro Hmod; apply Fin.to_nat_inj; unfold rr_pick.
+  rewrite !Fin.to_nat_of_nat; exact Hmod.
+Qed.
+
+Lemma rr_pick_even n : Nat.even n = true -> rr_pick 1 n = Fin.F1.
+Proof.
+  intro Hn; apply Nat.even_spec in Hn; destruct Hn as [k ->].
+  transitivity (rr_pick 1 0); [apply rr_pick_mod_congr|reflexivity].
+  change ((2 * k) mod 2 = 0).
+  rewrite Nat.mul_comm; apply Nat.Div0.mod_mul.
+Qed.
+
+Lemma rr_pick_odd n : Nat.even n = false -> rr_pick 1 n = Fin.FS Fin.F1.
+Proof.
+  intro Hn.
+  assert (Ho : Nat.odd n = true) by (unfold Nat.odd; now rewrite Hn).
+  apply Nat.odd_spec in Ho; destruct Ho as [k ->].
+  transitivity (rr_pick 1 1); [apply rr_pick_mod_congr|reflexivity].
+  change ((2 * k + 1) mod 2 = 1).
+  rewrite Nat.Div0.add_mod.
+  rewrite (Nat.mul_comm 2 k), Nat.Div0.mod_mul.
+  reflexivity.
+Qed.
 
 (** A policy carries its own state; at a scheduling point of a pool of size
     [S n] it offers [S (sched_arity n st)] alternatives, each resolving to a
@@ -93,14 +78,21 @@ Definition rr_scheduler : Scheduler :=
   {| sched_state := nat; sched_arity := fun _ _ => 0;
      sched_pick := fun n m _ => (rr_pick n m, S m) |}.
 
-(** Nondeterministic selection: at a pool of size [S n] every slot is an
-    alternative and the policy carries no state.  It is not fair
-    ([nd_not_fair], [Fair.v]): the alternative that picks another slot
-    returns to the same scheduling point, so any slot can be avoided
-    forever. *)
+(** Nondeterministic selection is stateless and can avoid a slot forever;
+    [Fair.nd_not_fair] proves that it has no fairness instance. *)
 Definition nd_scheduler : Scheduler :=
   {| sched_state := unit; sched_arity := fun n _ => n;
-     sched_pick := fun n _ a => (a, tt) |}.
+     sched_pick := fun n _ c => (c, tt) |}.
+
+Lemma slot_index_rr_pick n cursor : slot_index (rr_pick n cursor) = cursor mod S n.
+Proof. unfold slot_index, rr_pick; rewrite Fin.to_nat_of_nat; reflexivity. Qed.
+
+(** Logged selections while an unfocused pool of returning slots shrinks. *)
+Fixpoint rr_return_picks (size cursor : nat) : list nat :=
+  match size with
+  | 0 => List.nil
+  | S n => List.cons (slot_index (rr_pick n cursor)) (rr_return_picks n (S cursor))
+  end.
 
 (** [S m] alternatives: a single alternative is taken directly, more are a
     hidden branch. *)
@@ -150,87 +142,144 @@ Proof.
   apply sb_br_id; intro a; rewrite sb_guard; reflexivity.
 Qed.
 
-(** * Event-only policy scheduler *)
-Section PolicyScheduler.
-  Context {E B : Type -> Type} `{Bn -< B} (sch : Scheduler).
 
-  (** Policy-driven scheduler for a finite pool.
+Section Scheduler.
+  Context {E B : Type -> Type} `{Bn -< B}.
 
-      [None] focus means the policy chooses a runnable thread: the choice is
-      a [Scheduled] event at every alternative ([br_alts], inlined because a
-      cofixpoint body must be guarded by constructors).  [Some i] observes one
-      node of thread [i] exactly as [schedule] does, except that source yields
-      and forks are interpreted here: both become administrative guards.
-      Thread-internal branches are never inspected. *)
-  CoFixpoint schedule_with (n : nat) (v : pool E B n) (focus : option (Fin.t n))
-      (st : sched_state sch) : scheduled E B :=
+  (** Select only at an unfocused boundary. Focused source branches are
+      preserved, and all focused clauses leave the policy state unchanged. *)
+  CoFixpoint schedule_policy (sch : Scheduler) (n : nat) (v : pool E B n)
+      (focus : option (Fin.t n)) (st : sched_state sch) : completed E B :=
     match focus with
     | None =>
-        match n return pool E B n -> scheduled E B with
+        match n return pool E B n -> completed E B with
         | 0 => fun _ => Ret tt
         | S n' => fun v =>
-            match sched_arity sch n' st as m
-                  return (Fin.t (S m) -> Fin.t (S n') * sched_state sch) -> scheduled E B with
-            | 0 => fun pick =>
-                Vis (inl1 (Scheduled (slot_index (fst (pick Fin.F1)))))
-                  (fun _ => schedule_with (S n') v (Some (fst (pick Fin.F1))) (snd (pick Fin.F1)))
-            | S m' => fun pick =>
-                br (branchn (S (S m'))) (fun a =>
-                  Vis (inl1 (Scheduled (slot_index (fst (pick a)))))
-                    (fun _ => schedule_with (S n') v (Some (fst (pick a))) (snd (pick a))))
+            match sched_arity sch n' st as a return
+              (Fin.t (S a) -> Fin.t (S n') * sched_state sch) -> completed E B with
+            | 0 => fun pick => let '(i, st') := pick Fin.F1 in
+                Vis (inr1 (Scheduled (slot_index i)))
+                  (fun _ => schedule_policy sch (S n') v (Some i) st')
+            | S a => fun pick => Br (subevent _ (branchn (S (S a))))
+                (fun x => let '(i, st') := pick x in
+                  Vis (inr1 (Scheduled (slot_index i)))
+                    (fun _ => schedule_policy sch (S n') v (Some i) st'))
             end (sched_pick sch n' st)
         end v
     | Some i =>
-        match n return pool E B n -> Fin.t n -> scheduled E B with
+        match n return pool E B n -> Fin.t n -> completed E B with
         | 0 => fun _ i => match i with end
         | S n' => fun v i =>
             match observe (v $ i) with
-            | RetF _ => Guard (schedule_with n' (v -- i) None st)
+            | RetF _ => Guard (schedule_policy sch n' (v -- i) None st)
             | StuckF => Stuck
-            | BrF c k => Br c (fun j => schedule_with (S n') (v @ i := (k j)) (Some i) st)
-            | StepF t => Step (schedule_with (S n') (v @ i := t) (Some i) st)
-            | GuardF t => Guard (schedule_with (S n') (v @ i := t) (Some i) st)
+            | BrF c k => Br c (fun j => schedule_policy sch (S n') (v @ i := k j) (Some i) st)
+            | StepF t => Step (schedule_policy sch (S n') (v @ i := t) (Some i) st)
+            | GuardF t => Guard (schedule_policy sch (S n') (v @ i := t) (Some i) st)
             | @VisF _ _ _ _ Y e k =>
                 match e with
                 | inl1 y =>
-                    match y in yieldE Y0 return (Y0 -> thread E B) -> scheduled E B with
-                    | Yield => fun k => Guard (schedule_with (S n') (v @ i := (k tt)) None st)
+                    match y in yieldE Y0 return (Y0 -> thread E B) -> completed E B with
+                    | Yield => fun k => Guard (schedule_policy sch (S n') (v @ i := k tt) None st)
                     end k
                 | inr1 (inl1 f) =>
-                    match f in forkE Y0 return (Y0 -> thread E B) -> scheduled E B with
-                    | Fork => fun k =>
-                        Guard (schedule_with (S (S n'))
-                                 ((k true :: (v @ i := (k false)))%vector)
-                                 (Some (FS i)) st)
+                    match f in forkE Y0 return (Y0 -> thread E B) -> completed E B with
+                    | Fork => fun k => Guard (schedule_policy sch (S (S n'))
+                        (k true :: (v @ i := k false)) (Some (Fin.FS i)) st)
                     end k
-                | inr1 (inr1 e') =>
-                    Vis (inr1 e' : (schedE +' E) Y)
-                      (fun x => schedule_with (S n') (v @ i := (k x)) (Some i) st)
+                | inr1 (inr1 e') => Vis (inl1 e')
+                    (fun x => schedule_policy sch (S n') (v @ i := k x) (Some i) st)
                 end
             end
         end v i
     end.
-End PolicyScheduler.
+
+  Lemma unfold_schedule_policy (sch : Scheduler) n (v : pool E B n) focus st :
+    schedule_policy sch n v focus st ≅
+match focus with
+    | None =>
+        match n return pool E B n -> completed E B with
+        | 0 => fun _ => Ret tt
+        | S n' => fun v =>
+            match sched_arity sch n' st as a return
+              (Fin.t (S a) -> Fin.t (S n') * sched_state sch) -> completed E B with
+            | 0 => fun pick => let '(i, st') := pick Fin.F1 in
+                Vis (inr1 (Scheduled (slot_index i)))
+                  (fun _ => schedule_policy sch (S n') v (Some i) st')
+            | S a => fun pick => Br (subevent _ (branchn (S (S a))))
+                (fun x => let '(i, st') := pick x in
+                  Vis (inr1 (Scheduled (slot_index i)))
+                    (fun _ => schedule_policy sch (S n') v (Some i) st'))
+            end (sched_pick sch n' st)
+        end v
+    | Some i =>
+        match n return pool E B n -> Fin.t n -> completed E B with
+        | 0 => fun _ i => match i with end
+        | S n' => fun v i =>
+            match observe (v $ i) with
+            | RetF _ => Guard (schedule_policy sch n' (v -- i) None st)
+            | StuckF => Stuck
+            | BrF c k => Br c (fun j => schedule_policy sch (S n') (v @ i := k j) (Some i) st)
+            | StepF t => Step (schedule_policy sch (S n') (v @ i := t) (Some i) st)
+            | GuardF t => Guard (schedule_policy sch (S n') (v @ i := t) (Some i) st)
+            | @VisF _ _ _ _ Y e k =>
+                match e with
+                | inl1 y =>
+                    match y in yieldE Y0 return (Y0 -> thread E B) -> completed E B with
+                    | Yield => fun k => Guard (schedule_policy sch (S n') (v @ i := k tt) None st)
+                    end k
+                | inr1 (inl1 f) =>
+                    match f in forkE Y0 return (Y0 -> thread E B) -> completed E B with
+                    | Fork => fun k => Guard (schedule_policy sch (S (S n'))
+                        (k true :: (v @ i := k false)) (Some (Fin.FS i)) st)
+                    end k
+                | inr1 (inr1 e') => Vis (inl1 e')
+                    (fun x => schedule_policy sch (S n') (v @ i := k x) (Some i) st)
+                end
+            end
+        end v i
+    end.
+  Proof. step; cbn; reflexivity. Qed.
+
+  Definition schedule n (v : pool E B n) focus : completed E B :=
+    schedule_policy nd_scheduler n v focus tt.
+
+  Definition schedule_rr n (v : pool E B n) focus cursor : completed E B :=
+    schedule_policy rr_scheduler n v focus cursor.
+
+  Lemma schedule_policy_no_focus_nonempty (sch : Scheduler) n (v : pool E B (S n)) st :
+    schedule_policy sch (S n) v None st ≅
+    br_alts (sched_arity sch n st) (fun a =>
+      Vis (inr1 (Scheduled (slot_index (fst (sched_pick sch n st a)))))
+        (fun _ => schedule_policy sch (S n) v
+          (Some (fst (sched_pick sch n st a))) (snd (sched_pick sch n st a)))).
+  Proof.
+    rewrite unfold_schedule_policy.
+    generalize (sched_pick sch n st); destruct (sched_arity sch n st); intro pick;
+      cbn [br_alts].
+    - destruct (pick Fin.F1); reflexivity.
+    - step; constructor; intro a; destruct (pick a); reflexivity.
+  Qed.
+End Scheduler.
 
 (** * Event erasure handlers *)
 
-(** Erase scheduler spawn observations while preserving yield and user events.
-
-    The result universe [r] is named on every handler: the dependent match on a
-    (monomorphic) event index would otherwise minimise it to that index's global
-    universe, which [interp] (needing it strictly above the event domain) rejects. *)
-Definition handle_spawn@{r +} {E B} :
-  (yieldE +' (spawnE +' E)) ~> ctree@{_ _ _ _ r _} (yieldE +' E) B :=
+(** Preserve user effects and project each native selection to one silent
+    step. The named result universe keeps [interp]'s target above the event
+    domain. This handler interprets observations; it makes no choices. *)
+Definition handle_scheduled_step@{r +} {E B} :
+  (E +' schedE) ~> ctree@{_ _ _ _ r _} E B :=
   fun _ event =>
     match event with
-    | inl1 y => CTree.trigger (inl1 y)
-    | inr1 (inl1 s) => match s in spawnE Y return ctree (yieldE +' E) B Y with Spawn => Ret tt end
-    | inr1 (inr1 m) => CTree.trigger (inr1 m)
+    | inl1 e => CTree.trigger e
+    | inr1 s => match s in schedE Y return ctree E B Y with
+      | Scheduled _ => Step (Ret tt)
+      end
     end.
 
-Definition interp_spawn {E B X}
-    (t : ctree (yieldE +' (spawnE +' E)) B X) : ctree (yieldE +' E) B X :=
-  interp (M := ctree (yieldE +' E) B) handle_spawn t.
+Definition project_scheduled {E B X}
+    (t : ctree (E +' schedE) B X) : ctree E B X :=
+  interp (M := ctree E B) handle_scheduled_step t.
 
 (** Erase cooperative yield observations, leaving only user events. *)
 Definition handle_yield@{r +} {E B} : (yieldE +' E) ~> ctree@{_ _ _ _ r _} E B :=
@@ -262,9 +311,9 @@ Definition interp_thread {E B X}
 
 (** The erasure interpreters are [equ]-congruences; this lets structural
     equations be rewritten underneath them. *)
-#[global] Instance interp_spawn_equ {E B X} :
-  Proper (equ eq ==> equ eq) (@interp_spawn E B X).
-Proof. intros t u Ht. unfold interp_spawn. now rewrite Ht. Qed.
+#[global] Instance project_scheduled_equ {E B X} :
+  Proper (equ eq ==> equ eq) (@project_scheduled E B X).
+Proof. intros t u Ht; unfold project_scheduled; now rewrite Ht. Qed.
 
 #[global] Instance interp_yield_equ {E B X} :
   Proper (equ eq ==> equ eq) (@interp_yield E B X).
@@ -274,185 +323,191 @@ Proof. intros t u Ht. unfold interp_yield. now rewrite Ht. Qed.
   Proper (equ eq ==> equ eq) (@interp_thread E B X).
 Proof. intros t u Ht. unfold interp_thread, interp_yield. now rewrite Ht. Qed.
 
-(** Focused-node equations of both pool schedulers: unfold the cofixpoint
-    one step, expose the focused thread's node, and reduce. *)
-Local Ltac solve_focused_node H :=
-  lazy [schedule schedule_with observe _observe];
-  match type of H with
-  | observe (Vector.nth ?v ?i) = _ =>
-      change (@_observe _ _ unit (Vector.nth v i)) with (observe (Vector.nth v i));
-      rewrite H;
-      reflexivity
-  end.
-
-(** * Scheduler one-step/case regression facts. *)
+(** * Exact scheduler node observations. *)
 Section SchedulerFacts.
   Context {E B : Type -> Type} `{Bn -< B}.
 
-  Lemma schedule_empty_none (v : pool E B 0) :
-    observe (schedule 0 v None) = RetF tt.
+  Local Ltac solve_focused_schedule Hobs :=
+    lazy [schedule schedule_rr schedule_policy observe _observe];
+    match type of Hobs with
+    | observe (Vector.nth ?v ?i) = _ =>
+        change (@_observe _ _ unit (Vector.nth v i)) with (observe (Vector.nth v i));
+        rewrite Hobs; reflexivity
+    end.
+
+  Lemma schedule_policy_empty_none (sch : Scheduler) (v : pool E B 0) (st : sched_state sch) :
+    observe (schedule_policy sch 0 v None st) = RetF tt.
   Proof. reflexivity. Qed.
 
-  Lemma schedule_no_focus_nonempty n (v : pool E B (S n)) :
-    observe (schedule (S n) v None) =
-      VisF (inl1 Yield) (fun _ => brS (branchn (S n)) (fun i => schedule (S n) v (Some i))).
+  Lemma schedule_policy_focused_ret (sch : Scheduler) n (v : pool E B (S n)) (i : Fin.t (S n)) (st : sched_state sch) :
+    observe (v $ i) = RetF tt ->
+    observe (schedule_policy sch (S n) v (Some i) st) =
+      GuardF (schedule_policy sch n (v -- i) None st).
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
+
+  Lemma schedule_policy_focused_stuck (sch : Scheduler) n (v : pool E B (S n)) (i : Fin.t (S n)) (st : sched_state sch) :
+    observe (v $ i) = StuckF ->
+    observe (schedule_policy sch (S n) v (Some i) st) =
+      StuckF.
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
+
+  Lemma schedule_policy_focused_br (sch : Scheduler) n (v : pool E B (S n)) (i : Fin.t (S n)) {Y} (c : B Y) k (st : sched_state sch) :
+    observe (v $ i) = BrF c k ->
+    observe (schedule_policy sch (S n) v (Some i) st) =
+      BrF c (fun j => schedule_policy sch (S n) (v @ i := k j) (Some i) st).
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
+
+  Lemma schedule_policy_focused_step (sch : Scheduler) n (v : pool E B (S n)) (i : Fin.t (S n)) t (st : sched_state sch) :
+    observe (v $ i) = StepF t ->
+    observe (schedule_policy sch (S n) v (Some i) st) =
+      StepF (schedule_policy sch (S n) (v @ i := t) (Some i) st).
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
+
+  Lemma schedule_policy_focused_guard (sch : Scheduler) n (v : pool E B (S n)) (i : Fin.t (S n)) t (st : sched_state sch) :
+    observe (v $ i) = GuardF t ->
+    observe (schedule_policy sch (S n) v (Some i) st) =
+      GuardF (schedule_policy sch (S n) (v @ i := t) (Some i) st).
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
+
+  Lemma schedule_policy_focused_yield (sch : Scheduler) n (v : pool E B (S n)) (i : Fin.t (S n)) k (st : sched_state sch) :
+    observe (v $ i) = VisF (inl1 Yield) k ->
+    observe (schedule_policy sch (S n) v (Some i) st) =
+      GuardF (schedule_policy sch (S n) (v @ i := k tt) None st).
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
+
+  Lemma schedule_policy_focused_fork (sch : Scheduler) n (v : pool E B (S n)) (i : Fin.t (S n)) k (st : sched_state sch) :
+    observe (v $ i) = VisF (inr1 (inl1 Fork)) k ->
+    observe (schedule_policy sch (S n) v (Some i) st) =
+      GuardF (schedule_policy sch (S (S n)) (k true :: (v @ i := k false)) (Some (Fin.FS i)) st).
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
+
+  Lemma schedule_policy_focused_user_event (sch : Scheduler) n (v : pool E B (S n)) (i : Fin.t (S n)) {Y} (e : E Y) k (st : sched_state sch) :
+    observe (v $ i) = VisF (inr1 (inr1 e)) k ->
+    observe (schedule_policy sch (S n) v (Some i) st) =
+      VisF (inl1 e) (fun x => schedule_policy sch (S n) (v @ i := k x) (Some i) st).
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
+
+  Lemma schedule_empty_none (v : pool E B 0) :
+    observe (schedule 0 v None) = RetF tt.
   Proof. reflexivity. Qed.
 
   Lemma schedule_focused_ret n (v : pool E B (S n)) (i : Fin.t (S n)) :
     observe (v $ i) = RetF tt ->
     observe (schedule (S n) v (Some i)) =
       GuardF (schedule n (v -- i) None).
-  Proof.
-    intro Hret.
-    solve_focused_node Hret.
-  Qed.
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
 
   Lemma schedule_focused_stuck n (v : pool E B (S n)) (i : Fin.t (S n)) :
     observe (v $ i) = StuckF ->
-    observe (schedule (S n) v (Some i)) = StuckF.
-  Proof.
-    intro Hst.
-    solve_focused_node Hst.
-  Qed.
+    observe (schedule (S n) v (Some i)) =
+      StuckF.
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
 
   Lemma schedule_focused_br n (v : pool E B (S n)) (i : Fin.t (S n)) {Y} (c : B Y) k :
     observe (v $ i) = BrF c k ->
     observe (schedule (S n) v (Some i)) =
-      BrF c (fun j => schedule (S n) (v @ i := (k j)) (Some i)).
-  Proof.
-    intro Hbr.
-    solve_focused_node Hbr.
-  Qed.
+      BrF c (fun j => schedule (S n) (v @ i := k j) (Some i)).
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
 
   Lemma schedule_focused_step n (v : pool E B (S n)) (i : Fin.t (S n)) t :
     observe (v $ i) = StepF t ->
     observe (schedule (S n) v (Some i)) =
       StepF (schedule (S n) (v @ i := t) (Some i)).
-  Proof.
-    intro Hs.
-    solve_focused_node Hs.
-  Qed.
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
 
   Lemma schedule_focused_guard n (v : pool E B (S n)) (i : Fin.t (S n)) t :
     observe (v $ i) = GuardF t ->
     observe (schedule (S n) v (Some i)) =
       GuardF (schedule (S n) (v @ i := t) (Some i)).
-  Proof.
-    intro Hg.
-    solve_focused_node Hg.
-  Qed.
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
 
   Lemma schedule_focused_yield n (v : pool E B (S n)) (i : Fin.t (S n)) k :
     observe (v $ i) = VisF (inl1 Yield) k ->
     observe (schedule (S n) v (Some i)) =
-      GuardF (schedule (S n) (v @ i := (k tt)) None).
-  Proof.
-    intro Hy.
-    solve_focused_node Hy.
-  Qed.
+      GuardF (schedule (S n) (v @ i := k tt) None).
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
 
   Lemma schedule_focused_fork n (v : pool E B (S n)) (i : Fin.t (S n)) k :
     observe (v $ i) = VisF (inr1 (inl1 Fork)) k ->
     observe (schedule (S n) v (Some i)) =
-      VisF (inr1 (inl1 Spawn) : (yieldE +' (spawnE +' E)) unit)
-        (fun _ => schedule (S (S n))
-                    ((k true :: (v @ i := (k false)))%vector)
-                    (Some (Fin.FS i))).
-  Proof.
-    intro Hf.
-    solve_focused_node Hf.
-  Qed.
+      GuardF (schedule (S (S n)) (k true :: (v @ i := k false)) (Some (Fin.FS i))).
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
 
   Lemma schedule_focused_user_event n (v : pool E B (S n)) (i : Fin.t (S n)) {Y} (e : E Y) k :
     observe (v $ i) = VisF (inr1 (inr1 e)) k ->
     observe (schedule (S n) v (Some i)) =
-      VisF (inr1 (inr1 e) : (yieldE +' (spawnE +' E)) Y)
-        (fun x => schedule (S n) (v @ i := (k x)) (Some i)).
-  Proof.
-    intro Hu.
-    solve_focused_node Hu.
-  Qed.
-End SchedulerFacts.
+      VisF (inl1 e) (fun x => schedule (S n) (v @ i := k x) (Some i)).
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
 
-(** * Policy scheduler one-step/case facts. *)
-Section PolicySchedulerFacts.
-  Context {E B : Type -> Type} `{Bn -< B} (sch : Scheduler).
-
-  Lemma schedule_with_empty_none (v : pool E B 0) st :
-    observe (schedule_with sch 0 v None st) = RetF tt.
+  Lemma schedule_rr_empty_none (v : pool E B 0) cursor :
+    observe (schedule_rr 0 v None cursor) = RetF tt.
   Proof. reflexivity. Qed.
 
-  Lemma schedule_with_no_focus_nonempty n (v : pool E B (S n)) st :
-    schedule_with sch (S n) v None st ≅
-    br_alts (sched_arity sch n st) (fun a =>
-      Vis (inl1 (Scheduled (slot_index (fst (sched_pick sch n st a)))))
-        (fun _ => schedule_with sch (S n) v (Some (fst (sched_pick sch n st a)))
-                    (snd (sched_pick sch n st a)))).
-  Proof.
-    step; cbn.
-    generalize (sched_pick sch n st); destruct (sched_arity sch n st); intro pick; cbn;
-      constructor; intros; reflexivity.
-  Qed.
-
-  Lemma schedule_with_focused_ret n (v : pool E B (S n)) (i : Fin.t (S n)) st :
+  Lemma schedule_rr_focused_ret n (v : pool E B (S n)) (i : Fin.t (S n)) cursor :
     observe (v $ i) = RetF tt ->
-    observe (schedule_with sch (S n) v (Some i) st) =
-      GuardF (schedule_with sch n (v -- i) None st).
-  Proof. intro Hret; solve_focused_node Hret. Qed.
+    observe (schedule_rr (S n) v (Some i) cursor) =
+      GuardF (schedule_rr n (v -- i) None cursor).
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
 
-  Lemma schedule_with_focused_stuck n (v : pool E B (S n)) (i : Fin.t (S n)) st :
+  Lemma schedule_rr_focused_stuck n (v : pool E B (S n)) (i : Fin.t (S n)) cursor :
     observe (v $ i) = StuckF ->
-    observe (schedule_with sch (S n) v (Some i) st) = StuckF.
-  Proof. intro Hst; solve_focused_node Hst. Qed.
+    observe (schedule_rr (S n) v (Some i) cursor) =
+      StuckF.
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
 
-  Lemma schedule_with_focused_br n (v : pool E B (S n)) (i : Fin.t (S n)) {Y} (c : B Y) k st :
+  Lemma schedule_rr_focused_br n (v : pool E B (S n)) (i : Fin.t (S n)) {Y} (c : B Y) k cursor :
     observe (v $ i) = BrF c k ->
-    observe (schedule_with sch (S n) v (Some i) st) =
-      BrF c (fun j => schedule_with sch (S n) (v @ i := (k j)) (Some i) st).
-  Proof. intro Hbr; solve_focused_node Hbr. Qed.
+    observe (schedule_rr (S n) v (Some i) cursor) =
+      BrF c (fun j => schedule_rr (S n) (v @ i := k j) (Some i) cursor).
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
 
-  Lemma schedule_with_focused_step n (v : pool E B (S n)) (i : Fin.t (S n)) t st :
+  Lemma schedule_rr_focused_step n (v : pool E B (S n)) (i : Fin.t (S n)) t cursor :
     observe (v $ i) = StepF t ->
-    observe (schedule_with sch (S n) v (Some i) st) =
-      StepF (schedule_with sch (S n) (v @ i := t) (Some i) st).
-  Proof. intro Hs; solve_focused_node Hs. Qed.
+    observe (schedule_rr (S n) v (Some i) cursor) =
+      StepF (schedule_rr (S n) (v @ i := t) (Some i) cursor).
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
 
-  Lemma schedule_with_focused_guard n (v : pool E B (S n)) (i : Fin.t (S n)) t st :
+  Lemma schedule_rr_focused_guard n (v : pool E B (S n)) (i : Fin.t (S n)) t cursor :
     observe (v $ i) = GuardF t ->
-    observe (schedule_with sch (S n) v (Some i) st) =
-      GuardF (schedule_with sch (S n) (v @ i := t) (Some i) st).
-  Proof. intro Hg; solve_focused_node Hg. Qed.
+    observe (schedule_rr (S n) v (Some i) cursor) =
+      GuardF (schedule_rr (S n) (v @ i := t) (Some i) cursor).
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
 
-  Lemma schedule_with_focused_yield n (v : pool E B (S n)) (i : Fin.t (S n)) k st :
+  Lemma schedule_rr_focused_yield n (v : pool E B (S n)) (i : Fin.t (S n)) k cursor :
     observe (v $ i) = VisF (inl1 Yield) k ->
-    observe (schedule_with sch (S n) v (Some i) st) =
-      GuardF (schedule_with sch (S n) (v @ i := (k tt)) None st).
-  Proof. intro Hy; solve_focused_node Hy. Qed.
+    observe (schedule_rr (S n) v (Some i) cursor) =
+      GuardF (schedule_rr (S n) (v @ i := k tt) None cursor).
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
 
-  Lemma schedule_with_focused_fork n (v : pool E B (S n)) (i : Fin.t (S n)) k st :
+  Lemma schedule_rr_focused_fork n (v : pool E B (S n)) (i : Fin.t (S n)) k cursor :
     observe (v $ i) = VisF (inr1 (inl1 Fork)) k ->
-    observe (schedule_with sch (S n) v (Some i) st) =
-      GuardF (schedule_with sch (S (S n))
-                ((k true :: (v @ i := (k false)))%vector)
-                (Some (Fin.FS i)) st).
-  Proof. intro Hf; solve_focused_node Hf. Qed.
+    observe (schedule_rr (S n) v (Some i) cursor) =
+      GuardF (schedule_rr (S (S n)) (k true :: (v @ i := k false)) (Some (Fin.FS i)) cursor).
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
 
-  Lemma schedule_with_focused_user_event n (v : pool E B (S n)) (i : Fin.t (S n))
-      {Y} (e : E Y) k st :
+  Lemma schedule_rr_focused_user_event n (v : pool E B (S n)) (i : Fin.t (S n)) {Y} (e : E Y) k cursor :
     observe (v $ i) = VisF (inr1 (inr1 e)) k ->
-    observe (schedule_with sch (S n) v (Some i) st) =
-      VisF (inr1 e : (schedE +' E) Y)
-        (fun x => schedule_with sch (S n) (v @ i := (k x)) (Some i) st).
-  Proof. intro Hu; solve_focused_node Hu. Qed.
-End PolicySchedulerFacts.
+    observe (schedule_rr (S n) v (Some i) cursor) =
+      VisF (inl1 e) (fun x => schedule_rr (S n) (v @ i := k x) (Some i) cursor).
+  Proof. intro Hobs; solve_focused_schedule Hobs. Qed.
 
-(** Round robin offers a single alternative: its scheduling point is one
-    [Scheduled] node, exposed at the [observe] level. *)
-Lemma schedule_with_rr_no_focus {E B : Type -> Type} `{Bn -< B} n (v : pool E B (S n)) m :
-  observe (schedule_with rr_scheduler (S n) v None m) =
-    VisF (inl1 (Scheduled (slot_index (rr_pick n m))))
-      (fun _ => schedule_with rr_scheduler (S n) v (Some (rr_pick n m)) (S m)).
-Proof. reflexivity. Qed.
+  Lemma schedule_no_focus_nonempty n (v : pool E B (S n)) :
+    observe (schedule (S n) v None) =
+      (match n as m return pool E B (S m) -> ctree' (E +' schedE) B unit with
+      | 0 => fun v => VisF (inr1 (Scheduled 0))
+          (fun _ => schedule 1 v (Some Fin.F1))
+      | S m => fun v => BrF (subevent _ (branchn (S (S m))))
+          (fun i => Vis (inr1 (Scheduled (slot_index i)))
+            (fun _ => schedule (S (S m)) v (Some i)))
+      end) v.
+  Proof. destruct n; reflexivity. Qed.
+
+  Lemma schedule_rr_no_focus_nonempty n (v : pool E B (S n)) cursor :
+    observe (schedule_rr (S n) v None cursor) =
+      VisF (inr1 (Scheduled (slot_index (rr_pick n cursor))))
+        (fun _ => schedule_rr (S n) v (Some (rr_pick n cursor)) (S cursor)).
+  Proof. reflexivity. Qed.
+End SchedulerFacts.
 
 (** * Raw instrumentation entry points *)
 
@@ -463,53 +518,10 @@ Definition instr_thread {Σ B X}
     : ctreeW Σ B (Σ * X) :=
   instr_stateE (interp_thread t) σ.
 
-(** Instrument a scheduled pool: erase scheduler [Spawn] and cooperative
-    [Yield] observations, then instrument the residual state effects. *)
+(** Project scheduling selections to silent steps, then instrument user effects. *)
 Definition instr_schedule {Σ B} `{Bn -< B} (n : nat) (v : pool (stateE Σ) B n)
     (focus : option (Fin.t n)) (σ : Σ) : ctreeW Σ B (Σ * unit) :=
-  instr_stateE (interp_yield (interp_spawn (schedule n v focus))) σ.
-
-(** ** Structural [interp] and [equ] equations used by the erasure algebra.
-
-    Thin wrappers over the [ctrees] equations, kept under their TICL names.
-    The handler's result universe is named ([r]) so that [interp] can place it
-    strictly above the event domain; [M] is fixed to keep instance search finite. *)
-Section InterpNodes.
-  Universe r.
-  Context {E F B : Type -> Type} (h : E ~> ctree@{_ _ _ _ r _} F B).
-
-  Lemma interp_ret_node {X} (x : X) :
-    interp (M := ctree F B) h (Ret x : ctree E B X) ≅ Ret x.
-  Proof. apply interp_ret. Qed.
-
-  Lemma interp_stuck_node {X} :
-    interp (M := ctree F B) h (Stuck : ctree E B X) ≅ Stuck.
-  Proof. apply interp_stuck. Qed.
-
-  Lemma interp_guard_node {X} (t : ctree E B X) :
-    interp (M := ctree F B) h (Guard t) ≅ Guard (interp (M := ctree F B) h t).
-  Proof. apply interp_guard. Qed.
-
-  Lemma interp_step_node {X} (t : ctree E B X) :
-    interp (M := ctree F B) h (Step t) ≅ Step (Guard (interp (M := ctree F B) h t)).
-  Proof. apply interp_step. Qed.
-
-  Lemma interp_br_node {X Y} (c : B Y) (k : Y -> ctree E B X) :
-    interp (M := ctree F B) h (Br c k) ≅ Br c (fun i => Guard (interp (M := ctree F B) h (k i))).
-  Proof. rewrite interp_br'; reflexivity. Qed.
-
-  Lemma interp_vis_node {X Y} (e : E Y) (k : Y -> ctree E B X) :
-    interp (M := ctree F B) h (Vis e k) ≅ h _ e >>= (fun x => Guard (interp (M := ctree F B) h (k x))).
-  Proof. apply interp_vis. Qed.
-End InterpNodes.
-
-Lemma guard_equ_node {E B X} (t u : ctree E B X) :
-  t ≅ u -> Guard t ≅ Guard u.
-Proof. apply guard_equ. Qed.
-
-Lemma vis_equ_node {E B X Y} (e : E Y) (k1 k2 : Y -> ctree E B X) :
-  (forall x, k1 x ≅ k2 x) -> Vis e k1 ≅ Vis e k2.
-Proof. intro Hk. step. constructor. exact Hk. Qed.
+  instr_stateE (project_scheduled (schedule n v focus)) σ.
 
 (** ** Composed erasure equations for a single raw thread node. *)
 
@@ -518,14 +530,14 @@ Lemma interp_thread_yield_node {E B X}
   interp_thread (Vis (inl1 Yield) k) ≅ Guard (Guard (interp_thread (k tt))).
 Proof.
   unfold interp_thread, interp_yield.
-  rewrite interp_vis_node.
+  rewrite interp_vis.
   cbn [handle_thread].
   rewrite bind_trigger.
-  rewrite interp_vis_node.
+  rewrite interp_vis.
   cbn [handle_yield].
   rewrite bind_ret_l.
   apply guard_equ_node.
-  rewrite interp_guard_node.
+  rewrite interp_guard.
   reflexivity.
 Qed.
 
@@ -535,15 +547,15 @@ Lemma interp_thread_user_node {E B X Y} (m : E Y)
     ≅ Vis m (fun x => Guard (Guard (interp_thread (k x)))).
 Proof.
   unfold interp_thread, interp_yield.
-  rewrite interp_vis_node.
+  rewrite interp_vis.
   cbn [handle_thread].
   rewrite bind_trigger.
-  rewrite interp_vis_node.
+  rewrite interp_vis.
   cbn [handle_yield].
   rewrite bind_trigger.
   apply vis_equ_node; intro x.
   apply guard_equ_node.
-  rewrite interp_guard_node.
+  rewrite interp_guard.
   reflexivity.
 Qed.
 
@@ -559,7 +571,7 @@ Section ThreadStateInterp.
     interp_state h (interp_thread (Ret x : ctree (yieldE +' (forkE +' E)) B X)) s ≅ Ret (s, x).
   Proof.
     unfold interp_thread, interp_yield.
-    rewrite interp_ret_node, interp_ret_node.
+    rewrite interp_ret, interp_ret.
     apply interp_state_ret.
   Qed.
 
@@ -655,102 +667,38 @@ Proof.
   reflexivity.
 Qed.
 
-(** ** Composed erasure equations for a single scheduled node. *)
-(** [interp_yield (interp_spawn _)] is the erased view of a scheduled pool:
-    scheduler [Spawn] and cooperative [Yield] observations are removed, and the
-    residual user events are preserved. *)
+(** ** Exact equations of the scheduling observation projection. *)
 
-Lemma interp_erase_ret {E B X} (x : X) :
-  interp_yield (interp_spawn (Ret x : ctree (yieldE +' (spawnE +' E)) B X)) ≅ Ret x.
+Lemma project_scheduled_ret {E B X} (x : X) :
+  project_scheduled (Ret x : ctree (E +' schedE) B X) ≅ Ret x.
+Proof. unfold project_scheduled; apply (interp_ret (C:=B) (D:=B) (h:=handle_scheduled_step)). Qed.
+
+Lemma project_scheduled_stuck {E B X} :
+  project_scheduled (Stuck : ctree (E +' schedE) B X) ≅ Stuck.
+Proof. unfold project_scheduled; apply (interp_stuck (C:=B) (D:=B) (h:=handle_scheduled_step)). Qed.
+
+Lemma project_scheduled_guard {E B X} (t : ctree (E +' schedE) B X) :
+  project_scheduled (Guard t) ≅ Guard (project_scheduled t).
+Proof. unfold project_scheduled; apply (interp_guard (C:=B) (D:=B) (h:=handle_scheduled_step)). Qed.
+
+Lemma project_scheduled_step {E B X} (t : ctree (E +' schedE) B X) :
+  project_scheduled (Step t) ≅ Step (Guard (project_scheduled t)).
+Proof. unfold project_scheduled; apply (interp_step (C:=B) (D:=B) (h:=handle_scheduled_step)). Qed.
+
+Lemma project_scheduled_br {E B X Y} (c : B Y) (k : Y -> ctree (E +' schedE) B X) :
+  project_scheduled (Br c k) ≅ Br c (fun x => Guard (project_scheduled (k x))).
+Proof. unfold project_scheduled; rewrite interp_br'; reflexivity. Qed.
+
+Lemma project_scheduled_user {E B X Y} (e : E Y) (k : Y -> ctree (E +' schedE) B X) :
+  project_scheduled (Vis (inl1 e) k) ≅ Vis e (fun x => Guard (project_scheduled (k x))).
 Proof.
-  unfold interp_yield, interp_spawn.
-  rewrite interp_ret_node, interp_ret_node.
-  reflexivity.
+  unfold project_scheduled; rewrite interp_vis; cbn [handle_scheduled_step].
+  rewrite bind_trigger; reflexivity.
 Qed.
 
-Lemma interp_erase_stuck {E B X} :
-  interp_yield (interp_spawn (Stuck : ctree (yieldE +' (spawnE +' E)) B X)) ≅ Stuck.
+Lemma project_scheduled_scheduled {E B X} i (k : unit -> ctree (E +' schedE) B X) :
+  project_scheduled (Vis (inr1 (Scheduled i)) k) ≅ Step (Guard (project_scheduled (k tt))).
 Proof.
-  unfold interp_yield, interp_spawn.
-  rewrite interp_stuck_node, interp_stuck_node.
-  reflexivity.
-Qed.
-
-Lemma interp_erase_guard {E B X}
-    (t : ctree (yieldE +' (spawnE +' E)) B X) :
-  interp_yield (interp_spawn (Guard t)) ≅ Guard (interp_yield (interp_spawn t)).
-Proof.
-  unfold interp_yield, interp_spawn.
-  rewrite interp_guard_node, interp_guard_node.
-  reflexivity.
-Qed.
-
-Lemma interp_erase_step {E B X}
-    (t : ctree (yieldE +' (spawnE +' E)) B X) :
-  interp_yield (interp_spawn (Step t)) ≅ Step (Guard (Guard (interp_yield (interp_spawn t)))).
-Proof.
-  unfold interp_yield, interp_spawn.
-  rewrite interp_step_node, interp_step_node.
-  do 2 (step; constructor).
-  rewrite interp_guard_node.
-  reflexivity.
-Qed.
-
-Lemma interp_erase_br {E B X Y} (c : B Y)
-    (k : Y -> ctree (yieldE +' (spawnE +' E)) B X) :
-  interp_yield (interp_spawn (Br c k))
-    ≅ Br c (fun i => Guard (Guard (interp_yield (interp_spawn (k i))))).
-Proof.
-  unfold interp_yield, interp_spawn.
-  rewrite interp_br_node, interp_br_node.
-  apply br_equ; intro i.
-  apply guard_equ_node, interp_guard_node.
-Qed.
-
-Lemma interp_erase_yield {E B X}
-    (k : unit -> ctree (yieldE +' (spawnE +' E)) B X) :
-  interp_yield (interp_spawn (Vis (inl1 Yield) k))
-    ≅ Guard (Guard (interp_yield (interp_spawn (k tt)))).
-Proof.
-  unfold interp_yield, interp_spawn.
-  rewrite interp_vis_node.
-  cbn [handle_spawn].
-  rewrite bind_trigger.
-  rewrite interp_vis_node.
-  cbn [handle_yield].
-  rewrite bind_ret_l.
-  apply guard_equ_node.
-  rewrite interp_guard_node.
-  reflexivity.
-Qed.
-
-Lemma interp_erase_spawn {E B X}
-    (k : unit -> ctree (yieldE +' (spawnE +' E)) B X) :
-  interp_yield (interp_spawn (Vis (inr1 (inl1 Spawn)) k))
-    ≅ Guard (interp_yield (interp_spawn (k tt))).
-Proof.
-  unfold interp_yield, interp_spawn.
-  rewrite interp_vis_node.
-  cbn [handle_spawn].
-  rewrite bind_ret_l.
-  rewrite interp_guard_node.
-  reflexivity.
-Qed.
-
-Lemma interp_erase_user {E B X Y} (m : E Y)
-    (k : Y -> ctree (yieldE +' (spawnE +' E)) B X) :
-  interp_yield (interp_spawn (Vis (inr1 (inr1 m)) k))
-    ≅ Vis m (fun x => Guard (Guard (interp_yield (interp_spawn (k x))))).
-Proof.
-  unfold interp_yield, interp_spawn.
-  rewrite interp_vis_node.
-  cbn [handle_spawn].
-  rewrite bind_trigger.
-  rewrite interp_vis_node.
-  cbn [handle_yield].
-  rewrite bind_trigger.
-  apply vis_equ_node; intro x.
-  apply guard_equ_node.
-  rewrite interp_guard_node.
-  reflexivity.
+  unfold project_scheduled; rewrite interp_vis; cbn [handle_scheduled_step].
+  rewrite bind_step, bind_ret_l; reflexivity.
 Qed.

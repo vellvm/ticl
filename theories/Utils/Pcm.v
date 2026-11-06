@@ -128,6 +128,15 @@ Section Assertions.
     eauto using peq_sym, peq_trans.
   Qed.
 
+  Lemma asep_pinned (a b : A) (P Q : Prop) :
+    a # b ->
+    (asep (fun x => x ≈ a /\ P) (fun y => y ≈ b /\ Q) (a ⊎ b) <-> P /\ Q).
+  Proof.
+    intro Hd; split.
+    - intros (x & y & _ & _ & (_ & HP) & (_ & HQ)); auto.
+    - intros (HP & HQ); exists a, b; repeat split; auto using peq_refl.
+  Qed.
+
   (** [⋆] is commutative. *)
   Lemma asep_comm: forall P Q a, asep P Q a -> asep Q P a.
   Proof.

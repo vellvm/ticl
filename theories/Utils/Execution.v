@@ -47,6 +47,23 @@ Definition execution_valid {St Act Out}
   initial (states e 0) /\
   forall k, step (selected e k) (states e k) (emitted e k) (states e (S k)).
 
+(** Establish validity and preservation together for generated executions. *)
+Lemma execution_invariant_steps {St Act Out}
+  (step : Act -> St -> Out -> St -> Prop) (Inv : St -> Prop)
+  (e : Execution St Act Out) :
+  Inv (states e 0) ->
+  (forall n, Inv (states e n) ->
+    step (selected e n) (states e n) (emitted e n) (states e (S n)) /\
+    Inv (states e (S n))) ->
+  (forall n, Inv (states e n)) /\
+  (forall n, step (selected e n) (states e n) (emitted e n) (states e (S n))).
+Proof.
+  intros H0 Hstep.
+  assert (HI : forall n, Inv (states e n)).
+  { intro n; induction n as [|n IH]; [exact H0|exact (proj2 (Hstep n IH))]. }
+  split; [exact HI|intro n; exact (proj1 (Hstep n (HI n)))].
+Qed.
+
 (** Every action is chosen infinitely often. *)
 Definition fair_choices {Act} (pick : nat -> Act) : Prop :=
   forall a, infinitely (fun k => pick k = a).
@@ -365,51 +382,120 @@ Section ExecutionWindow.
       as (next' & Hturn' & _).
     rewrite Hsel, Hturn in Hturn'; congruence.
   Qed.
+
+  (** Repeated selected windows follow their successful boundary replays.
+      Related replay endpoints may differ as states, but no failed replay
+      supplies an endpoint.  Empty prefixes and cycles are permitted. *)
+  Lemma execution_script_cycles {C : Type} (e : Execution St Act Out)
+    (pre cycle : list Act) (boundary : C -> St) (c0 : C)
+    (advance : C -> C) (s : St) :
+    Equivalence R ->
+    valid e -> R (states e 0) s ->
+    List.map (selected e) (List.seq 0 (List.length pre)) = pre ->
+    (exists last ws, run_turns step logs pre s = Some (last,ws) /\
+      R last (boundary c0)) ->
+    (forall k, List.map (selected e)
+      (List.seq (List.length pre + k * List.length cycle)
+        (List.length cycle)) = cycle) ->
+    (forall c, exists last ws,
+      run_turns step logs cycle (boundary c) = Some (last,ws) /\
+      R last (boundary (advance c))) ->
+    forall k, R (states e (List.length pre + k * List.length cycle))
+      (boundary (Nat.iter k advance c0)).
+  Proof.
+    intros [_ _ Htrans] Hvalid Hstart Hpre
+      (last & ws & Hrun & Hboundary) Hwindows Hcycle.
+    assert (Hbase : R (states e (List.length pre)) (boundary c0)).
+    { eapply Htrans; [|exact Hboundary].
+      pose proof (execution_script_state e 0 pre s last ws
+        Hvalid Hstart Hpre Hrun) as Hstate.
+      exact Hstate. }
+    intro k; induction k as [|k IH].
+    - replace (List.length pre + 0 * List.length cycle)
+        with (List.length pre) by lia.
+      exact Hbase.
+    - destruct (Hcycle (Nat.iter k advance c0))
+        as (next & observations & Hreplay & Hnext).
+      pose proof (execution_script_state e
+        (List.length pre + k * List.length cycle) cycle
+        (boundary (Nat.iter k advance c0)) next observations
+        Hvalid IH (Hwindows k) Hreplay) as Hstate.
+      rewrite Nat.iter_succ.
+      replace (List.length pre + S k * List.length cycle)
+        with (List.length pre + k * List.length cycle + List.length cycle)
+        by lia.
+      eapply Htrans; [exact Hstate|exact Hnext].
+  Qed.
+
+  (** A boundary self-transition for each future selected action preserves
+      state relatedness.  Its output is existential and may vary each turn;
+      success, rather than a default state on [None], is required. *)
+  Lemma execution_stutters_from (e : Execution St Act Out) start boundary :
+    valid e -> R (states e start) boundary ->
+    (forall n, exists out,
+      step (selected e (start + n)) boundary = Some (boundary,out)) ->
+    forall n, R (states e (start + n)) boundary.
+  Proof.
+    intros Hvalid Hstart Hstutter n; induction n as [|n IH].
+    - now rewrite Nat.add_0_r.
+    - destruct (Hstutter n) as (out & Hout).
+      destruct (execution_turn_observation e (start + n) boundary Hvalid IH)
+        as (next & Hturn & Hnext).
+      rewrite Hout in Hturn.
+      assert (Enext : next = boundary) by congruence; subst next.
+      replace (start + S n) with (S (start + n)) by lia.
+      exact Hnext.
+  Qed.
 End ExecutionWindow.
 
 (** ** Counters and observation indices.
 
-    Generic over a state counter and an observation index, for executions
-    whose output is an optional observation. *)
+    Generic over an output projection, a state counter and an event index.
+    Each turn contributes at most one indexed event. *)
 Section ExecutionCounter.
-  Context {St Act W : Type}
-    (step : Act -> St -> option (St * option W))
+  Context {St Act Out W : Type}
+    (step : Act -> St -> option (St * Out))
     (initial : St -> Prop)
+    (events : Out -> list W)
     (counter : St -> nat) (index : W -> nat).
 
   Abbreviation valid := (execution_valid (fun a s o s' => step a s = Some (s',o)) initial).
 
-  Context (Hcounter : forall a s s' o, step a s = Some (s',o) ->
-    match o with
-    | None => counter s' = counter s
-    | Some w => counter s' = S (counter s) /\ index w = counter s
-    end).
+  Context (Hcounter : forall a s s' out, step a s = Some (s',out) ->
+    List.length (events out) <= 1 /\
+    counter s' = counter s + List.length (events out) /\
+    forall w, In w (events out) -> index w = counter s).
 
-  Lemma execution_event_index (e : Execution St Act (option W)) k w :
-    valid e -> emitted e k = Some w ->
+  Lemma execution_event_index (e : Execution St Act Out) k w :
+    valid e -> In w (events (emitted e k)) ->
     counter (states e (S k)) = S (counter (states e k)) /\
     index w = counter (states e k).
   Proof.
     intros Hvalid Hobs.
-    pose proof (Hcounter (selected e k) (states e k) (states e (S k))
-      (emitted e k) (execution_step step initial e k Hvalid)) as H.
-    now rewrite Hobs in H.
+    destruct (Hcounter (selected e k) (states e k) (states e (S k))
+      (emitted e k) (execution_step step initial e k Hvalid))
+      as (Hlength & Hcount & Hindex).
+    assert (Hnonempty : events (emitted e k) <> []) by
+      (intro E; rewrite E in Hobs; contradiction).
+    assert (Hpositive : 0 < List.length (events (emitted e k))) by
+      (destruct (events (emitted e k)); cbn in *; congruence || lia).
+    split; [lia | now apply Hindex].
   Qed.
 
-  Lemma execution_counter_mono (e : Execution St Act (option W)) lo hi :
+  Lemma execution_counter_mono (e : Execution St Act Out) lo hi :
     valid e -> lo <= hi -> counter (states e lo) <= counter (states e hi).
   Proof.
     intros Hvalid Hle.
     assert (Hstep : forall k, counter (states e k) <= counter (states e (S k))).
-    { intro k; pose proof (Hcounter (selected e k) (states e k) (states e (S k))
-        (emitted e k) (execution_step step initial e k Hvalid)) as H.
-      destruct (emitted e k); cbn in H; intuition lia. }
+    { intro k; destruct (Hcounter (selected e k) (states e k) (states e (S k))
+        (emitted e k) (execution_step step initial e k Hvalid))
+        as (_ & Hcount & _); lia. }
     induction Hle as [|hi Hle IH]; [lia|specialize (Hstep hi); lia].
   Qed.
 
-  Lemma execution_event_order (e : Execution St Act (option W)) k j w p :
+  Lemma execution_event_order (e : Execution St Act Out) k j w p :
     valid e -> k < j ->
-    emitted e k = Some w -> emitted e j = Some p -> index w < index p.
+    In w (events (emitted e k)) -> In p (events (emitted e j)) -> index w < index p.
   Proof.
     intros Hvalid Hkj Hw Hp.
     pose proof (execution_event_index e k w Hvalid Hw) as [Hk Hi].

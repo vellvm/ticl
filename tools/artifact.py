@@ -333,7 +333,7 @@ def inventory(root: Path, baseline: dict[str, Any], results: Path) -> dict[str, 
     client = root / "examples/CSL/Queue/Client.v"
     if client.is_file():
         _, body, _ = lex(client.read_text(encoding="utf-8"))
-        reused = ["iter_equ", "interp_schedule_rr_guard_equ", "guard_equ_equ", "run_rr_two_forks", "qheap_queue_nodes_rep", "new_queue_heap_disjoint", "new_queue_heap_agrees", "interp_rr_new_queue", "interp_rr_new_queue_first", "run_rr_framable", "ticll_csl_frame", "shared_rotate_agaf_pop_rr_fresh", "exact_worker_turn", "qstepN_agree", "frame_preserved"]
+        reused = ["iter_equ", "interp_schedule_rr_guard_equ", "guard_equ_equ", "run_rr_two_forks", "qheap_queue_nodes_rep", "new_queue_heap_disjoint", "new_queue_heap_agrees", "interp_rr_new_queue", "interp_rr_new_queue_first", "run_rr_framable", "ticl_csl_frame", "shared_rotate_agaf_pop_rr_fresh", "exact_worker_turn", "qstepN_agree", "frame_preserved"]
         summary["reused_named_lemmas"] = [name for name in reused if re.search(r"\b" + re.escape(name) + r"\b", body)]
     shared = root / "examples/CSL/Queue/Shared.v"
     if shared.is_file():

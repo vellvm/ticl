@@ -1,10 +1,8 @@
 (** * Nondeterministic scheduling interpretation.
 
-    The parallel of [CTree.Interp.Yield.RoundRobin]: the same [schedule]
-    pool semantics, but every scheduling choice is an actual visible branch
-    ([brS]) instead of a cursor pick.  The handler, effects, branch signature
-    and auxiliary state are arbitrary; no scheduler-policy record is
-    introduced. *)
+    The native pool scheduler records each selected slot.  This program-only
+    view projects that observation to one silent step, then interprets user
+    effects with an arbitrary state handler. *)
 
 From Stdlib Require Import Fin Vector.
 From TICL Require Import
@@ -12,7 +10,6 @@ From TICL Require Import
   CTree.Events.Yield
   CTree.Events.State
   CTree.Events.Writer
-  CTree.Interp.Refine
   CTree.Interp.Yield.Mod
   CTree.Interp.Yield.SBisim
   CTree.Interp.State.Mod
@@ -31,7 +28,7 @@ Section NondeterministicInterpretation.
     (handler : E ~> stateT Sigma (ctree F B))
     (n : nat) (ts : pool E B n) (focus : option (Fin.t n)) (sigma : Sigma)
     : ctree F B (Sigma * unit) :=
-    interp_state handler (interp_yield (interp_spawn (schedule n ts focus))) sigma.
+    interp_state handler (project_scheduled (schedule n ts focus)) sigma.
 
   Lemma interp_schedule_nd_equ
     (handler : E ~> stateT Sigma (ctree F B)) n (ts ts' : pool E B n) focus sigma :
@@ -53,7 +50,7 @@ Section NondeterministicInterpretation.
     assert (Hempty : schedule 0 ts None ≅ Ret tt).
     { rewrite (ctree_eta (schedule 0 ts None)), schedule_empty_none.
       reflexivity. }
-    rewrite Hempty, interp_erase_ret, interp_state_ret; reflexivity.
+    rewrite Hempty, project_scheduled_ret, interp_state_ret; reflexivity.
   Qed.
 
   Lemma interp_schedule_nd_ret
@@ -67,7 +64,7 @@ Section NondeterministicInterpretation.
     assert (Hnode : schedule (S n) ts (Some i) ≅ Guard (schedule n (ts -- i) None)).
     { rewrite (ctree_eta (schedule (S n) ts (Some i))),
         (schedule_focused_ret n ts i Hobs); reflexivity. }
-    rewrite Hnode, interp_erase_guard, interp_state_guard, sb_guard; reflexivity.
+    rewrite Hnode, project_scheduled_guard, interp_state_guard, sb_guard; reflexivity.
   Qed.
 
   Lemma interp_schedule_nd_guard
@@ -82,7 +79,7 @@ Section NondeterministicInterpretation.
       Guard (schedule (S n) (ts @ i := t) (Some i))).
     { rewrite (ctree_eta (schedule (S n) ts (Some i))),
         (schedule_focused_guard n ts i t Hobs); reflexivity. }
-    rewrite Hnode, interp_erase_guard, interp_state_guard, sb_guard; reflexivity.
+    rewrite Hnode, project_scheduled_guard, interp_state_guard, sb_guard; reflexivity.
   Qed.
 
   (** A visible step of the focused thread is one visible step of the pool. *)
@@ -98,10 +95,27 @@ Section NondeterministicInterpretation.
       Step (schedule (S n) (ts @ i := t) (Some i))).
     { rewrite (ctree_eta (schedule (S n) ts (Some i))),
         (schedule_focused_step n ts i t Hobs); reflexivity. }
-    rewrite Hnode, interp_erase_step, interp_state_step.
+    rewrite Hnode, project_scheduled_step, interp_state_step.
     apply sb_step.
-    rewrite sb_guard, interp_state_guard, sb_guard, interp_state_guard, sb_guard.
+    rewrite sb_guard, interp_state_guard, sb_guard.
     reflexivity.
+  Qed.
+
+  (** Program choices remain choices and do not select another pool slot. *)
+  Lemma interp_schedule_nd_br
+    (handler : E ~> stateT Sigma (ctree F B)) n (ts : pool E B (S n))
+    (i : Fin.t (S n)) {Y} (c : B Y) k sigma :
+    observe (ts $ i) = BrF c k ->
+    interp_schedule_nd handler (S n) ts (Some i) sigma ~
+      Br c (fun x => interp_schedule_nd handler (S n) (ts @ i := k x) (Some i) sigma).
+  Proof.
+    intro Hobs; unfold interp_schedule_nd at 1.
+    rewrite (ctree_eta (schedule (S n) ts (Some i))),
+      (schedule_focused_br n ts i c k Hobs).
+    rewrite project_scheduled_br, interp_state_br.
+    change (Monad.bind (mbr ?d) ?f) with (CTree.bind (branch d : ctree F B _) f).
+    rewrite bind_branch; apply sb_br_id; intro x.
+    rewrite sb_guard, interp_state_guard, sb_guard; reflexivity.
   Qed.
 
   Lemma interp_schedule_nd_yield
@@ -116,31 +130,32 @@ Section NondeterministicInterpretation.
       Guard (schedule (S n) (ts @ i := k tt) None)).
     { rewrite (ctree_eta (schedule (S n) ts (Some i))),
         (schedule_focused_yield n ts i k Hobs); reflexivity. }
-    rewrite Hnode, interp_erase_guard, interp_state_guard, sb_guard; reflexivity.
+    rewrite Hnode, project_scheduled_guard, interp_state_guard, sb_guard; reflexivity.
   Qed.
 
-  (** The genuine nondeterministic choice: one visible branch per selection. *)
+  (** The uniform visible-choice law also covers the optimized singleton
+      boundary.  Singleton elimination is performed after both interpreters. *)
   Lemma interp_schedule_nd_select
     (handler : E ~> stateT Sigma (ctree F B)) n (ts : pool E B (S n)) sigma :
     interp_schedule_nd handler (S n) ts None sigma ~
       brS (branchn (S n)) (fun i => interp_schedule_nd handler (S n) ts (Some i) sigma).
   Proof.
     unfold interp_schedule_nd at 1.
-    assert (Hnode : schedule (S n) ts None ≅
-      Vis (inl1 Yield) (fun _ => brS (branchn (S n)) (fun i => schedule (S n) ts (Some i)))).
-    { rewrite (ctree_eta (schedule (S n) ts None)), schedule_no_focus_nonempty.
-      reflexivity. }
-    rewrite Hnode, interp_erase_yield, interp_state_guard, sb_guard,
-      interp_state_guard, sb_guard.
-    rewrite interp_erase_br, interp_state_br.
-    change (Monad.bind (mbr ?c) ?f) with (CTree.bind (branch c : ctree F B _) f).
-    rewrite bind_branch.
-    apply sb_br_id; intro i.
-    rewrite sb_guard, interp_state_guard, sb_guard, interp_state_guard, sb_guard.
-    rewrite interp_erase_step, interp_state_step.
-    apply sb_step.
-    rewrite sb_guard, interp_state_guard, sb_guard, interp_state_guard, sb_guard.
-    reflexivity.
+    rewrite (ctree_eta (schedule (S n) ts None)), schedule_no_focus_nonempty.
+    destruct n as [|n].
+    - rewrite project_scheduled_scheduled, interp_state_step, interp_state_guard.
+      symmetry; apply sb_br_l with (y:=Fin.F1); intro i.
+      assert (Hi : i = Fin.F1) by (dependent destruction i; [reflexivity|inversion i]).
+      subst i; apply sb_step; rewrite !sb_guard; reflexivity.
+    - rewrite project_scheduled_br, interp_state_br.
+      change (Monad.bind (mbr ?c) ?f) with (CTree.bind (branch c : ctree F B _) f).
+      rewrite bind_branch.
+      apply sb_br_id; intro i.
+      rewrite sb_guard, interp_state_guard, sb_guard.
+      rewrite project_scheduled_scheduled, interp_state_step.
+      apply sb_step.
+      rewrite sb_guard, interp_state_guard, sb_guard.
+      reflexivity.
   Qed.
 
   Lemma interp_schedule_nd_fork
@@ -153,11 +168,10 @@ Section NondeterministicInterpretation.
   Proof.
     intro Hobs; unfold interp_schedule_nd at 1.
     assert (Hnode : schedule (S n) ts (Some i) ≅
-      Vis (inr1 (inl1 Spawn)) (fun _ =>
-        schedule (S (S n)) (k true :: (ts @ i := k false)) (Some (Fin.FS i)))).
+      Guard (schedule (S (S n)) (k true :: (ts @ i := k false)) (Some (Fin.FS i)))).
     { rewrite (ctree_eta (schedule (S n) ts (Some i))),
         (schedule_focused_fork n ts i k Hobs); reflexivity. }
-    rewrite Hnode, interp_erase_spawn, interp_state_guard, sb_guard; reflexivity.
+    rewrite Hnode, project_scheduled_guard, interp_state_guard, sb_guard; reflexivity.
   Qed.
 
   Lemma interp_schedule_nd_user
@@ -170,13 +184,13 @@ Section NondeterministicInterpretation.
   Proof.
     intro Hobs; unfold interp_schedule_nd at 1.
     assert (Hnode : schedule (S n) ts (Some i) ≅
-      Vis (inr1 (inr1 e) : (yieldE +' (spawnE +' E)) Y)
+      Vis (inl1 e : (E +' schedE) Y)
         (fun x => schedule (S n) (ts @ i := k x) (Some i))).
     { rewrite (ctree_eta (schedule (S n) ts (Some i))),
         (schedule_focused_user_event n ts i e k Hobs); reflexivity. }
-    rewrite Hnode, interp_erase_user, interp_state_vis.
+    rewrite Hnode, project_scheduled_user, interp_state_vis.
     __upto_bind_sbisim_eq; intros [sigma' x]; cbn.
-    rewrite sb_guard, interp_state_guard, sb_guard, interp_state_guard, sb_guard.
+    rewrite sb_guard, interp_state_guard, sb_guard.
     reflexivity.
   Qed.
 
@@ -198,7 +212,7 @@ Section NondeterministicInterpretation.
     { rewrite (ctree_eta (schedule (S n) (ts @ i := Stuck) (Some i))),
         (schedule_focused_stuck n (ts @ i := Stuck) i)
         by (rewrite Vector.nth_replace_eq; reflexivity); reflexivity. }
-    rewrite Hnode, interp_erase_stuck, interp_state_stuck; reflexivity.
+    rewrite Hnode, project_scheduled_stuck, interp_state_stuck; reflexivity.
   Qed.
 
   (** Keep one scheduler continuation fixed while interpreting a raw user event. *)

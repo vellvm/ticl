@@ -5,6 +5,8 @@ From TICL Require Import Utils.Execution.
 From Stdlib Require Import Classes.Morphisms.
 From TICL Require Import
   Lang.CoCSL.Mod
+  Lang.CoCSL.Frame
+  Lang.CoCSL.Sequential
   CTree.Core
   CTree.Events.Writer
   CTree.Events.Yield
@@ -94,19 +96,20 @@ Definition source_pool0 base : pool sE Bn 3 :=
   [denote (remote_client base true); denote (remote_client base false);
    denote (CUntilNone (owner_round base))]%vector.
 Definition state_agrees (sigma : SSig) (s : AState) : Prop :=
-  heq (fst (fst sigma)) (aheap s) /\ csl_counter sigma = acount s.
+  heq (fst (fst sigma)) (aheap s) /\
+  heq (snd (fst sigma)) (aallocs s) /\ csl_counter sigma = acount s.
 
 
 Definition source_reheap (sigma : SSig) (s : AState) : AState :=
-  {| aheap := fst (fst sigma); acount := csl_counter sigma;
+  {| aheap := fst (fst sigma); aallocs := snd (fst sigma); acount := csl_counter sigma;
      owner_state := owner_state s;
      remote0_state := remote0_state s; remote1_state := remote1_state s |}.
 
 Lemma state_agrees_reheap sigma s :
   state_agrees sigma s -> state_equiv s (source_reheap sigma s).
 Proof.
-  intros [Hh Hc]; unfold state_equiv, source_reheap; cbn.
-  split; [now apply heq_sym|]; repeat split; congruence.
+  intros [Hh [Ha Hc]]; unfold state_equiv, source_reheap; cbn.
+  do 2 (split; [now apply heq_sym|]); repeat split; congruence.
 Qed.
 
 Lemma source_pool0_initial capacity c :
@@ -115,25 +118,106 @@ Proof. apply pool_equ_refl. Qed.
 
 
 
+Lemma init_links_yield_fork_free first count :
+  yield_fork_free (init_links first count).
+Proof.
+  apply write_list_yield_fork_free.
+Qed.
+
+Lemma init_page_yield_fork_free base capacity :
+  yield_fork_free (init_page base capacity).
+Proof.
+  unfold init_page; cbn [yield_fork_free prog_ok user_only].
+  do 5 (split; [exact I|intros []]).
+  apply init_links_yield_fork_free.
+Qed.
+
+Definition init_links_logs {A} (first count : nat) (memory : ManagedHeap)
+  : list (CSLObs A) :=
+  write_snapshots (link_updates first count) memory.
+
+Definition init_page_logs {A} (base capacity : nat) (memory : ManagedHeap)
+  : list (CSLObs A) :=
+  let al := snd memory in
+  let h1 := upd (fst memory) (remote_head base) 0 in
+  let h2 := upd h1 (drain_head base) 0 in
+  let h3 := upd h2 (mailbox base false) 0 in
+  let h4 := upd h3 (mailbox base true) 0 in
+  let h5 := upd h4 (local_head base)
+    (match capacity with 0 => 0 | S _ => base + 5 end) in
+  [CSLHeap (h1,al); CSLHeap (h2,al); CSLHeap (h3,al);
+   CSLHeap (h4,al); CSLHeap (h5,al)] ++
+    init_links_logs (base + 5) capacity (h5,al).
+
+Definition new_page_logs {A} (base capacity : nat) (memory : ManagedHeap)
+  : list (CSLObs A) :=
+  let allocated := managed_alloc memory base (page_size capacity) in
+  CSLHeap allocated :: init_page_logs base capacity allocated.
+
+Lemma init_links_logs_length {A} first count memory :
+  List.length (@init_links_logs A first count memory) = count.
+Proof.
+  unfold init_links_logs; rewrite write_snapshots_length.
+  apply link_updates_length.
+Qed.
+
+Lemma init_page_logs_length {A} base capacity memory :
+  List.length (@init_page_logs A base capacity memory) = 5 + capacity.
+Proof. unfold init_page_logs; rewrite List.app_length, init_links_logs_length; reflexivity. Qed.
+
+Lemma new_page_logs_length {A} base capacity memory :
+  List.length (@new_page_logs A base capacity memory) = 6 + capacity.
+Proof. unfold new_page_logs; cbn [List.length]; rewrite init_page_logs_length; reflexivity. Qed.
+
+Lemma instr_flow_init_links first count h allocs ctx c :
+  (forall offset, Nat.lt offset (2 * count) ->
+    h (first + offset)%nat <> None) ->
+  instr_flow_erased (init_links first count) ((h,allocs),(ctx,c)) ~
+  emit_list (init_links_logs first count (h,allocs))
+    (Ret (((init_links_heap first count h,allocs),(ctx,c)),Some tt)
+      : ctreeW (CSLObs (nat * nat)) Bn (SSig * option unit)).
+Proof.
+  intro Allocated; unfold init_links, init_links_logs, init_links_heap.
+  apply instr_flow_write_list.
+  intros a v Hin; apply in_combine_l in Hin.
+  apply node_addrs_in in Hin as (j & Hj & ->).
+  apply Allocated; lia.
+Qed.
+
+Lemma instr_flow_init_page base capacity h allocs ctx c :
+  instr_flow_erased (init_page base capacity)
+    ((hunion (hblock base (page_size capacity)) h,allocs),(ctx,c)) ~
+  emit_list (init_page_logs base capacity (hunion (hblock base (page_size capacity)) h,allocs))
+    (Ret (((page_heap base capacity h,allocs),(ctx,c)),Some tt)
+      : ctreeW (CSLObs (nat * nat)) Bn (SSig * option unit)).
+Proof.
+  unfold init_page, page_heap, init_page_logs.
+  cbn [List.app].
+  do 5 (rewrite instr_flow_write by
+    (cbn [csl_memory fst snd]; repeat apply upd_mono;
+     rewrite page_backing_in by
+       (unfold remote_head, drain_head, mailbox, local_head, page_size; lia);
+     discriminate);
+    cbn [csl_memory fst snd]; rewrite emit_list_cons;
+    unfold log; rewrite bind_vis; setoid_rewrite bind_ret_l;
+    apply sb_vis; intros []).
+  apply instr_flow_init_links; intros offset O; repeat apply upd_mono.
+  rewrite page_backing_in by (unfold page_size; lia); discriminate.
+Qed.
+
 Lemma interp_rr_init_links n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   first count (K : option unit -> thread sE Bn) m h allocs ctx c :
   (forall offset, Nat.lt offset (2 * count) ->
     h (first + offset)%nat <> None) ->
   interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (init_links first count) >>= K)) (Some i) m ((h,allocs),(ctx,c)) ~
-  interp_schedule_rr sh (S n) (ts @ i := K (Some tt))
-    (Some i) m ((init_links_heap first count h,allocs),(ctx,c)).
+  emit_list (List.map inl (init_links_logs first count (h,allocs)))
+    (interp_schedule_rr sh (S n) (ts @ i := K (Some tt))
+      (Some i) m ((init_links_heap first count h,allocs),(ctx,c))).
 Proof.
-  revert first h; induction count as [|count IH]; intros first h Allocated.
-  - cbn [init_links init_links_heap]; rewrite interp_rr_ret; reflexivity.
-  - cbn [init_links init_links_heap]; rewrite interp_rr_bind.
-    etransitivity.
-    + apply interp_rr_write_present.
-      specialize (Allocated 0 ltac:(cbn; lia)).
-      now rewrite Nat.add_0_r in Allocated.
-    + apply IH; intros offset O; apply upd_mono.
-      replace (first + 2 + offset)%nat with (first + (2 + offset))%nat by lia.
-      apply Allocated; cbn; lia.
+  intro Allocated.
+  apply interp_fair_sequential; [apply init_links_yield_fork_free |].
+  apply instr_flow_init_links; exact Allocated.
 Qed.
 
 Lemma interp_nd_init_links n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
@@ -142,19 +226,14 @@ Lemma interp_nd_init_links n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
     h (first + offset)%nat <> None) ->
   interp_schedule_nd sh (S n)
     (ts @ i := (denote_flow (init_links first count) >>= K)) (Some i) ((h,allocs),(ctx,c)) ~
-  interp_schedule_nd sh (S n) (ts @ i := K (Some tt))
-    (Some i) ((init_links_heap first count h,allocs),(ctx,c)).
+  emit_list (init_links_logs first count (h,allocs))
+    (interp_schedule_nd sh (S n) (ts @ i := K (Some tt))
+      (Some i) ((init_links_heap first count h,allocs),(ctx,c))).
 Proof.
-  revert first h; induction count as [|count IH]; intros first h Allocated.
-  - cbn [init_links init_links_heap]; rewrite interp_nd_source_ret; reflexivity.
-  - cbn [init_links init_links_heap]; rewrite interp_nd_source_bind.
-    etransitivity.
-    + apply interp_nd_source_write_present.
-      specialize (Allocated 0 ltac:(cbn; lia)).
-      now rewrite Nat.add_0_r in Allocated.
-    + apply IH; intros offset O; apply upd_mono.
-      replace (first + 2 + offset)%nat with (first + (2 + offset))%nat by lia.
-      apply Allocated; cbn; lia.
+  intro Allocated.
+  rewrite run_nd_prefix by apply init_links_yield_fork_free.
+  rewrite instr_flow_init_links by exact Allocated.
+  rewrite emit_list_ret_bind; reflexivity.
 Qed.
 
 (** The starting heap is the actual allocation overlay.  In particular the
@@ -165,19 +244,12 @@ Lemma interp_rr_init_page n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (init_page base capacity) >>= K))
     (Some i) m ((hunion (hblock base (page_size capacity)) h,allocs),(ctx,c)) ~
-  interp_schedule_rr sh (S n) (ts @ i := K (Some tt))
-    (Some i) m ((page_heap base capacity h,allocs),(ctx,c)).
+  emit_list (List.map inl (init_page_logs base capacity (hunion (hblock base (page_size capacity)) h,allocs)))
+    (interp_schedule_rr sh (S n) (ts @ i := K (Some tt))
+      (Some i) m ((page_heap base capacity h,allocs),(ctx,c))).
 Proof.
-  unfold init_page, page_heap.
-  do 5 (rewrite interp_rr_bind; etransitivity;
-    [apply interp_rr_write_present;
-      repeat apply upd_mono;
-      rewrite page_backing_in by
-        (unfold remote_head, drain_head, mailbox, local_head, page_size; lia);
-      discriminate |]).
-  apply interp_rr_init_links; intros offset O.
-  repeat apply upd_mono.
-  rewrite page_backing_in by (unfold page_size; lia); discriminate.
+  apply interp_fair_sequential; [apply init_page_yield_fork_free |].
+  apply instr_flow_init_page.
 Qed.
 
 Lemma interp_nd_init_page n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
@@ -185,19 +257,12 @@ Lemma interp_nd_init_page n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   interp_schedule_nd sh (S n)
     (ts @ i := (denote_flow (init_page base capacity) >>= K))
     (Some i) ((hunion (hblock base (page_size capacity)) h,allocs),(ctx,c)) ~
-  interp_schedule_nd sh (S n) (ts @ i := K (Some tt))
-    (Some i) ((page_heap base capacity h,allocs),(ctx,c)).
+  emit_list (init_page_logs base capacity (hunion (hblock base (page_size capacity)) h,allocs))
+    (interp_schedule_nd sh (S n) (ts @ i := K (Some tt))
+      (Some i) ((page_heap base capacity h,allocs),(ctx,c))).
 Proof.
-  unfold init_page, page_heap.
-  do 5 (rewrite interp_nd_source_bind; etransitivity;
-    [apply interp_nd_source_write_present;
-      repeat apply upd_mono;
-      rewrite page_backing_in by
-        (unfold remote_head, drain_head, mailbox, local_head, page_size; lia);
-      discriminate |]).
-  apply interp_nd_init_links; intros offset O.
-  repeat apply upd_mono.
-  rewrite page_backing_in by (unfold page_size; lia); discriminate.
+  rewrite run_nd_prefix by apply init_page_yield_fork_free.
+  rewrite instr_flow_init_page, emit_list_ret_bind; reflexivity.
 Qed.
 
 (** A first-fit equation is separated from the finite-heap existence proof,
@@ -210,16 +275,20 @@ Lemma interp_rr_new_page_first n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
     ~ block_free h j (page_size capacity)) ->
   interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (new_page capacity) >>= K)) (Some i) m ((h,allocs),(ctx,c)) ~
-  interp_schedule_rr sh (S n) (ts @ i := K (Some base))
-    (Some i) m ((page_heap base capacity h,upd allocs base (page_size capacity)),(ctx,c)).
+  emit_list (List.map inl (new_page_logs base capacity (h,allocs)))
+    (interp_schedule_rr sh (S n) (ts @ i := K (Some base))
+      (Some i) m ((page_heap base capacity h,upd allocs base (page_size capacity)),(ctx,c))).
 Proof.
   intros Positive Free First.
   unfold new_page; rewrite interp_rr_bind.
   rewrite interp_rr_alloc_first with (base:=base) by
     (try apply page_size_positive; assumption).
-  rewrite interp_rr_bind; etransitivity.
-  - apply interp_rr_init_page.
-  - rewrite interp_rr_ret; reflexivity.
+  unfold new_page_logs; cbn [List.map]; rewrite emit_list_cons.
+  unfold log; rewrite bind_vis; setoid_rewrite bind_ret_l.
+  apply sb_vis; intros [].
+  unfold managed_alloc; cbn [fst snd].
+  rewrite interp_rr_bind, interp_rr_init_page.
+  apply emit_list_sbisim; rewrite interp_rr_ret; reflexivity.
 Qed.
 
 Lemma interp_nd_new_page_first n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
@@ -229,16 +298,20 @@ Lemma interp_nd_new_page_first n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
     ~ block_free h j (page_size capacity)) ->
   interp_schedule_nd sh (S n)
     (ts @ i := (denote_flow (new_page capacity) >>= K)) (Some i) ((h,allocs),(ctx,c)) ~
-  interp_schedule_nd sh (S n) (ts @ i := K (Some base))
-    (Some i) ((page_heap base capacity h,upd allocs base (page_size capacity)),(ctx,c)).
+  emit_list (new_page_logs base capacity (h,allocs))
+    (interp_schedule_nd sh (S n) (ts @ i := K (Some base))
+      (Some i) ((page_heap base capacity h,upd allocs base (page_size capacity)),(ctx,c))).
 Proof.
   intros Positive Free First.
   unfold new_page; rewrite interp_nd_source_bind.
   rewrite interp_nd_source_alloc_first with (base:=base) by
     (try apply page_size_positive; assumption).
-  rewrite interp_nd_source_bind; etransitivity.
-  - apply interp_nd_init_page.
-  - rewrite interp_nd_source_ret; reflexivity.
+  unfold new_page_logs; rewrite emit_list_cons.
+  unfold log; rewrite bind_vis; setoid_rewrite bind_ret_l.
+  apply sb_vis; intros [].
+  unfold managed_alloc; cbn [fst snd].
+  rewrite interp_nd_source_bind, interp_nd_init_page.
+  apply emit_list_sbisim; rewrite interp_nd_source_ret; reflexivity.
 Qed.
 
 Lemma interp_rr_new_page n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
@@ -252,8 +325,9 @@ Lemma interp_rr_new_page n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
     (forall x, h x <> None -> page_heap base capacity h x = h x) /\
     interp_schedule_rr sh (S n)
       (ts @ i := (denote_flow (new_page capacity) >>= K)) (Some i) m ((h,allocs),(ctx,c)) ~
-    interp_schedule_rr sh (S n) (ts @ i := K (Some base))
-      (Some i) m ((page_heap base capacity h,upd allocs base (page_size capacity)),(ctx,c)).
+    emit_list (List.map inl (new_page_logs base capacity (h,allocs)))
+      (interp_schedule_rr sh (S n) (ts @ i := K (Some base))
+        (Some i) m ((page_heap base capacity h,upd allocs base (page_size capacity)),(ctx,c))).
 Proof.
   intro Finite.
   destruct (first_fit_exists h (page_size capacity) Finite
@@ -275,8 +349,9 @@ Lemma interp_nd_new_page n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
     (forall x, h x <> None -> page_heap base capacity h x = h x) /\
     interp_schedule_nd sh (S n)
       (ts @ i := (denote_flow (new_page capacity) >>= K)) (Some i) ((h,allocs),(ctx,c)) ~
-    interp_schedule_nd sh (S n) (ts @ i := K (Some base))
-      (Some i) ((page_heap base capacity h,upd allocs base (page_size capacity)),(ctx,c)).
+    emit_list (new_page_logs base capacity (h,allocs))
+      (interp_schedule_nd sh (S n) (ts @ i := K (Some base))
+        (Some i) ((page_heap base capacity h,upd allocs base (page_size capacity)),(ctx,c))).
 Proof.
   intro Finite.
   destruct (first_fit_exists h (page_size capacity) Finite
@@ -294,8 +369,9 @@ Lemma interp_rr_new_page_hemp n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   capacity (K : option nat -> thread sE Bn) m ctx c :
   interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (new_page capacity) >>= K)) (Some i) m (managed_empty,(ctx,c)) ~
-  interp_schedule_rr sh (S n) (ts @ i := K (Some 1))
-    (Some i) m ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c)).
+  emit_list (List.map inl (new_page_logs 1 capacity managed_empty))
+    (interp_schedule_rr sh (S n) (ts @ i := K (Some 1))
+      (Some i) m ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c))).
 Proof.
   apply interp_rr_new_page_first.
   - lia.
@@ -307,8 +383,9 @@ Lemma interp_nd_new_page_hemp n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   capacity (K : option nat -> thread sE Bn) ctx c :
   interp_schedule_nd sh (S n)
     (ts @ i := (denote_flow (new_page capacity) >>= K)) (Some i) (managed_empty,(ctx,c)) ~
-  interp_schedule_nd sh (S n) (ts @ i := K (Some 1))
-    (Some i) ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c)).
+  emit_list (new_page_logs 1 capacity managed_empty)
+    (interp_schedule_nd sh (S n) (ts @ i := K (Some 1))
+      (Some i) ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c))).
 Proof.
   apply interp_nd_new_page_first.
   - lia.
@@ -326,11 +403,12 @@ Lemma interp_rr_new_page_read n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CBind (new_page capacity)
       (fun base => CRead (address base))) >>= K)) (Some i) m (managed_empty,(ctx,c)) ~
-  interp_schedule_rr sh (S n) (ts @ i := K (Some value))
-    (Some i) m ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c)).
+  emit_list (List.map inl (new_page_logs 1 capacity managed_empty))
+    (interp_schedule_rr sh (S n) (ts @ i := K (Some value))
+      (Some i) m ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c))).
 Proof.
   intro Lookup; rewrite interp_rr_bind, interp_rr_new_page_hemp.
-  apply interp_rr_read_value; exact Lookup.
+  apply emit_list_sbisim, interp_rr_read_value; exact Lookup.
 Qed.
 
 Lemma interp_nd_new_page_read n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
@@ -339,11 +417,12 @@ Lemma interp_nd_new_page_read n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   interp_schedule_nd sh (S n)
     (ts @ i := (denote_flow (CBind (new_page capacity)
       (fun base => CRead (address base))) >>= K)) (Some i) (managed_empty,(ctx,c)) ~
-  interp_schedule_nd sh (S n) (ts @ i := K (Some value))
-    (Some i) ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c)).
+  emit_list (new_page_logs 1 capacity managed_empty)
+    (interp_schedule_nd sh (S n) (ts @ i := K (Some value))
+      (Some i) ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c))).
 Proof.
   intro Lookup; rewrite interp_nd_source_bind, interp_nd_new_page_hemp.
-  apply interp_nd_source_read_value; exact Lookup.
+  apply emit_list_sbisim, interp_nd_source_read_value; exact Lookup.
 Qed.
 
 Lemma interp_rr_new_page_read_missing n
@@ -353,10 +432,11 @@ Lemma interp_rr_new_page_read_missing n
   interp_schedule_rr sh (S n)
     (ts @ i := (denote_flow (CBind (new_page capacity)
       (fun base => CRead (address base))) >>= K)) (Some i) m (managed_empty,(ctx,c)) ~
-    (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
+    emit_list (List.map inl (new_page_logs 1 capacity managed_empty))
+      (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
 Proof.
   intro Missing; rewrite interp_rr_bind, interp_rr_new_page_hemp.
-  apply interp_rr_read_missing; exact Missing.
+  apply emit_list_sbisim, interp_rr_read_missing; exact Missing.
 Qed.
 
 Lemma interp_nd_new_page_read_missing n
@@ -366,28 +446,33 @@ Lemma interp_nd_new_page_read_missing n
   interp_schedule_nd sh (S n)
     (ts @ i := (denote_flow (CBind (new_page capacity)
       (fun base => CRead (address base))) >>= K)) (Some i) (managed_empty,(ctx,c)) ~
-    (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+    emit_list (new_page_logs 1 capacity managed_empty)
+      (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   intro Missing; rewrite interp_nd_source_bind, interp_nd_new_page_hemp.
-  apply interp_nd_source_read_missing; exact Missing.
+  apply emit_list_sbisim, interp_nd_source_read_missing; exact Missing.
 Qed.
 
 (** The children are the actual scoped-fork children: their [None] branch
     terminates rather than running the parent's remaining initialization.
-    Parent focus advances twice, but its cursor is unchanged until selection. *)
+    Parent focus advances twice, but its cursor is unchanged until selection;
+    all initialization snapshots are retained under [inl]. *)
 Theorem run_rr_allocator_initialized capacity ctx c :
   run_rr (allocator_program capacity) (managed_empty,(ctx,c)) ~
-    interp_schedule_rr sh 3 (source_pool0 1) None 0
-      ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c)).
+    emit_list (List.map inl (new_page_logs 1 capacity managed_empty))
+      (interp_schedule_rr sh 3 (source_pool0 1) None 0
+        ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c))).
 Proof.
   unfold run_rr.
   change (interp_schedule_rr sh 1
     ([Ret tt]%vector @ Fin.F1 :=
       (denote_flow (allocator_program capacity) >>= fun _ => Ret tt))
     (Some Fin.F1) 0 (managed_empty,(ctx,c)) ~
-    interp_schedule_rr sh 3 (source_pool0 1) None 0
-      ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c))).
+    emit_list (List.map inl (new_page_logs 1 capacity managed_empty))
+      (interp_schedule_rr sh 3 (source_pool0 1) None 0
+        ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c)))).
   unfold allocator_program; rewrite interp_rr_bind, interp_rr_new_page_hemp.
+  apply emit_list_sbisim.
   rewrite interp_rr_bind, interp_rr_fork.
   change (interp_schedule_rr sh 2
     ([denote (remote_client 1 false); Ret tt]%vector @ Fin.FS Fin.F1 :=
@@ -409,7 +494,7 @@ Proof.
   unfold owner; rewrite interp_rr_bind, interp_rr_yield; reflexivity.
 Qed.
 
-(** The same startup on the scheduler-generic instrumented runner. *)
+(** The same snapshot-preserving startup for any instrumented scheduler. *)
 
 Lemma interp_fair_init_links sch n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   first count (K : option unit -> thread sE Bn) st h allocs ctx c :
@@ -417,19 +502,13 @@ Lemma interp_fair_init_links sch n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
     h (first + offset)%nat <> None) ->
   interp_schedule_fair sch sh (S n)
     (ts @ i := (denote_flow (init_links first count) >>= K)) (Some i) st ((h,allocs),(ctx,c)) ~
-  interp_schedule_fair sch sh (S n) (ts @ i := K (Some tt))
-    (Some i) st ((init_links_heap first count h,allocs),(ctx,c)).
+  emit_list (List.map inl (init_links_logs first count (h,allocs)))
+    (interp_schedule_fair sch sh (S n) (ts @ i := K (Some tt))
+      (Some i) st ((init_links_heap first count h,allocs),(ctx,c))).
 Proof.
-  revert first h; induction count as [|count IH]; intros first h Allocated.
-  - cbn [init_links init_links_heap]; rewrite interp_fair_ret; reflexivity.
-  - cbn [init_links init_links_heap]; rewrite interp_fair_bind.
-    etransitivity.
-    + apply interp_fair_write_present.
-      specialize (Allocated 0 ltac:(cbn; lia)).
-      now rewrite Nat.add_0_r in Allocated.
-    + apply IH; intros offset O; apply upd_mono.
-      replace (first + 2 + offset)%nat with (first + (2 + offset))%nat by lia.
-      apply Allocated; cbn; lia.
+  intro Allocated.
+  apply interp_fair_sequential; [apply init_links_yield_fork_free |].
+  apply instr_flow_init_links; exact Allocated.
 Qed.
 
 Lemma interp_fair_init_page sch n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
@@ -437,19 +516,13 @@ Lemma interp_fair_init_page sch n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   interp_schedule_fair sch sh (S n)
     (ts @ i := (denote_flow (init_page base capacity) >>= K))
     (Some i) st ((hunion (hblock base (page_size capacity)) h,allocs),(ctx,c)) ~
-  interp_schedule_fair sch sh (S n) (ts @ i := K (Some tt))
-    (Some i) st ((page_heap base capacity h,allocs),(ctx,c)).
+  emit_list (List.map inl
+    (init_page_logs base capacity (hunion (hblock base (page_size capacity)) h,allocs)))
+    (interp_schedule_fair sch sh (S n) (ts @ i := K (Some tt))
+      (Some i) st ((page_heap base capacity h,allocs),(ctx,c))).
 Proof.
-  unfold init_page, page_heap.
-  do 5 (rewrite interp_fair_bind; etransitivity;
-    [apply interp_fair_write_present;
-      repeat apply upd_mono;
-      rewrite page_backing_in by
-        (unfold remote_head, drain_head, mailbox, local_head, page_size; lia);
-      discriminate |]).
-  apply interp_fair_init_links; intros offset O.
-  repeat apply upd_mono.
-  rewrite page_backing_in by (unfold page_size; lia); discriminate.
+  apply interp_fair_sequential; [apply init_page_yield_fork_free |].
+  apply instr_flow_init_page.
 Qed.
 
 Lemma interp_fair_new_page_first sch n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
@@ -459,24 +532,29 @@ Lemma interp_fair_new_page_first sch n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
     ~ block_free h j (page_size capacity)) ->
   interp_schedule_fair sch sh (S n)
     (ts @ i := (denote_flow (new_page capacity) >>= K)) (Some i) st ((h,allocs),(ctx,c)) ~
-  interp_schedule_fair sch sh (S n) (ts @ i := K (Some base))
-    (Some i) st ((page_heap base capacity h,upd allocs base (page_size capacity)),(ctx,c)).
+  emit_list (List.map inl (new_page_logs base capacity (h,allocs)))
+    (interp_schedule_fair sch sh (S n) (ts @ i := K (Some base))
+      (Some i) st ((page_heap base capacity h,upd allocs base (page_size capacity)),(ctx,c))).
 Proof.
   intros Positive Free First.
   unfold new_page; rewrite interp_fair_bind.
   rewrite interp_fair_alloc_first with (base:=base) by
     (try apply page_size_positive; assumption).
-  rewrite interp_fair_bind; etransitivity.
-  - apply interp_fair_init_page.
-  - rewrite interp_fair_ret; reflexivity.
+  unfold new_page_logs; cbn [List.map]; rewrite emit_list_cons.
+  unfold log; rewrite bind_vis; setoid_rewrite bind_ret_l.
+  apply sb_vis; intros [].
+  unfold managed_alloc; cbn [fst snd].
+  rewrite interp_fair_bind, interp_fair_init_page.
+  apply emit_list_sbisim; rewrite interp_fair_ret; reflexivity.
 Qed.
 
 Lemma interp_fair_new_page_hemp sch n (ts : pool sE Bn (S n)) (i : Fin.t (S n))
   capacity (K : option nat -> thread sE Bn) st ctx c :
   interp_schedule_fair sch sh (S n)
     (ts @ i := (denote_flow (new_page capacity) >>= K)) (Some i) st (managed_empty,(ctx,c)) ~
-  interp_schedule_fair sch sh (S n) (ts @ i := K (Some 1))
-    (Some i) st ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c)).
+  emit_list (List.map inl (new_page_logs 1 capacity managed_empty))
+    (interp_schedule_fair sch sh (S n) (ts @ i := K (Some 1))
+      (Some i) st ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c))).
 Proof.
   apply interp_fair_new_page_first.
   - lia.
@@ -486,17 +564,20 @@ Qed.
 
 Theorem run_fair_allocator_initialized sch capacity st ctx c :
   run_fair sch (allocator_program capacity) st (managed_empty,(ctx,c)) ~
-    interp_schedule_fair sch sh 3 (source_pool0 1) None st
-      ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c)).
+    emit_list (List.map inl (new_page_logs 1 capacity managed_empty))
+      (interp_schedule_fair sch sh 3 (source_pool0 1) None st
+        ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c))).
 Proof.
   unfold run_fair, run_fair_pool.
   change (interp_schedule_fair sch sh 1
     ([Ret tt]%vector @ Fin.F1 :=
       (denote_flow (allocator_program capacity) >>= fun _ => Ret tt))
     (Some Fin.F1) st (managed_empty,(ctx,c)) ~
-    interp_schedule_fair sch sh 3 (source_pool0 1) None st
-      ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c))).
+    emit_list (List.map inl (new_page_logs 1 capacity managed_empty))
+      (interp_schedule_fair sch sh 3 (source_pool0 1) None st
+        ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c)))).
   unfold allocator_program; rewrite interp_fair_bind, interp_fair_new_page_hemp.
+  apply emit_list_sbisim.
   rewrite interp_fair_bind, interp_fair_fork.
   change (interp_schedule_fair sch sh 2
     ([denote (remote_client 1 false); Ret tt]%vector @ Fin.FS Fin.F1 :=
@@ -520,17 +601,20 @@ Qed.
 
 Theorem run_nd_allocator_initialized capacity ctx c :
   run_nd (allocator_program capacity) (managed_empty,(ctx,c)) ~
-    interp_schedule_nd sh 3 (source_pool0 1) None
-      ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c)).
+    emit_list (new_page_logs 1 capacity managed_empty)
+      (interp_schedule_nd sh 3 (source_pool0 1) None
+        ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c))).
 Proof.
   unfold run_nd.
   change (interp_schedule_nd sh 1
     ([Ret tt]%vector @ Fin.F1 :=
       (denote_flow (allocator_program capacity) >>= fun _ => Ret tt))
     (Some Fin.F1) (managed_empty,(ctx,c)) ~
-    interp_schedule_nd sh 3 (source_pool0 1) None
-      ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c))).
+    emit_list (new_page_logs 1 capacity managed_empty)
+      (interp_schedule_nd sh 3 (source_pool0 1) None
+        ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c)))).
   unfold allocator_program; rewrite interp_nd_source_bind, interp_nd_new_page_hemp.
+  apply emit_list_sbisim.
   rewrite interp_nd_source_bind, interp_nd_source_fork.
   change (interp_schedule_nd sh 2
     ([denote (remote_client 1 false); Ret tt]%vector @ Fin.FS Fin.F1 :=
@@ -594,30 +678,10 @@ Qed.
 Ltac allocator_residual_raw :=
   unfold remote_residual, owner_residual, remote_free, remote_client,
     detach_remote, remote_link_tail, remote_cas_tail, detach_cas_tail,
-    owner_offer_tail, denote, client_next, remote_after_free,
-    owner_next, owner_after_collect, owner_after_detach;
+    owner_offer_tail, offer_block, denote, client_next, remote_after_free,
+    owner_next, owner_after_collect, owner_after_detach, until_tail;
   csl_raw_equ.
 
-Ltac allocator_residual_alignment :=
-  cbn beta iota zeta;
-  first [solve [apply guard_equ_equ; reflexivity] |
-    lazymatch goal with
-    | |- guard_equ (denote_flow (CRet _) >>= _) _ =>
-        eapply guard_equ_trans; [apply guard_equ_equ; apply source_raw_ret|];
-        allocator_residual_alignment
-    | |- guard_equ (denote_flow (CBind _ _) >>= _) _ =>
-        eapply guard_equ_trans; [apply guard_equ_equ; apply source_raw_bind|];
-        allocator_residual_alignment
-    | |- guard_equ (Ret _ >>= _) _ =>
-        eapply guard_equ_trans; [apply guard_equ_equ; apply bind_ret_l|];
-        allocator_residual_alignment
-    | |- guard_equ (Guard _) _ => apply guard_equ_left; allocator_residual_alignment
-    end |
-    solve [apply guard_equ_equ; allocator_residual_raw] |
-    rewrite source_owner_read; apply guard_equ_equ; allocator_residual_raw].
-
-Ltac allocator_present :=
-  first [congruence | apply upd_mono; allocator_present].
 
 Ltac allocator_segment_steps :=
   repeat first
@@ -636,7 +700,10 @@ Ltac allocator_segment_steps :=
       | |- (segment_to sh csl_equ) (denote_flow (CRead _) >>= _) _ _ _ _ =>
           eapply exact_source_read; [eassumption|]
       | |- (segment_to sh csl_equ) (denote_flow (CWrite _ _) >>= _) _ _ _ _ =>
-          eapply exact_source_write; [allocator_present|]
+          eapply exact_source_write;
+            [first [congruence |
+              solve [apply upd_mono; congruence] |
+              solve [do 2 apply upd_mono; congruence]] |]
       | |- (segment_to sh csl_equ) (denote_flow (CEmit _ _) >>= _) _ _ _ _ =>
           apply exact_source_emit
       | |- (segment_to sh csl_equ) (denote_flow (CCAS (CLit _) (CLit _) (CLit _)) >>= _) _ _ _ _ =>
@@ -656,26 +723,45 @@ Ltac allocator_segment_steps :=
              owner_after_collect owner_after_detach] in src in
           change ((segment_to sh csl_equ) src' sigma logs target sigma')
         end) ];
-  apply exact_source_yield; allocator_residual_alignment.
+  (* Normalize only the finite trailing CPS constructors; the shared
+     guard-equivalence rules preserve the actual residual continuation. *)
+  apply exact_source_yield;
+  repeat first
+    [ progress (cbn beta iota zeta)
+    | lazymatch goal with
+      | |- guard_equ (denote_flow (CRet _) >>= _) _ =>
+          eapply guard_equ_trans;
+            [apply guard_equ_equ; apply source_raw_ret |]
+      | |- guard_equ (denote_flow (CBind _ _) >>= _) _ =>
+          eapply guard_equ_trans;
+            [apply guard_equ_equ; apply source_raw_bind |]
+      | |- guard_equ (Ret _ >>= _) _ =>
+          eapply guard_equ_trans;
+            [apply guard_equ_equ; apply bind_ret_l |]
+      | |- guard_equ (Guard _) _ => apply guard_equ_left
+      end ];
+  first [solve [apply guard_equ_equ; reflexivity] |
+    solve [apply guard_equ_equ; allocator_residual_raw] |
+    solve [rewrite source_owner_read; apply guard_equ_equ; allocator_residual_raw]].
 
 (** The checked model branches provide precisely the successful heap reads.
     Repeated checked writes remain allocated even if addresses coincide; no
     heap extensionality, freshness assumption, or unchecked CAS is used here. *)
 Local Opaque denote_flow CTree.iter CTree.bind.
 
-(** Every allocator round accesses linked-list cells only (read/write/CAS,
-    emit, yield), so an arbitrary allocation table [allocs] is carried through
-    the segment unchanged. *)
-Lemma turn_source_exact_segment base who s t event allocs ctx :
+(** A successful model turn records the exact managed-memory snapshots of
+    its source segment, carrying its own allocation table throughout. *)
+Lemma turn_source_exact_segment base who s t event ctx :
   turn base who s = Some (t,event) ->
   exists residual,
     (ThreadSegment sh csl_equ) ((allocator_pool base s) $ slot_of_actor who)
-      ((aheap s,allocs),(ctx,acount s)) (event_obs event) residual ((aheap t,allocs),(ctx,acount t)) /\
+      ((aheap s,aallocs s),(ctx,acount s)) event residual
+      ((aheap t,aallocs t),(ctx,acount t)) /\
     guard_equ residual ((allocator_pool base t) $ slot_of_actor who).
 Proof.
-  destruct s as [h c op r0 r1]; destruct who;
+  destruct s as [h allocs c op r0 r1]; destruct who;
     [destruct op|destruct r0|destruct r1]; intro Hturn;
-    cbn [turn aheap acount owner_state remote0_state remote1_state] in Hturn.
+    cbn [turn aheap aallocs acount owner_state remote0_state remote1_state] in Hturn.
   all: repeat match type of Hturn with
     | context [match ?v with Some _ => _ | None => _ end] =>
         let Hv := fresh "Hcell" in destruct v eqn:Hv; try discriminate
@@ -687,8 +773,8 @@ Proof.
     | H : Nat.eqb ?x ?y = true |- _ =>
         apply Nat.eqb_eq in H; subst
     end.
-  all: cbn [allocator_pool slot_of_actor Vector.nth aheap acount
-    owner_state remote0_state remote1_state event_obs].
+  all: cbn [allocator_pool slot_of_actor Vector.nth aheap aallocs acount
+    owner_state remote0_state remote1_state List.map List.app].
   all: lazymatch goal with
   | |- exists residual, (ThreadSegment sh csl_equ) ?src ?sigma ?logs residual ?sigma' /\
       guard_equ residual ?target =>
@@ -707,16 +793,13 @@ Proof.
   intro Hturn; intro j.
   rewrite <- (slot_of_actor_of_slot j).
   destruct (actor_of_slot j) eqn:Hactor.
-  all: destruct s as [h c op r0 r1]; destruct who;
-    cbn [turn aheap acount owner_state remote0_state remote1_state] in Hturn;
+  all: destruct s as [h allocs c op r0 r1]; destruct who;
+    [destruct op|destruct r0|destruct r1];
+    cbn [turn aheap aallocs acount owner_state remote0_state remote1_state] in Hturn;
     intro Hne; try contradiction.
   all: repeat match type of Hturn with
     | context [match ?v with Some _ => _ | None => _ end] =>
         let Hv := fresh "Hcell" in destruct v eqn:Hv; try discriminate
-    | context [match ?v with
-        ORead => _ | OCAS _ => _ | ODrain => _ | OOffer _ => _ end] => destruct v
-    | context [match ?v with
-        RPoll => _ | RRead _ => _ | RLink _ _ => _ | RCAS _ _ => _ end] => destruct v
     | context [if ?b then _ else _] => destruct b
     end.
   all: inversion Hturn; subst t event; reflexivity.
@@ -725,7 +808,7 @@ Qed.
 Lemma allocator_pool_state_equiv base s t :
   state_equiv s t -> pool_equ (allocator_pool base s) (allocator_pool base t).
 Proof.
-  intros [_ [_ [Ho [H0 H1]]]].
+  intros [_ [_ [_ [Ho [H0 H1]]]]].
   unfold allocator_pool; rewrite Ho, H0, H1; apply pool_equ_refl.
 Qed.
 
@@ -734,9 +817,8 @@ Qed.
     One instantiation of [CTree.Interp.Yield.Execution.PoolSimulation]; the
     scheduling-equivalence theorems it unlocks are the library's, so no
     allocator copy of the ND coinduction or the RR guard-alignment proof
-    remains.  The exact segment is built at the ACTUAL heap through
-    [source_reheap] and the generic step-result congruence, so no heap
-    function is extracted or equated. *)
+    remains.  The exact segment is built at the actual managed memory through
+    [source_reheap] and exact observation-list congruence. *)
 Theorem allocator_simulation base capacity :
   PoolSimulation 2 sh slot_of_actor (turn base) (allocator_pool base)
     state_agrees (allocator_inv base capacity).
@@ -751,15 +833,16 @@ Proof.
       who s (source_reheap sigma s) s' event Hreheap Hturn) as (actual & Hactual & Hnext).
     destruct sigma as [[h allocs] [ctx c]].
     destruct (turn_source_exact_segment base who
-      (source_reheap ((h,allocs),(ctx,c)) s) actual event allocs ctx Hactual)
+      (source_reheap ((h,allocs),(ctx,c)) s) actual event ctx Hactual)
       as (residual & Hseg & Htail).
-    cbn [source_reheap aheap acount owner_state remote0_state remote1_state
+    cbn [source_reheap aheap aallocs acount owner_state remote0_state remote1_state
       allocator_pool fst snd] in Hseg, Htail |- *.
-    exists residual, ((aheap actual,allocs),(ctx,acount actual)).
+    exists residual, ((aheap actual,aallocs actual),(ctx,acount actual)).
     split; [exact Hseg |].
     split.
-    + destruct Hnext as [Hheap [Hcount _]].
-      split; cbn; [now apply heq_sym | symmetry; exact Hcount].
+    + destruct Hnext as [Hheap [Hallocs [Hcount _]]].
+      split; cbn; [now apply heq_sym|].
+      split; [now apply heq_sym|symmetry; exact Hcount].
     + split.
       * eapply guard_equ_trans; [exact Htail |].
         apply guard_equ_equ; symmetry.
@@ -790,48 +873,49 @@ Qed.
     promoted to an unfocused-pool congruence.  At the canonical state the
     handler state after the turn is EXACTLY the model's heap and counter,
     with the allocation table unchanged. *)
-Theorem turn_interp_nd base capacity who s t event allocs ctx :
+Theorem turn_interp_nd base capacity who s t event ctx :
   allocator_inv base capacity s -> turn base who s = Some (t,event) ->
   exists residual,
     guard_equ residual ((allocator_pool base t) $ slot_of_actor who) /\
     interp_schedule_nd sh 3 (allocator_pool base s) (Some (slot_of_actor who))
-      ((aheap s,allocs),(ctx,acount s)) ~
-    emit_list (event_obs event)
+      ((aheap s,aallocs s),(ctx,acount s)) ~
+    emit_list event
       (interp_schedule_nd sh 3 (allocator_pool base t @ slot_of_actor who := residual)
-        None ((aheap t,allocs),(ctx,acount t))).
+        None ((aheap t,aallocs t),(ctx,acount t))).
 Proof.
   intros Hinv Hturn.
-  destruct (turn_source_exact_segment base who s t event allocs ctx Hturn)
+  destruct (turn_source_exact_segment base who s t event ctx Hturn)
     as (residual & Hseg & Htail).
   exists residual; split; [exact Htail|].
   etransitivity.
   - exact (segment_interp_nd sh csl_equ (fun X t u => equ_sbisim t u)
-      2 (allocator_pool base s) (slot_of_actor who) ((aheap s,allocs),(ctx,acount s))
-      (event_obs event) residual ((aheap t,allocs),(ctx,acount t)) Hseg).
+      2 (allocator_pool base s) (slot_of_actor who) ((aheap s,aallocs s),(ctx,acount s))
+      event residual ((aheap t,aallocs t),(ctx,acount t)) Hseg).
   - apply emit_list_sbisim, equ_sbisim, (interp_schedule_nd_equ sh).
     exact (source_replace_turn base who s t event residual Hturn).
 Qed.
 
-Theorem turn_interp_rr base capacity who s t event allocs ctx cursor :
+Theorem turn_interp_rr base capacity who s t event ctx cursor :
   allocator_inv base capacity s -> turn base who s = Some (t,event) ->
   exists residual,
     guard_equ residual ((allocator_pool base t) $ slot_of_actor who) /\
     interp_schedule_rr sh 3 (allocator_pool base s) (Some (slot_of_actor who))
-      cursor ((aheap s,allocs),(ctx,acount s)) ~
-    emit_list (List.map inl (event_obs event))
+      cursor ((aheap s,aallocs s),(ctx,acount s)) ~
+    emit_list (List.map inl event)
       (interp_schedule_rr sh 3
         (allocator_pool base t @ slot_of_actor who := residual)
-        None cursor ((aheap t,allocs),(ctx,acount t))).
+        None cursor ((aheap t,aallocs t),(ctx,acount t))).
 Proof.
   intros Hinv Hturn.
-  destruct (turn_source_exact_segment base who s t event allocs ctx Hturn)
+  destruct (turn_source_exact_segment base who s t event ctx Hturn)
     as (residual & Hseg & Htail).
   exists residual; split; [exact Htail|].
   etransitivity.
-  - exact (segment_interp_fair rr_scheduler sh csl_equ (fun X t u => equ_sbisim t u)
-      2 (allocator_pool base s) (slot_of_actor who) cursor ((aheap s,allocs),(ctx,acount s))
-      (event_obs event) residual ((aheap t,allocs),(ctx,acount t)) Hseg).
-  - apply emit_list_sbisim, equ_sbisim, interp_schedule_fair_equ.
+  - exact (segment_interp_fair rr_scheduler sh csl_equ
+      (fun X t u H => ltac:(rewrite H; reflexivity))
+      2 (allocator_pool base s) (slot_of_actor who) cursor ((aheap s,aallocs s),(ctx,acount s))
+      event residual ((aheap t,aallocs t),(ctx,acount t)) Hseg).
+  - apply emit_list_sbisim, equ_sbisim, interp_schedule_rr_equ.
     exact (source_replace_turn base who s t event residual Hturn).
 Qed.
 
@@ -846,7 +930,7 @@ Theorem selected_turn_interp_nd base capacity (ts : pool sE Bn 3)
     state_agrees sigma' t /\
     guard_equ residual ((allocator_pool base t) $ slot_of_actor who) /\
     interp_schedule_nd sh 3 ts (Some (slot_of_actor who)) sigma ~
-    emit_list (event_obs event)
+    emit_list event
       (interp_schedule_nd sh 3 (ts @ slot_of_actor who := residual) None sigma').
 Proof.
   intros Hpool Hagree Hinv Hturn.
@@ -868,7 +952,7 @@ Theorem selected_turn_interp_rr base capacity (ts : pool sE Bn 3)
     state_agrees sigma' t /\
     guard_equ residual ((allocator_pool base t) $ slot_of_actor who) /\
     interp_schedule_rr sh 3 ts (Some (slot_of_actor who)) cursor sigma ~
-    emit_list (List.map inl (event_obs event))
+    emit_list (List.map inl event)
       (interp_schedule_rr sh 3 (ts @ slot_of_actor who := residual) None cursor sigma').
 Proof.
   intros Hpool Hagree Hinv Hturn.
@@ -878,54 +962,59 @@ Proof.
   exists residual, sigma'; split; [exact Hstate|]; split.
   - pose proof (Hnext (slot_of_actor who)) as Htail.
     rewrite Vector.nth_replace_eq in Htail; exact Htail.
-  - exact (segment_interp_fair rr_scheduler sh csl_equ (fun X t u => equ_sbisim t u)
+  - exact (segment_interp_fair rr_scheduler sh csl_equ
+      (fun X t u H => ltac:(rewrite H; reflexivity))
       2 ts (slot_of_actor who) cursor sigma
-      (event_obs event) residual sigma' Hseg).
+      event residual sigma' Hseg).
 Qed.
 Local Open Scope nat_scope.
 
-Lemma selected_turn_exact_segment base (ts : pool sE Bn 3) s who t event allocs ctx :
+Lemma selected_turn_exact_segment base (ts : pool sE Bn 3) s who t event ctx :
   pool_guard_equ ts (allocator_pool base s) -> turn base who s = Some (t,event) ->
   exists residual,
-    (ThreadSegment sh csl_equ) (ts $ slot_of_actor who) ((aheap s,allocs),(ctx,acount s))
-      (event_obs event) residual ((aheap t,allocs),(ctx,acount t)) /\
+    (ThreadSegment sh csl_equ) (ts $ slot_of_actor who) ((aheap s,aallocs s),(ctx,acount s))
+      event residual ((aheap t,aallocs t),(ctx,acount t)) /\
     guard_equ residual ((allocator_pool base t) $ slot_of_actor who).
 Proof.
   intros Hpool Hturn.
-  destruct (turn_source_exact_segment base who s t event allocs ctx Hturn)
+  destruct (turn_source_exact_segment base who s t event ctx Hturn)
     as (residual & Hseg & Htail).
   exists residual; split; [|exact Htail].
   apply (proj2 ((guard_equ_segment_iff sh csl_equ)
     (ts $ slot_of_actor who) ((allocator_pool base s) $ slot_of_actor who)
-    (Hpool (slot_of_actor who)) ((aheap s,allocs),(ctx,acount s)) (event_obs event)
-    residual ((aheap t,allocs),(ctx,acount t)))); exact Hseg.
+    (Hpool (slot_of_actor who)) ((aheap s,aallocs s),(ctx,acount s)) event
+    residual ((aheap t,aallocs t),(ctx,acount t)))); exact Hseg.
 Qed.
 
 Theorem run_rr_allocator_bisim capacity ctx c :
   run_rr (allocator_program capacity) (managed_empty,(ctx,c)) ~
-    (model_rr 2 actor_of_slot (turn 1) (initial_state capacity c) 0
-       : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
+    emit_list (List.map inl (new_page_logs 1 capacity managed_empty))
+      (model_rr 2 actor_of_slot (turn 1) (initial_state capacity c) 0
+         : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
 Proof.
   rewrite run_rr_allocator_initialized.
+  apply emit_list_sbisim.
   exact (pool_simulation_rr_bisim actor_of_slot slot_of_actor_of_slot
     (allocator_simulation 1 capacity)
     (initial_state capacity c) (source_pool0 1)
     ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c)) 0
-    (initial_state_inv capacity c) (conj (heq_refl _) eq_refl)
+    (initial_state_inv capacity c) (conj (heq_refl _) (conj (heq_refl _) eq_refl))
     (pool_equ_guard _ _ (source_pool0_initial capacity c))).
 Qed.
 
 Theorem run_nd_allocator_bisim capacity ctx c :
   run_nd (allocator_program capacity) (managed_empty,(ctx,c)) ~
-    (model_nd 2 actor_of_slot (turn 1) (initial_state capacity c)
-       : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
+    emit_list (new_page_logs 1 capacity managed_empty)
+      (model_nd 2 actor_of_slot (turn 1) (initial_state capacity c)
+         : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
   rewrite run_nd_allocator_initialized.
+  apply emit_list_sbisim.
   exact (pool_simulation_nd_bisim actor_of_slot slot_of_actor_of_slot
     (allocator_simulation 1 capacity)
     (initial_state capacity c) (source_pool0 1)
     ((page_heap 1 capacity hemp,upd hemp 1 (page_size capacity)),(ctx,c))
-    (initial_state_inv capacity c) (conj (heq_refl _) eq_refl)
+    (initial_state_inv capacity c) (conj (heq_refl _) (conj (heq_refl _) eq_refl))
     (pool_equ_guard _ _ (source_pool0_initial capacity c))).
 Qed.
 

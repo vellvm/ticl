@@ -42,7 +42,7 @@ Section TickTock.
   (** * Specification *)
   (** There exists an infinite path that will allways [tock]. *)
   Example eg_tock:
-    <( tocker, {Obs Tock tt} |= EG vis {fun _ e _ => existT _ _ e = existT _ _ Tock} )>.
+    <( tocker, {Obs Tock tt} |=L EG vis {fun _ e _ => existT _ _ e = existT _ _ Tock} )>.
   Proof.
     unfold tocker.
     apply eg_iter with (R:=fun 'tt w => w = Obs Tock tt); auto with ticl.
@@ -51,22 +51,22 @@ Section TickTock.
     - csplit; auto with ticl.
     - unfold CTree.map, brS2.
       rewrite bind_br; setoid_rewrite bind_step.
-      apply enr_brS; split; [csplit; eauto with ticl|].
+      apply (en_brS (b:=true)); split; [csplit; eauto with ticl|].
       exists true; cbn.
       rewrite bind_br; setoid_rewrite bind_step.
-      apply eur_brS.
+      apply (eu_brS (b:=true)).
       right; split.
       + csplit; auto with ticl.
       + exists false; cbn.
         unfold tock, CTree.trigger.
         rewrite bind_vis.
-        apply eur_vis.
+        apply (eu_vis (b:=true)).
         right.
         split.
         * csplit; auto with ticl.
         * exists tt.
           rewrite bind_ret_l.
-          apply eur_ret.
+          apply (eu_ret (b:=true)).
           cleft.
           apply ret_ret; [constructor |].
           exists tt; intuition.

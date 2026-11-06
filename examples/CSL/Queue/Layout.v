@@ -8,14 +8,8 @@ Local Open Scope nat_scope.
 
 (** ** A generic queue heap *)
 
-Fixpoint nodeval (ns vs: list nat) (x: nat) : option nat :=
-  match ns, vs with
-  | a :: ns', v :: vs' =>
-      if Nat.eqb x a then Some v
-      else if Nat.eqb x (S a) then Some (List.hd 0 ns')
-      else nodeval ns' vs' x
-  | _, _ => None
-  end.
+Definition nodeval (ns vs : list nat) : Heap :=
+  apply_writes (rev (node_writes ns vs)) hemp.
 
 Definition qheap (hdr: nat) (ns vs: list nat) : Heap :=
   fun x => if Nat.eqb x hdr then Some (last ns 0)
@@ -25,51 +19,46 @@ Definition qheap (hdr: nat) (ns vs: list nat) : Heap :=
 Lemma nodeval_dom: forall ns vs x,
     nodeval ns vs x <> None -> In x (cells ns).
 Proof.
-  induction ns as [| a ns IH]; intros vs x H.
-  - destruct vs; cbn in H; congruence.
-  - destruct vs as [| v vs]; [cbn in H; congruence |].
-    apply in_cells; cbn [nodeval] in H.
-    destruct (Nat.eqb_spec x a) as [Ex | Hna];
-      [exists a; split; [apply in_eq | now left] |].
-    destruct (Nat.eqb_spec x (S a)) as [Ex | Hnsa];
-      [exists a; split; [apply in_eq | now right] |].
-    apply IH in H; apply in_cells in H as (b & Hb & Hx).
-    exists b; split; [now apply in_cons | exact Hx].
+  intros ns vs x H; unfold nodeval in H.
+  apply apply_writes_dom_exact in H as [H | H]; [| exfalso; apply H; reflexivity].
+  rewrite map_rev in H; apply in_rev in H.
+  now apply node_writes_keys_subset in H.
 Qed.
 
 Lemma nodeval_in: forall ns vs x,
     length ns = length vs -> In x (cells ns) -> nodeval ns vs x <> None.
 Proof.
-  induction ns as [| a ns IH]; intros [| v vs] x Hlen Hx;
-    cbn in Hlen; try discriminate; [cbn in Hx; contradiction |].
-  cbn [nodeval].
-  destruct (Nat.eqb_spec x a) as [Ex | Hna]; [discriminate |].
-  destruct (Nat.eqb_spec x (S a)) as [Ex | Hnsa]; [discriminate |].
-  apply (IH vs); [lia |].
-  apply in_cells in Hx as (b & Hb & Hxb).
-  apply in_cells; destruct Hb as [Eb | Hb]; [| exists b; split; assumption].
-  exfalso; destruct Hxb as [Ex | Ex]; [apply Hna | apply Hnsa]; congruence.
+  intros ns vs x Hlen Hx; unfold nodeval.
+  exact (proj2 (node_writes_dom ns vs x Hlen) Hx).
 Qed.
 
 
 Lemma nodeval_chain: forall hdr ns vs,
     qwf hdr ns -> length ns = length vs -> chain (nodeval ns vs) ns vs 0.
 Proof.
-  intros hdr; induction ns as [| a ns IH]; intros [| v vs] Hwf Hlen;
-    cbn in Hlen; try discriminate; [apply chain_nil |].
-  destruct (qwf_node_cells _ _ _ Hwf) as (Hanc & Hsanc).
-  apply (proj2 (chain_cons _ _ _ _ _ _)).
-  cbn [nodeval].
-  rewrite Nat.eqb_refl.
-  split; [reflexivity |].
-  destruct (Nat.eqb_spec (S a) a) as [C | _]; [lia |].
-  rewrite Nat.eqb_refl.
-  split; [reflexivity |].
-  eapply chain_mono; [apply (IH vs (qwf_tail _ _ _ Hwf)); lia |].
-  intros x Hx; cbn [nodeval].
-  destruct (Nat.eqb_spec x a) as [Ex | Hna]; [rewrite Ex in Hx; contradiction |].
-  destruct (Nat.eqb_spec x (S a)) as [Ex | Hnsa];
-    [rewrite Ex in Hx; contradiction | reflexivity].
+  intros hdr ns vs Hwf Hlen; destruct ns as [|a ns].
+  - destruct vs; cbn in Hlen; [apply chain_nil | discriminate].
+  - assert (Hnd : NoDup (cells (a :: ns))).
+    { apply cells_nodup.
+      - pose proof (proj1 Hwf) as Hnames.
+        apply NoDup_cons_iff in Hnames; tauto.
+      - intros b d Hb Hd; apply (proj2 (proj2 Hwf)); now right. }
+    assert (Hnext : length vs = length (tl (a :: ns) ++ [0])).
+    { rewrite app_length; cbn; cbn in Hlen; lia. }
+    pose proof (node_writes_contents (a :: ns) vs Hlen Hnd) as Hcontents.
+    assert (Hpayload : Forall2 (fun b v => nodeval (a :: ns) vs b = Some v)
+      (a :: ns) (map fst (combine vs (tl (a :: ns) ++ [0])))).
+    { apply Forall2_map_right.
+      eapply Forall2_impl'; [exact Hcontents |].
+      intros b [v next] Hb Hpair [Hp Hl]; exact Hp. }
+    assert (Hlinks : Forall2 (fun b next => nodeval (a :: ns) vs (S b) = Some next)
+      (a :: ns) (map snd (combine vs (tl (a :: ns) ++ [0])))).
+    { apply Forall2_map_right.
+      eapply Forall2_impl'; [exact Hcontents |].
+      intros b [v next] Hb Hpair [Hp Hl]; exact Hl. }
+    rewrite map_fst_combine in Hpayload by exact Hnext.
+    rewrite map_snd_combine in Hlinks by exact Hnext.
+    split; [now apply linked_of_Forall2 | exact Hpayload].
 Qed.
 
 Theorem qheap_qrep: forall hdr ns vs,
@@ -125,14 +114,8 @@ Qed.
 Definition queue_nodes (hdr count : nat) : list nat :=
   node_addrs (hdr + 2) count.
 
-Fixpoint fill_nodes_heap (first : nat) (values : list nat) (h : Heap) : Heap :=
-  match values with
-  | [] => h
-  | value :: rest =>
-      fill_nodes_heap (first + 2) rest
-        (upd (upd h first value) (S first)
-          (match rest with [] => 0 | _ :: _ => first + 2 end))
-  end.
+Definition fill_nodes_heap (first : nat) (values : list nat) (h : Heap) : Heap :=
+  apply_writes (node_writes (node_addrs first (length values)) values) h.
 
 Definition init_queue_heap (hdr : nat) (values : list nat) (h : Heap) : Heap :=
   let ns := queue_nodes hdr (length values) in
@@ -216,17 +199,13 @@ Lemma fill_nodes_heap_lookup first values h x :
     | None => h x
     end.
 Proof.
-  revert first h x; induction values as [| value values IH]; intros first h x.
-  - reflexivity.
-  - cbn [fill_nodes_heap length node_addrs]; rewrite IH; cbn [nodeval].
-    destruct (Nat.eqb_spec x first) as [Hx | Hfirst].
-    + subst x; rewrite nodeval_node_addrs_out by (left; lia).
-      rewrite upd_neq by lia; apply upd_eq.
-    + destruct (Nat.eqb_spec x (S first)) as [Hx | Hsfirst].
-      * subst x; rewrite nodeval_node_addrs_out by (left; lia).
-        rewrite upd_eq; destruct values; reflexivity.
-      * rewrite upd_neq by exact Hsfirst.
-        rewrite upd_neq by exact Hfirst; reflexivity.
+  unfold fill_nodes_heap, nodeval.
+  rewrite apply_writes_rev by
+    (apply node_writes_nodup; [apply node_addrs_length | apply node_addrs_cells_nodup]).
+  rewrite !apply_writes_lookup.
+  destruct (find (fun av => Nat.eqb x (fst av))
+    (rev (node_writes (node_addrs first (length values)) values)))
+    as [[a value] |]; reflexivity.
 Qed.
 
 Lemma init_queue_heap_agrees hdr values h :
@@ -283,9 +262,7 @@ Qed.
 Lemma fill_nodes_heap_finite first values h :
   heap_finite h -> heap_finite (fill_nodes_heap first values h).
 Proof.
-  revert first h; induction values as [| value values IH]; intros first h Hh.
-  - exact Hh.
-  - cbn [fill_nodes_heap]; apply IH, heap_finite_upd, heap_finite_upd, Hh.
+  apply apply_writes_finite.
 Qed.
 
 Lemma new_queue_heap_finite hdr values h :

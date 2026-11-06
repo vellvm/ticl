@@ -13,13 +13,13 @@ modify one queue, and the facade does not assert a general CSL parallel rule.
 ## Library ownership
 
 `ICTree.Interp.CSL.Mod` is the one CSL interpreter: the effect sum `sE`, the
-state `SSig`, the observation sum `CSLObs`, the payload-polymorphic handler
+state `SSig`, the observation alphabet `CSLObs`, the payload-polymorphic handler
 `sh` (heap, context and indexed-emission handlers), thread effects, the
-context get/put laws, the raw physical-free laws, and the effect-level
-select/heap-free Ticl rules. It imports no language or example.
+context get/put laws, raw physical-free equations, and indexed selection
+rules. It imports no language or example.
 `Lang.CoCSL.Mod` is the one CoCSL source language: `CExp`, `CProg`, their denotation,
-source execution equations, exact first-yield segment rules, the structural
-Ticl matrix, the Yield-fragment rules, and the source-pool rules; it
+source execution equations, exact first-yield segment rules, indexed structural
+TICL rules, the Yield-fragment rules, and the source-pool rules; it
 re-exports the interpreter and the generic Yield scheduler/logic layers. Import
 `examples.CSL.Queue` for the queue development and `examples.CSL.Allocator.*`
 for the allocator. The previous split implementation modules were removed, not
@@ -29,8 +29,8 @@ retained as compatibility re-export files.
 | --- | --- |
 | `ICTree.Trace` | Observation-polymorphic finite log prefixes, labeled finite steps, guarded prefix alignment |
 | `ICTree.Logic.Trace` | Structural AF/AGAF rules for finite observation prefixes |
-| `ICTree.Logic.Bind` | Five exact `*_log_iff` rules, shared by the CSL emit matrix |
-| `ICTree.Logic.State` | Ghost-ranked `aul_state_iter_ghost` over arbitrary handlers |
+| `ICTree.Logic.Bind` | Three exact `*_log_iff` rules, shared by the CSL emit rules |
+| `ICTree.Logic.State` | Ghost-ranked `u_state_iter_prefix_ghost` and continuation-aware `ag_state_iter_logs` |
 | `ICTree.Interp.State.Mod` | Generic `interp_state_trigger_bind` normalization |
 | `Utils.Relations` | Lexicographic ranks, bounded predicate search, interval counts, and infinite-occurrence facts |
 | `Utils.Lists` | Comparator-parametric first-match search and shared list-rotation lemmas |
@@ -42,7 +42,7 @@ retained as compatibility re-export files.
 | `Utils.Maps` | The variable context `Ctx.Ctx` shared by languages and the CSL interpreter |
 | `Lang.CoCSL.Mod` | CoCSL syntax, denotation, source execution equations, source segment rules, structural matrix, Yield-fragment and source-pool rules |
 | `Lang.CoCSL.Owned` | Lineage-tagged action machine, indexed projection, admission/confinement, runner erasure, and logged-action adequacy |
-| `Lang.CoCSL.Separation` | Shallow TICL over owned clocks, anchored `hsep`, and the AU/EU/AN/AG/EG/Done/Ret splitting family |
+| `Lang.CoCSL.Asep` | Shallow TICL over owned clocks, unary lifting of ordinary heap `asep`, and the AU/EU/AN/AG/EG/Done/Ret splitting family |
 
 Concrete address layouts, overlap counterexamples, allocator-specific state
 machines and their fairness/rank arguments, and regression consumers remain in
@@ -51,7 +51,7 @@ segment judgments remain distinct; administrative guards are not replaced by
 visible scheduler steps.
 
 `examples.CSL.Allocator.Liveness.allocator_agaf_fair` proves `AG (AF _)`
-recurrence of every observation kind (`tag_alloc`, `tag_retire`, `tag_reclaim`)
+recurrence of every user-emission kind (`tag_alloc`, `tag_retire`, `tag_reclaim`)
 of `run_fair S (allocator_program capacity)` for every `FairScheduler S` and
 every `0 < capacity`, through `agaf_pool_simulation_fair` on the model's
 `PoolSimulation` certificate: the ghost is the model state with the ownership
@@ -60,6 +60,16 @@ potential, helpful distance) under `rank3`, and the helpful slot is the owner
 when it can move a block, else a remote that holds or owns one
 (`allocator_fair_turn`). It replaces the round-robin, capacity-2 demo
 recurrence.
+
+`AState` carries both `aheap` and `aallocs`; each turn returns the actual
+successive mutation snapshots, followed by at most one final user emission.
+`Utils.Execution.ExecutionCounter` projects `events : Out -> list W`; the
+allocator uses `csl_emissions`, so heap logs do not affect occurrence indices.
+`new_page_logs` retains one allocation, five metadata writes, and one link write
+per block (`6 + capacity` snapshots). Full source realizations prepend these
+logs to chunk zero without shifting action/state indices or inserting a tick.
+Partial model `None` is not a log-free source-fault specification for invalid
+heaps: the regression checks a mailbox clear before a later missing-payload write.
 
 Operational consumers use the public checked-operation normal forms instead of
 local read/write/emit/allocation/CAS tactics. Temporal consumers use the source
@@ -79,7 +89,7 @@ helpers were removed in favor of `inversion_0` and Stdlib's `wf_inverse_image`.
 Scheduler parity and allocator cursor proofs share `rr_pick_mod_congr`.
 Obsolete allocator transport/specialization helpers were removed, but unused
 public structural rules and substantive verification goals remain intentional
-proof roots. In particular, the 140 CSL rules, `aur_schedule_update`,
+proof roots. In particular, the public CSL structural rules, `aur_schedule_update`,
 `free_local_disj`, `free_local_frame`, and allocator safety/liveness results are
 not classified as dead merely because no other theorem references them.
 
@@ -89,30 +99,38 @@ The source execution is:
 
 ```text
 raw source denotations
-  -> event-only policy pool scheduler (`schedule_with`, round robin = `rr_scheduler`)
+  -> event-only policy pool scheduler (`schedule_policy`, round robin = `rr_scheduler`)
   -> one shared checked heap handler, relabelled under `inl`; picks logged under `inr`
 ```
 
-`ICTree.Interp.Yield.Mod` owns the `Scheduler` policy record, `rr_scheduler`,
-and the pool cofixpoint `schedule_with`, which interprets `Yield`/`Fork` itself
-and leaves a `Scheduled i` event at every scheduling decision; it never
-inspects a thread's `Br` nodes (`interp_schedule_fair_br`,
-`examples.HiddenBr.rr_preserves_thread_branch`). `ICTree.Interp.Yield.Policy`
-owns the instrumented policy runner `interp_schedule_fair` with observation
-type `W + nat` and its execution equations; `ICTree.Interp.Yield.RoundRobin`
-is its `rr_scheduler` instance (`interp_schedule_rr`, an abbreviation of `interp_schedule_fair rr_scheduler`), whose selection is one
-logged `Log (inr (slot_index (rr_pick n m)))` event
-(`interp_schedule_rr_select`) with no extra visible step.
-`ICTree.Interp.Refine` keeps the standalone branch refiner `refine_rr` only for
-the hidden-branching counterexamples and the parity picker facts.  Neither
-module imports a language or example. `Lang.CoCSL.Mod` instantiates that API
-with `sh`; it owns source-constructor execution equations and scoped-fork
-startup. No example-local pool interpreter or bridge module is used.
+`CTree.Interp.Yield.Mod` owns the pure `Scheduler` policies, cursor arithmetic,
+and `schedule_policy`. It interprets `Yield`/`Fork` and emits `Scheduled i` at
+each pool selection without resolving source `Br` nodes
+(`interp_schedule_fair_br`, `examples.HiddenBr.rr_preserves_thread_branch`).
+`CTree.Interp.Yield.Policy` owns `interp_schedule_fair`, whose observations
+are program events under `inl` and scheduling slots under `inr`.
+`CTree.Interp.Yield.RoundRobin` specializes this runner to `rr_scheduler`.
+Its selection equation, `interp_schedule_rr_select`, logs
+`Log (inr (slot_index (rr_pick n m)))` without an extra visible step.
+`CTree.Interp.Refine` retains the independent whole-tree branch refiner and
+the `BranchFree` predicate. These modules import no language or example.
+`Lang.CoCSL.Mod` instantiates the runner with `sh` and owns source-constructor
+execution equations and scoped-fork startup. No example-local pool interpreter
+or bridge module is used.
 
 `rr_pick n m` is the cursor modulo the pool size; guards, events, yields and
 forks do not advance it. Round robin does not force a nonyielding worker to
 yield, and no universal fairness theorem for arbitrary or changing pools is
 claimed; `rr_fair` certifies the policy's own pick stream.
+
+`CTree.Interp.Yield.Execution` models a turn by
+`Act -> St -> option (St * list W)`. `model_nd` emits a selection step;
+`model_rr` emits a logged slot. Both then emit the returned list in order.
+An empty list adds no program log. Raw unfolding equations retain the recursive
+administrative `Guard`; the `_sbisim` equations remove only that guard.
+`ClosedTurns`, `RankedTurns`, and `FairTurns` certify actual lists, with target
+hits expressed by `List.Exists`. Fixed-pool AG transport also requires closure
+under a program-log prefix so it covers every residual suffix.
 
 Fork prepends the child while retaining parent focus. Thus the initial queue
 pool is `[queue2; queue1]`, slot 1 is focused, and cursor 0 has not yet been used
@@ -133,10 +151,9 @@ at a real `Log (stamp ...)` transition, not at an administrative guard.
 execution to the tagged cyclic reference for any heap, without unused queue
 representation premises. The reference alone is not evidence of source execution.
 
-`Program.run_rr_allocated_parallel` proves that actual silent allocation and
-checked initialization from `managed_empty` reach a finite heap with two
-PCM-separated queues, an allocation table recording both actual blocks, and the
-original worker execution, at the same observation counter.
+`Program.run_rr_allocated_parallel` retains the exact allocation/initialization
+observation prefix from `managed_empty`, then runs two PCM-separated queues
+with both actual allocation records and the same user-emission counter.
 It also covers empty input lists. No initialized heap is assumed.
 
 `examples.CSL.Queue.Ticl` exposes recurrence for **every fair scheduling
@@ -152,8 +169,9 @@ state `st`, and runs `run_fair S (allocated_parallel_queues values1 values2) st
 
 These four theorems require one successful `find_index Nat.eqb` premise per payload
 list, not representation, disjointness, or preallocated-heap premises. They
-transport the worker recurrence through the proved initialization bisimulation
-`run_fair_allocated_parallel`. The lower-level statements remain:
+transport worker recurrence through the initialization log prefix in
+`run_fair_allocated_parallel`, at its actual nonterminal boundary world. The
+lower-level statements remain:
 
 - `rotate_agaf_pop_fair`: queue 1 ordinary recurrence.
 - `rotate_agaf_pop_fair_q2`: queue 2 ordinary recurrence.
@@ -180,11 +198,13 @@ counting an old observation at index `j` toward the bound `S j`.
 ## One shared queue, two spawned workers
 
 `shared_queue hdr` forks `worker 1 hdr`, then `worker 2 hdr`, and terminates;
-the remaining pool is `[worker 2 hdr; worker 1 hdr]` (`run_{nd,rr}_two_forks`;
-`scheduled_visible_two_forks` exhibits both `Spawn` events). Both workers rotate
+the remaining pool is `[worker 2 hdr; worker 1 hdr]` (`run_{nd,rr}_two_forks`).
+`scheduled_visible_two_forks` exposes that pool without preceding events:
+both forks retain parent focus and make no selection. Both workers rotate
 the SAME queue. `exact_worker_turn` is an exact first-yield source segment of
-one worker: one pop logged as `inr (stamp (tag,v) c)`, one rotation, and a
-return to the same worker. `shared_worker_turn` packages it with the standard
+one worker: `CSLEmit (stamp (tag,v) c)` followed by four post-write heap
+snapshots (`queue_turn_logs`), then a return to the same worker.
+`shared_worker_turn` packages this list with the standard
 invariant/position variant, for either worker, so the generic
 `ag_csl_{nd,rr}_invariance` and `aul_csl_{nd,rr}_eventually` rules apply with
 no fairness or phase argument. The public results are
@@ -208,7 +228,7 @@ field. The managed memory `ManagedHeap := Heap * AllocationTable` pairs the data
 heap with the live malloc extents (base to positive length, same partial-map
 representation); `ProductPCM` gives it componentwise separation, so an extent
 record is an owned resource. `SSig` is `ManagedHeap * (Ctx.Ctx * nat)`, a state is
-`((h,allocs),(ctx,c))`, and results remain `(result, SSig)`. The context is
+`((h,allocs),(ctx,c))`, and results are state-first `(SSig, result)`. The context is
 shared by all threads and is not part of heap ownership. Runners take a full
 state: `run_rr p ((h,allocs),(ctx,c))`, `run_nd p ...`, and the pool runners
 `run_{nd,rr}_pool`. Runners start at `managed_empty` or an explicit `(h,allocs)`;
@@ -221,30 +241,37 @@ Neither module imports a language, concrete heap, allocator, or observation type
 CSL uses `sE := heapE + (stateE Ctx.Ctx + writerE (nat * nat))`; the sequential
 queue model uses `qE := heapE + (stateE Ctx.Ctx + writerE nat)`. Both are
 interpreted by the one payload-polymorphic
-`sh := h_sum heap_handler (h_sum csl_context_handler csl_emit_handler)`, at
-payloads `nat * nat` and `nat`. Observations are `CSLObs A := Ctx.Ctx + indexed A`.
+`sh := h_sum (heap_handlerW CSLHeap) (h_sum csl_context_handler csl_emit_handler)`, at
+payloads `nat * nat` and `nat`. `CSLObs A` distinguishes `CSLHeap memory`,
+`CSLCtx context`, and `CSLEmit (stamp payload index)`. Only `CSLEmit` satisfies
+`csl_indexed`; heap snapshots and context updates do not advance user indices.
+`heap_handlerW` reuses `h_instr` around the canonical checked `heap_handler`;
+its observer runs only after a checked operation returns. There is no initial
+heap snapshot: `World` still remembers only the most recent observation.
 
-`CAlloc size` uses `heap_alloc`/`HAlloc` and a guarded, constructive search inside the shared
-handler. It returns the least positive base whose entire interval is free and
-initializes exactly `size` cells to zero, preserving every old allocated value
-and address zero. It neither emits nor yields, and advances neither the
-observation counter nor the scheduler cursor. There is no runtime fuel,
-caller-selected base, heap-wide maximum, classical choice, or separate allocation
-log; success records exactly `upd allocs base size` in the extent table.
+`CAlloc size` uses `heap_alloc`/`HAlloc` and the same guarded constructive search.
+It returns the least positive base whose entire interval is free and initializes
+exactly `size` cells to zero, preserving old allocated values and address zero.
+It emits one `CSLHeap` snapshot after installing `upd allocs base size`;
+rejected candidates remain silent guards. It neither yields nor advances the
+user-emission counter or scheduler cursor. There is no runtime fuel,
+caller-selected base, heap-wide maximum, classical choice, or second allocation event.
 Size zero is `stuck`. Positive requests terminate on every finite heap; an
 infinite heap with no suitable interval silently diverges, as proved by
 `alloc_search_no_space`. This is not a finite-memory exhaustion policy.
 
-Reads and writes remain checked; writes never allocate implicitly. Emit records
-`inr (stamp (tag,value) c)`, preserves the managed memory and context, and
-increments the global observation counter. The numeric `HCAS addr old value`
-(`heap_cas`) operation faults on an absent cell, updates and returns `true` on a
-matching value, and otherwise returns `false` without changing the heap. It
-neither logs nor yields. The scheduler cursor is separate. A variable read
-`CVar x` looks up the shared context, yields once on success and
+Reads and writes remain checked; writes never allocate implicitly. Every
+successful write logs its post-memory, including a same-value write. Reads and
+faulting operations emit nothing. Emit records `CSLEmit (stamp (tag,value) c)`,
+preserves managed memory and context, and increments only the user-emission
+counter. Numeric `HCAS addr old value` faults on an absent cell, updates and
+returns `true` on a match, and otherwise returns `false` without changing the
+heap. Every true result logs the post-memory, even if the desired value is
+unchanged; false results are silent. Neither outcome yields. The scheduler
+cursor is separate. A variable read `CVar x` looks up the shared context, yields once on success and
 returns the captured value; an unbound variable is `stuck`. `CAssign x e`
 evaluates `e`, then reads the current context again and logs exactly
-`inl (add x v ctx)`; it does not change the counter. There is no lock.
+`CSLCtx (add x v ctx)`; it does not change the counter. There is no lock.
 
 `CCAS a expected desired` takes three `CExp` operands. It evaluates each once
 through `denote_exp`, in address/expected/desired order, then performs the
@@ -261,8 +288,9 @@ allocator's existing yield boundaries.
 live recorded base it removes every cell of exactly that extent and its extent
 record. `CFree 0` is a no-op even if address zero holds data. Every other free —
 an interior pointer, an unknown base, or a second free of the same base — is
-`stuck`, as are later reads, writes, and CAS on released cells. Free neither
-emits nor yields, and changes neither the counter nor the cursor.
+`stuck`, as are later reads, writes, and CAS on released cells. Successful
+nonzero free emits the released memory; free zero and invalid free are silent.
+Free never yields or changes the user-emission counter or cursor.
 `managed_free_frame` releases exactly an owned `block_owned` resource while
 preserving any disjoint frame. The allocator example's `remote_free` remains
 CAS-based free-list publication, not heap deletion.
@@ -287,17 +315,19 @@ functions by Leibniz equality.
 
 ## Structural temporal interface
 
-`From TICL Require Import Lang.CoCSL.Mod.` exports the full matrix. Its 110
-source rules are the name product
-`{anl,anr,aul,aur,ag}_csl_{nd,rr}_{read,write,emit,yield,fork,ret,bind,until_none,alloc,cas,free}`.
-They apply to arbitrary nonempty focused pools and continuations, not only queue
-or allocator fixtures. Another 30 rules use suffixes `select` and `heap_free`
-(effect level, in `ICTree.Interp.CSL.Mod`) and `alloc_finite`, giving 140
-independently named equivalences.
+`From TICL Require Import Lang.CoCSL.Mod.` exports exact source/scheduler
+equations and the shared indexed `an_csl_{nd,rr}_*`, `au_csl_{nd,rr}_*`, and
+prefix-only `ag_csl_{nd,rr}_*` interfaces for selection, emission, and yield.
+AN/AU guards have index `None`; endpoints retain mode `b`. Scheduler results
+are `SSig * unit`, while erased `CProg X` results are `SSig * option X`.
+Checked operation equations compose with the shared log, bind, and state rules;
+there is no separate prefix/suffix mutation-rule product.
 
-Silent rules transport the interpreted residual in the same world. Emit rules
-keep the current-prefix obligation in the old world and place only the successor
-in `Obs (Log (inr (stamp (tag,value) c))) tt`. ND yield checks every branch, including the
+Silent rules transport the interpreted residual in the same world. Mutation
+rules retain the complete log prefix at the original world; shared log rules
+place the successor in the post-operation heap world. Emit similarly places
+only the successor in `Obs (Log (CSLEmit (stamp (tag,value) c))) tt`.
+ND yield checks every branch, including the
 single branch of a singleton pool; RR yield selects `rr_pick n m` and advances
 only the cursor. Fork prepends its child but keeps the parent focused. Bind and
 until preserve the pool and the outer `None` halt flow. These rules assert no
@@ -320,8 +350,8 @@ For general expressions, `source_raw_cas`, `interp_rr_cas_exp`, and
 leave a literal CAS tail to which those rules apply. Moving these evaluations
 outside the scheduler via `instr_exp_erased` would erase their yields.
 
-The Yield fragment is reasoned about through `scheduled_visible` (Spawn and
-Yield visible), the standalone erased views `instr_exp_erased` and
+The Yield fragment is reasoned about through `scheduled_visible` (native
+`Scheduled` observations), the standalone erased views `instr_exp_erased` and
 `instr_flow_erased` (outer option flow exposed), and `run_nd`: expression rules
 `axr_csl_exp_*`, singleton rules `axr_csl_nd_skip` and `axr_csl_nd_yield`
 (the latter retains one real scheduling `AX` before `ret`), assignment rules `a{u,l}r_csl_{flow,nd}_assign*`,
@@ -333,33 +363,41 @@ liveness claim.
 
 `From TICL Require Import Lang.CoCSL.Frame.` transports proved properties of a
 run to the same program on a heap extended by a disjoint `ManagedHeap` region
-`fr`. The chain is `Logic.Simulation` (Kripke-generic: a conditional
-simulation `csim` preserves every prefix formula; right-unique return relations
-preserve suffix formulas, with native `ret` postconditions rewritten by `framer`) →
+`fr`. The chain is `Logic.Simulation` (Kripke-generic: conditional simulation
+transports both observation and return atoms through `framer X b ER RV`;
+suffix transport requires right uniqueness of both relations) →
 `CTree.Logic.Sim` (`csim` on ctrees, `Framable okE` trees: no hidden `Br`
 whose branches are not guarded by a visible `Step`, and only `okE` events) →
 `CTree.Interp.CSL.Frame` (`FrameHandler`: a handler frames when its
 responses in frame-related states agree up to the frame; `sh_frame_handler`
 and `policy_handler_frame` are the two instances; `csim_interp_frame`:
 `interp_state h u` of a framing handler is a conditional simulation between
-`s` and any `s'` with `frame_rel fr s s'`; `ticll_csl_frame`,
-`ticlr_csl_frame`, `a{n,u}r_csl_frame_ret`, and semantic
-`a{n,u}r_csl_frame_done`) →
+`s` and any `s'` with `frame_rel fr s s'`; indexed `ticl_interp_frame`
+specializes to `ticl_csl_frame` for program-only runs and `ticl_csl_frameW`
+for instrumented policies, including ordinary RR) →
 `CTree.Interp.Yield.Frame` (the erased nondeterministic tree and the
 round-robin scheduled tree of a `Framable` pool are `Framable`;
-`framable_translate_inr1`) → `Lang.CoCSL.Frame` (`run_{nd,rr}_framable`,
-`run_{nd,rr}_pool_framable`, `instr_flow_framable`, and `frame_post_iff`).
-Clients apply the generic `CTree.Interp.CSL.Frame` rules directly with
-the runner's framability certificate and a `frame_rel` proof; there are no
-runner-specific frame-rule wrappers. Native consequence lemmas
-`ret_impl_ticlr` and `aur_ret_mono` live in `Logic.Congruence`.
-`aur_done_mono` retains the more general semantic terminal-postcondition domain.
+`framable_translate_inl1`) → `Lang.CoCSL.Frame` (`run_{nd,rr}_framable`,
+`run_{nd,rr}_pool_framable`, `instr_flow_framable`, `frame_post_iff`, and
+`frame_postW_iff`). Clients supply the runner's framability certificate and a
+`frame_rel` proof. Native consequence lemmas `ret_impl_ticl` and `aur_ret_mono`
+live in `Logic.Congruence`; `aur_done_mono` keeps the semantic terminal domain.
+`ticl_csl_frame` requires related source and target initial worlds. `frameER fr`
+preserves contexts and emissions exactly and relates an owned mutation snapshot
+to that snapshot extended by `fr`. `frame_post` existentially relates both the
+returned state/value and the predecessor world. Logged RR uses `frameERW`,
+which additionally preserves slot logs, and `frame_postW` for native returns.
+`ticl_csl_frame_stable` and `ticl_csl_frameW_stable` retain
+an unchanged prefix only with a `prefix_stable` proof; indexed user-emission
+predicates are stable, but arbitrary exact-heap predicates are not.
+
 
 `alloc_free p` is required: first-fit allocation is deterministic in the
 absolute heap, so `HAlloc` is excluded from `no_alloc_sE`
 (`~ Framable no_alloc_sE (heap_alloc 1)` in `examples/CSL/Frame/Single.v`).
 A framed `AF ret P` becomes `AF ret (frame_post fr P)`, which `frame_post_iff`
-unfolds to `exists m, m # fr /\ managed_wf m /\ M ≈ m ⊎ fr /\ P ((m, aux), x) w`.
+unfolds to `exists m w, m # fr /\ managed_wf m /\ M ≈ m ⊎ fr /\
+simW (frameER fr) (frameRV fr) w w' /\ P ((m, aux), x) w` at target world `w'`.
 Suffix syntax has no `done` or `finish` atom: `ret P` holds before the final
 value transition and requires one common return value across every successor.
 Original terminal claims remain explicit `anc`/`auc`/`euc` propositions ending
@@ -380,13 +418,15 @@ variable read yields.
 `Lang.CoCSL.Sequential` is the join principle for cooperative pools: a
 `yield_fork_free` segment of a focused slot runs exactly as its standalone
 erased run (`run_{nd,rr}_prefix`, from `interp_schedule_{nd,rr}_prefix_bind`
-over `Sequential` raw threads), with `instr_flow_head`, `instr_flow_read`,
-`instr_flow_write`, `instr_flow_write_single`, and `run_nd_fork_bind` equations.
+over `Sequential` raw threads), with `instr_flow_head`, `instr_flow_ret`, checked
+read/write/CAS/free/allocation/emission equations, and `run_nd_fork_bind`.
+`instr_flow_write_single` exposes a heap log followed by the native return.
 `Sequential t` is `BranchFree t /\ Framable user_only t`, reusing the two
 existing coinductive predicates; `sequential_inv` exposes its node shape.
 `examples/CSL/Frame/{Shared,AF,AN,AG}.v` keep the original properties
-(`af_two_procs_*`, `an_two_procs_*`, `ag_two_procs_*`), including four-transition
-AN positives and fault negatives. Their ND proofs use framed native-return
+(`af_two_procs_*`, `an_two_procs_*`, `ag_two_procs_*`), including five native AX
+steps before `ret` and six semantic next steps before `done_with`, with fault
+negatives at the same boundaries. Their ND proofs use framed native-return
 helpers and TICL rules directly. Shared `close_ret` closes an `AF ret` leaf
 with `ret_ret`; exact semantic corollaries retain the final raw value step.
 
@@ -406,31 +446,55 @@ the lineage's own-action clock.
 The exported pool-shape facts `owned_step_sel` and `owned_step_focus` expose
 selection and focused steps without unfolding the machine. The regression
 fixtures reuse them and Separation's `hTrue_proper` rather than duplicate proofs.
+`owned_interp` executes the pool through the existing `interp_schedule_nd sh`
+on `joined_state`. `prim_reflect_joined` and `owned_interp_action` reflect
+primitives and actions directly against this runner. `OAFree base` and
+`OACAS success` distinguish silent outcomes. Writes, nonzero frees, and successful
+CAS log post-memory; emissions use the global count. Selection and source steps
+retain raw Tau.
 
 `admissible child parent h h' ctx base` requires well-formed disjoint heaps,
 no allocation or context writes (`component_ok`), and every reachable pending
 primitive inside its owner's reservation (`confined`; `addr_ok` is a static
-sufficient condition for literal addresses). Under it,
-`Owned.owned_fork_erasure` relates the erased instrumented machine to
-`run_nd (CBind (CFork child) k)` on the joined heap by
-`sbisim (simL owned_result_rel)`: observations and steps are exact, returned
-heaps agree up to `≈`. Free, CAS, `CVar`, nested forks, and faults are
-reflected in both directions; allocation and `CAssign` stay outside this
-fragment.
+sufficient condition for literal addresses). `owned_fork_runner` identifies
+`owned_interp (init_owned child (k tt) h h' ctx base)` with
+`run_nd (CBind (CFork child) k)` on the joined heap, without an admission premise.
+Operational reflection of free, CAS, `CVar`, nested forks, and faults uses
+admission; allocation and `CAssign` stay outside this fragment.
 
-`Lang.CoCSL.Separation` reads the shallow TICL operators over any transition
-relation (`hAN`…`hEG`, `hDone`, `hRet`) and defines the anchored split
-`hsep P Q`, which keeps the fork's split instead of choosing a fresh one.
-The generic AU/EU/AN/AG/EG splits require `coupled` and proper assertions:
+`Lang.CoCSL.Asep` reads the shallow TICL operators over any transition relation
+(`hAN`…`hEG`, `hDone`, `hRet`). It consumes the syntax-independent unary
+`state_sat` and exact-resource `state_obligation` assertions from
+`CTree.Interp.CSL.Asep`. Their separating operation is ordinary managed-heap
+`Utils.Pcm.asep`:
+
+```coq
+state_sat (fun c => asep (state_obligation Child P c)
+                          (state_obligation Parent Q c))
+```
+
+The heap pins keep the admitted split instead of choosing a fresh one.
+The generic AU/EU/AN/AG/EG splits retain `coupled` and properness premises:
 
 | Global premise | Component conclusion | Extra hypothesis |
 | --- | --- | --- |
-| `hAU`/`hEU`/`hAF`/`hEF` of `hsep` | both projections | none |
-| `hAN`/`hAX` of `hsep` | both projections | `SelectionStable` targets, nonempty projections |
-| `hAG` of `hsep` | both projections | `step_closed` invariant with `finite_release` ranks |
-| `hEG` of `hsep` along one execution | both projections | the execution is fair to both lineages |
-| `hDone`/`hRet` of `hsep` | `hDone` both / last-finisher `hRet` disjunction | none |
+| `hAU`/`hEU`/`hAF`/`hEF` of lifted heap assertions | both projections | none |
+| `hAN`/`hAX` of lifted heap assertions | both projections | `SelectionStable` targets, nonempty projections |
+| `hAG` of lifted heap assertions | both projections | `step_closed` invariant with `finite_release` ranks |
+| `hEG` of lifted heap assertions along one execution | both projections | the execution is fair to both lineages |
+| `hDone`/`hRet` of lifted heap assertions | `hDone` both / last-finisher `hRet` disjunction | none |
 | any operator over `weak_next i` | same operator on `project i` | none |
+
+`hRet` witnesses an actual successor; every successor must be terminal,
+satisfy the postcondition, and agree through `same_view`. This comparison keeps
+each lineage's heap, count, and last stamp, plus context, base, and terminality.
+Equal joined states alone do not imply agreement. `hRet_at` compares the selected
+projection; `same_view_project` requires global terminality.
+
+The shallow `sim_*` laws in `Logic.Simulation` match two Kripke clocks on the
+same carrier, event signature, branch family, and return type. All six
+`weak_h*_to_local` modal proofs share `weak_project_sim_l`, `weak_project_sim_r`,
+and `weak_project_atom`. Existential laws need only forward matching.
 
 `fork_h{au,eu,an,ax,ag,eg_fair}_split` state these at the outer fork; the child's
 projection starts unfocused, and its initial selection is stripped for AG/EG
@@ -438,16 +502,18 @@ projection starts unfocused, and its initial selection is stripped for AG/EG
 never for AN. `examples/CSL/Frame/Separation.v` checks every rule and its
 boundaries on concrete programs.
 
-`owned_ticll_erasure` and `fork_ticll_erasure` transfer original TICL prefix
-formulas to the ND runner unchanged. Suffix bridges retain native `ret` through
-`framer owned_result_rel`. Native `owned_*_ret_ticl`/`fork_*_ret_ticl` AF/EF
-bridges discharge it for proper result predicates; the original `*_done_ticl`
-names retain exact semantic eventual-terminal claims via `af_ret_done`/`ef_ret_done`.
-`erase_owned_silent_path` removes finite erased-silent action paths,
-`erase_owned_select` keeps one scheduler tick, and `erase_owned_terminal`
-identifies an immediate native return before its final-value transition. `owned_hag_ticl`
-requires a decreasing silent-action rank separate from lineage release;
-`owned_heg_ticl` requires infinitely many visible actions in its execution.
+`owned_ticl_transport` transports arbitrary indexed formulas between related
+worlds of the canonical runner using `event_eq` and `owned_result_rel`.
+`fork_ticl` identifies the owned and source fork runners at any world, with the
+formula unchanged, including native-return predicates.
+Native `owned_*_ret_ticl`/`fork_*_ret_ticl` AF/EF bridges accept arbitrary proper
+result predicates; the original `*_done_ticl` names retain exact semantic
+eventual-terminal claims via `af_ret_done`/`ef_ret_done`.
+`owned_interp_silent` removes finite silent action paths under `erasable`,
+`owned_interp_select` keeps one scheduler tick, and `owned_interp_terminal`
+identifies an immediate native return before its final-value transition.
+`owned_hag_ticl` requires a decreasing silent-action rank separate from lineage
+release; `owned_heg_ticl` requires infinitely many visible actions in its execution.
 
 ## Runtime queue construction
 
@@ -465,9 +531,11 @@ interpreter. `new_queue_heap_owned` separates the exact `qheap` resource from
 the unchanged old heap; it does not claim exact queue ownership of unrelated
 cells. Allocation addresses need not remain the same under framing.
 
-Both blocks are initialized before fork. Initialization emits and yields
-nothing; the existing parent-first startup and rotation loop are unchanged.
-The infinite workers do not allocate or free further storage.
+Both blocks are initialized before fork. `new_queue_logs` contains one allocation
+snapshot, two header-write snapshots, and two node-write snapshots per value:
+`2 * length values + 3` observations. Initialization neither yields nor advances
+the user-emission counter or cursor. Empty-queue faults retain this prefix.
+The parent-first startup is unchanged; infinite workers allocate or free no further storage.
 
 ## Donor provenance
 
@@ -537,9 +605,9 @@ lifecycle consumer of the source language:
   satisfies `AG ⊤` in every not-done world) and `run_{nd,rr}_silent_loop_no_ag`
   (a silent loop is `stuck`, hence fails `AG ⊤`), beside the structural matrix.
 - `examples/CSL/Memory.v`: `lifecycle_scope` (both CAS outcomes, adjacent
-  first-fit blocks, whole-extent release, and the exact stamp sequence),
-  `reuse_first_fit`, `free_null_unchanged`, and the `*_stuck` faults for
-  interior-pointer free, double free, and read/write/CAS after free.
+  first-fit blocks, whole-extent release, and the exact mutation/emission sequence),
+  `reuse_first_fit`, `free_null_unchanged`, and `*_stuck` faults that retain the
+  successful-operation prefix before interior free, double free, or released-cell access.
 - `examples/CSL/Control.v`: `scoped_fork_no_parent_replay` (a child runs only
   its body), `context_resume_preserves_updates` (one yield per variable read,
   late context read in assignment, separate counter), and
@@ -558,6 +626,13 @@ lifecycle consumer of the source language:
   payloads may repeat), `parallel_queues_hemp_stuck`, and
   `allocated_parallel_queues_empty_stuck`; `examples.CSL.Queue.Ticl` derives the two
   corresponding `*_no_ag` results for an arbitrary formula.
+- `examples/CSL/Frame/HeapObservations.v`: the five-observation mutation probe,
+  arbitrary finite prefixes and ND/RR recurrence of the no-yield alternating
+  writer, the productive heap-silent yielding control, post-heap/return framing,
+  initialization snapshot tables, and an invalid allocator source that clears
+  a mailbox before a missing-payload write faults. `two_log_iterator_recurrence` checks the
+  continuation-aware rule; its detached-suffix negative explains why the old
+  body-only invariant is insufficient after later logs replace the target.
 - `examples/CSL/Overlap.v` and `examples/CSL/Allocator/Counterexamples.v` keep
   their witness queue, heaps, scripts, and observation tables as section-local
   `Let`s, discharged into the public statements.
@@ -579,9 +654,9 @@ extensionality explicitly: `frameRV_right_unique` and
 `owned_result_rel_right_unique` turn pointwise heap and allocation-table
 equivalence into equality of return values. The heap model itself remains
 pointwise; prefix and semantic terminal bridges need no return-uniqueness premise.
-`Print Assumptions ticlr_csl_frame` reports functional extensionality and
+`Print Assumptions ticl_csl_frame` reports functional extensionality and
 `eq_rect_eq`, the same set as the existing scheduler baseline.
 Within the generic layers, `ticll_sim` and `framable_bind` are closed under
-the global context; `ticlr_sim` (worlds with `Finish`), `csim_structural`
+the global context; `ticl_sim` (worlds with `Finish`), `csim_structural`
 (ctrees' `trans`), and `framable_iter` (`unfold_iter`) inherit `eq_rect_eq`,
 as do `ret_ret`, `ktrans_finish`, and `unfold_iter`.

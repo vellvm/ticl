@@ -21,6 +21,7 @@
 From Stdlib Require Import
   List
   Lia
+  FunctionalExtensionality
   Arith.PeanoNat.
 
 From Coinduction Require Import all.
@@ -28,12 +29,21 @@ From Coinduction Require Import all.
 From TICL Require Import
   CTree.Core
   CTree.Interp.State.Mod
+  CTree.Events.Writer
   CTree.Events.Heap.
 
 From TICL Require Export Events.HeapModel.
 
 Import CTreeNotations.
 Local Open Scope ctree_scope.
+
+(** Extensional equality is needed only at interpretation boundaries; the
+    pure heap model and its PCM laws remain pointwise. *)
+Lemma managed_heap_ext (m m' : ManagedHeap) : (m ≈ m')%pcm -> m = m'.
+Proof.
+  destruct m as [h al], m' as [h' al']; intros [Hh Hal]; f_equal;
+    apply functional_extensionality; assumption.
+Qed.
 
 (** The immutable snapshot is searched without fuel or heap instrumentation.
     Every rejected candidate is silent; only success changes the heap. *)
@@ -79,6 +89,25 @@ Definition heap_handler {F B : Type -> Type} {Sigma : Type}
             else Ret (s,false)
         end
     end.
+
+(** Observe successful mutations only, after the checked operation returns.
+    Command success, not extensional heap change, determines visibility. *)
+Definition heap_mutation_obs {Sigma : Type} (Y : Type)
+  (e : heapE Y) (result : Y) (post : ManagedHeap * Sigma)
+  : option ManagedHeap :=
+  match e in heapE X return X -> option ManagedHeap with
+  | HWrite _ _ => fun _ => Some (fst post)
+  | HAlloc _ => fun _ => Some (fst post)
+  | HCAS _ _ _ => fun success => if success then Some (fst post) else None
+  | HFree base => fun _ => match base with 0 => None | S _ => Some (fst post) end
+  | HRead _ => fun _ => None
+  end result.
+
+Definition heap_handlerW {W : Type} {B : Type -> Type} {Sigma : Type}
+  (snapshot : ManagedHeap -> W)
+  : heapE ~> stateT (ManagedHeap * Sigma) (ctreeW W B) :=
+  h_instr (heap_handler (F:=void1))
+    (fun Y e result post => option_map snapshot (heap_mutation_obs Y e result post)).
 
 (** ** Raw handler equations.
 
@@ -249,6 +278,14 @@ Section AllocSearch.
     - intros j J Lt; apply First; lia.
     - apply heap_handler_alloc_first; try assumption; try lia.
   Qed.
+  Lemma heap_handler_alloc_no_space h allocs size (aux : Sigma) :
+    Nat.lt 0 size -> (forall j, Nat.lt 0 j -> ~ block_free h j size) ->
+    heap_handler (F:=F) (B:=B) _ (HAlloc size) ((h,allocs),aux) ≅ CTree.spin.
+  Proof.
+    intros Pos Full; cbn [heap_handler fst snd].
+    rewrite (alloc_search_no_space h size 1 aux Pos ltac:(intros j Hj; apply Full; lia)).
+    apply bind_spin.
+  Qed.
 End AllocSearch.
 
 (** ** Lifting through [interp_state].
@@ -395,3 +432,344 @@ Section HeapInterp.
     rewrite (heap_handler_free_invalid base memory aux H), bind_stuck; reflexivity.
   Qed.
 End HeapInterp.
+(** First-fit allocation in raw form.
+
+    Every [sbisim] bind congruence of the library ([bind_sbisim_cong],
+    [sbisim_clo_bind_eq]) identifies the universes of the bound and returned
+    result types, so rewriting [alloc_search_first] under the handler's own
+    [bind] pins the auxiliary state's universe to the state transformer's;
+    the handler instance inside [sh] lives at a different (rigid) universe,
+    and [alloc_search] is a cofixpoint, so the two can never be identified.
+    The equations below instead unfold [bind] one step at a time: the
+    rejected candidates are exactly [base - start] leading guards, which are
+    then discharged at the handler-call level by [sb_guard]. *)
+Lemma alloc_search_bind_guards {F B : Type -> Type} {Sigma X : Type}
+  (h : Heap) (size start base : nat) (aux : Sigma)
+  (k : (Heap * Sigma) * nat -> ctree F B X) :
+  Nat.lt 0 size -> Nat.le start base -> block_free h base size ->
+  (forall j, Nat.le start j -> Nat.lt j base -> ~ block_free h j size) ->
+  (alloc_search h size start aux >>= k) ≅
+    guards (base - start) (k ((hunion (hblock base size) h, aux), base)).
+Proof.
+  intros Pos L Free First; destruct size as [|size]; [lia |].
+  remember (base - start) as distance eqn:D.
+  revert start L First D.
+  induction distance as [|distance IH]; intros start L First D.
+  - assert (start = base) by lia; subst start.
+    apply block_freeb_spec in Free.
+    rewrite unfold_bind; cbn -[block_freeb]; unfold observe; cbn -[block_freeb].
+    rewrite Free; reflexivity.
+  - assert (Test : block_freeb h start (S size) = false).
+    { destruct (block_freeb h start (S size)) eqn:T; [|reflexivity].
+      exfalso; apply (First start); try lia; apply block_freeb_spec; exact T. }
+    rewrite unfold_bind; cbn -[block_freeb]; unfold observe; cbn -[block_freeb].
+    rewrite Test.
+    cbn [guards]; apply guard_equ_node.
+    apply IH; [lia | intros j J B'; apply First; lia | lia].
+Qed.
+
+Lemma heap_handler_alloc_first_guards {F B : Type -> Type} {Sigma : Type}
+  h allocs size base (aux : Sigma) :
+  Nat.lt 0 size -> Nat.lt 0 base -> block_free h base size ->
+  (forall j, Nat.lt 0 j -> Nat.lt j base -> ~ block_free h j size) ->
+  heap_handler (F:=F) (B:=B) _ (HAlloc size) ((h,allocs),aux) ≅
+    guards (base - 1) (Ret ((managed_alloc (h,allocs) base size, aux), base)).
+Proof.
+  intros Pos B' Free First.
+  cbn [heap_handler fst snd].
+  rewrite (alloc_search_bind_guards h size 1 base aux);
+    [reflexivity | exact Pos | lia | exact Free | intros j J L; apply First; lia].
+Qed.
+
+(** ** Observable checked-heap equations *)
+Section HandlerWEquations.
+  Context {W : Type} {B : Type -> Type} {Sigma : Type}
+    (snapshot : ManagedHeap -> W).
+
+  Lemma heap_handlerW_rd_some a h allocs (aux : Sigma) v :
+    h a = Some v ->
+    heap_handlerW snapshot _ (HRead a) ((h,allocs),aux) ≅
+      (Ret (((h,allocs),aux),v) : ctreeW W B _).
+  Proof.
+    intro H; unfold heap_handlerW, h_instr.
+    rewrite (heap_handler_rd_some a h allocs aux v H), translate_ret, bind_ret_l.
+    reflexivity.
+  Qed.
+
+  Lemma heap_handlerW_rd_none a h allocs (aux : Sigma) :
+    h a = None ->
+    heap_handlerW snapshot _ (HRead a) ((h,allocs),aux) ≅ (Stuck : ctreeW W B _).
+  Proof.
+    intro H; unfold heap_handlerW, h_instr.
+    rewrite (heap_handler_rd_none a h allocs aux H).
+    rewrite (translate_stuck (((h,allocs),aux),0)), bind_stuck; reflexivity.
+  Qed.
+
+  Lemma heap_handlerW_wr_some a h allocs (aux : Sigma) v old :
+    h a = Some old ->
+    heap_handlerW snapshot _ (HWrite a v) ((h,allocs),aux) ≅
+      (log (snapshot (upd h a v,allocs));;
+       Ret (((upd h a v,allocs),aux),tt) : ctreeW W B _).
+  Proof.
+    intro H; unfold heap_handlerW, h_instr.
+    rewrite (heap_handler_wr_some a h allocs aux v old H), translate_ret, bind_ret_l.
+    cbn [heap_mutation_obs option_map fst]; unfold log; rewrite bind_vis.
+    apply vis_equ_node; intros []; rewrite bind_ret_l; reflexivity.
+  Qed.
+
+  Lemma heap_handlerW_wr_none a h allocs (aux : Sigma) v :
+    h a = None ->
+    heap_handlerW snapshot _ (HWrite a v) ((h,allocs),aux) ≅ (Stuck : ctreeW W B _).
+  Proof.
+    intro H; unfold heap_handlerW, h_instr.
+    rewrite (heap_handler_wr_none a h allocs aux v H).
+    rewrite (translate_stuck (((h,allocs),aux),tt)), bind_stuck; reflexivity.
+  Qed.
+
+  Lemma heap_handlerW_cas_success a expected desired h allocs (aux : Sigma) :
+    h a = Some expected ->
+    heap_handlerW snapshot _ (HCAS a expected desired) ((h,allocs),aux) ≅
+      (log (snapshot (upd h a desired,allocs));;
+       Ret (((upd h a desired,allocs),aux),true) : ctreeW W B _).
+  Proof.
+    intro H; unfold heap_handlerW, h_instr.
+    rewrite (heap_handler_cas_success a expected desired h allocs aux H), translate_ret, bind_ret_l.
+    cbn [heap_mutation_obs option_map fst]; unfold log; rewrite bind_vis.
+    apply vis_equ_node; intros []; rewrite bind_ret_l; reflexivity.
+  Qed.
+
+  Lemma heap_handlerW_cas_failure a expected desired current h allocs (aux : Sigma) :
+    h a = Some current -> current <> expected ->
+    heap_handlerW snapshot _ (HCAS a expected desired) ((h,allocs),aux) ≅
+      (Ret (((h,allocs),aux),false) : ctreeW W B _).
+  Proof.
+    intros H N; unfold heap_handlerW, h_instr.
+    rewrite (heap_handler_cas_failure a expected desired current h allocs aux H N),
+      translate_ret, bind_ret_l; reflexivity.
+  Qed.
+
+  Lemma heap_handlerW_cas_missing a expected desired h allocs (aux : Sigma) :
+    h a = None ->
+    heap_handlerW snapshot _ (HCAS a expected desired) ((h,allocs),aux) ≅
+      (Stuck : ctreeW W B _).
+  Proof.
+    intro H; unfold heap_handlerW, h_instr.
+    rewrite (heap_handler_cas_missing a expected desired h allocs aux H).
+    rewrite (translate_stuck (((h,allocs),aux),false)), bind_stuck; reflexivity.
+  Qed.
+
+  Lemma heap_handlerW_free base (memory memory' : ManagedHeap) (aux : Sigma) :
+    managed_free memory base = Some memory' ->
+    heap_handlerW snapshot _ (HFree base) (memory,aux) ≅
+      (match base with
+       | 0 => Ret ((memory',aux),tt)
+       | S _ => log (snapshot memory');; Ret ((memory',aux),tt)
+       end : ctreeW W B _).
+  Proof.
+    intro H; unfold heap_handlerW, h_instr.
+    rewrite (heap_handler_free base memory memory' aux H), translate_ret, bind_ret_l.
+    destruct base; [reflexivity|].
+    cbn [heap_mutation_obs option_map fst]; unfold log; rewrite bind_vis.
+    apply vis_equ_node; intros []; rewrite bind_ret_l; reflexivity.
+  Qed.
+
+  Lemma heap_handlerW_free_invalid base (memory : ManagedHeap) (aux : Sigma) :
+    managed_free memory base = None ->
+    heap_handlerW snapshot _ (HFree base) (memory,aux) ≅ (Stuck : ctreeW W B _).
+  Proof.
+    intro H; unfold heap_handlerW, h_instr.
+    rewrite (heap_handler_free_invalid base memory aux H).
+    rewrite (translate_stuck ((memory,aux),tt)), bind_stuck; reflexivity.
+  Qed.
+
+  Lemma heap_handlerW_alloc_zero h allocs (aux : Sigma) :
+    heap_handlerW snapshot _ (HAlloc 0) ((h,allocs),aux) ≅ (Stuck : ctreeW W B _).
+  Proof.
+    unfold heap_handlerW, h_instr; rewrite heap_handler_alloc_zero.
+    rewrite (translate_stuck (((h,allocs),aux),0)), bind_stuck; reflexivity.
+  Qed.
+
+  Lemma heap_handlerW_alloc_first_guards h allocs size base (aux : Sigma) :
+    Nat.lt 0 size -> Nat.lt 0 base -> block_free h base size ->
+    (forall j, Nat.lt 0 j -> Nat.lt j base -> ~ block_free h j size) ->
+    heap_handlerW snapshot _ (HAlloc size) ((h,allocs),aux) ≅
+      (guards (base - 1)
+        (log (snapshot (managed_alloc (h,allocs) base size));;
+         Ret ((managed_alloc (h,allocs) base size,aux),base)) : ctreeW W B _).
+  Proof.
+    intros Pos Base Free First; unfold heap_handlerW, h_instr.
+    rewrite (heap_handler_alloc_first_guards h allocs size base aux Pos Base Free First),
+      translate_guards, bind_guards.
+    induction (base - 1) as [|n IH]; cbn [guards];
+      [|apply guard_equ_node; exact IH].
+    rewrite translate_ret, bind_ret_l.
+    cbn [heap_mutation_obs option_map fst]; unfold log; rewrite bind_vis.
+    apply vis_equ_node; intros []; rewrite bind_ret_l; reflexivity.
+  Qed.
+
+  Lemma heap_handlerW_alloc_first h allocs size base (aux : Sigma) :
+    Nat.lt 0 size -> Nat.lt 0 base -> block_free h base size ->
+    (forall j, Nat.lt 0 j -> Nat.lt j base -> ~ block_free h j size) ->
+    heap_handlerW (B:=B) snapshot _ (HAlloc size) ((h,allocs),aux) ~
+      (log (snapshot (managed_alloc (h,allocs) base size));;
+       Ret ((managed_alloc (h,allocs) base size,aux),base) : ctreeW W B _).
+  Proof.
+    intros Pos Base Free First.
+    rewrite (heap_handlerW_alloc_first_guards h allocs size base aux Pos Base Free First).
+    apply guards_sbisim.
+  Qed.
+  Lemma heap_handlerW_alloc_no_space h allocs size (aux : Sigma) :
+    Nat.lt 0 size -> (forall j, Nat.lt 0 j -> ~ block_free h j size) ->
+    heap_handlerW (B:=B) snapshot _ (HAlloc size) ((h,allocs),aux) ≅ CTree.spin.
+  Proof.
+    intros Pos Full; unfold heap_handlerW, h_instr.
+    rewrite (heap_handler_alloc_no_space h allocs size aux Pos Full), translate_spin, bind_spin.
+    reflexivity.
+  Qed.
+End HandlerWEquations.
+
+(** ** Observable heap interpretation and continuations *)
+Section HeapWInterp.
+  Context {W : Type} {G B : Type -> Type} {Sigma : Type}
+    (snapshot : ManagedHeap -> W)
+    (other : G ~> stateT (ManagedHeap * Sigma) (ctreeW W B)).
+
+  Local Ltac heapW_event :=
+    rewrite interp_state_bind, interp_state_trigger_bind, subevent_left; cbn [h_sum].
+  Local Ltac heapW_log :=
+    rewrite bind_bind; setoid_rewrite bind_ret_l; reflexivity.
+
+  Lemma interp_heapW_rd {X} a h allocs (aux : Sigma) v
+    (k : nat -> ctree (heapE +' G) B X) :
+    h a = Some v ->
+    interp_state (h_sum (heap_handlerW snapshot) other) (x <- heap_read a;; k x) ((h,allocs),aux) ~
+      interp_state (h_sum (heap_handlerW snapshot) other) (k v) ((h,allocs),aux).
+  Proof.
+    intro H; unfold heap_read; heapW_event.
+    rewrite (heap_handlerW_rd_some snapshot a h allocs aux v H), bind_ret_l; reflexivity.
+  Qed.
+
+  Lemma interp_heapW_wr {X} a h allocs (aux : Sigma) v old
+    (k : unit -> ctree (heapE +' G) B X) :
+    h a = Some old ->
+    interp_state (h_sum (heap_handlerW snapshot) other) (x <- heap_write a v;; k x) ((h,allocs),aux) ~
+      (log (snapshot (upd h a v,allocs));;
+       interp_state (h_sum (heap_handlerW snapshot) other) (k tt) ((upd h a v,allocs),aux)).
+  Proof.
+    intro H; unfold heap_write; heapW_event.
+    rewrite (heap_handlerW_wr_some snapshot a h allocs aux v old H); heapW_log.
+  Qed.
+
+  Lemma interp_heapW_wr_present {X} a h allocs (aux : Sigma) v
+    (k : unit -> ctree (heapE +' G) B X) :
+    h a <> None ->
+    interp_state (h_sum (heap_handlerW snapshot) other) (x <- heap_write a v;; k x) ((h,allocs),aux) ~
+      (log (snapshot (upd h a v,allocs));;
+       interp_state (h_sum (heap_handlerW snapshot) other) (k tt) ((upd h a v,allocs),aux)).
+  Proof.
+    intro H; destruct (h a) as [old|] eqn:Ha; [eapply interp_heapW_wr; eauto|contradiction].
+  Qed.
+
+  Lemma interp_heapW_cas_success {X} a expected desired h allocs (aux : Sigma)
+    (k : bool -> ctree (heapE +' G) B X) :
+    h a = Some expected ->
+    interp_state (h_sum (heap_handlerW snapshot) other)
+      (r <- heap_cas a expected desired;; k r) ((h,allocs),aux) ~
+      (log (snapshot (upd h a desired,allocs));;
+       interp_state (h_sum (heap_handlerW snapshot) other) (k true) ((upd h a desired,allocs),aux)).
+  Proof.
+    intro H; unfold heap_cas; heapW_event.
+    rewrite (heap_handlerW_cas_success snapshot a expected desired h allocs aux H); heapW_log.
+  Qed.
+
+  Lemma interp_heapW_cas_failure {X} a expected desired current h allocs (aux : Sigma)
+    (k : bool -> ctree (heapE +' G) B X) :
+    h a = Some current -> current <> expected ->
+    interp_state (h_sum (heap_handlerW snapshot) other)
+      (r <- heap_cas a expected desired;; k r) ((h,allocs),aux) ~
+      interp_state (h_sum (heap_handlerW snapshot) other) (k false) ((h,allocs),aux).
+  Proof.
+    intros H N; unfold heap_cas; heapW_event.
+    rewrite (heap_handlerW_cas_failure snapshot a expected desired current h allocs aux H N),
+      bind_ret_l; reflexivity.
+  Qed.
+
+  Lemma interp_heapW_alloc_first {X} h allocs size base (aux : Sigma)
+    (k : nat -> ctree (heapE +' G) B X) :
+    Nat.lt 0 size -> Nat.lt 0 base -> block_free h base size ->
+    (forall j, Nat.lt 0 j -> Nat.lt j base -> ~ block_free h j size) ->
+    interp_state (h_sum (heap_handlerW snapshot) other) (a <- heap_alloc size;; k a) ((h,allocs),aux) ~
+      (log (snapshot (managed_alloc (h,allocs) base size));;
+       interp_state (h_sum (heap_handlerW snapshot) other) (k base)
+         (managed_alloc (h,allocs) base size,aux)).
+  Proof.
+    intros Pos Base Free First; unfold heap_alloc; heapW_event.
+    rewrite (heap_handlerW_alloc_first_guards snapshot h allocs size base aux Pos Base Free First),
+      bind_guards, guards_sbisim; heapW_log.
+  Qed.
+
+  Lemma interp_heapW_free {X} base (memory memory' : ManagedHeap) (aux : Sigma)
+    (k : unit -> ctree (heapE +' G) B X) :
+    managed_free memory base = Some memory' ->
+    interp_state (h_sum (heap_handlerW snapshot) other) (x <- heap_free base;; k x) (memory,aux) ~
+      match base with
+      | 0 => interp_state (h_sum (heap_handlerW snapshot) other) (k tt) (memory',aux)
+      | S _ => log (snapshot memory');;
+          interp_state (h_sum (heap_handlerW snapshot) other) (k tt) (memory',aux)
+      end.
+  Proof.
+    intro H; unfold heap_free; heapW_event.
+    rewrite (heap_handlerW_free snapshot base memory memory' aux H).
+    destruct base; [rewrite bind_ret_l; reflexivity|heapW_log].
+  Qed.
+
+  Lemma interp_heapW_rd_missing {X} a h allocs (aux : Sigma)
+    (k : nat -> ctree (heapE +' G) B X) :
+    h a = None ->
+    interp_state (h_sum (heap_handlerW snapshot) other) (r <- heap_read a;; k r) ((h,allocs),aux) ~
+      (Stuck : ctreeW W B ((ManagedHeap * Sigma) * X)).
+  Proof.
+    intro H; unfold heap_read; heapW_event.
+    rewrite (heap_handlerW_rd_none snapshot a h allocs aux H), bind_stuck; reflexivity.
+  Qed.
+
+  Lemma interp_heapW_wr_missing {X} a v h allocs (aux : Sigma)
+    (k : unit -> ctree (heapE +' G) B X) :
+    h a = None ->
+    interp_state (h_sum (heap_handlerW snapshot) other) (r <- heap_write a v;; k r) ((h,allocs),aux) ~
+      (Stuck : ctreeW W B ((ManagedHeap * Sigma) * X)).
+  Proof.
+    intro H; unfold heap_write; heapW_event.
+    rewrite (heap_handlerW_wr_none snapshot a h allocs aux v H), bind_stuck; reflexivity.
+  Qed.
+
+  Lemma interp_heapW_cas_missing {X} a expected desired h allocs (aux : Sigma)
+    (k : bool -> ctree (heapE +' G) B X) :
+    h a = None ->
+    interp_state (h_sum (heap_handlerW snapshot) other) (r <- heap_cas a expected desired;; k r) ((h,allocs),aux) ~
+      (Stuck : ctreeW W B ((ManagedHeap * Sigma) * X)).
+  Proof.
+    intro H; unfold heap_cas; heapW_event.
+    rewrite (heap_handlerW_cas_missing snapshot a expected desired h allocs aux H), bind_stuck; reflexivity.
+  Qed.
+
+  Lemma interp_heapW_alloc_zero {X} h allocs (aux : Sigma)
+    (k : nat -> ctree (heapE +' G) B X) :
+    
+    interp_state (h_sum (heap_handlerW snapshot) other) (r <- heap_alloc 0;; k r) ((h,allocs),aux) ~
+      (Stuck : ctreeW W B ((ManagedHeap * Sigma) * X)).
+  Proof.
+    unfold heap_alloc; heapW_event.
+    rewrite (heap_handlerW_alloc_zero snapshot h allocs aux), bind_stuck; reflexivity.
+  Qed.
+
+  Lemma interp_heapW_free_invalid {X} base (memory : ManagedHeap) (aux : Sigma)
+    (k : unit -> ctree (heapE +' G) B X) :
+    managed_free memory base = None ->
+    interp_state (h_sum (heap_handlerW snapshot) other) (r <- heap_free base;; k r) (memory,aux) ~
+      (Stuck : ctreeW W B ((ManagedHeap * Sigma) * X)).
+  Proof.
+    intro H; unfold heap_free; heapW_event.
+    rewrite (heap_handlerW_free_invalid snapshot base memory aux H), bind_stuck; reflexivity.
+  Qed.
+End HeapWInterp.

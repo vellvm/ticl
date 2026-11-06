@@ -186,6 +186,14 @@ Section EquivSetoid.
             apply Hy.
             now symmetry.
     Qed.
+
+    Global Instance proper_qnext_equ (q : ticlq) :
+      Proper (meq ==> eq ==> iff) (qnext q P Q).
+    Proof. destruct q; cbn [qnext]; typeclasses eauto. Qed.
+
+    Global Instance proper_quntil_equ (q : ticlq) :
+      Proper (meq ==> eq ==> iff) (quntil q P Q).
+    Proof. destruct q; cbn [quntil]; typeclasses eauto. Qed.
   End Binary.
 
   (** * Congruence of the greatest fixpoints AG, EG *)
@@ -244,80 +252,59 @@ Section EquivSetoid.
 End EquivSetoid.
 
 (** * Congruence with respect to TICL formulas *)
-(** [entailsL] is a congruence with regards to [meq]. This is the main result of this file. *)
-Global Add Parametric Morphism `{KS: KripkeSetoid M E B X meq} (φ: ticll E) :
-  (entailsL X φ)
-       with signature (meq ==> eq  ==> iff) as proper_entailsL_meq.
+(** [entails] preserves model equivalence at either formula mode. *)
+Global Add Parametric Morphism `{KS: KripkeSetoid M E B X meq}
+    (b : bool) (φ : ticl_at E X b) :
+  (entails X b φ)
+       with signature (meq ==> eq ==> iff) as proper_entails_meq.
 Proof.
-  induction φ; intros * Heq w.
-  - (* Now *) rewrite ?ticll_now; reflexivity. 
-  - (* CuL *) destruct q; rewrite unfold_entailsL.
-    + (* au *)
-      refine (@proper_au_equ M E B K X meq Eqm KS (entailsL X φ1) (entailsL X φ2) _ _ _ _ Heq _ _ eq_refl);
-      unfold Proper, respectful; intros; subst; auto.
-    + (* eu *)
-      refine (@proper_eu_equ M E B K X meq Eqm KS (entailsL X φ1) (entailsL X φ2) _ _ _ _ Heq _ _ eq_refl);
-      unfold Proper, respectful; intros; subst; auto.
-  - (* CxL *) destruct q; rewrite unfold_entailsL.
-    + (* ax *)
-      refine (@proper_ax_equ M E B K X meq Eqm KS (entailsL X φ1) (entailsL X φ2) _ _ _ _ Heq _ _ eq_refl);
-        unfold Proper, respectful; intros; subst; auto.
-    + (* ex *)
-      refine (@proper_ex_equ M E B K X meq Eqm KS (entailsL X φ1) (entailsL X φ2) _ _ _ _ Heq _ _ eq_refl);
-        unfold Proper, respectful; intros; subst; auto. 
-  - (* Cg *) destruct q; rewrite unfold_entailsL.
-    + (* ag *)
-      refine (@proper_ag_equ M E B K X meq Eqm KS (entailsL X φ) _ _ _ Heq _ _ eq_refl);
-        unfold Proper, respectful; intros; subst; auto.
-    + (* er *)
-      refine (@proper_er_equ M E B K X meq Eqm KS (entailsL X φ) _ _ _ Heq _ _ eq_refl);
-        unfold Proper, respectful; intros; subst; auto.
-  - (* /\ *) split; intros [Ha Hb]; split.
-    + now rewrite <- (IHφ1 _ _ Heq).
-    + now rewrite <- (IHφ2 _ _ Heq).
-    + now rewrite (IHφ1 _ _ Heq).
-    + now rewrite (IHφ2 _ _ Heq).
-  - (* \/ *) split; intros; rewrite unfold_entailsL in *; destruct H.
-    + left; now rewrite <- (IHφ1 _ _ Heq).
-    + right; now rewrite <- (IHφ2 _ _ Heq).
-    + left; now rewrite (IHφ1 _ _ Heq).
-    + right; now rewrite (IHφ2 _ _ Heq).
-Qed.
-
-(** [entailsR] is a congruence with regards to [meq]. *)
-Global Add Parametric Morphism `{KS: KripkeSetoid M E B X meq} (φ: ticlr E X) :
-  (entailsR φ)
-       with signature (meq ==> eq  ==> iff) as proper_entailsR_meq.
-Proof.
-  induction φ; intros * Heq w.
-  - (* Ret *) rewrite ?ticlr_ret.
-    split; intros (r & Hr & Han); exists r; split; auto.
-    + refine (proj1 (@proper_ax_equ M E B K X meq Eqm KS (fun _ w => not_done w) (fun _ => done_of r w) _ _ _ _ Heq _ _ eq_refl) Han);
-        unfold Proper, respectful; intros; subst; auto.
-    + refine (proj2 (@proper_ax_equ M E B K X meq Eqm KS (fun _ w => not_done w) (fun _ => done_of r w) _ _ _ _ Heq _ _ eq_refl) Han);
-        unfold Proper, respectful; intros; subst; auto.
-  - (* CuR *) destruct q; rewrite unfold_entailsR.
-    + (* au *)
-      refine (@proper_au_equ M E B K X meq Eqm KS (entailsL X φ) (entailsR φ0) _ _ _ _ Heq _ _ eq_refl);
-      unfold Proper, respectful; intros; subst; auto.
-    + (* eu *)
-      refine (@proper_eu_equ M E B K X meq Eqm KS (entailsL X φ) (entailsR φ0) _ _ _ _ Heq _ _ eq_refl);
-      unfold Proper, respectful; intros; subst; auto.
-  - (* CxR *) destruct q; rewrite unfold_entailsR. 
-    + (* ax *)
-      refine (@proper_ax_equ M E B K X meq Eqm KS (entailsL X φ) (entailsR φ0) _ _ _ _ Heq _ _ eq_refl);
-        unfold Proper, respectful; intros; subst; auto.
-    + (* ex *)
-      refine (@proper_ex_equ M E B K X meq Eqm KS (entailsL X φ) (entailsR φ0) _ _ _ _ Heq _ _ eq_refl);
-        unfold Proper, respectful; intros; subst; auto.
-  - (* /\ *) split; rewrite unfold_entailsR; intros [Ha Hb]; rewrite unfold_entailsR; split.
-    + now rewrite <- (IHφ1 _ _ Heq).
-    + now rewrite <- (IHφ2 _ _ Heq).
-    + now rewrite (IHφ1 _ _ Heq).
-    + now rewrite (IHφ2 _ _ Heq).
-  - (* /\ *) split; intros; rewrite ticlr_or in H |- *; destruct H.
-    + left; now rewrite <- (IHφ1 _ _ Heq).
-    + right; now rewrite <- (IHφ2 _ _ Heq).
-    + left; now rewrite (IHφ1 _ _ Heq).
-    + right; now rewrite (IHφ2 _ _ Heq).      
+  assert (Hall : forall b (p : ticl_at E X b),
+      Proper (meq ==> eq ==> iff) (entails X b p)).
+  { apply (@ticl_at_ind E X
+      (fun b p => Proper (meq ==> eq ==> iff) (entails X b p))).
+    - intros p t t' Heq w w' <-; rewrite !ticl_now; reflexivity.
+    - intros p t t' Heq w w' <-; rewrite !ticl_ret.
+      split; intros (r & Hr & Han); exists r; split; auto.
+      + refine (proj1 (@proper_ax_equ M E B K X meq Eqm KS
+          (fun _ w => not_done w) (fun _ => done_of r w)
+          _ _ _ _ Heq _ _ eq_refl) Han);
+          unfold Proper, respectful; intros; subst; reflexivity.
+      + refine (proj2 (@proper_ax_equ M E B K X meq Eqm KS
+          (fun _ w => not_done w) (fun _ => done_of r w)
+          _ _ _ _ Heq _ _ eq_refl) Han);
+          unfold Proper, respectful; intros; subst; reflexivity.
+    - intros b' q p IHp r IHr t t' Heq w w' <-; destruct q.
+      + rewrite !ticl_au.
+        exact (@proper_au_equ M E B K X meq Eqm KS
+          (entails X false p) (entails X b' r) IHp IHr
+          t t' Heq w w eq_refl).
+      + rewrite !ticl_eu.
+        exact (@proper_eu_equ M E B K X meq Eqm KS
+          (entails X false p) (entails X b' r) IHp IHr
+          t t' Heq w w eq_refl).
+    - intros b' q p IHp r IHr t t' Heq w w' <-; destruct q.
+      + rewrite !ticl_an.
+        exact (@proper_ax_equ M E B K X meq Eqm KS
+          (entails X false p) (entails X b' r) IHp IHr
+          t t' Heq w w eq_refl).
+      + rewrite !ticl_en.
+        exact (@proper_ex_equ M E B K X meq Eqm KS
+          (entails X false p) (entails X b' r) IHp IHr
+          t t' Heq w w eq_refl).
+    - intros q p IHp t t' Heq w w' <-; destruct q.
+      + rewrite !unfold_entails_ag.
+        exact (@proper_ag_equ M E B K X meq Eqm KS
+          (entails X false p) IHp t t' Heq w w eq_refl).
+      + rewrite !unfold_entails_eg.
+        exact (@proper_er_equ M E B K X meq Eqm KS
+          (entails X false p) IHp t t' Heq w w eq_refl).
+    - intros b' p IHp r IHr t t' Heq w w' <-.
+      rewrite !ticl_and.
+      now rewrite (IHp t t' Heq w w eq_refl),
+        (IHr t t' Heq w w eq_refl).
+    - intros b' p IHp r IHr t t' Heq w w' <-.
+      rewrite !ticl_or.
+      now rewrite (IHp t t' Heq w w eq_refl),
+        (IHr t t' Heq w w eq_refl). }
+  intros t t' Heq w; exact (Hall b φ t t' Heq w w eq_refl).
 Qed.

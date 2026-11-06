@@ -6,6 +6,7 @@
     the untouched frame.  The negative check shows allocation is not
     framable, and the prefix check frames an [AG] of the emit loop. *)
 From examples Require Import CSL.Frame.Shared.
+From Equations Require Import Equations.
 
 
 (** Read cell [1] and write its successor. *)
@@ -17,14 +18,16 @@ Definition fr : ManagedHeap := (hsingle 2 7, hemp).
 
 (** The standalone run: cell [1] ends at [1]. *)
 Local Lemma p_af_ret ctx :
-  <[ {run_nd p (s0 ctx)}, Pure |= AF ret {fun '(s', _) _ => fst (csl_memory s') 1 = Some 1} ]>.
+  <( {run_nd p (s0 ctx)}, Pure |=R AF ret {fun '(s', _) _ => fst (csl_memory s') 1 = Some 1} )>.
 Proof.
+  ticl_normalize.
   unfold run_nd, run_nd_pool, csl_pool, denote, s0; cbn [Vector.map].
   change ([denote_flow p;; Ret tt] : pool sE Bn 1) with
     (([Ret tt] : pool sE Bn 1) @ Fin.F1 := (denote_flow p >>= fun _ => Ret tt)).
-  unfold p; rewrite aur_csl_nd_bind.
-  rewrite aur_csl_nd_read with (value := 0) by (unfold hsingle; cbn; reflexivity).
-  rewrite aur_csl_nd_write by (unfold hsingle; cbn; discriminate).
+  unfold p; rewrite interp_nd_source_bind.
+  rewrite interp_nd_source_read_value with (value := 0) by (unfold hsingle; cbn; reflexivity).
+  rewrite interp_nd_source_write_present by (unfold hsingle; cbn; discriminate).
+  apply (af_log (b:=true)); [constructor|].
   rewrite (interp_schedule_nd_ret sh) by reflexivity.
   rewrite (interp_schedule_nd_empty sh).
   close_ret.
@@ -33,7 +36,7 @@ Qed.
 
 (** Preserve the terminal-world property, including the final value transition. *)
 Lemma p_af ctx :
-  auc (entailsL (SSig * unit) (CNow (fun _ => True)))
+  auc (entails (SSig * unit) false (CNow (fun _ => True)))
     (fun _ wd => done_with (X := SSig * unit) (fun '(s', _) _ => fst (csl_memory s') 1 = Some 1) wd)
     (run_nd p (s0 ctx)) Pure.
 Proof. apply af_ret_done, p_af_ret. Qed.
@@ -47,17 +50,24 @@ Qed.
 (** The framed run on the two-cell heap: cell [1] ends at [1] and cell [2]
     is still [7]. *)
 Theorem p_af_framed ctx :
-  auc (entailsL (SSig * unit) (CNow (fun _ => True)))
+  auc (entails (SSig * unit) false (CNow (fun _ => True)))
     (fun _ wd => done_with (X := SSig * unit)
       (fun '(s', _) _ => fst (csl_memory s') 1 = Some 1 /\ fst (csl_memory s') 2 = Some 7) wd)
     (run_nd p (frame_state fr (s0 ctx))) Pure.
 Proof.
   apply af_ret_done.
-  eapply aur_ret_mono; [|apply (aur_csl_frame_ret sh _ sh_frame_handler fr _ _ _
-    (run_nd_framable p ltac:(cbn; tauto)) (frame_rel_state fr _ (frame_inv_s0 ctx)));
-    [constructor|apply p_af_ret]].
+  eapply aur_ret_mono with
+    (P := frame_post fr (fun '(s', _) _ => fst (csl_memory s') 1 = Some 1)).
+  2:{
+    eapply (impl_ticl_until (b:=true) Q_A Q_A eq_refl
+      (framer (SSig * unit) false (frameER fr) (frameRV fr) <( ⊤ )>) <( ⊤ )>).
+    - apply prefix_stable_framer; simp prefix_stable; intros; exact I.
+    - reflexivity.
+    - apply (aur_csl_frame_ret fr _ _ _
+        (run_nd_framable p ltac:(cbn; tauto)) (frame_rel_state fr _ (frame_inv_s0 ctx))
+        <( ⊤ )> _ Pure Pure); [constructor|constructor|apply p_af_ret]. }
   intros [[M aux] x] ? HP; apply frame_post_iff in HP.
-  destruct HP as (m & [HD _] & _ & [HE _] & HP); cbn in *.
+  destruct HP as (m & source & [HD _] & _ & [HE _] & _ & HP); cbn in *.
   split.
   - rewrite (HE 1); unfold hunion; now rewrite HP.
   - rewrite (HE 2); unfold hunion.
@@ -75,12 +85,14 @@ Qed.
 (** Prefix frame: the emit loop never stops on the framed heap either. *)
 Theorem emit_loop_ag_framed ctx :
   <( {run_nd (CUntilNone (CBind (CEmit 1 2) (fun _ => CRet (Some tt : option unit))))
-        (frame_state fr (s0 ctx))}, Pure |= AG ⊤ )>.
+        (frame_state fr (s0 ctx))}, Pure |=L AG ⊤ )>.
 Proof.
-  apply (ticll_csl_frame sh _ sh_frame_handler fr _ _ _
+  eapply (ticl_csl_frame_stable fr _ _ _
     (run_nd_framable (CUntilNone (CBind (CEmit 1 2) (fun _ => CRet (Some tt : option unit)))) ltac:(cbn; tauto))
-    (frame_rel_state fr _ (frame_inv_s0 ctx))).
-  apply run_nd_emit_loop_ag; constructor.
+    (frame_rel_state fr _ (frame_inv_s0 ctx)) _ Pure Pure).
+  - simp prefix_stable; intros; exact I.
+  - constructor.
+  - apply run_nd_emit_loop_ag; constructor.
 Qed.
 
 Print Assumptions p_af_framed.

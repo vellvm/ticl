@@ -12,10 +12,12 @@ From TICL Require Import
   CTree.Core
   CTree.Interp.State.Mod
   CTree.Interp.Yield.Policy
+  CTree.Interp.Yield.Fair
   CTree.Events.State
   CTree.Events.Writer
   CTree.Events.Yield
   Utils.Vectors
+  CTree.Trace
   CTree.Logic.Trans
   CTree.Logic.CanStep
   CTree.Logic.AX
@@ -51,11 +53,12 @@ Definition turn (q hdr: nat) : ctree sE Bn unit := turnk q hdr (Ret tt).
 Theorem turnk_spec {X}: forall q hdr a ns pv vs h allocs ctx c (kt: ctree sE Bn X),
     qrep hdr (a :: ns) (pv :: vs) h ->
     interp_state sh (turnk q hdr kt) ((h, allocs), (ctx, c))
-    ~ (log (inr (stamp (q,pv) c) : CSLObs (nat * nat)) ;;
-       interp_state sh kt ((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, allocs), (ctx, S c))).
+    ~ emit_list (queue_turn_logs (CSLEmit (stamp (q,pv) c)) hdr a
+        (List.hd 0 ns) (last (a :: ns) 0) (h,allocs))
+       (interp_state sh kt ((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, allocs), (ctx, S c))).
 Proof.
   intros q hdr a ns pv vs h allocs ctx c kt Hq; unfold turnk.
-  eapply (queue_turn_spec (semit q) (fun value index => inr (stamp (q,value) index))).
+  eapply (queue_turn_spec (semit q) (fun value index => CSLEmit (stamp (q,value) index))).
   - intros; unfold semit; apply interp_csl_emit.
   - exact Hq.
 Qed.
@@ -65,25 +68,23 @@ Qed.
     [n] is the turn counter and the loop index.  A turn is a whole rotation;
     the counter advances only after it completes.  Each completed turn ends
     with one logged scheduling decision: the source round-robin scheduler
-    ([interp_schedule_rr_select]) logs the slot it picks next, so the
-    reference scheduler, written in the scheduled signature
-    [schedE +' sE], triggers the same [Scheduled] event for
+    ([interp_schedule_rr_select]) logs the slot it picks next.  The reference
+    scheduler triggers the same [Scheduled] event in [sE +' schedE] for
     [Program.queue_pool_bisim] to be a bisimulation. *)
 
 Definition hdrof (u v n: nat) : nat := if Nat.even n then u else v.
 Definition tagof (n: nat) : nat := if Nat.even n then 1 else 2.
 
-(** The pool slot that runs turn [n]: queue 2 sits in slot [0], queue 1 in
-    slot [1]. *)
+(** Queue 2 occupies slot [0], and queue 1 occupies slot [1]. *)
 Definition queue_slot (n : nat) : Fin.t 2 :=
   if Nat.even n then Fin.FS Fin.F1 else Fin.F1.
 
-Definition sbody (u v: nat) (n: nat) : ctree (schedE +' sE) Bn (nat + unit) :=
-  translate inr1 (turn (tagof n) (hdrof u v n)) ;;
-  CTree.trigger (inl1 (Scheduled (slot_index (queue_slot (S n)))) : (schedE +' sE) unit) ;;
+Definition sbody (u v: nat) (n: nat) : ctree (sE +' schedE) Bn (nat + unit) :=
+  translate inl1 (turn (tagof n) (hdrof u v n)) ;;
+  CTree.trigger (inr1 (Scheduled (slot_index (queue_slot (S n)))) : (sE +' schedE) unit) ;;
   Ret (inl (S n)).
 
-Definition sched (u v n: nat) : ctree (schedE +' sE) Bn unit := CTree.iter (sbody u v) n.
+Definition sched (u v n: nat) : ctree (sE +' schedE) Bn unit := CTree.iter (sbody u v) n.
 
 Definition srun (u v n: nat) (s: SSig)
   : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit) :=
@@ -95,11 +96,12 @@ Definition srun (u v n: nat) (s: SSig)
 Theorem sbody_spec: forall u v n a ns pv vs h allocs ctx c,
     qrep (hdrof u v n) (a :: ns) (pv :: vs) h ->
     interp_state (policy_handler sh) (sbody u v n) ((h, allocs), (ctx, c))
-    ~ (log (inl (inr (stamp ((tagof n),pv) c)) : CSLObs (nat * nat) + nat) ;;
-       log (inr (slot_index (queue_slot (S n))) : CSLObs (nat * nat) + nat) ;;
-       Ret (((rot_heap (hdrof u v n) a (List.hd 0 ns) (zof (hdrof u v n) ns) h, allocs),
-                   (ctx, S c)),
-                  @inl nat unit (S n))
+    ~ (emit_list (List.map inl
+         (queue_turn_logs (CSLEmit (stamp (tagof n,pv) c))
+           (hdrof u v n) a (List.hd 0 ns) (last (a :: ns) 0) (h,allocs)))
+       (log (inr (slot_index (queue_slot (S n)))) ;;
+        Ret (((rot_heap (hdrof u v n) a (List.hd 0 ns) (zof (hdrof u v n) ns) h, allocs),
+              (ctx, S c)), @inl nat unit (S n)))
        : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * (nat + unit))).
 Proof.
   intros u v n a ns pv vs h allocs ctx c Hq.
@@ -107,8 +109,7 @@ Proof.
   rewrite interp_state_bind, interp_state_policy_translate.
   unfold turn.
   rewrite (turnk_spec (tagof n) (hdrof u v n) a ns pv vs h allocs ctx c (Ret tt) Hq).
-  rewrite (translate_log_bind _ _).
-  rewrite !log_vis, bind_vis; apply sb_vis; intros _.
+  rewrite translate_emit_list, emit_list_bind; apply emit_list_sbisim.
   rewrite interp_state_ret, translate_ret, bind_ret_l.
   rewrite interp_state_bind, interp_state_trigger_bind.
   cbn [policy_handler h_sum sched_handler].
@@ -139,7 +140,7 @@ Proof. intros n H; unfold tagof; now rewrite H. Qed.
 
 (** ** Observation predicates
 
-    Tagged observations are [inr] of [indexed (nat * nat)]: the payload pairs the
+    Tagged observations are [CSLEmit] of [indexed (nat * nat)]: the payload pairs the
     queue tag with the (fun o => indexed_value o = value), and the occurrence index is the record's
     own field.  A plain predicate is therefore
     [fun o => indexed_value o = (q,nl)] and its freshness companion is

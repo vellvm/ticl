@@ -3,22 +3,16 @@
     The reference theorem is [examples/Queue.v], [rotate_agaf_pop]:
 
       find_index rel_dec nl q = Some i ->
-      <( instr_prog rotate q, Pure |= AG AF visW {fun h => h = nl} )>
+      <( instr_prog rotate q, Pure |=L AG AF visW {fun h => h = nl} )>
 
     over an ABSTRACT queue held in the interpretation state as a [list T].
     Here the queue is a preallocated linked structure in a heap, the pops are
     real heap reads, and the rotation is four real heap writes.
 
-    The temporal proof uses two reusable structural iteration rules:
-
-    - the outer [AG] needs NO adaptation.  [CTree.Logic.State.ag_state_iter]
-      takes an invariant [R i sigma w], and the abstract queue can be
-      existentially quantified inside it.  There is no variant, so nothing
-      has to be a function of the state.
-
-    - the inner [AF] uses [CTree.Logic.State.aul_state_iter_ghost].
-      Its rank belongs to ghost queue data tied to the heap by the invariant;
-      it need not be a function of the concrete heap or observation world. *)
+    The outer [AG] uses continuation-aware [ag_state_iter_logs]: every pending
+    heap snapshot retains the actual next iteration.  The inner [AF] keeps
+    [u_state_iter_prefix_ghost], whose rank belongs to ghost queue data tied to
+    the heap by the invariant. *)
 
 From Stdlib Require Import
   List
@@ -41,7 +35,8 @@ From TICL Require Import
   CTree.Logic.Bind
   CTree.Logic.Iter
   CTree.Logic.State
-  Logic.Core.
+  Logic.Core
+  CTree.Logic.Trace.
 
 From examples Require Import CSL.Queue.Representation CSL.Queue.Sequential
   CSL.Queue.Operations.
@@ -78,125 +73,88 @@ Section Recurrence.
   Context (hdr nl kb: nat) (P: (indexed nat) -> Prop)
           (HP: forall j, Nat.le kb j -> P (stamp nl j)).
 
-  (** The [AG] invariant: the state is a valid representation of SOME queue
-      that still contains [nl].  The abstract queue is existentially
-      quantified -- no extraction function from heaps to lists is needed. *)
-  Definition Rq (_: unit) (s: SSig) (_: WorldW (CSLObs nat)) : Prop :=
-    exists ns vs d, qrep hdr ns vs (fst (fst s)) /\ find_index Nat.eqb nl vs = Some d.
+  (** *** The recurrence theorem.
 
-  (** *** One iteration, as a deterministic suffix formula.
-
-      This is the only place the body is opened, and it is opened through
-      [rot_body_spec] -- a bisimulation -- not by unfolding [auc]. *)
-  Lemma body_det: forall ns vs a v h allocs ctx c w,
-      qrep hdr (a :: ns) (v :: vs) h ->
-      not_done w ->
-      <[ {interp_state (sh (A:=nat)) (rot_body hdr) ((h, allocs), (ctx, c))}, w
-         |= ⊤ AU ret= {(((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h, allocs), (ctx, S c)),
-                            @inl unit unit tt)}
-              {Obs (Log (inr (stamp v c) : CSLObs nat)) tt} ]>.
-  Proof.
-    intros ns vs a v h allocs ctx c w Hq Hd.
-    rewrite (rot_body_spec hdr a ns v vs h allocs ctx c Hq).
-    apply aur_log.
-    - cleft; apply ret_ret; [constructor | split; reflexivity].
-    - apply ticll_top; assumption.
-  Qed.
-
-  (** *** The inner eventuality.
-
-      The ghost data is the rank [(kb - c, d)]: [c] is the private occurrence
-      counter and [d] is the position of [nl] in the abstract queue.  Neither
-      the heap nor the world appears in it.  The whole proof is ONE
-      application of [aul_state_iter_ghost] plus a body case analysis. *)
-  Definition InvQ (m: nat * nat) (_: unit) (s: SSig) : Prop :=
-    exists ns vs d, qrep hdr ns vs (fst (fst s))
-               /\ find_index Nat.eqb nl vs = Some d
-               /\ m = (kb - csl_counter s, d).
-
-  Lemma inner_af: forall h allocs ctx c ns vs d w,
-      not_done w ->
-      qrep hdr ns vs h ->
-      find_index Nat.eqb nl vs = Some d ->
-      <( {interp_state (sh (A:=nat)) (rotate hdr) ((h, allocs), (ctx, c))}, w |= AF visW {csl_indexed P} )>.
-  Proof.
-    intros h allocs ctx c ns vs d w Hd Hq Hf.
-    unfold rotate.
-    apply (aul_state_iter_ghost (sh (A:=nat)) lexnat InvQ (fun _: unit => rot_body hdr)
-             _ _ lexnat_wf (kb - c, d) tt ((h, allocs), (ctx, c)) w Hd).
-    - exists ns, vs, d; split; [exact Hq | split; [exact Hf | reflexivity]].
-    - clear h allocs ctx c ns vs d w Hd Hq Hf.
-      intros m [] s w Hd (ns & vs & d & Hq & Hf & Hm).
-      destruct s as ((h, allocs), (ctx, c)); cbn in Hq, Hm.
-      destruct vs as [| v vs']; [cbn in Hf; discriminate |].
-      destruct ns as [| a ns']; [apply qrep_len in Hq; cbn in Hq; discriminate |].
-      (* the shared "rotate once" step *)
-      assert (Hstep: forall d', find_index Nat.eqb nl (vs' ++ [v]) = Some d' ->
-                           lexnat (kb - S c, d') m ->
-                           (exists g' i' s' w',
-                               not_done w'
-                               /\ <[ {interp_state (sh (A:=nat))
-                                       ((fun _: unit => rot_body hdr) tt) ((h, allocs), (ctx, c))}, w
-                                     |= ⊤ AU ret= {(s', @inl unit unit i')} w' ]>
-                               /\ InvQ g' i' s'
-                               /\ lexnat g' m)).
-      { intros d' Hd' Hlex.
-        exists (kb - S c, d'), tt,
-          ((rot_heap hdr a (List.hd 0 ns') (zof hdr ns') h, allocs), (ctx, S c)),
-          (Obs (Log (inr (stamp v c) : CSLObs nat)) tt).
-        split; [constructor |].
-        split; [eapply body_det; eassumption |].
-        split; [| exact Hlex].
-        exists (ns' ++ [a]), (vs' ++ [v]), d'; cbn; split;
-          [apply (rot_heap_spec hdr a ns' v vs' h Hq)
-          | split; [exact Hd' | reflexivity]]. }
-      destruct d as [| d0].
-      + (* the element is at the head *)
-        pose proof (find_index_head Nat.eqb Nat.eqb_eq _ _ _ Hf) as Hv; subst v.
-        destruct (Nat.le_gt_cases kb c) as [Hle | Hgt].
-        * (* and the occurrence bound is already met: observe it now *)
-          left.
-          rewrite (rot_body_spec hdr a ns' nl vs' h allocs ctx c Hq).
-          apply afl_log; [assumption |].
-          cleft; apply ticll_vis; constructor; now apply HP.
-        * (* the bound is not met yet: rotate, the bound gets closer *)
-          right.
-          destruct (find_index_last_ex Nat.eqb Nat.eqb_eq nl vs') as (d' & Hd').
-          apply (Hstep d'); [exact Hd' | rewrite Hm; left; cbn; lia].
-      + (* the element is deeper in the queue: rotate, it gets closer *)
-        right.
-        apply (Hstep d0).
-        * rewrite <- rotl_cons; eapply find_index_rotl; exact Hf.
-        * rewrite Hm; destruct (Nat.le_gt_cases kb c);
-            [right; cbn; split; lia | left; cbn; lia].
-  Qed.
-
-  (** *** The recurrence theorem. *)
+      [ag_state_iter_logs] keeps the exact continuation under every pending
+      snapshot. At each loop boundary, [u_state_iter_prefix_ghost] proves the
+      eventuality with the inline rank [(kb - counter, first-match position)].
+      [find_index_rotation_progress] permits duplicate payloads; the body is
+      exposed only through [rot_body_spec]. *)
   Theorem rotate_agaf_core: forall h allocs ctx c ns vs d w,
       not_done w ->
       qrep hdr ns vs h ->
       find_index Nat.eqb nl vs = Some d ->
-      <( {interp_state (sh (A:=nat)) (rotate hdr) ((h, allocs), (ctx, c))}, w |= AG (AF visW {csl_indexed P}) )>.
+      <( {interp_state (sh (A:=nat)) (rotate hdr) ((h, allocs), (ctx, c))}, w |=L AG (AF visW {csl_indexed P}) )>.
   Proof.
     intros h allocs ctx c ns vs d w Hd Hq Hf.
     unfold rotate.
-    apply (ag_state_iter (sh (A:=nat)) ((h, allocs), (ctx, c)) Rq tt w); [assumption | |].
+    eapply (ag_state_iter_logs (sh (A:=nat)) (X:=unit)
+      (fun (_ : unit) (s : SSig) =>
+        exists ns vs d, qrep hdr ns vs (fst (fst s)) /\
+          find_index Nat.eqb nl vs = Some d)
+      (fun _ : unit => rot_body hdr) <( AF visW {csl_indexed P} )>).
+    - intros [] ((h1,allocs1),(ctx1,c1)) (ns1 & vs1 & d1 & Hq1 & Hf1).
+      cbn in Hq1.
+      destruct vs1 as [|v1 vs1']; [cbn in Hf1; discriminate|].
+      destruct ns1 as [|a1 ns1'];
+        [apply qrep_len in Hq1; cbn in Hq1; discriminate|].
+      destruct (find_index_rotl_pres Nat.eqb Nat.eqb_eq _ _ _ _ Hf1) as (d' & Hd'').
+      exists tt,
+        ((rot_heap hdr a1 (List.hd 0 ns1') (zof hdr ns1') h1,allocs1),(ctx1,S c1)),
+        (queue_turn_logs (CSLEmit (stamp v1 c1)) hdr a1
+          (List.hd 0 ns1') (last (a1 :: ns1') 0) (h1,allocs1)).
+      split; [discriminate|split;
+        [exact (rot_body_spec hdr a1 ns1' v1 vs1' h1 allocs1 ctx1 c1 Hq1)|]].
+      exists (ns1' ++ [a1]), (vs1' ++ [v1]), d'; split.
+      + exact (proj1 (rot_heap_spec hdr a1 ns1' v1 vs1' h1 Hq1)).
+      + rewrite <- rotl_cons; exact Hd''.
+    - intros o t w' Hw Hphi.
+      pose proof (af_log (b:=false) o t w' _ Hw Hphi) as Hlog.
+      rewrite log_vis in Hlog; exact Hlog.
+    - intros [] ((h1,allocs1),(ctx1,c1)) w' (ns1 & vs1 & d1 & Hq1 & Hf1) Hw.
+      eapply (u_state_iter_prefix_ghost (sh (A:=nat)) Q_A
+        (fun m (_ : unit) (s : SSig) z =>
+          not_done z /\ exists ns vs d,
+            qrep hdr ns vs (fst (fst s)) /\
+            find_index Nat.eqb nl vs = Some d /\
+            m = (kb - csl_counter s, d))
+        lexnat (fun _ : unit => rot_body hdr) _ _ lexnat_wf)
+        with (g := (kb - c1, d1)).
+      2: exact Hw.
+      2: { split; [exact Hw|].
+           exists ns1, vs1, d1; split; [exact Hq1|].
+           split; [exact Hf1|reflexivity]. }
+      clear h allocs ctx c ns vs d w Hd Hq Hf h1 allocs1 ctx1 c1
+        ns1 vs1 d1 w' Hq1 Hf1 Hw.
+      intros m [] ((h2,allocs2),(ctx2,c2)) w2 Hd2
+        (Hlive & ns2 & vs2 & d2 & Hq2 & Hf2 & Hm).
+      cbn in Hq2, Hm.
+      destruct vs2 as [|v2 vs2']; [cbn in Hf2; discriminate|].
+      destruct ns2 as [|a2 ns2'];
+        [apply qrep_len in Hq2; cbn in Hq2; discriminate|].
+      destruct (find_index_rotation_progress Nat.eqb Nat.eqb_eq nl v2 vs2' d2
+        Hf2 kb c2) as (d' & Hf' & [[Hv Hbound]|Hrank]).
+      + left; subst v2.
+        ticl_normalize.
+        rewrite (rot_body_spec hdr a2 ns2' nl vs2' h2 allocs2 ctx2 c2 Hq2).
+        eapply af_emit_list_member with (o:=CSLEmit (stamp nl c2)).
+        * exact Hd2.
+        * unfold queue_turn_logs; apply in_eq.
+        * cbn; now apply HP.
+      + right.
+        ticl_normalize.
+        rewrite (rot_body_spec hdr a2 ns2' v2 vs2' h2 allocs2 ctx2 c2 Hq2).
+        apply af_emit_list_ret; [exact Hd2|].
+        exists (kb - S c2, d'), tt; split; [reflexivity|].
+        split; [apply after_logs_not_done; exact Hd2|].
+        split.
+        * split; [apply after_logs_not_done; exact Hd2|].
+          exists (ns2' ++ [a2]), (vs2' ++ [v2]), d'; cbn; split.
+          -- apply (rot_heap_spec hdr a2 ns2' v2 vs2' h2 Hq2).
+          -- split; [rewrite <- rotl_cons; exact Hf'|reflexivity].
+        * rewrite Hm; exact Hrank.
     - exists ns, vs, d; split; assumption.
-    - intros [] s w' Hd' (ns1 & vs1 & d1 & Hq1 & Hf1).
-      destruct s as ((h1, allocs1), (ctx1, c1)); cbn in Hq1.
-      destruct vs1 as [| v1 vs1']; [cbn in Hf1; discriminate |].
-      destruct ns1 as [| a1 ns1'];
-        [apply qrep_len in Hq1; cbn in Hq1; discriminate |].
-      split.
-      + eapply inner_af; [exact Hd' | exact Hq1 | exact Hf1].
-      + rewrite (rot_body_spec hdr a1 ns1' v1 vs1' h1 allocs1 ctx1 c1 Hq1).
-        apply anr_log; [| apply ticll_top; assumption].
-        cleft; apply ret_ret; [constructor |].
-        exists tt; split; [reflexivity | split; [constructor |]].
-        destruct (find_index_rotl_pres Nat.eqb Nat.eqb_eq _ _ _ _ Hf1) as (d' & Hd'').
-        exists (ns1' ++ [a1]), (vs1' ++ [v1]), d'; split.
-        * apply (rot_heap_spec hdr a1 ns1' v1 vs1' h1 Hq1).
-        * rewrite <- rotl_cons; exact Hd''.
+    - exact Hd.
   Qed.
 End Recurrence.
 
@@ -215,7 +173,7 @@ End Recurrence.
 Theorem rotate_agaf_pop_heap: forall hdr nl h allocs ctx c ns vs d,
     qrep hdr ns vs h ->
     find_index Nat.eqb nl vs = Some d ->
-    <( {run hdr ((h, allocs), (ctx, c))}, Pure |= AG (AF visW {csl_indexed (fun o => indexed_value o = nl)}) )>.
+    <( {run hdr ((h, allocs), (ctx, c))}, Pure |=L AG (AF visW {csl_indexed (fun o => indexed_value o = nl)}) )>.
 Proof.
   intros hdr nl h allocs ctx c ns vs d Hq Hf.
   unfold run.
@@ -226,7 +184,7 @@ Qed.
 Theorem rotate_agaf_pop_fresh: forall hdr nl h allocs ctx c ns vs d k,
     qrep hdr ns vs h ->
     find_index Nat.eqb nl vs = Some d ->
-    <( {run hdr ((h, allocs), (ctx, c))}, Pure |= AG (AF visW {csl_indexed (indexed_after (fun x => x = nl) k)}) )>.
+    <( {run hdr ((h, allocs), (ctx, c))}, Pure |=L AG (AF visW {csl_indexed (indexed_after (fun x => x = nl) k)}) )>.
 Proof.
   intros hdr nl h allocs ctx c ns vs d k Hq Hf.
   unfold run.
@@ -248,7 +206,7 @@ Qed.
     formula.  This is what the hypothesis [find_index Nat.eqb nl vs = Some d] (which forces
     a non-empty queue) buys. *)
 Theorem empty_queue_no_ag: forall hdr h allocs ctx c vs w phi,
-    qrep hdr [] vs h -> ~ <( {run hdr ((h, allocs), (ctx, c))}, w |= AG phi )>.
+    qrep hdr [] vs h -> ~ <( {run hdr ((h, allocs), (ctx, c))}, w |=L AG phi )>.
 Proof.
   intros hdr h allocs ctx c vs w phi Hq H.
   pose proof Hq as (Hwf & Hhd & _ & _ & _); cbn in Hhd.
@@ -257,9 +215,11 @@ Proof.
   { unfold run, rotate, sh; rewrite interp_state_unfold_iter.
     apply nostep_bind.
     unfold rot_body, queue_turn.
-    rewrite (interp_heap_rd (h_sum csl_context_handler (csl_emit_handler (A:=nat)))
+    rewrite (interp_heapW_rd CSLHeap (h_sum csl_context_handler (csl_emit_handler (A:=nat)))
       (S hdr) h allocs (ctx, c) 0 _ Hhd).
-    now apply (interp_heap_rd_nostep (h_sum csl_context_handler (csl_emit_handler (A:=nat)))). }
+    rewrite (interp_heapW_rd_missing CSLHeap
+      (h_sum csl_context_handler (csl_emit_handler (A:=nat))) 0 h allocs (ctx,c) _ H0).
+    apply can_step_stuck. }
   cdestruct H; now apply Hns.
 Qed.
 
@@ -272,7 +232,7 @@ Qed.
     standard duality and is NOT mechanised here. *)
 
 Definition obs_sat (Q: nat -> Prop) : WorldW (CSLObs nat) -> Prop :=
-  fun w => forall o, w = Obs (Log (inr o)) tt -> Q (indexed_value o).
+  fun w => forall o, w = Obs (Log (CSLEmit o)) tt -> Q (indexed_value o).
 
 Theorem rotate_ag_obs: forall hdr h allocs ctx c ns vs w (Q: nat -> Prop),
     (forall x, In x vs -> Q x) ->
@@ -280,7 +240,7 @@ Theorem rotate_ag_obs: forall hdr h allocs ctx c ns vs w (Q: nat -> Prop),
     qrep hdr ns vs h ->
     ns <> [] ->
     obs_sat Q w ->
-    <( {interp_state (sh (A:=nat)) (rotate hdr) ((h, allocs), (ctx, c))}, w |= AG (now {obs_sat Q}) )>.
+    <( {interp_state (sh (A:=nat)) (rotate hdr) ((h, allocs), (ctx, c))}, w |=L AG (now {obs_sat Q}) )>.
 Proof.
   intros hdr h allocs ctx c ns vs w Q HQ Hd Hq Hne Hw.
   unfold rotate.
@@ -298,18 +258,21 @@ Proof.
     destruct vs1 as [| v1 vs1']; [apply qrep_len in Hq1; cbn in Hq1; discriminate |].
     assert (Hv1: Q v1) by (apply Hin1, in_eq).
     split.
-    + apply ticll_now; split; assumption.
-    + rewrite (rot_body_spec hdr a1 ns1' v1 vs1' h1 allocs1 ctx1 c1 Hq1).
-      apply anr_log; [| apply ticll_top; assumption].
-      cleft; apply ret_ret; [constructor |].
-      exists tt; split; [reflexivity | split; [constructor |]].
+    + apply ticl_now; split; assumption.
+    + ticl_normalize; rewrite (rot_body_spec hdr a1 ns1' v1 vs1' h1 allocs1 ctx1 c1 Hq1).
+      unfold queue_turn_logs; cbn [fst snd emit_list List.fold_right].
+      apply (an_log (b:=true)); [|apply ticll_top; exact Hd'].
+      do 4 (apply (au_log (b:=true)); [|apply ticl_now; split;
+        [intros o Ho; inversion Ho; subst; cbn; exact Hv1|constructor]]).
+      cleft; apply ret_ret; [constructor|].
+      exists tt; split; [reflexivity|split; [constructor|]].
       split.
       * exists (ns1' ++ [a1]), (vs1' ++ [v1]); split;
-          [apply (rot_heap_spec hdr a1 ns1' v1 vs1' h1 Hq1) | split].
+          [apply (rot_heap_spec hdr a1 ns1' v1 vs1' h1 Hq1)|split].
         -- intro C; apply app_eq_nil in C as (_ & C); discriminate.
-        -- intros x Hx; apply in_app_iff in Hx as [Hx | [Hx | []]];
-             [apply Hin1, in_cons; exact Hx | subst; exact Hv1].
-      * intros o Ho; inversion Ho; subst; cbn; exact Hv1.
+        -- intros x Hx; apply in_app_iff in Hx as [Hx|[Hx|[]]];
+             [apply Hin1, in_cons; exact Hx|subst; exact Hv1].
+      * intros o Ho; discriminate.
 Qed.
 
 (** The control itself: an element outside the initial queue is never the
@@ -318,7 +281,7 @@ Corollary absent_never_observed: forall hdr h allocs ctx c ns vs nl,
     qrep hdr ns vs h ->
     ns <> [] ->
     ~ In nl vs ->
-    <( {run hdr ((h, allocs), (ctx, c))}, Pure |= AG (now {obs_sat (fun x => x <> nl)}) )>.
+    <( {run hdr ((h, allocs), (ctx, c))}, Pure |=L AG (now {obs_sat (fun x => x <> nl)}) )>.
 Proof.
   intros hdr h allocs ctx c ns vs nl Hq Hne Hnin.
   unfold run.

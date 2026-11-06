@@ -22,14 +22,15 @@ Section BasicLemmas.
   Context {E B: Type -> Type} {X: Type}.
 
   (** Vis iff lemma for always [AG] *)
-  Lemma ag_vis: forall {Y} (e: E Y) (k: Y -> ctree E B X) (v: Y) w φ,
-      (<( {Vis e k}, w |= φ )> /\ forall v, <( {k v}, {Obs e v} |= AG φ )>) <->
-         <( {Vis e k}, w |= AG φ )>.
+  Lemma ag_vis: forall {Y} (e: E Y) (k: Y -> ctree E B X) (v: Y) w (φ : ticll E),
+      (<( {Vis e k}, w |=L φ )> /\ forall v, <( {k v}, {Obs e v} |=L AG φ )>) <->
+         <( {Vis e k}, w |=L AG φ )>.
   Proof.
+    ticl_normalize.
     split; intros.
     - destruct H as (Hφ & H).
       csplit; eauto with ticl.
-      + apply ticll_not_done in Hφ.
+      + apply ticl_not_done in Hφ.
         apply (can_step_vis e k v); eauto with ticl.
       + intros t' w' TR.
         apply ktrans_vis in TR as (v' & -> & <- & ?); eauto with ticl.
@@ -40,14 +41,15 @@ Section BasicLemmas.
   Qed.
 
   (** Visible branch iff lemma for always [AG] *)
-  Lemma ag_brS: forall {Y} (c: B Y) (k: Y -> ctree E B X) (y: Y) w φ,
-      (<( {BrS c k}, w |= φ )> /\ forall (y: Y), <( {k y}, w |= AG φ )>) <->
-        <( {BrS c k}, w |= AG φ )>.
+  Lemma ag_brS: forall {Y} (c: B Y) (k: Y -> ctree E B X) (y: Y) w (φ : ticll E),
+      (<( {BrS c k}, w |=L φ )> /\ forall (y: Y), <( {k y}, w |=L AG φ )>) <->
+        <( {BrS c k}, w |=L AG φ )>.
   Proof.
+    ticl_normalize.
     split; intros.
     - destruct H as (Hφ & H).
       csplit; eauto with ticl.
-      + apply ticll_not_done in Hφ.
+      + apply ticl_not_done in Hφ.
         apply (can_step_brS c k y); eauto with ticl.
       + intros t' w' TR.
         apply ktrans_brS in TR as (y' & Heq & -> & Hd).
@@ -59,14 +61,15 @@ Section BasicLemmas.
   Qed.
 
   (** Visible step iff lemma for always [AG] *)
-  Lemma ag_step: forall (t: ctree E B X) w φ,
-      (<( {Step t}, w |= φ )> /\ <( t, w |= AG φ )>) <->
-        <( {Step t}, w |= AG φ )>.
+  Lemma ag_step: forall (t: ctree E B X) w (φ : ticll E),
+      (<( {Step t}, w |=L φ )> /\ <( t, w |=L AG φ )>) <->
+        <( {Step t}, w |=L AG φ )>.
   Proof.
+    ticl_normalize.
     split; intros.
     - destruct H as (Hφ & H).
       csplit; eauto with ticl.
-      + apply ticll_not_done in Hφ.
+      + apply ticl_not_done in Hφ.
         apply can_step_step; eauto with ticl.
       + intros t' w' TR.
         apply ktrans_step in TR as (Heq & -> & Hd).
@@ -78,12 +81,13 @@ Section BasicLemmas.
 
   (** Hidden branch lemma for always [AG]: all successors of all branches
       satisfy [AG φ] and at least one branch can step. *)
-  Lemma ag_br: forall {Y} (c: B Y) (k: Y -> ctree E B X) w φ,
-      <( {Br c k}, w |= φ )> ->
+  Lemma ag_br: forall {Y} (c: B Y) (k: Y -> ctree E B X) w (φ : ticll E),
+      <( {Br c k}, w |=L φ )> ->
       (exists y, can_step (k y) w) ->
-      (forall y t' w', |k y, w| ↦ |t', w'| -> <( t', w' |= AG φ )>) ->
-      <( {Br c k}, w |= AG φ )>.
+      (forall y t' w', |k y, w| ↦ |t', w'| -> <( t', w' |=L AG φ )>) ->
+      <( {Br c k}, w |=L AG φ )>.
   Proof.
+    ticl_normalize.
     intros * Hφ Hs Hk; csplit; eauto with ticl.
     - now apply can_step_br.
     - intros t' w' TR.
@@ -91,8 +95,8 @@ Section BasicLemmas.
   Qed.
 
   (** Stuckness lemma for always [AG]: no AG formula for stuck as it doesn't step *)
-  Lemma ag_stuck: forall w φ,
-      ~ <( {Stuck: ctree E B X}, w |= AG φ )>.
+  Lemma ag_stuck: forall w (φ : ticll E),
+      ~ <( {Stuck: ctree E B X}, w |=L AG φ )>.
   Proof.
     intros * H.
     cdestruct H; subst.
@@ -100,14 +104,14 @@ Section BasicLemmas.
   Qed.
 
   (** Return lemma for always [AG]: no AG formula for return as it doesn't step always *)
-  Lemma ag_ret: forall (x: X) w φ,
-      ~ <( {Ret x: ctree E B X}, w |= AG φ )>.
+  Lemma ag_ret: forall (x: X) w (φ : ticll E),
+      ~ <( {Ret x: ctree E B X}, w |=L AG φ )>.
   Proof.
     intros * H.
     cdestruct H.
     destruct Hs as (t' & w' & TR).
     specialize (H _ _ TR).
-    apply ticll_not_done in Hp.
+    apply ticl_not_done in Hp.
     inv Hp.
     + apply ktrans_done in TR as (-> & ?).
       rewrite H0 in H.
@@ -118,3 +122,14 @@ Section BasicLemmas.
   Qed.
 
 End BasicLemmas.
+
+(** Silent divergence has no productive global derivation. *)
+Lemma guard_fixed_no_ag {E B : Type -> Type} {X : Type} (t : ctree E B X) w φ :
+  t ≅ Guard t -> ~ <( t, w |=L AG φ )>.
+Proof.
+  intros Ht H; cdestruct H.
+  destruct Hs as (t' & w' & TR).
+  apply ktrans_trans in TR as (l & TR & _).
+  rewrite (guard_fixed_spin t Ht) in TR.
+  eapply spin_is_stuck; exact TR.
+Qed.

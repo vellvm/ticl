@@ -8,6 +8,7 @@ From TICL Require Import
   Utils.Utils
   CTree.Events.Yield
   CTree.Interp.Yield.Mod
+  CTree.Interp.Yield.Policy
   CTree.Interp.Yield.SBisim
   Utils.Vectors.
 
@@ -43,7 +44,7 @@ Variant SchedulerObs : Type -> Type :=
 Abbreviation schedulerObsE := SchedulerObs.
 
 Definition scheduler_observedE (E : Type -> Type) : Type -> Type :=
-  schedulerObsE +' (yieldE +' (spawnE +' E)).
+  schedulerObsE +' (E +' schedE).
 
 Definition observed_completed (E B : Type -> Type) : Type :=
   ctree (scheduler_observedE E) B unit.
@@ -51,9 +52,8 @@ Definition observed_completed (E B : Type -> Type) : Type :=
 Section ObservedSchedulerDef.
   Context {E B : Type -> Type} `{Bn -< B}.
 
-  (** Observed scheduler.  The only extra visible events are proof-facing
-      [schedulerObsE] events at nonempty no-focus scheduling points.  The
-      scheduling choice itself is the same visible [brS] as in [schedule]. *)
+  (** Proof observations precede the native ND selection. A singleton pool
+      selects directly; larger pools branch without adding a silent step. *)
   CoFixpoint schedule_with_offers
       (n : nat) (v : pool E B n) (focus : option (Fin.t n))
       : observed_completed E B :=
@@ -88,13 +88,12 @@ Section ObservedSchedulerDef.
                 | inr1 (inl1 f) =>
                     match f in forkE Y0 return (Y0 -> thread E B) -> observed_completed E B with
                     | Fork => fun k =>
-                        Vis (inr1 (inr1 (inl1 Spawn)) : scheduler_observedE E unit)
-                          (fun _ => schedule_with_offers (S (S n'))
-                                      ((k true :: (v @ i := (k false)))%vector)
-                                      (Some (Fin.FS i)))
+                        Guard (schedule_with_offers (S (S n'))
+                          ((k true :: (v @ i := (k false)))%vector)
+                          (Some (Fin.FS i)))
                     end k
                 | inr1 (inr1 e') =>
-                    Vis (inr1 (inr1 (inr1 e')) : scheduler_observedE E Y)
+                    Vis (inr1 (inl1 e') : scheduler_observedE E Y)
                       (fun x => schedule_with_offers (S n') (v @ i := (k x)) (Some i))
                 end
             end
@@ -111,10 +110,15 @@ Section ObservedSchedulerDef.
         match pool_size return pool E B pool_size -> observed_completed E B with
         | 0 => fun _ => Ret tt
         | S n' => fun v =>
-            Vis (inr1 (inl1 Yield) : scheduler_observedE E unit)
-              (fun _ : unit =>
-                 brS (branchn (S n')) (fun i =>
-                   schedule_with_offers (S n') v (Some i)))
+            match n' as n0 return pool E B (S n0) -> observed_completed E B with
+            | 0 => fun v =>
+                Vis (inr1 (inr1 (Scheduled 0)) : scheduler_observedE E unit)
+                  (fun _ => schedule_with_offers 1 v (Some Fin.F1))
+            | S n0 => fun v =>
+                Br (subevent _ (branchn (S (S n0)))) (fun i =>
+                  Vis (inr1 (inr1 (Scheduled (slot_index i))) : scheduler_observedE E unit)
+                    (fun _ => schedule_with_offers (S (S n0)) v (Some i)))
+            end v
         end v
     | S n' => fun embed v =>
         Vis (inl1 (ObsOffered (live_slot_ref (embed Fin.F1))))
@@ -127,11 +131,11 @@ End ObservedSchedulerDef.
 (** Erase the observation tier.  The result universe is named for the same
     reason as the handlers of [CTree.Interp.Yield.Mod]. *)
 Definition handle_scheduler_offers@{r +} {E B} :
-  scheduler_observedE E ~> ctree@{_ _ _ _ r _} (yieldE +' (spawnE +' E)) B :=
+  scheduler_observedE E ~> ctree@{_ _ _ _ r _} (E +' schedE) B :=
   fun _ event =>
     match event with
     | inl1 o =>
-        match o in SchedulerObs Y return ctree (yieldE +' (spawnE +' E)) B Y with
+        match o in SchedulerObs Y return ctree (E +' schedE) B Y with
         | ObsSchedulingPoint _ => Ret tt
         | ObsOffered _ => Ret tt
         end
@@ -140,8 +144,8 @@ Definition handle_scheduler_offers@{r +} {E B} :
 
 Definition forget_scheduler_offers {E B X}
     (t : ctree (scheduler_observedE E) B X)
-    : ctree (yieldE +' (spawnE +' E)) B X :=
-  interp (M := ctree (yieldE +' (spawnE +' E)) B) handle_scheduler_offers t.
+    : ctree (E +' schedE) B X :=
+  interp (M := ctree (E +' schedE) B) handle_scheduler_offers t.
 
 #[global] Instance forget_scheduler_offers_equ {E B X} :
   Proper (equ eq ==> equ eq) (@forget_scheduler_offers E B X).
@@ -186,17 +190,23 @@ Section ObservedScheduler.
   Lemma schedule_with_offers_offer_prefix_zero_nonempty n
       (embed : LiveSlot 0 -> LiveSlot (S n)) (v : pool E B (S n)) :
     observe (schedule_with_offers_offer_prefix (S n) 0 embed v) =
-      VisF (inr1 (inl1 Yield) : scheduler_observedE E unit)
-        (fun _ : unit =>
-           brS (branchn (S n)) (fun i => schedule_with_offers (S n) v (Some i))).
-  Proof. reflexivity. Qed.
+      observe (match n as n0 return pool E B (S n0) -> observed_completed E B with
+      | 0 => fun v =>
+          Vis (inr1 (inr1 (Scheduled 0)) : scheduler_observedE E unit)
+            (fun _ => schedule_with_offers 1 v (Some Fin.F1))
+      | S n0 => fun v =>
+          Br (subevent _ (branchn (S (S n0)))) (fun i =>
+            Vis (inr1 (inr1 (Scheduled (slot_index i))) : scheduler_observedE E unit)
+              (fun _ => schedule_with_offers (S (S n0)) v (Some i)))
+      end v).
+  Proof. destruct n; reflexivity. Qed.
 
   (** The exhausted offer prefix does not depend on the (empty) embedding. *)
   Lemma schedule_with_offers_offer_prefix_zero m
       (embed embed' : LiveSlot 0 -> LiveSlot m) (v : pool E B m) :
     schedule_with_offers_offer_prefix m 0 embed v ≅
     schedule_with_offers_offer_prefix m 0 embed' v.
-  Proof. step; destruct m; cbn; constructor; intros; reflexivity. Qed.
+  Proof. step; destruct m as [|[|m]]; cbn; reflexivity. Qed.
 
   Lemma schedule_with_offers_focused_ret n
       (v : pool E B (S n)) (i : Fin.t (S n)) :
@@ -262,10 +272,9 @@ Section ObservedScheduler.
       (v : pool E B (S n)) (i : Fin.t (S n)) k :
     observe (v $ i) = VisF (inr1 (inl1 Fork)) k ->
     observe (schedule_with_offers (S n) v (Some i)) =
-      VisF (inr1 (inr1 (inl1 Spawn)) : scheduler_observedE E unit)
-        (fun _ => schedule_with_offers (S (S n))
-          ((k true :: (v @ i := (k false)))%vector)
-          (Some (Fin.FS i))).
+      GuardF (schedule_with_offers (S (S n))
+        ((k true :: (v @ i := (k false)))%vector)
+        (Some (Fin.FS i))).
   Proof.
     intro Hf.
     solve_focused_schedule_with_offers Hf.
@@ -275,14 +284,14 @@ Section ObservedScheduler.
       (v : pool E B (S n)) (i : Fin.t (S n)) {Y} (e : E Y) k :
     observe (v $ i) = VisF (inr1 (inr1 e)) k ->
     observe (schedule_with_offers (S n) v (Some i)) =
-      VisF (inr1 (inr1 (inr1 e)) : scheduler_observedE E Y)
+      VisF (inr1 (inl1 e) : scheduler_observedE E Y)
         (fun x => schedule_with_offers (S n) (v @ i := (k x)) (Some i)).
   Proof.
     intro Hu.
     solve_focused_schedule_with_offers Hu.
   Qed.
 
-  (** [≅]-level forms of the one-node facts, for both schedulers. *)
+  (** [≅]-level forms of the observed scheduler's one-node facts. *)
   Local Ltac node_equ H :=
     match goal with
     | |- ?t ≅ _ => rewrite (ctree_eta t), H; reflexivity
@@ -308,67 +317,137 @@ Section ObservedScheduler.
   Local Lemma swo_prefix_zero_nonempty_equ n
       (embed : LiveSlot 0 -> LiveSlot (S n)) (v : pool E B (S n)) :
     schedule_with_offers_offer_prefix (S n) 0 embed v ≅
-    Vis (inr1 (inl1 Yield) : scheduler_observedE E unit)
-      (fun _ : unit => brS (branchn (S n)) (fun i => schedule_with_offers (S n) v (Some i))).
-  Proof. node_equ (schedule_with_offers_offer_prefix_zero_nonempty n embed v). Qed.
+    match n as n0 return pool E B (S n0) -> observed_completed E B with
+    | 0 => fun v =>
+        Vis (inr1 (inr1 (Scheduled 0)) : scheduler_observedE E unit)
+          (fun _ => schedule_with_offers 1 v (Some Fin.F1))
+    | S n0 => fun v =>
+        Br (subevent _ (branchn (S (S n0)))) (fun i =>
+          Vis (inr1 (inr1 (Scheduled (slot_index i))) : scheduler_observedE E unit)
+            (fun _ => schedule_with_offers (S (S n0)) v (Some i)))
+    end v.
+  Proof. destruct n; node_equ (schedule_with_offers_offer_prefix_zero_nonempty _ embed v). Qed.
 
-  Local Lemma schedule_empty_equ (v : pool E B 0) :
-    schedule 0 v None ≅ Ret tt.
-  Proof. node_equ (schedule_empty_none v). Qed.
+  (** Congruence includes the offer, choice, and selected phases: source
+      branches and scheduler choices have different continuations. *)
+  Inductive observed_pool_rel : observed_completed E B -> observed_completed E B -> Prop :=
+  | observed_pool_root n (v w : pool E B n) focus :
+      pool_equ v w ->
+      observed_pool_rel (schedule_with_offers n v focus) (schedule_with_offers n w focus)
+  | observed_pool_offer m r embed (v w : pool E B m) :
+      pool_equ v w ->
+      observed_pool_rel (schedule_with_offers_offer_prefix m r embed v)
+        (schedule_with_offers_offer_prefix m r embed w)
+  | observed_pool_choice n (v w : pool E B (S (S n))) :
+      pool_equ v w ->
+      observed_pool_rel
+        (Br (subevent _ (branchn (S (S n)))) (fun i =>
+          Vis (inr1 (inr1 (Scheduled (slot_index i))) : scheduler_observedE E unit)
+            (fun _ => schedule_with_offers (S (S n)) v (Some i))))
+        (Br (subevent _ (branchn (S (S n)))) (fun i =>
+          Vis (inr1 (inr1 (Scheduled (slot_index i))) : scheduler_observedE E unit)
+            (fun _ => schedule_with_offers (S (S n)) w (Some i))))
+  | observed_pool_selected n (v w : pool E B (S n)) i :
+      pool_equ v w ->
+      observed_pool_rel
+        (Vis (inr1 (inr1 (Scheduled (slot_index i))) : scheduler_observedE E unit)
+          (fun _ => schedule_with_offers (S n) v (Some i)))
+        (Vis (inr1 (inr1 (Scheduled (slot_index i))) : scheduler_observedE E unit)
+          (fun _ => schedule_with_offers (S n) w (Some i))).
 
-  Local Lemma schedule_no_focus_equ' n (v : pool E B (S n)) :
-    schedule (S n) v None ≅
-    Vis (inl1 Yield) (fun _ : unit => brS (branchn (S n)) (fun i => schedule (S n) v (Some i))).
-  Proof. node_equ (schedule_no_focus_nonempty n v). Qed.
+  Local Lemma observed_pool_rel_step :
+    observed_pool_rel <= fequ eq observed_pool_rel.
+  Proof.
+    intros t u Hr; change (equb eq observed_pool_rel (observe t) (observe u)).
+    destruct Hr as [n v w focus Hp|m r embed v w Hp|n v w Hp|n v w i Hp].
+    - destruct focus as [i|].
+      + destruct n as [|n]; [inversion i|].
+        assert (Hgo : go (observe (v $ i)) ≅ go (observe (w $ i)))
+          by (rewrite <- !ctree_eta; apply Hp).
+        destruct (observe (v $ i)) as [r| |s|g|Y e k|Y c k] eqn:Hv;
+        destruct (observe (w $ i)) as [r'| |s'|g'|Y' e' k'|Y' c' k'] eqn:Hw;
+          try (step in Hgo; cbn in Hgo; inversion Hgo; fail).
+        * destruct r, r'.
+          rewrite (schedule_with_offers_focused_ret n v i Hv),
+            (schedule_with_offers_focused_ret n w i Hw).
+          constructor; constructor; apply remove_pool_equ, Hp.
+        * rewrite (schedule_with_offers_focused_stuck n v i Hv),
+            (schedule_with_offers_focused_stuck n w i Hw); constructor.
+        * apply equ_step_inv in Hgo.
+          rewrite (schedule_with_offers_focused_step n v i s Hv),
+            (schedule_with_offers_focused_step n w i s' Hw).
+          constructor; constructor; apply replace_pool_equ; assumption.
+        * apply equ_guard_inv in Hgo.
+          rewrite (schedule_with_offers_focused_guard n v i g Hv),
+            (schedule_with_offers_focused_guard n w i g' Hw).
+          constructor; constructor; apply replace_pool_equ; assumption.
+        * pose proof (equ_vis_invT _ _ _ _ Hgo) as HY; subst Y'.
+          pose proof (equ_vis_invE _ _ _ _ Hgo) as [He Hk]; subst e'.
+          destruct e as [y|[f|e]].
+          -- destruct y.
+             rewrite (schedule_with_offers_focused_yield n v i k Hv),
+               (schedule_with_offers_focused_yield n w i k' Hw).
+             constructor; constructor; apply replace_pool_equ; [exact Hp|apply Hk].
+          -- destruct f.
+             rewrite (schedule_with_offers_focused_fork n v i k Hv),
+               (schedule_with_offers_focused_fork n w i k' Hw).
+             constructor; constructor; apply cons_pool_equ; [apply Hk|].
+             apply replace_pool_equ; [exact Hp|apply Hk].
+          -- rewrite (schedule_with_offers_focused_user_event n v i e k Hv),
+               (schedule_with_offers_focused_user_event n w i e k' Hw).
+             constructor; intro x; constructor; apply replace_pool_equ; [exact Hp|apply Hk].
+        * pose proof (equ_br_invT _ _ _ _ Hgo) as HY; subst Y'.
+          pose proof (equ_br_invE _ _ _ _ Hgo) as [Hc Hk]; subst c'.
+          rewrite (schedule_with_offers_focused_br n v i c k Hv),
+            (schedule_with_offers_focused_br n w i c k' Hw).
+          constructor; intro x; constructor; apply replace_pool_equ; [exact Hp|apply Hk].
+      + destruct n as [|n].
+        * rewrite !schedule_with_offers_empty_none; constructor; reflexivity.
+        * rewrite !schedule_with_offers_no_focus_nonempty.
+          constructor; intros []; constructor; exact Hp.
+    - destruct r as [|r].
+      + destruct m as [|[|m]]; cbn [schedule_with_offers_offer_prefix observe _observe].
+        * constructor; reflexivity.
+        * constructor; intros []; constructor; exact Hp.
+        * constructor; intro i; constructor; exact Hp.
+      + rewrite !schedule_with_offers_offer_prefix_succ.
+        constructor; intros []; constructor; exact Hp.
+    - cbn; constructor; intro i; constructor; exact Hp.
+    - cbn; constructor; intros []; constructor; exact Hp.
+  Qed.
 
-  Local Lemma schedule_focused_ret_equ n (v : pool E B (S n)) (i : Fin.t (S n)) :
-    observe (v $ i) = RetF tt ->
-    schedule (S n) v (Some i) ≅ Guard (schedule n (v -- i) None).
-  Proof. intro Hv; node_equ (schedule_focused_ret n v i Hv). Qed.
+  Lemma schedule_with_offers_pool_proper n (v w : pool E B n) focus :
+    pool_equ v w -> schedule_with_offers n v focus ≅ schedule_with_offers n w focus.
+  Proof.
+    intro Hp; unfold equ; apply (leq_gfp (fequ eq) observed_pool_rel).
+    - exact observed_pool_rel_step.
+    - constructor; exact Hp.
+  Qed.
 
-  Local Lemma schedule_focused_stuck_equ n (v : pool E B (S n)) (i : Fin.t (S n)) :
-    observe (v $ i) = StuckF ->
-    schedule (S n) v (Some i) ≅ Stuck.
-  Proof. intro Hv; node_equ (schedule_focused_stuck n v i Hv). Qed.
-
-  Local Lemma schedule_focused_br_equ n (v : pool E B (S n)) (i : Fin.t (S n))
-      {Y} (c : B Y) k :
-    observe (v $ i) = BrF c k ->
-    schedule (S n) v (Some i) ≅ Br c (fun j => schedule (S n) (v @ i := k j) (Some i)).
-  Proof. intro Hv; node_equ (schedule_focused_br n v i c k Hv). Qed.
-
-  Local Lemma schedule_focused_step_equ n (v : pool E B (S n)) (i : Fin.t (S n)) t :
-    observe (v $ i) = StepF t ->
-    schedule (S n) v (Some i) ≅ Step (schedule (S n) (v @ i := t) (Some i)).
-  Proof. intro Hv; node_equ (schedule_focused_step n v i t Hv). Qed.
-
-  Local Lemma schedule_focused_guard_equ n (v : pool E B (S n)) (i : Fin.t (S n)) t :
-    observe (v $ i) = GuardF t ->
-    schedule (S n) v (Some i) ≅ Guard (schedule (S n) (v @ i := t) (Some i)).
-  Proof. intro Hv; node_equ (schedule_focused_guard n v i t Hv). Qed.
-
-  Local Lemma schedule_focused_yield_equ n
-      (v : pool E B (S n)) (i : Fin.t (S n)) k :
-    observe (v $ i) = VisF (inl1 Yield) k ->
-    schedule (S n) v (Some i) ≅
-    Guard (schedule (S n) (v @ i := (k tt)) None).
-  Proof. intro Hv; node_equ (schedule_focused_yield n v i k Hv). Qed.
-
-  Local Lemma schedule_focused_fork_equ n
-      (v : pool E B (S n)) (i : Fin.t (S n)) k :
-    observe (v $ i) = VisF (inr1 (inl1 Fork)) k ->
-    schedule (S n) v (Some i) ≅
-    Vis (inr1 (inl1 Spawn) : (yieldE +' (spawnE +' E)) unit)
-      (fun _ => schedule (S (S n)) ((k true :: (v @ i := (k false)))%vector) (Some (Fin.FS i))).
-  Proof. intro Hv; node_equ (schedule_focused_fork n v i k Hv). Qed.
-
-  Local Lemma schedule_focused_user_event_equ n
-      (v : pool E B (S n)) (i : Fin.t (S n)) {Y} (e : E Y) k :
-    observe (v $ i) = VisF (inr1 (inr1 e)) k ->
-    schedule (S n) v (Some i) ≅
-    Vis (inr1 (inr1 e) : (yieldE +' (spawnE +' E)) Y)
-      (fun x => schedule (S n) (v @ i := (k x)) (Some i)).
-  Proof. intro Hv; node_equ (schedule_focused_user_event n v i e k Hv). Qed.
+  Lemma schedule_with_offers_focus_guards : forall a n (v : pool E B (S n)) i x,
+    (v $ i) ≅ guards a x ->
+    schedule_with_offers (S n) v (Some i) ≅
+      guards a (schedule_with_offers (S n) (v @ i := x) (Some i)).
+  Proof.
+    induction a as [|a IH]; intros n v i x Hx; cbn [guards] in *.
+    - apply schedule_with_offers_pool_proper.
+      intro j; destruct (Fin.eq_dec j i) as [->|Hne].
+      + rewrite Vector.nth_replace_eq; exact Hx.
+      + rewrite Vector.nth_replace_neq by congruence; reflexivity.
+    - transitivity (schedule_with_offers (S n) (v @ i := Guard (guards a x)) (Some i)).
+      { apply schedule_with_offers_pool_proper.
+        intro j; destruct (Fin.eq_dec j i) as [->|Hne].
+        - rewrite Vector.nth_replace_eq; exact Hx.
+        - rewrite Vector.nth_replace_neq by congruence; reflexivity. }
+      rewrite (ctree_eta (schedule_with_offers (S n) (v @ i := Guard (guards a x)) (Some i))),
+        (schedule_with_offers_focused_guard n (v @ i := Guard (guards a x)) i (guards a x)
+          ltac:(rewrite Vector.nth_replace_eq; reflexivity)).
+      cbn; rewrite Vector.replace_replace_eq.
+      apply guard_equ_node.
+      rewrite (IH n (v @ i := guards a x) i x)
+        by (rewrite Vector.nth_replace_eq; reflexivity).
+      rewrite Vector.replace_replace_eq; reflexivity.
+  Qed.
 
   (** ** Erasure of the observation tier, node by node. *)
 
@@ -380,7 +459,7 @@ Section ObservedScheduler.
           (fun i : LiveSlot (S n) => i) v)).
   Proof.
     unfold forget_scheduler_offers.
-    rewrite swo_no_focus_equ, interp_vis_node.
+    rewrite swo_no_focus_equ, interp_vis.
     cbn [handle_scheduler_offers]; rewrite bind_ret_l; reflexivity.
   Qed.
 
@@ -393,7 +472,7 @@ Section ObservedScheduler.
         (fun i => embed (Fin.FS i)) v).
   Proof.
     unfold forget_scheduler_offers.
-    rewrite swo_prefix_succ_equ, interp_vis_node.
+    rewrite swo_prefix_succ_equ, interp_vis.
     cbn [handle_scheduler_offers]; rewrite bind_ret_l.
     apply sb_guard.
   Qed.
@@ -432,30 +511,30 @@ Section ObservedScheduler.
       (embed : LiveSlot 0 -> LiveSlot (S n)) (v : pool E B (S n)) :
     forget_scheduler_offers
       (schedule_with_offers_offer_prefix (S n) 0 embed v) ~
-    Vis (inl1 Yield)
-      (fun _ : unit =>
-         brS (branchn (S n)) (fun i =>
-           forget_scheduler_offers
-             (schedule_with_offers (S n) v (Some i)))).
+    Br (subevent _ (branchn (S n))) (fun i =>
+      Vis (inr1 (Scheduled (slot_index i))) (fun _ =>
+        forget_scheduler_offers (schedule_with_offers (S n) v (Some i)))).
   Proof.
-    unfold forget_scheduler_offers.
-    rewrite swo_prefix_zero_nonempty_equ, interp_vis_node.
-    cbn [handle_scheduler_offers]; rewrite bind_trigger.
-    apply sb_vis; intros [].
-    rewrite sb_guard, interp_br_node.
-    apply sb_br_id; intro i.
-    rewrite sb_guard, interp_step_node.
-    apply sb_step, sb_guard.
+    destruct n as [|n].
+    - unfold forget_scheduler_offers.
+      rewrite swo_prefix_zero_nonempty_equ, interp_vis.
+      cbn [handle_scheduler_offers]; rewrite bind_trigger.
+      symmetry; apply sb_br_l with (y := Fin.F1); intro i.
+      assert (Hi : i = Fin.F1) by (dependent destruction i; [reflexivity|inversion i]).
+      subst i; cbn [slot_index]. apply sb_vis; intros []; symmetry; apply sb_guard.
+    - unfold forget_scheduler_offers.
+      rewrite swo_prefix_zero_nonempty_equ, interp_br'.
+      apply sb_br_id; intro i; rewrite sb_guard, interp_vis.
+      cbn [handle_scheduler_offers]; rewrite bind_trigger.
+      apply sb_vis; intros []; apply sb_guard.
   Qed.
 
   Lemma forget_scheduler_offers_no_focus_projection_to_focused n
       (v : pool E B (S n)) :
     forget_scheduler_offers (schedule_with_offers (S n) v None) ~
-    Vis (inl1 Yield)
-      (fun _ : unit =>
-         brS (branchn (S n)) (fun i =>
-           forget_scheduler_offers
-             (schedule_with_offers (S n) v (Some i)))).
+    Br (subevent _ (branchn (S n))) (fun i =>
+      Vis (inr1 (Scheduled (slot_index i))) (fun _ =>
+        forget_scheduler_offers (schedule_with_offers (S n) v (Some i)))).
   Proof.
     transitivity (forget_scheduler_offers
       (schedule_with_offers_offer_prefix (S n) (S n)
@@ -473,7 +552,7 @@ Section ObservedScheduler.
     forget_scheduler_offers (schedule_with_offers 0 v None) ~ (Ret tt : completed E B).
   Proof.
     unfold forget_scheduler_offers.
-    rewrite swo_empty_equ, interp_ret_node; reflexivity.
+    rewrite swo_empty_equ, interp_ret; reflexivity.
   Qed.
 
   Lemma forget_scheduler_offers_focused_br_projection n
@@ -487,7 +566,7 @@ Section ObservedScheduler.
     intro Hbr.
     unfold forget_scheduler_offers.
     rewrite (ctree_eta (schedule_with_offers (S n) v (Some i))),
-      (schedule_with_offers_focused_br n v i c k Hbr), interp_br_node.
+      (schedule_with_offers_focused_br n v i c k Hbr), interp_br'.
     apply sb_br_id; intro j.
     apply sb_guard.
   Qed.
@@ -502,7 +581,7 @@ Section ObservedScheduler.
     intro Hs.
     unfold forget_scheduler_offers.
     rewrite (ctree_eta (schedule_with_offers (S n) v (Some i))),
-      (schedule_with_offers_focused_step n v i t Hs), interp_step_node.
+      (schedule_with_offers_focused_step n v i t Hs), interp_step.
     apply sb_step, sb_guard.
   Qed.
 
@@ -510,26 +589,21 @@ Section ObservedScheduler.
       (v : pool E B (S n)) (i : Fin.t (S n)) k :
     observe (v $ i) = VisF (inr1 (inl1 Fork)) k ->
     forget_scheduler_offers (schedule_with_offers (S n) v (Some i)) ~
-    Vis (inr1 (inl1 Spawn) : (yieldE +' (spawnE +' E)) unit)
-      (fun _ =>
-        forget_scheduler_offers (schedule_with_offers (S (S n))
-          ((k true :: (v @ i := (k false)))%vector)
-          (Some (Fin.FS i)))).
+    Guard (forget_scheduler_offers (schedule_with_offers (S (S n))
+      ((k true :: (v @ i := (k false)))%vector) (Some (Fin.FS i)))).
   Proof.
     intro Hfork.
     unfold forget_scheduler_offers.
     rewrite (ctree_eta (schedule_with_offers (S n) v (Some i))),
-      (schedule_with_offers_focused_fork n v i k Hfork), interp_vis_node.
-    cbn [handle_scheduler_offers]; rewrite bind_trigger.
-    apply sb_vis; intros [].
-    apply sb_guard.
+      (schedule_with_offers_focused_fork n v i k Hfork), interp_guard.
+    reflexivity.
   Qed.
 
   Lemma forget_scheduler_offers_focused_user_event_projection n
       (v : pool E B (S n)) (i : Fin.t (S n)) {Y} (e : E Y) k :
     observe (v $ i) = VisF (inr1 (inr1 e)) k ->
     forget_scheduler_offers (schedule_with_offers (S n) v (Some i)) ~
-    Vis (inr1 (inr1 e) : (yieldE +' (spawnE +' E)) Y)
+    Vis (inl1 e : (E +' schedE) Y)
       (fun x =>
         forget_scheduler_offers
           (schedule_with_offers (S n) (v @ i := (k x)) (Some i))).
@@ -537,7 +611,7 @@ Section ObservedScheduler.
     intro Huser.
     unfold forget_scheduler_offers.
     rewrite (ctree_eta (schedule_with_offers (S n) v (Some i))),
-      (schedule_with_offers_focused_user_event n v i e k Huser), interp_vis_node.
+      (schedule_with_offers_focused_user_event n v i e k Huser), interp_vis.
     cbn [handle_scheduler_offers]; rewrite bind_trigger.
     apply sb_vis; intro x.
     apply sb_guard.
@@ -560,7 +634,7 @@ Section ObservedScheduler.
     Guard (erased_schedule n (v -- i) None).
   Proof.
     intro Hret; erased_node (schedule_with_offers_focused_ret n v i Hret).
-    apply interp_guard_node.
+    apply interp_guard.
   Qed.
 
   Local Lemma erased_focused_stuck_equ n
@@ -569,7 +643,7 @@ Section ObservedScheduler.
     erased_schedule (S n) v (Some i) ≅ Stuck.
   Proof.
     intro Hst; erased_node (schedule_with_offers_focused_stuck n v i Hst).
-    apply interp_stuck_node.
+    apply interp_stuck.
   Qed.
 
   Local Lemma erased_focused_br_equ n
@@ -579,7 +653,7 @@ Section ObservedScheduler.
     Br c (fun j => Guard (erased_schedule (S n) (v @ i := (k j)) (Some i))).
   Proof.
     intro Hbr; erased_node (schedule_with_offers_focused_br n v i c k Hbr).
-    apply interp_br_node.
+    rewrite interp_br'; reflexivity.
   Qed.
 
   Local Lemma erased_focused_step_equ n
@@ -589,7 +663,7 @@ Section ObservedScheduler.
     Step (Guard (erased_schedule (S n) (v @ i := t) (Some i))).
   Proof.
     intro Hs; erased_node (schedule_with_offers_focused_step n v i t Hs).
-    apply interp_step_node.
+    apply interp_step.
   Qed.
 
   Local Lemma erased_focused_guard_equ n
@@ -599,7 +673,7 @@ Section ObservedScheduler.
     Guard (erased_schedule (S n) (v @ i := t) (Some i)).
   Proof.
     intro Hguard; erased_node (schedule_with_offers_focused_guard n v i t Hguard).
-    apply interp_guard_node.
+    apply interp_guard.
   Qed.
 
   Local Lemma erased_focused_yield_equ n
@@ -609,33 +683,48 @@ Section ObservedScheduler.
     Guard (erased_schedule (S n) (v @ i := (k tt)) None).
   Proof.
     intro Hyield; erased_node (schedule_with_offers_focused_yield n v i k Hyield).
-    apply interp_guard_node.
+    apply interp_guard.
   Qed.
 
   Local Lemma erased_focused_fork_equ n
       (v : pool E B (S n)) (i : Fin.t (S n)) k :
     observe (v $ i) = VisF (inr1 (inl1 Fork)) k ->
     erased_schedule (S n) v (Some i) ≅
-    Vis (inr1 (inl1 Spawn) : (yieldE +' (spawnE +' E)) unit)
-      (fun _ => Guard (erased_schedule (S (S n))
-        ((k true :: (v @ i := (k false)))%vector)
-        (Some (Fin.FS i)))).
+    Guard (erased_schedule (S (S n))
+      ((k true :: (v @ i := (k false)))%vector) (Some (Fin.FS i))).
   Proof.
     intro Hfork; erased_node (schedule_with_offers_focused_fork n v i k Hfork).
-    rewrite interp_vis_node.
-    cbn [handle_scheduler_offers]; rewrite bind_trigger; reflexivity.
+    apply interp_guard.
   Qed.
 
   Local Lemma erased_focused_user_event_equ n
       (v : pool E B (S n)) (i : Fin.t (S n)) {Y} (e : E Y) k :
     observe (v $ i) = VisF (inr1 (inr1 e)) k ->
     erased_schedule (S n) v (Some i) ≅
-    Vis (inr1 (inr1 e) : (yieldE +' (spawnE +' E)) Y)
+    Vis (inl1 e : (E +' schedE) Y)
       (fun x => Guard (erased_schedule (S n) (v @ i := (k x)) (Some i))).
   Proof.
     intro Huser; erased_node (schedule_with_offers_focused_user_event n v i e k Huser).
-    rewrite interp_vis_node.
+    rewrite interp_vis.
     cbn [handle_scheduler_offers]; rewrite bind_trigger; reflexivity.
+  Qed.
+
+  Local Lemma forget_scheduler_offers_guards a (t : observed_completed E B) :
+    forget_scheduler_offers (guards a t) ≅ guards a (forget_scheduler_offers t).
+  Proof.
+    induction a as [|a IH]; cbn [guards]; [reflexivity|].
+    unfold forget_scheduler_offers at 1; rewrite interp_guard.
+    apply guard_equ_node; exact IH.
+  Qed.
+
+  Local Lemma erased_focus_guards a n (v : pool E B (S n)) i x :
+    (v $ i) ≅ guards a x ->
+    erased_schedule (S n) v (Some i) ≅
+      guards a (erased_schedule (S n) (v @ i := x) (Some i)).
+  Proof.
+    intro Hx; unfold erased_schedule.
+    rewrite (schedule_with_offers_focus_guards a n v i x Hx).
+    apply forget_scheduler_offers_guards.
   Qed.
 
   Local Lemma erased_offer_prefix_guards :
@@ -648,119 +737,206 @@ Section ObservedScheduler.
     - cbn [guards]; now rewrite (schedule_with_offers_offer_prefix_zero m embed
         (fun i : LiveSlot 0 => match i with end) v).
     - cbn [guards]; unfold forget_scheduler_offers at 1.
-      rewrite swo_prefix_succ_equ, interp_vis_node.
+      rewrite swo_prefix_succ_equ, interp_vis.
       cbn [handle_scheduler_offers]; rewrite bind_ret_l.
       apply guard_equ_node, IH.
   Qed.
 
-  Local Lemma erased_no_focus_guards :
-    forall n (v : pool E B (S n)),
-      erased_schedule (S n) v None ≅
-      guards (S (S n)) (Vis (inl1 Yield) (fun _ : unit =>
-        Guard (Br (subevent _ (branchn (S n))) (fun i =>
-          Guard (Step (Guard (erased_schedule (S n) v (Some i)))))))).
+  Local Definition erased_pick n (v : pool E B (S n)) : completed E B :=
+    match n as n0 return pool E B (S n0) -> completed E B with
+    | 0 => fun v => Vis (inr1 (Scheduled 0))
+        (fun _ => Guard (erased_schedule 1 v (Some Fin.F1)))
+    | S n0 => fun v => Br (subevent _ (branchn (S (S n0)))) (fun i =>
+        Guard (Vis (inr1 (Scheduled (slot_index i)))
+          (fun _ => Guard (erased_schedule (S (S n0)) v (Some i)))))
+    end v.
+
+  Local Lemma erased_prefix_zero_equ n embed (v : pool E B (S n)) :
+    forget_scheduler_offers (schedule_with_offers_offer_prefix (S n) 0 embed v) ≅
+    erased_pick n v.
   Proof.
-    intros n v; unfold erased_schedule at 1.
-    rewrite forget_scheduler_offers_no_focus_nonempty_unfold.
+    destruct n as [|n]; unfold forget_scheduler_offers at 1;
+      rewrite swo_prefix_zero_nonempty_equ; cbn [erased_pick].
+    - rewrite interp_vis; cbn [handle_scheduler_offers]; rewrite bind_trigger; reflexivity.
+    - rewrite interp_br'; apply br_equ; intro i; apply guard_equ_node.
+      rewrite interp_vis; cbn [handle_scheduler_offers]; rewrite bind_trigger; reflexivity.
+  Qed.
+
+  Local Lemma erased_no_focus_guards n (v : pool E B (S n)) :
+    erased_schedule (S n) v None ≅ guards (S (S n)) (erased_pick n v).
+  Proof.
+    unfold erased_schedule at 1; rewrite forget_scheduler_offers_no_focus_nonempty_unfold.
     cbn [guards]; apply guard_equ_node.
-    rewrite erased_offer_prefix_guards.
-    apply (guards_equ (S n)).
-    unfold forget_scheduler_offers.
-    rewrite swo_prefix_zero_nonempty_equ, interp_vis_node.
-    cbn [handle_scheduler_offers]; rewrite bind_trigger.
-    apply vis_equ_node; intros []; apply guard_equ_node.
-    rewrite interp_br_node; apply br_equ; intro i.
-    apply guard_equ_node.
-    rewrite interp_step_node; reflexivity.
+    rewrite erased_offer_prefix_guards; apply (guards_equ (S n)), erased_prefix_zero_equ.
   Qed.
 
-  Local Lemma erased_offers_galigned :
-    forall n (v : pool E B n) focus a b,
-      galigned (guards a (erased_schedule n v focus))
-               (guards b (schedule n v focus)).
+  (** The mixed-pool invariant keeps all four phases. Guard alignment is not
+      composed transitively: both focused slots are normalized together. *)
+  Inductive erased_offers_rel : completed E B -> completed E B -> Prop :=
+  | erased_offers_at a b n (ts us : pool E B n) focus T U :
+      pool_guard_equ ts us ->
+      T ≅ guards a (erased_schedule n ts focus) ->
+      U ≅ guards b (schedule n us focus) -> erased_offers_rel T U
+  | erased_offers_offer a b n r embed (ts us : pool E B (S n)) T U :
+      pool_guard_equ ts us ->
+      T ≅ guards a (forget_scheduler_offers
+        (schedule_with_offers_offer_prefix (S n) r embed ts)) ->
+      U ≅ guards b (schedule (S n) us None) -> erased_offers_rel T U
+  | erased_offers_choice a b n (ts us : pool E B (S (S n))) T U :
+      pool_guard_equ ts us ->
+      T ≅ guards a (erased_pick (S n) ts) ->
+      U ≅ guards b (Br (subevent _ (branchn (S (S n)))) (fun i =>
+        Vis (inr1 (Scheduled (slot_index i)))
+          (fun _ => schedule (S (S n)) us (Some i)))) -> erased_offers_rel T U
+  | erased_offers_selected a b n (ts us : pool E B (S n)) i T U :
+      pool_guard_equ ts us ->
+      T ≅ guards a (Vis (inr1 (Scheduled (slot_index i)))
+        (fun _ => Guard (erased_schedule (S n) ts (Some i)))) ->
+      U ≅ guards b (Vis (inr1 (Scheduled (slot_index i)))
+        (fun _ => schedule (S n) us (Some i))) -> erased_offers_rel T U.
+
+  Local Lemma erased_pick_step a b n (ts us : pool E B (S n)) T U :
+    pool_guard_equ ts us ->
+    T ≅ guards a (erased_pick n ts) ->
+    U ≅ guards b (schedule (S n) us None) -> galignF erased_offers_rel T U.
   Proof.
-    cofix CH; intros n v focus a b.
+    intros Hp ET EU; rewrite schedule_no_focus_equ in EU; destruct n as [|n].
+    - apply (galignF_vis _ T U a b (inr1 (Scheduled 0) : (E +' schedE) unit)
+        (fun _ => Guard (erased_schedule 1 ts (Some Fin.F1)))
+        (fun _ => schedule 1 us (Some Fin.F1))); [exact ET|exact EU|].
+      intros []; apply (erased_offers_at 1 0 1 ts us (Some Fin.F1));
+        [exact Hp|reflexivity|reflexivity].
+    - apply (galignF_br _ T U a b (subevent _ (branchn (S (S n))))
+        (fun i => Guard (Vis (inr1 (Scheduled (slot_index i)))
+          (fun _ => Guard (erased_schedule (S (S n)) ts (Some i)))))
+        (fun i => Vis (inr1 (Scheduled (slot_index i)))
+          (fun _ => schedule (S (S n)) us (Some i)))); [exact ET|exact EU|].
+      intro i; apply (erased_offers_selected 1 0 (S n) ts us i);
+        [exact Hp|reflexivity|reflexivity].
+  Qed.
+
+  Local Lemma erased_offers_rel_step T U :
+    erased_offers_rel T U -> galignF erased_offers_rel T U.
+  Proof.
+    intros [a b n ts us focus T' U' Hp ET EU
+      |a b n r embed ts us T' U' Hp ET EU
+      |a b n ts us T' U' Hp ET EU
+      |a b n ts us i T' U' Hp ET EU].
+    2: { apply (erased_pick_step (a + r) b n ts us); [exact Hp| |exact EU].
+         rewrite ET, erased_offer_prefix_guards, erased_prefix_zero_equ, <- guards_add; reflexivity. }
+    2: { apply (galignF_br _ T' U' a b (subevent _ (branchn (S (S n))))
+           (fun i => Guard (Vis (inr1 (Scheduled (slot_index i)))
+             (fun _ => Guard (erased_schedule (S (S n)) ts (Some i)))))
+           (fun i => Vis (inr1 (Scheduled (slot_index i)))
+             (fun _ => schedule (S (S n)) us (Some i)))); [exact ET|exact EU|].
+         intro i; apply (erased_offers_selected 1 0 (S n) ts us i);
+           [exact Hp|reflexivity|reflexivity]. }
+    2: { eapply galignF_vis; [exact ET|exact EU|].
+         intros []; apply (erased_offers_at 1 0 (S n) ts us (Some i));
+           [exact Hp|reflexivity|reflexivity]. }
     destruct focus as [i|].
-    - destruct n as [|n]; [inversion i|].
-      destruct (observe (v $ i)) as [r| |t|t|Y e k|Y c k] eqn:Hvi.
-      + destruct r.
-        apply (galign_guard _ _ a b
-          (erased_schedule n (v -- i) None) (schedule n (v -- i) None)).
-        * rewrite <- guards_guard; apply (guards_equ a); apply erased_focused_ret_equ; exact Hvi.
-        * rewrite <- guards_guard; apply (guards_equ b); apply schedule_focused_ret_equ; exact Hvi.
-        * exact (CH _ _ _ 0 0).
-      + apply (galign_stuck _ _ a b).
-        * apply (guards_equ a); apply erased_focused_stuck_equ; exact Hvi.
-        * apply (guards_equ b); apply schedule_focused_stuck_equ; exact Hvi.
-      + apply (galign_step _ _ a b
-          (Guard (erased_schedule (S n) (v @ i := t) (Some i)))
-          (schedule (S n) (v @ i := t) (Some i))).
-        * apply (guards_equ a); apply erased_focused_step_equ; exact Hvi.
-        * apply (guards_equ b); apply schedule_focused_step_equ; exact Hvi.
-        * exact (CH _ _ _ 1 0).
-      + apply (galign_guard _ _ a b
-          (erased_schedule (S n) (v @ i := t) (Some i))
-          (schedule (S n) (v @ i := t) (Some i))).
-        * rewrite <- guards_guard; apply (guards_equ a); apply erased_focused_guard_equ; exact Hvi.
-        * rewrite <- guards_guard; apply (guards_equ b); apply schedule_focused_guard_equ; exact Hvi.
-        * exact (CH _ _ _ 0 0).
-      + destruct e as [yld|[frk|usr]].
-        * revert k Hvi; destruct yld; intros k Hvi.
-          apply (galign_guard _ _ a b
-            (erased_schedule (S n) (v @ i := k tt) None)
-            (schedule (S n) (v @ i := k tt) None)).
-          -- rewrite <- guards_guard; apply (guards_equ a); apply erased_focused_yield_equ; exact Hvi.
-          -- rewrite <- guards_guard; apply (guards_equ b); apply schedule_focused_yield_equ; exact Hvi.
-          -- exact (CH _ _ _ 0 0).
-        * revert k Hvi; destruct frk; intros k Hvi.
-          apply (galign_vis _ _ a b (inr1 (inl1 Spawn) : (yieldE +' (spawnE +' E)) unit)
-            (fun _ => Guard (erased_schedule (S (S n)) ((k true :: (v @ i := k false))%vector) (Some (Fin.FS i))))
-            (fun _ => schedule (S (S n)) ((k true :: (v @ i := k false))%vector) (Some (Fin.FS i)))).
-          -- apply (guards_equ a); apply erased_focused_fork_equ; exact Hvi.
-          -- apply (guards_equ b); apply schedule_focused_fork_equ; exact Hvi.
-          -- intros []; exact (CH _ _ _ 1 0).
-        * apply (galign_vis _ _ a b (inr1 (inr1 usr) : (yieldE +' (spawnE +' E)) Y)
-            (fun x => Guard (erased_schedule (S n) (v @ i := k x) (Some i)))
-            (fun x => schedule (S n) (v @ i := k x) (Some i))).
-          -- apply (guards_equ a); apply erased_focused_user_event_equ; exact Hvi.
-          -- apply (guards_equ b); apply schedule_focused_user_event_equ; exact Hvi.
-          -- intro x; exact (CH _ _ _ 1 0).
-      + apply (galign_br _ _ a b c
-          (fun j => Guard (erased_schedule (S n) (v @ i := k j) (Some i)))
-          (fun j => schedule (S n) (v @ i := k j) (Some i))).
-        * apply (guards_equ a); apply erased_focused_br_equ; exact Hvi.
-        * apply (guards_equ b); apply schedule_focused_br_equ; exact Hvi.
-        * intro j; exact (CH _ _ _ 1 0).
-    - destruct n as [|n].
-      + apply (galign_ret _ _ a b tt).
-        * apply (guards_equ a); unfold erased_schedule, forget_scheduler_offers.
-          rewrite swo_empty_equ; apply interp_ret_node.
-        * apply (guards_equ b); apply schedule_empty_equ.
-      + apply (galign_vis _ _ (a + S (S n))%nat b (inl1 Yield : (yieldE +' (spawnE +' E)) unit)
-          (fun _ : unit => Guard (Br (subevent _ (branchn (S n))) (fun i =>
-             Guard (Step (Guard (erased_schedule (S n) v (Some i)))))))
-          (fun _ : unit => Br (subevent _ (branchn (S n))) (fun i =>
-             Step (schedule (S n) v (Some i))))).
-        * rewrite guards_add; apply (guards_equ a); apply erased_no_focus_guards.
-        * apply (guards_equ b); apply schedule_no_focus_equ'.
-        * intros [].
-          apply (galign_br _ _ 1 0 (subevent _ (branchn (S n)))
-            (fun i => Guard (Step (Guard (erased_schedule (S n) v (Some i)))))
-            (fun i => Step (schedule (S n) v (Some i)))); [reflexivity|reflexivity|].
-          intro i.
-          apply (galign_step _ _ 1 0
-            (Guard (erased_schedule (S n) v (Some i))) (schedule (S n) v (Some i)));
-            [reflexivity|reflexivity|].
-          exact (CH _ _ _ 1 0).
+    2: { destruct n as [|n].
+         - apply (galignF_ret _ T' U' a b tt).
+           + rewrite ET; apply (guards_equ a); unfold erased_schedule, forget_scheduler_offers.
+             rewrite swo_empty_equ; apply interp_ret.
+           + rewrite EU; apply (guards_equ b), trans_schedule_empty_ret.
+         - apply (erased_pick_step (a + S (S n)) b n ts us); [exact Hp| |exact EU].
+           rewrite ET, erased_no_focus_guards, <- guards_add; reflexivity. }
+    destruct n as [|n]; [inversion i|].
+    destruct (guard_equ_guards _ _ (Hp i)) as (p & q & x & Ex & Ey).
+    pose proof (pool_guard_equ_replace ts us i x Hp) as Hp'.
+    set (ts' := ts @ i := x) in *; set (us' := us @ i := x) in *.
+    assert (ET' : T' ≅ guards (a + p) (erased_schedule (S n) ts' (Some i)))
+      by (rewrite ET, (erased_focus_guards p n ts i x Ex), <- guards_add; reflexivity).
+    assert (EU' : U' ≅ guards (b + q) (schedule (S n) us' (Some i)))
+      by (rewrite EU, (schedule_focus_guards q n us i x Ey), <- guards_add; reflexivity).
+    assert (Hts : observe (ts' $ i) = observe x) by (unfold ts'; now rewrite Vector.nth_replace_eq).
+    assert (Hus : observe (us' $ i) = observe x) by (unfold us'; now rewrite Vector.nth_replace_eq).
+    clearbody ts' us'; clear ET EU.
+    destruct (observe x) as [[]| |next|g|Y e k|Y c k] eqn:Hx.
+    - apply (galignF_guard _ T' U' (a + p) (b + q)
+        (erased_schedule n (ts' -- i) None) (schedule n (us' -- i) None)).
+      + rewrite ET', (erased_focused_ret_equ n ts' i Hts), <- guards_guard; reflexivity.
+      + rewrite EU', (trans_schedule_focused_ret n us' i Hus), <- guards_guard; reflexivity.
+      + apply (erased_offers_at 0 0 n (ts' -- i) (us' -- i) None);
+          [apply pool_guard_equ_remove, Hp'|reflexivity|reflexivity].
+    - apply (galignF_stuck _ T' U' (a + p) (b + q)).
+      + rewrite ET', (erased_focused_stuck_equ n ts' i Hts); reflexivity.
+      + rewrite EU', (trans_schedule_focused_stuck n us' i Hus); reflexivity.
+    - apply (galignF_step _ T' U' (a + p) (b + q)
+        (Guard (erased_schedule (S n) (ts' @ i := next) (Some i)))
+        (schedule (S n) (us' @ i := next) (Some i))).
+      + rewrite ET', (erased_focused_step_equ n ts' i next Hts); reflexivity.
+      + rewrite EU', (SBisim.schedule_focused_step_equ n us' i next Hus); reflexivity.
+      + apply (erased_offers_at 1 0 (S n) (ts' @ i := next) (us' @ i := next) (Some i));
+          [apply pool_guard_equ_replace, Hp'|reflexivity|reflexivity].
+    - apply (galignF_guard _ T' U' (a + p) (b + q)
+        (erased_schedule (S n) (ts' @ i := g) (Some i))
+        (schedule (S n) (us' @ i := g) (Some i))).
+      + rewrite ET', (erased_focused_guard_equ n ts' i g Hts), <- guards_guard; reflexivity.
+      + rewrite EU', (trans_schedule_focused_guard n us' i g Hus), <- guards_guard; reflexivity.
+      + eapply (erased_offers_at 0 0 (S n) (ts' @ i := g) (us' @ i := g) (Some i));
+          [apply pool_guard_equ_replace, Hp'|reflexivity|reflexivity].
+    - destruct e as [y|[f|e]]; [dependent destruction y|dependent destruction f|].
+      + apply (galignF_guard _ T' U' (a + p) (b + q)
+          (erased_schedule (S n) (ts' @ i := k tt) None)
+          (schedule (S n) (us' @ i := k tt) None)).
+        * rewrite ET', (erased_focused_yield_equ n ts' i k Hts), <- guards_guard; reflexivity.
+        * unfold schedule in EU' |- *.
+          rewrite EU', (schedule_policy_focused_yield_equ nd_scheduler n us' i k tt Hus),
+            <- guards_guard; reflexivity.
+        * eapply (erased_offers_at 0 0 (S n) (ts' @ i := k tt) (us' @ i := k tt) None);
+            [apply pool_guard_equ_replace, Hp'|reflexivity|reflexivity].
+      + apply (galignF_guard _ T' U' (a + p) (b + q)
+          (erased_schedule (S (S n)) (k true :: (ts' @ i := k false)) (Some (Fin.FS i)))
+          (schedule (S (S n)) (k true :: (us' @ i := k false)) (Some (Fin.FS i)))).
+        * rewrite ET', (erased_focused_fork_equ n ts' i k Hts), <- guards_guard; reflexivity.
+        * unfold schedule in EU' |- *.
+          rewrite EU', (schedule_policy_focused_fork_equ nd_scheduler n us' i k tt Hus),
+            <- guards_guard; reflexivity.
+        * eapply (erased_offers_at 0 0 (S (S n)) (k true :: (ts' @ i := k false)) (k true :: (us' @ i := k false)) (Some (Fin.FS i)));
+            [apply pool_guard_equ_cons, pool_guard_equ_replace, Hp'|reflexivity|reflexivity].
+      + apply (galignF_vis _ T' U' (a + p) (b + q) (inl1 e : (E +' schedE) Y)
+          (fun z => Guard (erased_schedule (S n) (ts' @ i := k z) (Some i)))
+          (fun z => schedule (S n) (us' @ i := k z) (Some i))).
+        * rewrite ET', (erased_focused_user_event_equ n ts' i e k Hts); reflexivity.
+        * unfold schedule in EU' |- *.
+          rewrite EU', (schedule_policy_focused_user_event_equ nd_scheduler n us' i e k tt Hus);
+            reflexivity.
+        * intro z; eapply (erased_offers_at 1 0 (S n) (ts' @ i := k z) (us' @ i := k z) (Some i));
+            [apply pool_guard_equ_replace, Hp'|reflexivity|reflexivity].
+    - apply (galignF_br _ T' U' (a + p) (b + q) c
+        (fun z => Guard (erased_schedule (S n) (ts' @ i := k z) (Some i)))
+        (fun z => schedule (S n) (us' @ i := k z) (Some i))).
+      + rewrite ET', (erased_focused_br_equ n ts' i c k Hts); reflexivity.
+      + rewrite EU', (SBisim.schedule_focused_br_equ n us' i c k Hus); reflexivity.
+      + intro z; eapply (erased_offers_at 1 0 (S n) (ts' @ i := k z) (us' @ i := k z) (Some i));
+          [apply pool_guard_equ_replace, Hp'|reflexivity|reflexivity].
   Qed.
 
-  Theorem forget_scheduler_offers_preserves_schedule
-      n (v : pool E B n) focus :
-    forget_scheduler_offers (schedule_with_offers n v focus) ~
-    schedule n v focus.
+  Theorem forget_scheduler_offers_schedule_galigned n (ts us : pool E B n) focus :
+    pool_guard_equ ts us ->
+    galigned (forget_scheduler_offers (schedule_with_offers n ts focus)) (schedule n us focus).
   Proof.
-    apply galigned_sbisim.
-    exact (erased_offers_galigned n v focus 0 0).
+    intro Hp; apply (galigned_coind erased_offers_rel erased_offers_rel_step).
+    apply (erased_offers_at 0 0 n ts us focus); [exact Hp|reflexivity|reflexivity].
+  Qed.
+
+  Lemma forget_scheduler_offers_offer_prefix_galigned n r embed
+      (ts us : pool E B (S n)) :
+    pool_guard_equ ts us ->
+    galigned (forget_scheduler_offers (schedule_with_offers_offer_prefix (S n) r embed ts))
+      (schedule (S n) us None).
+  Proof.
+    intro Hp; apply (galigned_coind erased_offers_rel erased_offers_rel_step).
+    apply (erased_offers_offer 0 0 n r embed ts us); [exact Hp|reflexivity|reflexivity].
+  Qed.
+
+  Theorem forget_scheduler_offers_preserves_schedule n (v : pool E B n) focus :
+    forget_scheduler_offers (schedule_with_offers n v focus) ~ schedule n v focus.
+  Proof.
+    apply galigned_sbisim, forget_scheduler_offers_schedule_galigned.
+    intro i; reflexivity.
   Qed.
 
   (** ** Every live slot is offered at a no-focus scheduling point. *)

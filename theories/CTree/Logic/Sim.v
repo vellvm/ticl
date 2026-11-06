@@ -10,11 +10,11 @@ Local Open Scope ticl_scope.
 Section ConditionalSimulation.
   Context {E B: Type -> Type} {X: Type}.
 
-  (** Labels related by simulation: τ and observations are equal; return values are [RV]-related. *)
-  Variant simL (RV: X -> X -> Prop) : @label E -> @label E -> Prop :=
-  | SimLTau : simL RV τ τ
-  | SimLObs {Y} (e: E Y) (v: Y) : simL RV (obs e v) (obs e v)
-  | SimLVal (x x': X) : RV x x' -> simL RV (val x) (val x').
+  (** Labels preserve responses; observations follow [ER] and returns [RV]. *)
+  Variant simL (ER : event_rel E) (RV: X -> X -> Prop) : @label E -> @label E -> Prop :=
+  | SimLTau : simL ER RV τ τ
+  | SimLObs {Y} (e e': E Y) (v: Y) : ER Y e e' -> simL ER RV (obs e v) (obs e' v)
+  | SimLVal (x x': X) : RV x x' -> simL ER RV (val x) (val x').
 
   (** A tree can make an LTS transition. *)
   Definition can_trans (t: ctree E B X) : Prop := exists l t', trans l t t'.
@@ -28,11 +28,11 @@ Section ConditionalSimulation.
 
 
   (** Conditional LTS simulation: forward always, backward only from a tree that can transition. *)
-  Program Definition csimF (RV: X -> X -> Prop) : mon (ctree E B X -> ctree E B X -> Prop) :=
+  Program Definition csimF (ER : event_rel E) (RV: X -> X -> Prop) : mon (ctree E B X -> ctree E B X -> Prop) :=
     {| body R t t' :=
-      (forall l t1, trans l t t1 -> exists l' t1', trans l' t' t1' /\ simL RV l l' /\ R t1 t1') /\
+      (forall l t1, trans l t t1 -> exists l' t1', trans l' t' t1' /\ simL ER RV l l' /\ R t1 t1') /\
       (can_trans t -> forall l' t1', trans l' t' t1' ->
-        exists l t1, trans l t t1 /\ simL RV l l' /\ R t1 t1') |}.
+        exists l t1, trans l t t1 /\ simL ER RV l l' /\ R t1 t1') |}.
   Next Obligation.
     rename H0 into Hf, H1 into Hb; split.
     - intros l t1 HT; destruct (Hf _ _ HT) as (l' & t1' & HT' & HL & HR).
@@ -42,10 +42,10 @@ Section ConditionalSimulation.
   Qed.
 
   (** Greatest fixed point of conditional simulation, matching the hypotheses of [Logic.Simulation]. *)
-  Definition csim RV := gfp (csimF RV).
+  Definition csim ER RV := gfp (csimF ER RV).
 
   (** Every simulation chain stage respects tree equivalence. *)
-  #[global] Instance csim_chain_equ RV {R: Chain (csimF RV)} :
+  #[global] Instance csim_chain_equ ER RV {R: Chain (csimF ER RV)} :
     Proper (equ eq ==> equ eq ==> iff) `R.
   Proof.
     apply tower.
@@ -66,7 +66,7 @@ Section ConditionalSimulation.
 
 
   (** A stuck source conditionally simulates every target. *)
-  Lemma csim_stuck_l RV {R: Chain (csimF RV)} t' : `R Stuck t'.
+  Lemma csim_stuck_l ER RV {R: Chain (csimF ER RV)} t' : `R Stuck t'.
   Proof.
     apply (b_chain R); split.
     - intros l t HT; exfalso; eapply trans_stuck_inv; eauto.
@@ -82,56 +82,64 @@ Section ConditionalSimulation.
   Qed.
 
 
-  (** Forward [Logic.Simulation] hypothesis, read off [ktrans_]. *)
-  Lemma csim_ktrans_l RV t t' w u z : csim RV t t' ->
-    |t, w| ↦ |u, z| -> exists u' z', |t', w| ↦ |u', z'| /\ csim RV u u' /\ simW RV z z'.
+  (** Forward matching starts from a related, not necessarily equal, world. *)
+  Lemma csim_ktrans_l ER RV t t' w w' u z : csim ER RV t t' ->
+    simW ER RV w w' -> |t, w| ↦ |u, z| ->
+    exists u' z', |t', w'| ↦ |u', z'| /\ csim ER RV u u' /\ simW ER RV z z'.
   Proof.
-    intros HS HT; step in HS; destruct HS as [Hf Hb].
+    intros HS HW HT; pose proof HW as Hworld.
+    pose proof (proj1 (simW_not_done_iff ER RV w w' HW)
+      (ktrans_not_done _ _ _ _ HT)) as Hnd'.
+    step in HS; destruct HS as [Hf Hb].
     ddestruction HT;
       edestruct Hf as (l' & u' & HT' & HL & HR); [eassumption| |eassumption| |eassumption| |eassumption| ];
       ddestruction HL.
-    - exists u', w; repeat split; auto; [now apply KtransTau|now apply simW_refl].
-    - exists u', (Obs e v); repeat split; auto; [now apply KtransObs|constructor].
-    - exists u', (Done x'); repeat split; auto; [now apply KtransDone|now constructor].
-    - exists u', (Finish e v x'); repeat split; auto; [now apply KtransFinish|now constructor].
+    - exists u', w'; repeat split; auto; now apply KtransTau.
+    - eexists u'; eexists; split; [eapply KtransObs; eauto|].
+      split; [exact HR|constructor; assumption].
+    - ddestruction HW; eexists u'; eexists; split; [eapply KtransDone; eassumption|].
+      split; [exact HR|now constructor].
+    - ddestruction HW; eexists u'; eexists; split; [eapply KtransFinish; eassumption|].
+      split; [exact HR|constructor; assumption].
   Qed.
 
-  (** Conditional backward [Logic.Simulation] hypothesis, read off [ktrans_]. *)
-  Lemma csim_ktrans_r RV t t' w u' z' : csim RV t t' -> can_step t w ->
-    |t', w| ↦ |u', z'| -> exists u z, |t, w| ↦ |u, z| /\ csim RV u u' /\ simW RV z z'.
+  (** Backward matching remains conditional on source progress. *)
+  Lemma csim_ktrans_r ER RV t t' w w' u' z' : csim ER RV t t' ->
+    simW ER RV w w' -> can_step t w -> |t', w'| ↦ |u', z'| ->
+    exists u z, |t, w| ↦ |u, z| /\ csim ER RV u u' /\ simW ER RV z z'.
   Proof.
-    intros HS (v & z & Hcan) HT.
-    assert (HC: can_trans t).
+    intros HS HW Hcan HT; pose proof HW as Hworld.
+    pose proof (can_step_not_done _ _ Hcan) as Hnd.
+    destruct Hcan as (v & z & Hcan).
+    assert (HC : can_trans t).
     { apply ktrans_trans in Hcan as (l & Hcan & _); now exists l, v. }
     step in HS; destruct HS as [Hf Hb]; specialize (Hb HC).
     ddestruction HT;
       edestruct Hb as (l & u & HT0 & HL & HR); [eassumption| |eassumption| |eassumption| |eassumption| ];
       ddestruction HL.
-    - exists u, w; repeat split; auto; [now apply KtransTau|now apply simW_refl].
-    - exists u, (Obs e v0); repeat split; auto; [now apply KtransObs|constructor].
-    - exists u, (Done x0); repeat split; auto; [now apply KtransDone|now constructor].
-    - exists u, (Finish e v0 x0); repeat split; auto; [now apply KtransFinish|now constructor].
+    - exists u, w; repeat split; auto; now apply KtransTau.
+    - eexists u; eexists; split; [eapply KtransObs; eauto|].
+      split; [exact HR|constructor; assumption].
+    - ddestruction HW; eexists u; eexists; split; [eapply KtransDone; eassumption|].
+      split; [exact HR|now constructor].
+    - ddestruction HW; eexists u; eexists; split; [eapply KtransFinish; eassumption|].
+      split; [exact HR|constructor; assumption].
   Qed.
 
-  (** Prefix formulas transport unchanged along conditional tree simulation. *)
-  Theorem ticll_csim RV (φ: ticll E) t t' w : csim RV t t' ->
-    <( t, w |= φ )> -> <( t', w |= φ )>.
-  Proof. eapply ticll_sim; [apply csim_ktrans_l|apply csim_ktrans_r]. Qed.
-
-  (** Suffix formulas transport with [framer] across related worlds. *)
-  Theorem ticlr_csim RV (ψ: ticlr E X) :
-    (forall x y1 y2, RV x y1 -> RV x y2 -> y1 = y2) -> forall t t' w w',
-    csim RV t t' -> simW RV w w' -> <[ t, w |= ψ ]> -> <[ t', w' |= {framer RV ψ} ]>.
+  Theorem ticl_csim (b : bool) ER RV (p : ticl E (if b then Some X else None)) :
+    sim_unique b ER RV -> forall t t' w w',
+    csim ER RV t t' -> simW ER RV w w' ->
+    entails X b p t w -> entails X b (framer X b ER RV p) t' w'.
   Proof.
-    intros Hunique; eapply ticlr_sim;
+    intros Hunique; eapply ticl_sim;
       [apply csim_ktrans_l|apply csim_ktrans_r|exact Hunique].
   Qed.
 End ConditionalSimulation.
 
 (** Unconditional bisimulation supplies both conditional simulation matches. *)
-Theorem sbisim_csim {E B X} (RV : X -> X -> Prop)
+Theorem sbisim_csim {E B X} (ER : event_rel E) (RV : X -> X -> Prop)
     (t u : ctree E B X) :
-  sbisim (simL RV) t u -> csim RV t u.
+  sbisim (simL ER RV) t u -> csim ER RV t u.
 Proof.
   revert t u; unfold csim; coinduction R IH.
   intros t u H; step in H; destruct H as [Hf Hb]; split.
@@ -287,31 +295,31 @@ End Framable.
 
 
 (** One-node simulation shape up to [S], avoiding coinduction through silent guards. *)
-Variant csim_shape {E B X} (RV : X -> X -> Prop)
+Variant csim_shape {E B X} (ER : event_rel E) (RV : X -> X -> Prop)
     (S : ctree E B X -> ctree E B X -> Prop) :
     ctree' E B X -> ctree' E B X -> Prop :=
-| CsStuckF v : csim_shape RV S StuckF v
-| CsRetF x x' : RV x x' -> csim_shape RV S (RetF x) (RetF x')
-| CsStepF t t' : S t t' -> csim_shape RV S (StepF t) (StepF t')
-| CsGuardF t t' : S t t' -> csim_shape RV S (GuardF t) (GuardF t')
-| CsVisF {Y} (e : E Y) k k' :
-    (forall y, S (k y) (k' y)) -> csim_shape RV S (VisF e k) (VisF e k')
+| CsStuckF v : csim_shape ER RV S StuckF v
+| CsRetF x x' : RV x x' -> csim_shape ER RV S (RetF x) (RetF x')
+| CsStepF t t' : S t t' -> csim_shape ER RV S (StepF t) (StepF t')
+| CsGuardF t t' : S t t' -> csim_shape ER RV S (GuardF t) (GuardF t')
+| CsVisF {Y} (e e' : E Y) k k' : ER Y e e' ->
+    (forall y, S (k y) (k' y)) -> csim_shape ER RV S (VisF e k) (VisF e' k')
 | CsBrF {Y} (c : B Y) k k' :
     (forall y, can_trans (k y)) -> (forall y, S (k y) (k' y)) ->
-    csim_shape RV S (BrF c k) (BrF c k').
+    csim_shape ER RV S (BrF c k) (BrF c k').
 
 Section StructuralSimulation.
-  Context {E B : Type -> Type} {X : Type} (RV : X -> X -> Prop)
+  Context {E B : Type -> Type} {X : Type} (ER : event_rel E) (RV : X -> X -> Prop)
     (S : ctree E B X -> ctree E B X -> Prop).
   Hypothesis Hshape : forall t t', S t t' ->
-    csim_shape RV S (observe t) (observe t').
+    csim_shape ER RV S (observe t) (observe t').
 
   (** Structural matching transports a transition forward by finite induction on [trans_]. *)
-  Lemma csim_shape_trans_l {R : Chain (csimF RV)}
+  Lemma csim_shape_trans_l {R : Chain (csimF ER RV)}
       (HS : forall t t', S t t' -> `R t t') :
-    forall l ot ou, trans_ l ot ou -> forall ot', csim_shape RV S ot ot' ->
+    forall l ot ou, trans_ l ot ou -> forall ot', csim_shape ER RV S ot ot' ->
       exists l' u', trans_ l' ot' (observe u') /\
-        simL RV l l' /\ `R (go ou) u'.
+        simL ER RV l l' /\ `R (go ou) u'.
   Proof.
     intros l ot ou HT; induction HT; intros ot' Hsh; ddestruction Hsh.
     - destruct (IHHT _ (Hshape _ _ (H0 x))) as (l' & u' & HT' & HL & HR).
@@ -321,19 +329,19 @@ Section StructuralSimulation.
     - exists τ, t'; split; [constructor; reflexivity |].
       split; [constructor |].
       rewrite <- ctree_eta, H; now apply HS.
-    - exists (obs e x), (k' x); split; [constructor; reflexivity |].
-      split; [constructor |].
-      rewrite <- ctree_eta, <- H; apply HS, H0.
+    - exists (obs e' x), (k' x); split; [constructor; reflexivity |].
+      split; [constructor; assumption |].
+      rewrite <- ctree_eta, <- H; apply HS, H1.
     - exists (val x'), Stuck; split; [constructor |].
       split; [now constructor | apply csim_stuck_l].
   Qed.
 (** Structural matching transports a transition backward when the source can transition. *)
-Lemma csim_shape_trans_r {R : Chain (csimF RV)}
+Lemma csim_shape_trans_r {R : Chain (csimF ER RV)}
       (HS : forall t t', S t t' -> `R t t') :
     forall l' ot' ou', trans_ l' ot' ou' ->
-      forall ot, csim_shape RV S ot ot' -> can_trans (go ot) ->
+      forall ot, csim_shape ER RV S ot ot' -> can_trans (go ot) ->
       exists l u, trans_ l ot (observe u) /\
-        simL RV l l' /\ `R u (go ou').
+        simL ER RV l l' /\ `R u (go ou').
   Proof.
     intros l' ot' ou' HT; induction HT; intros ot Hsh HC;
       ddestruction Hsh;
@@ -348,17 +356,17 @@ Lemma csim_shape_trans_r {R : Chain (csimF RV)}
     - exists τ, t0; split; [constructor; reflexivity |].
       split; [constructor |].
       rewrite <- ctree_eta, H; now apply HS.
-    - exists (obs e x), (k0 x); split; [constructor; reflexivity |].
-      split; [constructor |].
-      rewrite <- ctree_eta, <- H; apply HS, H0.
+    - exists (obs e0 x), (k0 x); split; [constructor; reflexivity |].
+      split; [constructor; assumption |].
+      rewrite <- ctree_eta, <- H; apply HS, H1.
     - exists (val x), Stuck; split; [constructor |].
       split; [now constructor | apply csim_stuck_l].
   Qed.
 
   (** Every invariant pair with matching observations is a simulation, by finite induction on [trans_]. *)
-  Theorem csim_structural : forall t t', S t t' -> csim RV t t'.
+  Theorem csim_structural : forall t t', S t t' -> csim ER RV t t'.
   Proof.
-    unfold csim; apply (tower (b := csimF RV)
+    unfold csim; apply (tower (b := csimF ER RV)
       (P := fun R => forall t t', S t t' -> R t t')).
     - intros T HT t t' H U HU; apply HT; auto.
     - intros R IH t t' H; split.
@@ -377,14 +385,14 @@ Lemma csim_shape_trans_r {R : Chain (csimF RV)}
   Qed.
 End StructuralSimulation.
 Section StructuralCongruence.
-  Context {E B : Type -> Type} {X : Type} (RV : X -> X -> Prop)
+  Context {E B : Type -> Type} {X : Type} (ER : event_rel E) (RV : X -> X -> Prop)
     (S : ctree E B X -> ctree E B X -> Prop).
   Context (HS : Proper (equ eq ==> equ eq ==> iff) S).
 
   (** Transport structural shapes along tree equivalence on both sides. *)
   Local Lemma csim_shape_transport ot1 ot2 ou1 ou2 :
     going (equ eq) ot1 ou1 -> going (equ eq) ot2 ou2 ->
-    csim_shape RV S ot1 ot2 -> csim_shape RV S ou1 ou2.
+    csim_shape ER RV S ot1 ot2 -> csim_shape ER RV S ou1 ou2.
   Proof.
     intros [H1] [H2] Hsh; step in H1; step in H2.
     change (equb eq (equ eq) ot1 ou1) in H1.
@@ -394,6 +402,7 @@ Section StructuralCongruence.
     - assumption.
     - eapply HS; [symmetry; eassumption | symmetry; eassumption | eassumption].
     - eapply HS; [symmetry; eassumption | symmetry; eassumption | eassumption].
+    - assumption.
     - intro y; eapply HS; [symmetry; eauto | symmetry; eauto | auto].
     - intro y; rewrite <- (REL y); auto.
     - intro y; eapply HS; [symmetry; eauto | symmetry; eauto | auto].
@@ -401,7 +410,7 @@ Section StructuralCongruence.
 
   (** Structural simulation shapes respect equivalence of observations. *)
   #[global] Instance csim_shape_equ :
-    Proper (going (equ eq) ==> going (equ eq) ==> iff) (csim_shape RV S).
+    Proper (going (equ eq) ==> going (equ eq) ==> iff) (csim_shape ER RV S).
   Proof.
     intros ot1 ou1 H1 ot2 ou2 H2; split; intro Hsh.
     - eapply csim_shape_transport; eauto.

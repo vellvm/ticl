@@ -69,14 +69,14 @@ Module ElectionDefs(C: Cyclic).
   
   Lemma aur_recv: forall (x: Id) (ms: Mails) w,
       not_done w ->
-      <[ {interp_state h_netE (recv x) ms}, w |=
-           AF (ret= {(ms, ms $ x)} {Obs (Log (ms $ x)) tt}) ]>.
+      <( {interp_state h_netE (recv x) ms}, w |=R
+           AF (ret= {(ms, ms $ x)} {Obs (Log (ms $ x)) tt}) )>.
   Proof.
     intros.
     unfold recv.
     rewrite interp_state_trigger; cbn.
     rewrite bind_bind.
-    apply aur_log.
+    apply (au_log (b:=true)).
     - rewrite bind_ret_l, sb_guard.
       cleft.
       apply ret_ret; eauto with ticl.
@@ -85,8 +85,8 @@ Module ElectionDefs(C: Cyclic).
 
   Lemma aur_send: forall (x: Id) (ms: Mails) (m: msg) w,
     not_done w ->
-     <[ {interp_state h_netE (send x m) ms}, w |=
-         AF (ret= {(ms @ (next x) := m, tt)} w) ]>.
+     <( {interp_state h_netE (send x m) ms}, w |=R
+         AF (ret= {(ms @ (next x) := m, tt)} w) )>.
   Proof.
     intros.
     unfold send.
@@ -187,11 +187,11 @@ Module Election3.
         end
     | Elected leader => m' = (m @ (next i) := (Elected leader))
     end ->
-    <[ {interp_state h_netE (elect i) m}, {w} |= AF (ret= {(m', tt)} {Obs (Log (m $ i)) tt}) ]>.
+    <( {interp_state h_netE (elect i) m}, {w} |=R AF (ret= {(m', tt)} {Obs (Log (m $ i)) tt}) )>.
   Proof.
     intros.
     unfold elect.
-    eapply aur_state_bind_r_eq.
+    eapply (au_state_bind_r_eq h_netE m (b:=true)).
     - eapply aur_recv; eauto with ticl.
     - destruct (m $ i) eqn:Hm.
       + destruct (Fin_compare u i) eqn:Hcomp; subst.
@@ -205,22 +205,22 @@ Module Election3.
   Qed.
 
   Ltac vroom :=
-    eapply aur_state_bind_r_eq;
+    eapply (au_state_bind_r_eq h_netE _ (b:=true));
     [apply aur_elect; eauto with ticl; try exact mailboxes 
     | cleft; first [apply axr_state_ret | rewrite interp_state_ret; apply ret_ret];
       eauto with ticl; try eexists; intuition; try simp next; eauto with ticl].
 
   Lemma election3_liveness:
-    <( {interp_state h_netE elect_sched mailboxes}, Pure |= AF visW {fun msg => msg = Elected id3} )>.
+    <( {interp_state h_netE elect_sched mailboxes}, Pure |=L AF visW {fun msg => msg = Elected id3} )>.
   Proof.
     intros.
     unfold elect_sched, mailboxes.
-    eapply aul_state_bind_r with (R:=fun _ σ' w' => σ' = mailboxes /\ w' = Pure).
+    eapply (au_state_bind_r h_netE _ (b:=false)) with (R:=fun _ σ' w' => σ' = mailboxes /\ w' = Pure).
     - cright.
-      unfold branchS; apply anr_state_brS with (y:=Fin.F1); split.
+      unfold branchS; apply (an_state_brS h_netE _ (b:=true)) with (y:=Fin.F1); split.
       + csplit; eauto with ticl.
       + intros.
-        apply aur_state_ret; eauto with ticl.
+        apply (au_state_ret h_netE _ (b:=true)); apply ret_ret; eauto with ticl.
     - intros * (-> & ->).
       unfold mailboxes.
       (* iter loop *)
@@ -265,9 +265,9 @@ Module Election3.
         -- right. vroom.
     + (* At checkpoint, now everything is deterministic *)
       intros i w m _ (-> & ? & ->); subst.
-      eapply aul_state_iter_next_eq; eauto with ticl.
+      eapply (au_state_iter_next_eq h_netE _ (b:=false)); eauto with ticl.
       * vroom.
-      * do 2 (eapply aul_state_iter_next_eq; eauto with ticl; [vroom|simp next; cbn]).
+      * do 2 (eapply (au_state_iter_next_eq h_netE _ (b:=false)); eauto with ticl; [vroom|simp next; cbn]).
         cleft. csplit; eauto with ticl.
   Qed.
   Print Assumptions election3_liveness.

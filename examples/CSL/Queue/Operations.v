@@ -4,7 +4,8 @@ From TICL Require Import
   CTree.Core
   CTree.Events.Heap
   CTree.Events.Writer
-  CTree.Interp.State.Mod.
+  CTree.Interp.State.Mod
+  CTree.Trace.
 
 Import CTree CTreeNotations ListNotations.
 Local Open Scope ctree_scope.
@@ -22,6 +23,16 @@ Definition queue_turn {E B : Type -> Type} `{heapE -< E} {X}
   heap_write (S a) 0;;
   heap_write hdr a;;
   tail.
+
+Definition queue_turn_logs {A} (event : CSLObs A)
+  (hdr a next last : nat) (memory : ManagedHeap) : list (CSLObs A) :=
+  let h0 := fst memory in
+  let al := snd memory in
+  let h1 := upd h0 (S hdr) next in
+  let h2 := upd h1 (S (if Nat.eqb next 0 then hdr else last)) a in
+  let h3 := upd h2 (S a) 0 in
+  let h4 := upd h3 hdr a in
+  [event; CSLHeap (h1,al); CSLHeap (h2,al); CSLHeap (h3,al); CSLHeap (h4,al)].
 
 Lemma queue_turn_equ {E B : Type -> Type} `{heapE -< E} {X}
   (emit_value : nat -> ctree E B unit) hdr (t u : ctree E B X) :
@@ -48,7 +59,7 @@ Qed.
 Lemma log_vis {W B X} (o : W) (t : ctreeW W B X) :
   (log o;; t) ≅ Vis (Log o) (fun _ => t).
 Proof.
-  unfold log; rewrite bind_trigger; step; constructor; intros []; reflexivity.
+  unfold log; rewrite bind_vis; setoid_rewrite bind_ret_l; step; constructor; intros []; reflexivity.
 Qed.
 
 (** Stated directly at the CSL handler [sh]: a handler-generic statement over
@@ -65,13 +76,14 @@ Lemma queue_turn_spec {A : Type} {X}
     (tail : ctree (heapE +' (stateE Ctx.Ctx +' writerE A)) Bn X),
     qrep hdr (a :: ns) (value :: values) h ->
     interp_state sh (queue_turn emit_value hdr tail) ((h,allocs),(ctx,c)) ~
-      (log (observe_value value c);;
-       interp_state sh tail
+      emit_list (queue_turn_logs (observe_value value c) hdr a
+        (List.hd 0 ns) (last (a :: ns) 0) (h,allocs))
+       (interp_state sh tail
          ((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h,allocs),(ctx,S c))).
 Proof.
   intros Emit hdr a ns value values h allocs ctx c tail Hq.
   set (other := h_sum csl_context_handler (csl_emit_handler (A:=A))).
-  change (sh (A:=A)) with (h_sum heap_handler other) in *.
+  change (sh (A:=A)) with (h_sum (heap_handlerW CSLHeap) other) in *.
   pose proof Hq as (Hwf & Hhd & Htl & Hch & Hdom).
   cbn in Hhd, Htl.
   apply chain_cons in Hch as (Ha & Hsa & Hch).
@@ -82,23 +94,27 @@ Proof.
   assert (Hshdrdom : h (S hdr) <> None) by (rewrite Hhd; discriminate).
   assert (Hread_hdr : upd h (S hdr) (List.hd 0 ns) hdr = Some (last (a :: ns) 0))
     by (rewrite upd_neq by congruence; exact Htl).
-  unfold queue_turn.
-  etransitivity; [apply (interp_heap_rd other (S hdr) h allocs (ctx,c) a _ Hhd)|].
-  etransitivity; [apply (interp_heap_rd other a h allocs (ctx,c) value _ Ha)|].
+  unfold queue_turn, queue_turn_logs; cbn [fst snd emit_list List.fold_right].
+  etransitivity; [apply (interp_heapW_rd CSLHeap other (S hdr) h allocs (ctx,c) a _ Hhd)|].
+  etransitivity; [apply (interp_heapW_rd CSLHeap other a h allocs (ctx,c) value _ Ha)|].
   etransitivity; [apply Emit|].
   rewrite !log_vis; apply sb_vis; intros _.
-  etransitivity; [apply (interp_heap_rd other (S a) h allocs (ctx,S c) (List.hd 0 ns) _ Hsa)|].
+  etransitivity; [apply (interp_heapW_rd CSLHeap other (S a) h allocs (ctx,S c) (List.hd 0 ns) _ Hsa)|].
   etransitivity;
-    [apply (interp_heap_wr_present other (S hdr) h allocs (ctx,S c) (List.hd 0 ns) _ Hshdrdom)|].
-  etransitivity; [apply (interp_heap_rd other hdr (upd h (S hdr) (List.hd 0 ns)) allocs (ctx,S c)
+    [apply (interp_heapW_wr_present CSLHeap other (S hdr) h allocs (ctx,S c) (List.hd 0 ns) _ Hshdrdom)|].
+  rewrite !log_vis; apply sb_vis; intros _.
+  etransitivity; [apply (interp_heapW_rd CSLHeap other hdr (upd h (S hdr) (List.hd 0 ns)) allocs (ctx,S c)
     (last (a :: ns) 0) _ Hread_hdr)|].
   cbn beta iota.
   rewrite (zof_compute hdr a ns Hwf).
-  etransitivity; [apply (interp_heap_wr_present other (S (zof hdr ns)) _ allocs (ctx,S c) a _
+  etransitivity; [apply (interp_heapW_wr_present CSLHeap other (S (zof hdr ns)) _ allocs (ctx,S c) a _
     (upd_mono _ _ _ _ Hzdom))|].
-  etransitivity; [apply (interp_heap_wr_present other (S a) _ allocs (ctx,S c) 0 _
+  rewrite !log_vis; apply sb_vis; intros _.
+  etransitivity; [apply (interp_heapW_wr_present CSLHeap other (S a) _ allocs (ctx,S c) 0 _
     (upd_mono _ _ _ _ (upd_mono _ _ _ _ Hsadom)))|].
-  etransitivity; [apply (interp_heap_wr_present other hdr _ allocs (ctx,S c) a _
+  rewrite !log_vis; apply sb_vis; intros _.
+  etransitivity; [apply (interp_heapW_wr_present CSLHeap other hdr _ allocs (ctx,S c) a _
     (upd_mono _ _ _ _ (upd_mono _ _ _ _ (upd_mono _ _ _ _ Hhdrdom))))|].
+  rewrite !log_vis; apply sb_vis; intros _.
   reflexivity.
 Qed.

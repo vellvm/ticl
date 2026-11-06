@@ -4,6 +4,7 @@ From TICL Require Import
   CTree.Core
   CTree.Events.Yield
   CTree.Interp.Refine
+  CTree.Interp.Yield.Policy
   CTree.Interp.Yield.Mod
   CTree.Interp.Yield.SBisim
   CTree.Interp.State.Mod
@@ -17,9 +18,14 @@ Local Open Scope fin_vector_scope.
 (** Lift an event predicate through a left summand; scheduler events are always admitted. *)
 Definition okE_lift {F E} (okE : forall Y, E Y -> Prop) : forall Y, (F +' E) Y -> Prop :=
   fun Y e => match e with inr1 e => okE Y e | inl1 _ => True end.
-(** Thread and scheduler signatures nest two event lifts. *)
+(** Source thread signatures nest two event lifts. *)
 Definition okE_thread {F G E} (okE : forall Y, E Y -> Prop) : forall Y, (F +' (G +' E)) Y -> Prop :=
   okE_lift (okE_lift okE).
+
+(** Raw policies preserve left-injected source events and admit selections. *)
+Definition okE_policy {E} (okE : forall Y, E Y -> Prop)
+  : forall Y, (E +' schedE) Y -> Prop :=
+  fun Y e => match e with inl1 e => okE Y e | inr1 _ => True end.
 
 Section InterpFramable.
   Universe r.
@@ -110,89 +116,106 @@ Section PoolFramable.
     exact (vector_cons_pointwise (fun a _ : thread E B => Framable (okE_thread okE) a) t t v v).
   Qed.
 
-  (** Scheduling only introduces guarded hidden branches: [schedule_no_focus_nonempty] picks under [Br] with [Step] children. *)
-  Lemma framable_schedule : forall n (ts: pool E B n) focus,
+  (** Every policy preserves framability after projecting selections to steps. *)
+  Lemma framable_schedule (sch : Scheduler) :
+    forall n (ts: pool E B n) focus (st : sched_state sch),
     pool_branchfree ts -> pool_framable ts ->
-    Framable (okE_thread okE) (schedule n ts focus).
+    Framable okE (project_scheduled (schedule_policy sch n ts focus st)).
   Proof.
-    unfold Framable; coinduction R IH; intros n ts focus Hbf Hfr.
+    unfold Framable; coinduction R IH; intros n ts focus st Hbf Hfr.
     destruct focus as [i|].
     - destruct n as [|n]; [inversion i|].
       pose proof (Hbf i) as Hi; apply branchfree_unfold in Hi.
       pose proof (Hfr i) as Hfi; apply framable_unfold in Hfi.
-      destruct (observe (ts $ i)) eqn:Hobs; cbn.
+      destruct (observe (ts $ i)) eqn:Hobs.
       + destruct r.
-        rewrite (schedule_focused_ret n ts i Hobs); constructor.
+        rewrite (observe_equ_go _ _ (schedule_policy_focused_ret sch n ts i st Hobs)),
+          project_scheduled_guard; constructor.
         apply IH; auto using pool_branchfree_remove, pool_framable_remove.
-      + rewrite (schedule_focused_stuck n ts i Hobs); constructor.
-      + rewrite (schedule_focused_step n ts i t Hobs); constructor.
+      + rewrite (observe_equ_go _ _ (schedule_policy_focused_stuck sch n ts i st Hobs)),
+          project_scheduled_stuck; constructor.
+      + rewrite (observe_equ_go _ _ (schedule_policy_focused_step sch n ts i t st Hobs)),
+          project_scheduled_step; constructor.
+        apply (b_chain R); cbn; constructor.
         inversion Hi; inversion Hfi; subst.
         apply IH; auto using pool_branchfree_replace, pool_framable_replace.
-      + rewrite (schedule_focused_guard n ts i t Hobs); constructor.
+      + rewrite (observe_equ_go _ _ (schedule_policy_focused_guard sch n ts i t st Hobs)),
+          project_scheduled_guard; constructor.
         inversion Hi; inversion Hfi; subst.
         apply IH; auto using pool_branchfree_replace, pool_framable_replace.
       + ddestruction Hi; ddestruction Hfi.
         destruct e as [y|[f|e]]; [destruct y|destruct f|].
-        * rewrite (schedule_focused_yield n ts i k Hobs); constructor.
+        * rewrite (observe_equ_go _ _ (schedule_policy_focused_yield sch n ts i k st Hobs)),
+            project_scheduled_guard; constructor.
           apply IH; auto using pool_branchfree_replace, pool_framable_replace.
-        * rewrite (schedule_focused_fork n ts i k Hobs); constructor; [exact I|].
-          intros _; apply IH;
-            auto using pool_branchfree_replace, pool_branchfree_cons,
-              pool_framable_replace, pool_framable_cons.
-        * rewrite (schedule_focused_user_event n ts i e k Hobs); apply FrVisF; [exact H1|].
-          intro x; apply IH; auto using pool_branchfree_replace, pool_framable_replace.
+        * rewrite (observe_equ_go _ _ (schedule_policy_focused_fork sch n ts i k st Hobs)),
+            project_scheduled_guard; constructor.
+          apply IH; auto using pool_branchfree_replace, pool_branchfree_cons,
+            pool_framable_replace, pool_framable_cons.
+        * rewrite (observe_equ_go _ _ (schedule_policy_focused_user_event sch n ts i e k st Hobs)),
+            project_scheduled_user.
+          constructor; [exact H1|].
+          intro x; apply (b_chain R); cbn; constructor.
+          apply IH; auto using pool_branchfree_replace, pool_framable_replace.
       + inversion Hi.
     - destruct n as [|n].
-      + cbn; constructor.
-      + change (framableF (okE_thread okE) `R (observe (schedule (S n) ts None)));
-          rewrite schedule_no_focus_nonempty; constructor; [exact I|].
-        intros _; apply (b_chain R); cbn; constructor.
-        * intro j; eapply GtsStep; reflexivity.
-        * intro j; apply (b_chain R); cbn; constructor; apply IH; auto.
+      + rewrite (observe_equ_go _ _ (schedule_policy_empty_none sch ts st)),
+          project_scheduled_ret; constructor.
+      + rewrite unfold_schedule_policy; cbn beta iota zeta.
+        generalize (sched_pick sch n st); destruct (sched_arity sch n st) as [|a]; intro pick.
+        * destruct (pick Fin.F1) as [j st']; rewrite project_scheduled_scheduled; constructor.
+          apply (b_chain R); cbn; constructor; apply IH; assumption.
+        * rewrite project_scheduled_br; constructor.
+          -- intro x; destruct (pick x) as [j st']; apply guards_to_step_guard.
+             eapply guards_to_step_equ; [symmetry; apply project_scheduled_scheduled|].
+             eapply GtsStep; reflexivity.
+          -- intro x; destruct (pick x) as [j st'].
+             apply (b_chain R); cbn; constructor.
+             rewrite project_scheduled_scheduled; apply (b_chain R); cbn; constructor.
+             apply (b_chain R); cbn; constructor; apply IH; assumption.
   Qed.
 End PoolFramable.
 
-(** Round-robin scheduling only introduces [Scheduled] events and
-    administrative guards; thread-internal branches are kept, so the pool's
-    branch freedom is what makes the scheduled tree framable. *)
-Lemma framable_schedule_rr {E} (okE: forall Y, E Y -> Prop) :
-  forall n (ts: pool E Bn n) focus cursor,
+(** Deterministic RR adds admissible selections and preserves source nodes. *)
+Lemma framable_schedule_rr {E} (okE : forall Y, E Y -> Prop) :
+  forall n (ts : pool E Bn n) focus cursor,
     pool_branchfree ts -> pool_framable okE ts ->
-    Framable (okE_lift okE) (schedule_with rr_scheduler n ts focus cursor).
+    Framable (okE_policy okE) (schedule_policy rr_scheduler n ts focus cursor).
 Proof.
   unfold Framable; coinduction R IH; intros n ts focus cursor Hbf Hfr.
+  change (framableF (okE_policy okE) `R
+    (observe (schedule_policy rr_scheduler n ts focus cursor))).
   destruct focus as [i|].
   - destruct n as [|n]; [inversion i|].
     pose proof (Hbf i) as Hi; apply branchfree_unfold in Hi.
     pose proof (Hfr i) as Hfi; apply framable_unfold in Hfi.
-    destruct (observe (ts $ i)) eqn:Hobs; cbn.
+    destruct (observe (ts $ i)) eqn:Hobs.
     + destruct r.
-      rewrite (schedule_with_focused_ret rr_scheduler n ts i cursor Hobs); constructor.
+      rewrite (schedule_policy_focused_ret rr_scheduler n ts i cursor Hobs); constructor.
       apply IH; auto using pool_branchfree_remove, pool_framable_remove.
-    + rewrite (schedule_with_focused_stuck rr_scheduler n ts i cursor Hobs); constructor.
-    + rewrite (schedule_with_focused_step rr_scheduler n ts i t cursor Hobs); constructor.
+    + rewrite (schedule_policy_focused_stuck rr_scheduler n ts i cursor Hobs); constructor.
+    + rewrite (schedule_policy_focused_step rr_scheduler n ts i t cursor Hobs); constructor.
       inversion Hi; inversion Hfi; subst.
       apply IH; auto using pool_branchfree_replace, pool_framable_replace.
-    + rewrite (schedule_with_focused_guard rr_scheduler n ts i t cursor Hobs); constructor.
+    + rewrite (schedule_policy_focused_guard rr_scheduler n ts i t cursor Hobs); constructor.
       inversion Hi; inversion Hfi; subst.
       apply IH; auto using pool_branchfree_replace, pool_framable_replace.
     + ddestruction Hi; ddestruction Hfi.
       destruct e as [y|[f|e]]; [destruct y|destruct f|].
-      * rewrite (schedule_with_focused_yield rr_scheduler n ts i k cursor Hobs); constructor.
+      * rewrite (schedule_policy_focused_yield rr_scheduler n ts i k cursor Hobs); constructor.
         apply IH; auto using pool_branchfree_replace, pool_framable_replace.
-      * rewrite (schedule_with_focused_fork rr_scheduler n ts i k cursor Hobs); constructor.
-        apply IH;
-          auto using pool_branchfree_replace, pool_branchfree_cons,
-            pool_framable_replace, pool_framable_cons.
-      * rewrite (schedule_with_focused_user_event rr_scheduler n ts i e k cursor Hobs);
-          apply FrVisF; [exact H0|].
+      * rewrite (schedule_policy_focused_fork rr_scheduler n ts i k cursor Hobs); constructor.
+        apply IH; auto using pool_branchfree_replace, pool_branchfree_cons,
+          pool_framable_replace, pool_framable_cons.
+      * rewrite (schedule_policy_focused_user_event rr_scheduler n ts i e k cursor Hobs).
+        apply FrVisF; [assumption|].
         intro x; apply IH; auto using pool_branchfree_replace, pool_framable_replace.
     + inversion Hi.
   - destruct n as [|n].
-    + cbn; constructor.
-    + change (framableF (okE_lift okE) `R (observe (schedule_with rr_scheduler (S n) ts None cursor)));
-        rewrite schedule_with_rr_no_focus; constructor; [exact I|].
-      intros _; apply IH; auto.
+    + rewrite (schedule_policy_empty_none rr_scheduler ts cursor); constructor.
+    + change (framableF (okE_policy okE) `R (observe (schedule_rr (S n) ts None cursor))).
+      rewrite schedule_rr_no_focus_nonempty; constructor; [exact I|].
+      intros []; apply IH; assumption.
 Qed.
 
 (** Translation preserves finite guarded-step prefixes. *)
@@ -221,16 +244,37 @@ Proof.
   - constructor; [intro; apply guards_to_step_translate, H|intro; apply IH, H0].
 Qed.
 
+(** Embedding source events under the policy's left summand frames. *)
+Lemma framable_translate_inl1 {E B X} (okE : forall Y, E Y -> Prop) :
+  forall (t : ctree E B X), Framable okE t ->
+    Framable (okE_policy okE) (translate inl1 t).
+Proof.
+  unfold Framable at 2; coinduction R IH; intros t Ht.
+  apply framable_unfold in Ht.
+  rewrite unfold_translate; cbn; destruct Ht; cbn.
+  - constructor.
+  - constructor.
+  - constructor; apply IH, H.
+  - constructor; apply IH, H.
+  - constructor; [exact H|intro; apply IH, H0].
+  - constructor; [intro; apply guards_to_step_translate, H|intro; apply IH, H0].
+Qed.
+
 
 (** Nondeterministic scheduler erasure preserves framability. *)
 Lemma framable_erased_nd {E B} `{Bn -< B} (okE: forall Y, E Y -> Prop)
   n (ts: pool E B n) focus :
   pool_branchfree ts -> pool_framable okE ts ->
-  Framable okE (interp_yield (interp_spawn (schedule n ts focus))).
+  Framable okE (project_scheduled (schedule n ts focus)).
 Proof.
-  intros Hbf Hfr; unfold interp_yield, interp_spawn.
-  apply (framable_interp _ (okE_lift okE)); [framable_handler|].
-  apply (framable_interp _ (okE_thread okE)); [framable_handler|].
-  now apply framable_schedule.
+  unfold schedule; apply framable_schedule.
 Qed.
 
+(** Round-robin scheduler erasure preserves framability. *)
+Lemma framable_erased_rr {E} (okE: forall Y, E Y -> Prop)
+  n (ts: pool E Bn n) focus cursor :
+  pool_branchfree ts -> pool_framable okE ts ->
+  Framable okE (project_scheduled (schedule_rr n ts focus cursor)).
+Proof.
+  unfold schedule_rr; apply framable_schedule.
+Qed.

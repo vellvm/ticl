@@ -158,20 +158,6 @@ Qed.
 Lemma chain_len: forall h ns vs f, chain h ns vs f -> length ns = length vs.
 Proof. intros h ns vs f (_ & Hf); eapply Forall2_length; exact Hf. Qed.
 
-Lemma Forall2_cells_mono: forall (h h': Heap) (ns vs: list nat),
-    Forall2 (fun a v => h a = Some v) ns vs ->
-    (forall x, In x (cells ns) -> h' x = h x) ->
-    Forall2 (fun a v => h' a = Some v) ns vs.
-Proof.
-  intros h h' ns vs Hf; induction Hf as [| a v ns vs Hav Hf IH]; intro Hag;
-    [constructor |].
-  constructor.
-  - rewrite Hag; [exact Hav |].
-    apply in_cells; exists a; split; now left.
-  - apply IH; intros x Hx; apply Hag.
-    apply in_cells in Hx as (b & Hb & Hxb).
-    apply in_cells; exists b; split; [now right | exact Hxb].
-Qed.
 
 Lemma chain_mono: forall h h' ns vs fin,
     chain h ns vs fin ->
@@ -182,20 +168,22 @@ Proof.
   - eapply linked_mono; [| exact Hl].
     intros a b Ha Hab; rewrite Hag; [exact Hab |].
     apply in_cells; exists a; split; [exact Ha | now right].
-  - eapply Forall2_cells_mono; [exact Hf | exact Hag].
+  - eapply Forall2_impl'; [exact Hf |].
+    intros a v Ha Hv Hav; rewrite Hag; [exact Hav |].
+    apply in_cells; exists a; split; [exact Ha | now left].
 Qed.
 
 Lemma chain_dom: forall h ns vs f x, chain h ns vs f -> In x (cells ns) -> h x <> None.
 Proof.
-  intros h ns; induction ns as [| a ns IH]; intros vs f x Hc Hin.
-  - cbn in Hin; contradiction.
-  - destruct vs as [| v vs]; [destruct Hc as (_ & Hf); inversion Hf |].
-    apply chain_cons in Hc as (Ha & Hsa & Hc).
-    change (In x ([a; S a] ++ cells ns)) in Hin.
-    rewrite in_app_iff in Hin; destruct Hin as [Hin | Hin].
-    + cbn in Hin; destruct Hin as [Hx | [Hx | []]]; subst x;
-        [now rewrite Ha | now rewrite Hsa].
-    + eapply IH; eauto.
+  intros h ns vs f x (Hl & Hf) Hin.
+  apply in_cells in Hin as (a & Ha & [-> | ->]).
+  - assert (Hvalue : exists v, In v vs /\ h a = Some v).
+    { exact (Forall2_left_exists (fun a v => h a = Some v) ns vs Hf a Ha). }
+    destruct Hvalue as (v & Hv & Hav); rewrite Hav; discriminate.
+  - apply in_split in Ha as (prefix & rest & E); subst ns.
+    apply linked_split in Hl as (_ & Hl).
+    cbn [linked] in Hl; destruct Hl as [Ha _].
+    rewrite Ha; discriminate.
 Qed.
 
 Definition agree_out (m: list nat) (h h': Heap) : Prop :=

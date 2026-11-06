@@ -10,13 +10,13 @@ From Stdlib Require Import Fin Vector Morphisms Program.Equality.
 From Coinduction Require Import all.
 From TICL Require Import
   CTree.Core
+  CTree.Interp.Refine
   CTree.Events.Yield
   CTree.Events.Writer
-  CTree.Interp.Refine
   CTree.Logic.Sim
   CTree.Interp.Yield.Mod
-  CTree.Interp.Yield.SBisim
   CTree.Interp.Yield.Policy
+  CTree.Interp.Yield.SBisim
   CTree.Interp.Yield.RoundRobin
   CTree.Interp.Yield.Nondeterministic
   CTree.Interp.State.Mod
@@ -64,7 +64,7 @@ Section ThreadNodes.
     interp_thread (Stuck : ctree (yieldE +' (forkE +' E)) B X) ≅ Stuck.
   Proof.
     unfold interp_thread, interp_yield.
-    rewrite interp_stuck_node, interp_stuck_node; reflexivity.
+    rewrite interp_stuck, interp_stuck; reflexivity.
   Qed.
 
   (** Standalone erasure commutes with a leading guard. *)
@@ -72,7 +72,7 @@ Section ThreadNodes.
     interp_thread (Guard t) ≅ Guard (interp_thread t).
   Proof.
     unfold interp_thread, interp_yield.
-    rewrite interp_guard_node, interp_guard_node; reflexivity.
+    rewrite interp_guard, interp_guard; reflexivity.
   Qed.
 
   (** Standalone erasure turns a visible step into a step followed by two guards. *)
@@ -80,7 +80,7 @@ Section ThreadNodes.
     interp_thread (Step t) ≅ Step (Guard (Guard (interp_thread t))).
   Proof.
     unfold interp_thread, interp_yield.
-    rewrite interp_step_node, interp_step_node, interp_guard_node; reflexivity.
+    rewrite interp_step, interp_step, interp_guard; reflexivity.
   Qed.
 End ThreadNodes.
 
@@ -191,16 +191,20 @@ Section AlignBind.
 
 End AlignBind.
 
-(** ** The cooperative prefix equation for the nondeterministic pool. *)
+(** ** The cooperative prefix equation, generically over the scheduling policy.
+
+    A focused sequential segment preserves the policy state until it rejoins
+    the pool; the scheduled observations are projected to silent steps. *)
 Section Prefix.
   Context {E F B : Type -> Type} {HB : Bn -< B} {Σ : Type}
     (handler : E ~> stateT Σ (ctree F B))
+    (sch : Scheduler) (st : sched_state sch)
     (n : nat) (ts : pool E B (S n)) (i : Fin.t (S n))
     {Y : Type} (K : Y -> thread E B).
 
-  (** Run the scheduled pool through erasure. *)
+  (** Run the focused pool under the direct scheduling policy. *)
   Let run (ts' : pool E B (S n)) (σ : Σ) : ctree F B (Σ * unit) :=
-    interp_state handler (interp_yield (interp_spawn (schedule (S n) ts' (Some i)))) σ.
+    interp_state handler (project_scheduled (schedule_policy sch (S n) ts' (Some i) st)) σ.
 
   (** Rejoin the pool with the focused continuation and its resulting state. *)
   Let rhs_k : Σ * Y -> ctree F B (Σ * unit) :=
@@ -211,7 +215,7 @@ Section Prefix.
     t ≅ t' -> run (ts @ i := t) σ ≅ run (ts @ i := t') σ.
   Proof.
     intro H; unfold run.
-    now rewrite (schedule_pool_proper (S n) _ _ (Some i)
+    now rewrite (schedule_policy_pool_proper sch (S n) _ _ (Some i) st
       (replace_pool_equ ts ts i t t' (pool_equ_refl ts) H)).
   Qed.
 
@@ -219,9 +223,10 @@ Section Prefix.
   Lemma run_slot_stuck t σ : t ≅ Stuck -> run (ts @ i := t) σ ≅ Stuck.
   Proof.
     intro H; rewrite (run_slot_equ _ Stuck σ H); unfold run.
-    rewrite (trans_schedule_focused_stuck n _ i)
+    assert (Hobs : observe ((ts @ i := Stuck) $ i) = StuckF)
       by (rewrite Vector.nth_replace_eq; reflexivity).
-    rewrite interp_erase_stuck, interp_state_stuck; reflexivity.
+    rewrite (observe_equ_go _ _ (schedule_policy_focused_stuck sch n _ i st Hobs)).
+    rewrite project_scheduled_stuck, interp_state_stuck; reflexivity.
   Qed.
 
   (** Exact [≅] equation for a focused guard. *)
@@ -229,36 +234,38 @@ Section Prefix.
     run (ts @ i := Guard t) σ ≅ Guard (run (ts @ i := t) σ).
   Proof.
     unfold run.
-    rewrite (trans_schedule_focused_guard n _ i t)
+    assert (Hobs : observe ((ts @ i := Guard t) $ i) = GuardF t)
       by (rewrite Vector.nth_replace_eq; reflexivity).
-    rewrite interp_erase_guard, interp_state_guard, Vector.replace_replace_eq.
+    rewrite (observe_equ_go _ _ (schedule_policy_focused_guard sch n _ i t st Hobs)).
+    rewrite project_scheduled_guard, interp_state_guard, Vector.replace_replace_eq.
     reflexivity.
   Qed.
 
   (** Exact [≅] equation for a focused step. *)
   Lemma run_slot_step t σ :
-    run (ts @ i := Step t) σ ≅ Step (Guard (Guard (Guard (run (ts @ i := t) σ)))).
+    run (ts @ i := Step t) σ ≅ Step (Guard (Guard (run (ts @ i := t) σ))).
   Proof.
     unfold run.
-    rewrite (schedule_focused_step_equ n _ i t)
+    assert (Hobs : observe ((ts @ i := Step t) $ i) = StepF t)
       by (rewrite Vector.nth_replace_eq; reflexivity).
-    rewrite interp_erase_step, interp_state_step, interp_state_guard,
-      interp_state_guard, Vector.replace_replace_eq.
+    rewrite (observe_equ_go _ _ (schedule_policy_focused_step sch n _ i t st Hobs)).
+    rewrite project_scheduled_step, interp_state_step, interp_state_guard,
+      Vector.replace_replace_eq.
     reflexivity.
   Qed.
 
   (** Exact [≅] equation for a focused user event. *)
   Lemma run_slot_user {Z} (e : E Z) k σ :
     run (ts @ i := Vis (inr1 (inr1 e)) k) σ ≅
-    (handler _ e σ >>= fun sx => Guard (Guard (Guard (run (ts @ i := k (snd sx)) (fst sx))))).
+    (handler _ e σ >>= fun sx => Guard (Guard (run (ts @ i := k (snd sx)) (fst sx)))).
   Proof.
     unfold run.
     assert (Hobs : observe ((ts @ i := Vis (inr1 (inr1 e)) k) $ i) = VisF (inr1 (inr1 e)) k)
       by (rewrite Vector.nth_replace_eq; reflexivity).
-    rewrite (observe_equ_go _ _ (schedule_focused_user_event n _ i e k Hobs)).
-    rewrite interp_erase_user, interp_state_vis.
+    rewrite (observe_equ_go _ _ (schedule_policy_focused_user_event sch n _ i e k st Hobs)).
+    rewrite project_scheduled_user, interp_state_vis.
     upto_bind_eq; intro sx.
-    rewrite interp_state_guard, interp_state_guard, Vector.replace_replace_eq.
+    rewrite interp_state_guard, Vector.replace_replace_eq.
     reflexivity.
   Qed.
 
@@ -290,17 +297,17 @@ Section Prefix.
       + rewrite Ew, interp_thread_guard_node, interp_state_guard, bind_guard; reflexivity.
       + apply (align_at _ 0 0 _ _ _ _ (prefix_base_at w' σ Hw')); reflexivity.
     - apply (galignF_step _ _ _ 0 0
-        (Guard (Guard (Guard (run (ts @ i := (w' >>= K)) σ))))
+        (Guard (Guard (run (ts @ i := (w' >>= K)) σ)))
         (Guard (Guard (Guard (interp_state handler (interp_thread w') σ >>= rhs_k))))).
       + rewrite (run_slot_equ _ (Step (w' >>= K)) σ) by (rewrite Ew, bind_step; reflexivity).
         rewrite run_slot_step; reflexivity.
       + rewrite Ew, interp_thread_step_node, interp_state_step, interp_state_guard,
           interp_state_guard, bind_step, bind_guard, bind_guard, bind_guard; reflexivity.
-      + apply (align_at _ 3 3 _ _ _ _ (prefix_base_at w' σ Hw')); reflexivity.
+      + apply (align_at _ 2 3 _ _ _ _ (prefix_base_at w' σ Hw')); reflexivity.
     - apply (align_bind_step _ 0 0 (handler _ e σ)
-        (fun sx => Guard (Guard (run (ts @ i := (k (snd sx) >>= K)) (fst sx))))
+        (fun sx => Guard (run (ts @ i := (k (snd sx) >>= K)) (fst sx)))
         (fun sx => Guard (Guard (interp_state handler (interp_thread (k (snd sx))) (fst sx) >>= rhs_k)))).
-      + intro sx; apply (align_at _ 2 2 _ _ _ _ (prefix_base_at (k (snd sx)) (fst sx) (Hk _))); reflexivity.
+      + intro sx; apply (align_at _ 1 2 _ _ _ _ (prefix_base_at (k (snd sx)) (fst sx) (Hk _))); reflexivity.
       + cbn [guards].
         rewrite (run_slot_equ _ (Vis (inr1 (inr1 e)) (fun z => k z >>= K)) σ)
           by (rewrite Ew, bind_vis; reflexivity).
@@ -324,6 +331,152 @@ Section Prefix.
   Qed.
 End Prefix.
 
+(** A focused sequential interval never invokes the policy. Its observations
+    are only relabelled user logs, with the same actual pool continuation. *)
+Section FairPrefix.
+  Context {E : Type -> Type} {W Sigma X : Type}
+    (sch : Scheduler) (handler : E ~> stateT Sigma (ctreeW W Bn))
+    (st : sched_state sch) (n : nat) (ts : pool E Bn (S n))
+    (i : Fin.t (S n)) (K : X -> thread E Bn).
+
+  Local Notation "'run' us sigma" :=
+    (interp_schedule_fair sch handler (S n) us (Some i) st sigma)
+    (at level 10, us at next level, sigma at next level).
+
+  Local Lemma fair_prefix_slot_equ t u sigma :
+    t ≅ u -> run (ts @ i := t) sigma ≅ run (ts @ i := u) sigma.
+  Proof.
+    intro H; apply interp_schedule_fair_equ;
+      exact (replace_pool_equ ts ts i t u (pool_equ_refl ts) H).
+  Qed.
+
+  Local Lemma fair_prefix_slot_guard t sigma :
+    run (ts @ i := Guard t) sigma ≅ Guard (run (ts @ i := t) sigma).
+  Proof.
+    assert (Hobs : observe ((ts @ i := Guard t) $ i) = GuardF t)
+      by (rewrite Vector.nth_replace_eq; reflexivity).
+    unfold interp_schedule_fair.
+    rewrite (observe_equ_go _ _ (schedule_policy_focused_guard sch n
+      (ts @ i := Guard t) i t st Hobs)).
+    rewrite interp_state_guard, Vector.replace_replace_eq; reflexivity.
+  Qed.
+
+  Local Lemma fair_prefix_slot_step t sigma :
+    run (ts @ i := Step t) sigma ≅ Step (Guard (run (ts @ i := t) sigma)).
+  Proof.
+    assert (Hobs : observe ((ts @ i := Step t) $ i) = StepF t)
+      by (rewrite Vector.nth_replace_eq; reflexivity).
+    unfold interp_schedule_fair.
+    rewrite (observe_equ_go _ _ (schedule_policy_focused_step sch n
+      (ts @ i := Step t) i t st Hobs)).
+    rewrite interp_state_step, Vector.replace_replace_eq; reflexivity.
+  Qed.
+
+  Local Lemma fair_prefix_slot_user {Y} (e : E Y) k sigma :
+    run (ts @ i := Vis (inr1 (inr1 e)) k) sigma ≅
+    (translate relabel_log (handler _ e sigma) >>= fun sx =>
+      Guard (run (ts @ i := k (snd sx)) (fst sx))).
+  Proof.
+    assert (Hobs : observe ((ts @ i := Vis (inr1 (inr1 e)) k) $ i) =
+      VisF (inr1 (inr1 e)) k) by (rewrite Vector.nth_replace_eq; reflexivity).
+    unfold interp_schedule_fair.
+    rewrite (observe_equ_go _ _ (schedule_policy_focused_user_event sch n
+      (ts @ i := Vis (inr1 (inr1 e)) k) i e k st Hobs)).
+    rewrite interp_state_vis; cbn [policy_handler h_sum].
+    upto_bind_eq; intros [sigma' x]; cbn.
+    rewrite Vector.replace_replace_eq; reflexivity.
+  Qed.
+
+  Variant fair_prefix_base :
+    ctreeW (W + nat) Bn (Sigma * unit) -> ctreeW (W + nat) Bn (Sigma * unit) -> Prop :=
+  | fair_prefix_at t sigma : Sequential t ->
+      fair_prefix_base (run (ts @ i := (t >>= K)) sigma)
+        (translate relabel_log (interp_state handler (interp_thread t) sigma) >>=
+          fun '(sigma',x) => run (ts @ i := K x) sigma').
+
+  Local Lemma fair_prefix_base_step T U :
+    fair_prefix_base T U -> galignF (align_rel fair_prefix_base) T U.
+  Proof.
+    intros [t sigma Ht]; apply sequential_inv in Ht.
+    pose proof (ctree_eta t) as Et; revert Et.
+    destruct Ht as [x| |t' Ht'|t' Ht'|Y e k Hk]; intro Et.
+    - apply align_equ_step.
+      rewrite (fair_prefix_slot_equ _ (K x) sigma) by (rewrite Et, bind_ret_l; reflexivity).
+      rewrite Et, interp_state_thread_ret, translate_ret, bind_ret_l; reflexivity.
+    - apply (galignF_stuck _ _ _ 0 0).
+      + apply interp_schedule_fair_stuck; rewrite Vector.nth_replace_eq, Et, bind_stuck; reflexivity.
+      + rewrite Et, interp_thread_stuck_node, interp_state_stuck.
+        rewrite (unfold_translate (Stuck : ctreeW W Bn (Sigma * X)) relabel_log); cbn.
+        rewrite bind_stuck; reflexivity.
+    - apply (galignF_guard _ _ _ 0 0
+        (run (ts @ i := (t' >>= K)) sigma)
+        (translate relabel_log (interp_state handler (interp_thread t') sigma) >>=
+          fun '(sigma',x) => run (ts @ i := K x) sigma')).
+      + rewrite (fair_prefix_slot_equ _ (Guard (t' >>= K)) sigma)
+          by (rewrite Et, bind_guard; reflexivity).
+        rewrite fair_prefix_slot_guard; reflexivity.
+      + rewrite Et, interp_thread_guard_node, interp_state_guard, translate_guard, bind_guard; reflexivity.
+      + apply (align_at _ 0 0 _ _ _ _ (fair_prefix_at t' sigma Ht')); reflexivity.
+    - apply (galignF_step _ _ _ 0 0
+        (Guard (run (ts @ i := (t' >>= K)) sigma))
+        (guards 3 (translate relabel_log (interp_state handler (interp_thread t') sigma) >>=
+          fun '(sigma',x) => run (ts @ i := K x) sigma'))).
+      + rewrite (fair_prefix_slot_equ _ (Step (t' >>= K)) sigma)
+          by (rewrite Et, bind_step; reflexivity).
+        rewrite fair_prefix_slot_step; reflexivity.
+      + rewrite Et, interp_thread_step_node, interp_state_step, !interp_state_guard,
+          translate_step, !translate_guard, bind_step, !bind_guard; reflexivity.
+      + apply (align_at _ 1 3 _ _ _ _ (fair_prefix_at t' sigma Ht')); reflexivity.
+    - apply (align_bind_step _ 0 0 (translate relabel_log (handler _ e sigma))
+        (fun sx => run (ts @ i := (k (snd sx) >>= K)) (fst sx))
+        (fun sx => guards 2
+          (translate relabel_log (interp_state handler (interp_thread (k (snd sx))) (fst sx)) >>=
+            fun '(sigma',x) => run (ts @ i := K x) sigma'))).
+      + intro sx; apply (align_at _ 0 2 _ _ _ _ (fair_prefix_at (k (snd sx)) (fst sx) (Hk _))); reflexivity.
+      + rewrite (fair_prefix_slot_equ _ (Vis (inr1 (inr1 e)) (fun x => k x >>= K)) sigma)
+          by (rewrite Et, bind_vis; reflexivity).
+        rewrite fair_prefix_slot_user; reflexivity.
+      + rewrite Et, interp_thread_user_node, interp_state_vis.
+        change (Monad.bind ?a ?b) with (CTree.bind a b).
+        rewrite translate_bind, bind_bind.
+        upto_bind_eq; intros [sigma' x]; cbn.
+        rewrite !interp_state_guard, !translate_guard, !bind_guard; reflexivity.
+  Qed.
+
+  Local Lemma fair_prefix_bind t sigma :
+    Sequential t -> run (ts @ i := (t >>= K)) sigma ~
+    (translate relabel_log (interp_state handler (interp_thread t) sigma) >>=
+      fun '(sigma',x) => run (ts @ i := K x) sigma').
+  Proof.
+    intro Ht; apply galigned_sbisim,
+      (galigned_coind (align_rel fair_prefix_base)
+        (align_rel_step fair_prefix_base fair_prefix_base_step)),
+      (align_at _ 0 0 _ _ _ _ (fair_prefix_at t sigma Ht)); reflexivity.
+  Qed.
+End FairPrefix.
+
+Lemma interp_schedule_fair_prefix_bind {E : Type -> Type} {W Sigma X : Type}
+    (sch : Scheduler) (handler : E ~> stateT Sigma (ctreeW W Bn))
+    n (ts : pool E Bn (S n)) (i : Fin.t (S n))
+    (t : ctree (yieldE +' (forkE +' E)) Bn X) (K : X -> thread E Bn)
+    (st : sched_state sch) sigma :
+  Sequential t ->
+  interp_schedule_fair sch handler (S n) (ts @ i := (t >>= K)) (Some i) st sigma ~
+  (translate relabel_log (interp_state handler (interp_thread t) sigma) >>=
+    fun '(sigma',x) =>
+      interp_schedule_fair sch handler (S n) (ts @ i := K x) (Some i) st sigma').
+Proof. exact (fair_prefix_bind sch handler st n ts i K t sigma). Qed.
+
+(** Round-robin join principle for a focused sequential segment. *)
+Lemma interp_schedule_rr_prefix_bind {E : Type -> Type} {W Σ : Type}
+  (handler : E ~> stateT Σ (ctreeW W Bn)) n (ts : pool E Bn (S n)) (i : Fin.t (S n))
+  {Y} (w : ctree (yieldE +' (forkE +' E)) Bn Y) (K : Y -> thread E Bn) m σ :
+  Sequential w ->
+  interp_schedule_rr handler (S n) (ts @ i := (w >>= K)) (Some i) m σ ~
+  (translate relabel_log (interp_state handler (interp_thread w) σ) >>= fun '(σ', y) =>
+     interp_schedule_rr handler (S n) (ts @ i := K y) (Some i) m σ').
+Proof. apply interp_schedule_fair_prefix_bind. Qed.
+
 (** Nondeterministic join principle for a focused sequential segment. *)
 Lemma interp_schedule_nd_prefix_bind {E F B : Type -> Type} {HB : Bn -< B} {Σ : Type}
   (handler : E ~> stateT Σ (ctree F B)) n (ts : pool E B (S n)) (i : Fin.t (S n))
@@ -334,148 +487,6 @@ Lemma interp_schedule_nd_prefix_bind {E F B : Type -> Type} {HB : Bn -< B} {Σ :
      interp_schedule_nd handler (S n) (ts @ i := K y) (Some i) σ').
 Proof.
   intro Hw; unfold interp_schedule_nd.
-  apply (run_prefix_bind handler n ts i K); exact Hw.
-Qed.
-
-(** ** The cooperative prefix equation for the policy-scheduled pool.
-
-    The policy runner relabels the standalone run's observations under [inl];
-    guard counts differ from the erased runner (one administrative guard per
-    node instead of three), which the alignment closure absorbs. *)
-Section PolicyPrefix.
-  Context {E : Type -> Type} {W Σ : Type} (sch : Scheduler)
-    (handler : E ~> stateT Σ (ctreeW W Bn))
-    (n : nat) (ts : pool E Bn (S n)) (i : Fin.t (S n))
-    {Y : Type} (K : Y -> thread E Bn) (st : sched_state sch).
-
-  Let run (ts' : pool E Bn (S n)) (σ : Σ) : ctreeW (W + nat) Bn (Σ * unit) :=
-    interp_state (policy_handler handler) (schedule_with sch (S n) ts' (Some i) st) σ.
-
-  Let rhs_k : Σ * Y -> ctreeW (W + nat) Bn (Σ * unit) :=
-    fun '(σ', y) => run (ts @ i := K y) σ'.
-
-  Lemma policy_run_slot_equ t t' σ :
-    t ≅ t' -> run (ts @ i := t) σ ≅ run (ts @ i := t') σ.
-  Proof.
-    intro H; unfold run.
-    now rewrite (schedule_with_pool_proper sch (S n) _ _ (Some i) st
-      (replace_pool_equ ts ts i t t' (pool_equ_refl ts) H)).
-  Qed.
-
-  Lemma policy_run_slot_stuck t σ : t ≅ Stuck -> run (ts @ i := t) σ ≅ Stuck.
-  Proof.
-    intro H; rewrite (policy_run_slot_equ _ Stuck σ H); unfold run.
-    rewrite (observe_equ_go _ _ (schedule_with_focused_stuck sch n (ts @ i := Stuck) i st
-      ltac:(rewrite Vector.nth_replace_eq; reflexivity))).
-    apply interp_state_stuck.
-  Qed.
-
-  Lemma policy_run_slot_guard t σ :
-    run (ts @ i := Guard t) σ ≅ Guard (run (ts @ i := t) σ).
-  Proof.
-    unfold run.
-    rewrite (observe_equ_go _ _ (schedule_with_focused_guard sch n (ts @ i := Guard t) i t st
-      ltac:(rewrite Vector.nth_replace_eq; reflexivity))).
-    rewrite interp_state_guard, Vector.replace_replace_eq; reflexivity.
-  Qed.
-
-  Lemma policy_run_slot_step t σ :
-    run (ts @ i := Step t) σ ≅ Step (Guard (run (ts @ i := t) σ)).
-  Proof.
-    unfold run.
-    rewrite (observe_equ_go _ _ (schedule_with_focused_step sch n (ts @ i := Step t) i t st
-      ltac:(rewrite Vector.nth_replace_eq; reflexivity))).
-    rewrite interp_state_step, Vector.replace_replace_eq; reflexivity.
-  Qed.
-
-  Lemma policy_run_slot_user {Z} (e : E Z) k σ :
-    run (ts @ i := Vis (inr1 (inr1 e)) k) σ ≅
-    (translate relabel_log (handler _ e σ) >>= fun sx => Guard (run (ts @ i := k (snd sx)) (fst sx))).
-  Proof.
-    unfold run.
-    rewrite (observe_equ_go _ _ (schedule_with_focused_user_event sch n
-      (ts @ i := Vis (inr1 (inr1 e)) k) i e k st
-      ltac:(rewrite Vector.nth_replace_eq; reflexivity))).
-    rewrite interp_state_vis; cbn [policy_handler h_sum].
-    upto_bind_eq; intro sx.
-    rewrite Vector.replace_replace_eq; reflexivity.
-  Qed.
-
-  Variant policy_prefix_base : ctreeW (W + nat) Bn (Σ * unit) -> ctreeW (W + nat) Bn (Σ * unit) -> Prop :=
-  | policy_prefix_base_at w σ :
-      Sequential w ->
-      policy_prefix_base (run (ts @ i := (w >>= K)) σ)
-        (translate relabel_log (interp_state handler (interp_thread w) σ) >>= rhs_k).
-
-  Lemma policy_prefix_base_step t u :
-    policy_prefix_base t u -> galignF (align_rel policy_prefix_base) t u.
-  Proof.
-    intros [w σ Hw].
-    apply sequential_inv in Hw.
-    pose proof (ctree_eta w) as Ew; revert Ew.
-    destruct Hw as [y| |w' Hw'|w' Hw'|Z e k Hk]; intro Ew.
-    - apply align_equ_step.
-      rewrite (policy_run_slot_equ _ (K y) σ) by (rewrite Ew, bind_ret_l; reflexivity).
-      rewrite Ew, interp_state_thread_ret, translate_ret, bind_ret_l; reflexivity.
-    - apply (galignF_stuck _ _ _ 0 0).
-      + apply policy_run_slot_stuck; rewrite Ew, bind_stuck; reflexivity.
-      + rewrite Ew, interp_thread_stuck_node, interp_state_stuck, translate_stuck_node,
-          (bind_stuck rhs_k); reflexivity.
-    - apply (galignF_guard _ _ _ 0 0
-        (run (ts @ i := (w' >>= K)) σ)
-        (translate relabel_log (interp_state handler (interp_thread w') σ) >>= rhs_k)).
-      + rewrite (policy_run_slot_equ _ (Guard (w' >>= K)) σ) by (rewrite Ew, bind_guard; reflexivity).
-        rewrite policy_run_slot_guard; reflexivity.
-      + rewrite Ew, interp_thread_guard_node, interp_state_guard, translate_guard, bind_guard;
-          reflexivity.
-      + apply (align_at _ 0 0 _ _ _ _ (policy_prefix_base_at w' σ Hw')); reflexivity.
-    - apply (galignF_step _ _ _ 0 0
-        (Guard (run (ts @ i := (w' >>= K)) σ))
-        (Guard (Guard (Guard (translate relabel_log (interp_state handler (interp_thread w') σ) >>= rhs_k))))).
-      + rewrite (policy_run_slot_equ _ (Step (w' >>= K)) σ) by (rewrite Ew, bind_step; reflexivity).
-        rewrite policy_run_slot_step; reflexivity.
-      + rewrite Ew, interp_thread_step_node, interp_state_step, interp_state_guard,
-          interp_state_guard, translate_step, !translate_guard, bind_step, !bind_guard; reflexivity.
-      + apply (align_at _ 1 3 _ _ _ _ (policy_prefix_base_at w' σ Hw')); reflexivity.
-    - apply (align_bind_step _ 0 0 (translate relabel_log (handler _ e σ))
-        (fun sx => run (ts @ i := (k (snd sx) >>= K)) (fst sx))
-        (fun sx => Guard (Guard (translate relabel_log
-           (interp_state handler (interp_thread (k (snd sx))) (fst sx)) >>= rhs_k)))).
-      + intro sx; apply (align_at _ 0 2 _ _ _ _ (policy_prefix_base_at (k (snd sx)) (fst sx) (Hk _))); reflexivity.
-      + cbn [guards].
-        rewrite (policy_run_slot_equ _ (Vis (inr1 (inr1 e)) (fun z => k z >>= K)) σ)
-          by (rewrite Ew, bind_vis; reflexivity).
-        rewrite policy_run_slot_user; reflexivity.
-      + cbn [guards].
-        rewrite Ew, interp_thread_user_node, interp_state_vis.
-        change (Monad.bind ?a ?b) with (CTree.bind a b); rewrite translate_bind, bind_bind.
-        upto_bind_eq; intro sx.
-        rewrite translate_guard, interp_state_guard, interp_state_guard, !translate_guard, !bind_guard.
-        reflexivity.
-  Qed.
-
-  Lemma policy_run_prefix_bind (w : ctree (yieldE +' (forkE +' E)) Bn Y) σ :
-    Sequential w ->
-    run (ts @ i := (w >>= K)) σ ~
-    (translate relabel_log (interp_state handler (interp_thread w) σ) >>= rhs_k).
-  Proof.
-    intro Hw.
-    apply galigned_sbisim,
-      (galigned_coind (align_rel policy_prefix_base)
-        (align_rel_step policy_prefix_base policy_prefix_base_step)),
-      (align_at _ 0 0 _ _ _ _ (policy_prefix_base_at w σ Hw)); reflexivity.
-  Qed.
-End PolicyPrefix.
-
-(** Policy join principle for a focused sequential segment. *)
-Lemma interp_schedule_fair_prefix_bind {E : Type -> Type} {W Σ : Type} (sch : Scheduler)
-  (handler : E ~> stateT Σ (ctreeW W Bn)) n (ts : pool E Bn (S n)) (i : Fin.t (S n))
-  {Y} (w : ctree (yieldE +' (forkE +' E)) Bn Y) (K : Y -> thread E Bn) st σ :
-  Sequential w ->
-  interp_schedule_fair sch handler (S n) (ts @ i := (w >>= K)) (Some i) st σ ~
-  (translate relabel_log (interp_state handler (interp_thread w) σ) >>= fun '(σ', y) =>
-     interp_schedule_fair sch handler (S n) (ts @ i := K y) (Some i) st σ').
-Proof.
-  intro Hw; unfold interp_schedule_fair.
-  apply (policy_run_prefix_bind sch handler n ts i K st); exact Hw.
+  unfold schedule.
+  exact (run_prefix_bind handler nd_scheduler tt n ts i K w σ Hw).
 Qed.

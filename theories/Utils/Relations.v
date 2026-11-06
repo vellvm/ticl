@@ -1,5 +1,22 @@
 From Stdlib Require Import Relations Arith.Wf_nat Arith.PeanoNat List Lia.
 
+Lemma nat_iter_add_const n k x : Nat.iter n (Nat.add k) x = n*k+x.
+Proof. induction n as [|n IH]; [reflexivity|rewrite Nat.iter_succ, IH; cbn; lia]. Qed.
+
+Lemma clos_refl_trans_preserves {A} (R : relation A) (I : A -> Prop) :
+  (forall x y, I x -> R x y -> I y) ->
+  forall x y, I x -> clos_refl_trans A R x y -> I y.
+Proof.
+  intros Hstep x y Hx Hpath; revert Hx.
+  induction Hpath; intro Hx; [eapply Hstep; eauto|exact Hx|auto].
+Qed.
+
+Lemma acc_self_loop {A} (R : relation A) x : R x x -> ~ Acc R x.
+Proof.
+  intros Hloop Hacc; revert Hloop.
+  induction Hacc as [x Hacc IH]; intro Hloop; exact (IH x Hloop Hloop).
+Qed.
+
 (** One natural-number lexicographic layer over an arbitrary relation. *)
 Definition lexn {A} (R: relation A) : relation (nat * A) :=
   fun p q => fst p < fst q \/ (fst p = fst q /\ R (snd p) (snd q)).

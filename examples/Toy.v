@@ -49,7 +49,7 @@ Module P25.
   (** StImp is deterministic: the branch signature [B] is arbitrary. *)
   Lemma toy_spec {B: Type -> Type}: forall cval N,
       let init := add c cval empty in
-      <( {instr_prog (B:=B) toy init}, {Obs (Log init) tt} |= var c <= N \/ AF (var r >= N) )>.
+      <( {instr_prog (B:=B) toy init}, {Obs (Log init) tt} |=L var c <= N \/ AF (var r >= N) )>.
   Proof.
     intros.
     assert (Hcr: c<>r) by (intro Hcontra; inv Hcontra).
@@ -58,7 +58,7 @@ Module P25.
     - cleft. (* cval <= N *)
       eapply var_le with cval; eauto with ticl; try lia.
     - cright. (* cval > N *)
-      eapply aul_cprog_seq.
+      eapply (au_cprog_seq (suffix:=false)).
       + eapply aur_cprog_assgn_eq; eauto with ticl; try lia.
         * apply axr_cexp_const; eauto with ticl; try lia.
         * csplit; eauto with ticl; try lia.
@@ -87,26 +87,26 @@ Module P25.
             ++ destruct n eqn:Hn.
                ** (* n = 0, c = 1 *)
                  left.
-                 eapply aul_cprog_seq.
+                 eapply (au_cprog_seq (suffix:=false)).
                  --- eapply aur_cprog_assgn_eq; eauto with ticl; try lia.
                      +++ eapply axr_cexp_sub; eauto with ticl; try lia.
                      +++ csplit; eauto with ticl; try lia.
-                 --- eapply aul_cprog_assgn.
+                 --- eapply (au_cprog_assgn (suffix:=false)).
                      +++ eapply axr_cexp_add; eauto with ticl; try lia.
                          rewrite lookup_add_neq; eauto with ticl; try lia.
                      +++ csplit; eauto with ticl; try lia.
                      +++ eapply var_ge with (vr+1); eauto with ticl; try lia.
                ** (* n = S n0, c > 1 *)
                  right.
-                 eapply aur_cprog_seq.
+                 eapply (au_cprog_seq (suffix:=true)).
                  --- eapply aur_cprog_assgn_eq; eauto with ticl; try lia.
                      +++ eapply axr_cexp_sub; eauto with ticl; try lia.
                      +++ csplit; eauto with ticl; try lia.
-                 --- eapply aur_cprog_assgn; eauto with ticl; try lia.
+                 --- eapply (au_cprog_assgn (suffix:=true)); eauto with ticl; try lia.
                      +++ eapply axr_cexp_add; eauto with ticl; try lia.
                          rewrite lookup_add_neq; eauto with ticl; try lia.
                      +++ csplit; eauto with ticl; try lia.
-                     +++ intuition.
+                     +++ apply ret_ret; [constructor |]; intuition.
                          *** apply assert1_add_neq; eauto with ticl; try lia.
                              apply assert1_add_eq; eauto with ticl; try lia.
                          *** apply assert2_add_l; eauto with ticl; try lia.

@@ -16,7 +16,11 @@ Generalizable All Variables.
 (** In program instrumentation, we leave behind a [Log] event after each semantic interpretation.
     This is useful for remembering the temporal information of the program post interpretation,
     while also being general enough to accomodate arbitrary ghost-state [W]. *)
-Definition log {S B}: S -> ctree (writerE S) B unit := fun s => CTree.trigger (Log s).
+(** Keep the returned [unit] independent of the event-reply universe.
+    [CTree.trigger (Log s)] ties those universes and cannot serve every
+    model-return universe used by [Kripke]. The reply type is [unit]. *)
+Definition log {S B}: S -> ctree (writerE S) B unit :=
+  fun s => Vis (Log s) (fun _ => Ret tt).
 
 Abbreviation ctreeW Φ B := (ctree (writerE Φ) B).
 Abbreviation InstrM Φ B Σ := (stateT Σ (ctreeW Φ B)).

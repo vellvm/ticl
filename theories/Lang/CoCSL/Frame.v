@@ -1,13 +1,13 @@
 (** * Heap frame rules for CoCSL source programs.
 
-    A framed run is the same program on a heap extended by a disjoint
-    [ManagedHeap] region; every proved prefix property survives and every
-    suffix postcondition acquires the frame ([frame_post]).  Allocation is
-    excluded ([alloc_free]) because first-fit allocation is deterministic in
-    the absolute heap. *)
+    The same program runs on a heap extended by a disjoint [ManagedHeap].
+    All atoms acquire their [framer] image; native postconditions acquire
+    [frame_post]. Literal prefix transport additionally needs [prefix_stable].
+    Unconditional admission excludes allocation. A conditional allocation rule
+    requires common first fit and the full allocated managed-state relation. *)
 
 From TICL Require Export Lang.CoCSL.Mod CTree.Interp.CSL.Frame CTree.Interp.Yield.Frame.
-From Stdlib Require Import Fin Vector Strings.String.
+From Stdlib Require Import Fin Vector Strings.String Arith.PeanoNat.
 From ExtLib Require Import Structures.Maps Data.Map.FMapAList Data.String.
 From TICL Require Import
   CTree.Core
@@ -151,14 +151,14 @@ Qed.
 (** The erased nondeterministic pool runner is framable. *)
 Lemma run_nd_pool_framable {n} (ps : Vector.t (CProg unit) n) focus :
   Vector.Forall alloc_free ps ->
-  Framable no_alloc_sE (interp_yield (interp_spawn (schedule n (csl_pool ps) focus))).
+  Framable no_alloc_sE (project_scheduled (schedule n (csl_pool ps) focus)).
 Proof. intro; apply framable_erased_nd; auto using csl_pool_branchfree, csl_pool_framable. Qed.
 
 (** The round-robin scheduled pool is framable: scheduling events are always
     admitted. *)
 Lemma run_rr_pool_framable {n} (ps : Vector.t (CProg unit) n) focus cursor :
   Vector.Forall alloc_free ps ->
-  Framable (okE_lift no_alloc_sE) (schedule_with rr_scheduler n (csl_pool ps) focus cursor).
+  Framable (okE_policy no_alloc_sE) (schedule_policy rr_scheduler n (csl_pool ps) focus cursor).
 Proof. intro; apply framable_schedule_rr; auto using csl_pool_branchfree, csl_pool_framable. Qed.
 
 (** The standalone erased flow of an allocation-free program is framable. *)
@@ -167,32 +167,196 @@ Lemma instr_flow_framable {A} (p : CProg A) :
 Proof. intro; apply framable_thread, denote_flow_framable; assumption. Qed.
 (** The singleton nondeterministic runner has a framable erased tree. *)
 Lemma run_nd_framable p : alloc_free p ->
-  Framable no_alloc_sE (interp_yield (interp_spawn (schedule 1 (csl_pool [p]%vector) (Some Fin.F1)))).
+  Framable no_alloc_sE (project_scheduled (schedule 1 (csl_pool [p]%vector) (Some Fin.F1))).
 Proof. intro; apply run_nd_pool_framable; repeat constructor; assumption. Qed.
 
 (** The singleton round-robin runner has a framable scheduled tree. *)
 Lemma run_rr_framable p : alloc_free p ->
-  Framable (okE_lift no_alloc_sE) (schedule_with rr_scheduler 1 (csl_pool [p]%vector) (Some Fin.F1) 0).
+  Framable (okE_policy no_alloc_sE)
+    (schedule_policy rr_scheduler 1 (csl_pool [p]%vector) (Some Fin.F1) 0).
 Proof. intro; apply run_rr_pool_framable; repeat constructor; assumption. Qed.
 
-(** The standalone erased flow, embedded under the policy handler's event
-    signature, is framable. *)
+(** Standalone source flow embedded under the instrumented policy handler. *)
 Lemma instr_flow_sched_framable {A} (p : CProg A) :
   alloc_free p ->
-  Framable (okE_lift (F := schedE) no_alloc_sE) (translate inr1 (interp_thread (denote_flow p))).
-Proof. intro; apply framable_translate_inr1, instr_flow_framable; assumption. Qed.
+  Framable (okE_policy no_alloc_sE) (translate inl1 (interp_thread (denote_flow p))).
+Proof. intro; apply framable_translate_inl1, instr_flow_framable; assumption. Qed.
 
+(** ** All-atom framing for the existing source execution shapes. *)
+Lemma instr_exp_csl_frame {b} (fr : ManagedHeap) (e : CExp) (s s' : SSig)
+  (p : ticl_at (writerE (CSLObs (nat * nat))) (SSig * nat) b) w w' :
+  exp_ok (okE_thread no_alloc_sE) e -> frame_rel fr s s' ->
+  simW (frameER fr) (@frameRV nat fr) w w' ->
+  entails (SSig * nat) b p (instr_exp_erased e s) w ->
+  entails (SSig * nat) b (framer (SSig * nat) b (frameER fr) (frameRV fr) p)
+    (instr_exp_erased e s') w'.
+Proof.
+  intros HF HR HW H; unfold instr_exp_erased in *.
+  eapply ticl_csl_frame; [|exact HR|exact HW|exact H].
+  apply framable_thread, denote_exp_framable; exact HF.
+Qed.
+
+Lemma instr_flow_csl_frame {A b} (fr : ManagedHeap) (source : CProg A) (s s' : SSig)
+  (p : ticl_at (writerE (CSLObs (nat * nat))) (SSig * option A) b) w w' :
+  alloc_free source -> frame_rel fr s s' ->
+  simW (frameER fr) (@frameRV (option A) fr) w w' ->
+  entails (SSig * option A) b p (instr_flow_erased source s) w ->
+  entails (SSig * option A) b
+    (framer (SSig * option A) b (frameER fr) (frameRV fr) p)
+    (instr_flow_erased source s') w'.
+Proof.
+  intros HF HR HW H; unfold instr_flow_erased in *.
+  eapply ticl_csl_frame; [apply instr_flow_framable; exact HF|exact HR|exact HW|exact H].
+Qed.
+
+Lemma run_nd_pool_csl_frame {n b} (fr : ManagedHeap)
+  (ps : Vector.t (CProg unit) n) focus (s s' : SSig)
+  (p : ticl_at (writerE (CSLObs (nat * nat))) (SSig * unit) b) w w' :
+  Vector.Forall alloc_free ps -> frame_rel fr s s' ->
+  simW (frameER fr) (@frameRV unit fr) w w' ->
+  entails (SSig * unit) b p (run_nd_pool ps focus s) w ->
+  entails (SSig * unit) b (framer (SSig * unit) b (frameER fr) (frameRV fr) p)
+    (run_nd_pool ps focus s') w'.
+Proof.
+  intros HF HR HW H; unfold run_nd_pool, interp_schedule_nd in *.
+  eapply ticl_csl_frame;
+    [apply run_nd_pool_framable; exact HF|exact HR|exact HW|exact H].
+Qed.
+
+Lemma run_rr_pool_csl_frame {n b} (fr : ManagedHeap)
+  (ps : Vector.t (CProg unit) n) focus cursor (s s' : SSig)
+  (p : ticl_at (writerE (CSLObs (nat * nat) + nat)) (SSig * unit) b) w w' :
+  Vector.Forall alloc_free ps -> frame_rel fr s s' ->
+  simW (frameERW fr) (@frameRV unit fr) w w' ->
+  entails (SSig * unit) b p (run_rr_pool ps focus cursor s) w ->
+  entails (SSig * unit) b (framer (SSig * unit) b (frameERW fr) (frameRV fr) p)
+    (run_rr_pool ps focus cursor s') w'.
+Proof.
+  intros HF HR HW H; unfold run_rr_pool, interp_schedule_fair in *.
+  eapply ticl_csl_frameW;
+    [apply run_rr_pool_framable; exact HF|exact HR|exact HW|exact H].
+Qed.
+
+Lemma run_nd_csl_frame {b} (fr : ManagedHeap) (source : CProg unit) (s s' : SSig)
+  (p : ticl_at (writerE (CSLObs (nat * nat))) (SSig * unit) b) w w' :
+  alloc_free source -> frame_rel fr s s' ->
+  simW (frameER fr) (@frameRV unit fr) w w' ->
+  entails (SSig * unit) b p (run_nd source s) w ->
+  entails (SSig * unit) b (framer (SSig * unit) b (frameER fr) (frameRV fr) p)
+    (run_nd source s') w'.
+Proof.
+  intros HF HR HW H; unfold run_nd, run_nd_pool, interp_schedule_nd in *.
+  eapply ticl_csl_frame; [apply run_nd_framable; exact HF|exact HR|exact HW|exact H].
+Qed.
+
+Lemma run_rr_csl_frame {b} (fr : ManagedHeap) (source : CProg unit) (s s' : SSig)
+  (p : ticl_at (writerE (CSLObs (nat * nat) + nat)) (SSig * unit) b) w w' :
+  alloc_free source -> frame_rel fr s s' ->
+  simW (frameERW fr) (@frameRV unit fr) w w' ->
+  entails (SSig * unit) b p (run_rr source s) w ->
+  entails (SSig * unit) b (framer (SSig * unit) b (frameERW fr) (frameRV fr) p)
+    (run_rr source s') w'.
+Proof.
+  intros HF HR HW H; unfold run_rr, run_rr_pool, interp_schedule_fair in *.
+  eapply ticl_csl_frameW; [apply run_rr_framable; exact HF|exact HR|exact HW|exact H].
+Qed.
+
+
+(** A scheduled allocation may frame only when both heaps select the same
+    first-fit block and the full allocated memories remain frame-related. *)
+Lemma ticl_csl_nd_alloc_frame_at {b} (fr : ManagedHeap) n
+  (ts : pool sE Bn (S n)) (i : Fin.t (S n)) (size base : nat)
+  (K : option nat -> thread sE Bn) (s s' : SSig)
+  (p : ticl_at (writerE (CSLObs (nat * nat))) (SSig * unit) b) w w' :
+  frame_rel fr s s' -> Nat.lt 0 size -> Nat.lt 0 base ->
+  block_free (fst (csl_memory s)) base size ->
+  block_free (fst (csl_memory s')) base size ->
+  (forall j, Nat.lt 0 j -> Nat.lt j base -> ~ block_free (fst (csl_memory s)) j size) ->
+  (forall j, Nat.lt 0 j -> Nat.lt j base -> ~ block_free (fst (csl_memory s')) j size) ->
+  frame_rel fr (managed_alloc (csl_memory s) base size, snd s)
+    (managed_alloc (csl_memory s') base size, snd s') ->
+  Framable no_alloc_sE
+    (project_scheduled (schedule (S n) (ts @ i := K (Some base)) (Some i))) ->
+  simW (frameER fr) (@frameRV unit fr) w w' ->
+  entails (SSig * unit) b p
+    (interp_schedule_nd sh (S n)
+      (ts @ i := (denote_flow (CAlloc size) >>= K)) (Some i) s) w ->
+  entails (SSig * unit) b (framer (SSig * unit) b (frameER fr) (frameRV fr) p)
+    (interp_schedule_nd sh (S n)
+      (ts @ i := (denote_flow (CAlloc size) >>= K)) (Some i) s') w'.
+Proof.
+  intros HR Hsize Hbase Hfree Hfree' Hfirst Hfirst' Hpost HF HW H.
+  destruct s as [[h allocs] [ctx c]], s' as [[h' allocs'] [ctx' c']].
+  cbn [csl_memory] in Hfree, Hfree', Hfirst, Hfirst', Hpost.
+  rewrite (interp_nd_source_alloc_first n ts i size base K h allocs ctx c
+    Hsize Hbase Hfree Hfirst) in H.
+  rewrite (interp_nd_source_alloc_first n ts i size base K h' allocs' ctx' c'
+    Hsize Hbase Hfree' Hfirst').
+  unfold interp_schedule_nd in *.
+  eapply ticl_csl_frame_log; [exact HF|exact Hpost| |exact HW|exact H].
+  exact (frameER_heap fr _ _ Hpost).
+Qed.
+
+Lemma ticl_csl_rr_alloc_frame_at {b} (fr : ManagedHeap) n
+  (ts : pool sE Bn (S n)) (i : Fin.t (S n)) (size base : nat)
+  (K : option nat -> thread sE Bn) (cursor : nat) (s s' : SSig)
+  (p : ticl_at (writerE (CSLObs (nat * nat) + nat)) (SSig * unit) b) w w' :
+  frame_rel fr s s' -> Nat.lt 0 size -> Nat.lt 0 base ->
+  block_free (fst (csl_memory s)) base size ->
+  block_free (fst (csl_memory s')) base size ->
+  (forall j, Nat.lt 0 j -> Nat.lt j base -> ~ block_free (fst (csl_memory s)) j size) ->
+  (forall j, Nat.lt 0 j -> Nat.lt j base -> ~ block_free (fst (csl_memory s')) j size) ->
+  frame_rel fr (managed_alloc (csl_memory s) base size, snd s)
+    (managed_alloc (csl_memory s') base size, snd s') ->
+  Framable (okE_policy no_alloc_sE)
+    (schedule_policy rr_scheduler (S n) (ts @ i := K (Some base)) (Some i) cursor) ->
+  simW (frameERW fr) (@frameRV unit fr) w w' ->
+  entails (SSig * unit) b p
+    (interp_schedule_rr sh (S n)
+      (ts @ i := (denote_flow (CAlloc size) >>= K)) (Some i) cursor s) w ->
+  entails (SSig * unit) b (framer (SSig * unit) b (frameERW fr) (frameRV fr) p)
+    (interp_schedule_rr sh (S n)
+      (ts @ i := (denote_flow (CAlloc size) >>= K)) (Some i) cursor s') w'.
+Proof.
+  intros HR Hsize Hbase Hfree Hfree' Hfirst Hfirst' Hpost HF HW H.
+  destruct s as [[h allocs] [ctx c]], s' as [[h' allocs'] [ctx' c']].
+  cbn [csl_memory] in Hfree, Hfree', Hfirst, Hfirst', Hpost.
+  rewrite (interp_rr_alloc_first n ts i size base K cursor h allocs ctx c
+    Hsize Hbase Hfree Hfirst) in H.
+  rewrite (interp_rr_alloc_first n ts i size base K cursor h' allocs' ctx' c'
+    Hsize Hbase Hfree' Hfirst').
+  unfold interp_schedule_fair in *.
+  eapply ticl_csl_frameW_log; [exact HF|exact Hpost| |exact HW|exact H].
+  exact (frameERW_heap fr _ _ Hpost).
+Qed.
 
 (** Client-facing unfolding of a framed postcondition on the memory component. *)
 Lemma frame_post_iff {X} fr (P : SSig * X -> World (writerE (CSLObs (nat * nat))) -> Prop)
-  M aux x w :
-  frame_post fr P ((M, aux), x) w <->
-  exists m, m # fr /\ managed_wf m /\ M ≈ m ⊎ fr /\ P ((m, aux), x) w.
+  M aux x w' :
+  frame_post fr P ((M, aux), x) w' <->
+  exists m w, m # fr /\ managed_wf m /\ M ≈ m ⊎ fr /\
+    simW (frameER fr) (frameRV (X:=X) fr) w w' /\ P ((m, aux), x) w.
 Proof.
   split.
-  - intros ([[m aux'] x'] & [Hx [[HD HW] [HA HE]]] & HP); cbn in *; subst.
-    exists m; auto.
-  - intros (m & HD & HW & HE & HP).
-    exists ((m, aux), x); split; [|exact HP].
+  - intros ([[m aux'] x'] & w & [Hx [[HD HW] [HA HE]]] & Hworld & HP); cbn in *; subst.
+    exists m, w; auto.
+  - intros (m & w & HD & HW & HE & Hworld & HP).
+    exists ((m, aux), x), w; split; [|auto].
+    split; [reflexivity|split; [split; assumption|split; [reflexivity|exact HE]]].
+Qed.
+
+(** Logged postconditions preserve both framed memory and predecessor worlds. *)
+Lemma frame_postW_iff {X} fr
+  (P : SSig * X -> World (writerE (CSLObs (nat * nat) + nat)) -> Prop)
+  M aux x w' :
+  frame_postW fr P ((M, aux), x) w' <->
+  exists m w, m # fr /\ managed_wf m /\ M ≈ m ⊎ fr /\
+    simW (frameERW fr) (frameRV (X:=X) fr) w w' /\ P ((m, aux), x) w.
+Proof.
+  split.
+  - intros ([[m aux'] x'] & w & [Hx [[HD HW] [HA HE]]] & Hworld & HP); cbn in *; subst.
+    exists m, w; auto.
+  - intros (m & w & HD & HW & HE & Hworld & HP).
+    exists ((m, aux), x), w; split; [|auto].
     split; [reflexivity|split; [split; assumption|split; [reflexivity|exact HE]]].
 Qed.

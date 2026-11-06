@@ -32,6 +32,20 @@ Local Open Scope ctree_scope.
 Local Open Scope list_scope.
 Local Open Scope nat_scope.
 
+(** Concrete mutation tables retain the post-state of every source write.
+    All pages in these witnesses have capacity two. *)
+Local Fixpoint mutation_snapshots (h : Heap) (writes : list (nat * nat))
+    : list (CSLObs (nat * nat)) :=
+  match writes with
+  | [] => []
+  | (address,value) :: rest =>
+      let next := upd h address value in
+      CSLHeap (next,upd hemp 1 (page_size 2)) :: mutation_snapshots next rest
+  end.
+
+Local Definition snapshot_slice (logs : list (CSLObs (nat * nat))) start count :=
+  List.firstn count (List.skipn start logs).
+
 Section Starvation.
 
 Let starvation_cycle : list Actor :=
@@ -40,13 +54,13 @@ Let starvation_cycle : list Actor :=
 Let starvation_prefix : list Actor :=
   [Owner; Owner; Owner; Owner; Owner; Remote1] ++ starvation_cycle.
 
-Let starve_prefix_logs (c : nat) : list (CSLObs (nat * nat)) :=
-  [inr (stamp (tag_alloc,6) c); inr (stamp (tag_alloc,8) (1+c));
-   inr (stamp (tag_retire,6) (2+c)); inr (stamp (tag_retry,8) (3+c));
-   inr (stamp (tag_reclaim,6) (4+c)); inr (stamp (tag_alloc,6) (5+c))].
-Let starve_cycle_logs (c : nat) : list (CSLObs (nat * nat)) :=
-  [inr (stamp (tag_retire,6) c); inr (stamp (tag_retry,8) (1+c));
-   inr (stamp (tag_reclaim,6) (2+c)); inr (stamp (tag_alloc,6) (3+c))].
+Let starve_prefix_user_logs (c : nat) : list (CSLObs (nat * nat)) :=
+  [CSLEmit (stamp (tag_alloc,6) c); CSLEmit (stamp (tag_alloc,8) (1+c));
+   CSLEmit (stamp (tag_retire,6) (2+c)); CSLEmit (stamp (tag_retry,8) (3+c));
+   CSLEmit (stamp (tag_reclaim,6) (4+c)); CSLEmit (stamp (tag_alloc,6) (5+c))].
+Let starve_cycle_user_logs (c : nat) : list (CSLObs (nat * nat)) :=
+  [CSLEmit (stamp (tag_retire,6) c); CSLEmit (stamp (tag_retry,8) (1+c));
+   CSLEmit (stamp (tag_reclaim,6) (2+c)); CSLEmit (stamp (tag_alloc,6) (3+c))].
 
 (** A pointwise representative only: the infinite witness always retains
     the actual heap returned by its preceding turn. *)
@@ -57,32 +71,77 @@ Let starve_boundary_heap : Heap := fun x =>
   | 9 => Some 2 | _ => None
   end.
 Let starve_boundary (c : nat) : AState :=
-  {| aheap := starve_boundary_heap; acount := c;
+  {| aheap := starve_boundary_heap; aallocs := upd hemp 1 (page_size 2); acount := c;
      owner_state := ORead; remote0_state := RPoll;
      remote1_state := RRead 8 |}.
 
 (** The observation of each individual turn, including every silent turn. *)
-Let starve_prefix_event (c i : nat) : option (CSLObs (nat * nat)) :=
+Let starve_prefix_user_event (c i : nat) : list (CSLObs (nat * nat)) :=
   match i with
-  | 3 => Some (inr (stamp (tag_alloc,6) c))
-  | 4 => Some (inr (stamp (tag_alloc,8) (1+c)))
-  | 11 => Some (inr (stamp (tag_retire,6) (2+c)))
-  | 12 => Some (inr (stamp (tag_retry,8) (3+c)))
-  | 15 => Some (inr (stamp (tag_reclaim,6) (4+c)))
-  | 17 => Some (inr (stamp (tag_alloc,6) (5+c)))
-  | _ => None
+  | 3 => [CSLEmit (stamp (tag_alloc,6) c)]
+  | 4 => [CSLEmit (stamp (tag_alloc,8) (1+c))]
+  | 11 => [CSLEmit (stamp (tag_retire,6) (2+c))]
+  | 12 => [CSLEmit (stamp (tag_retry,8) (3+c))]
+  | 15 => [CSLEmit (stamp (tag_reclaim,6) (4+c))]
+  | 17 => [CSLEmit (stamp (tag_alloc,6) (5+c))]
+  | _ => []
   end.
-Let starve_cycle_event (c i : nat) : option (CSLObs (nat * nat)) :=
+Let starve_cycle_user_event (c i : nat) : list (CSLObs (nat * nat)) :=
   match i with
-  | 5 => Some (inr (stamp (tag_retire,6) c))
-  | 6 => Some (inr (stamp (tag_retry,8) (1+c)))
-  | 9 => Some (inr (stamp (tag_reclaim,6) (2+c)))
-  | 11 => Some (inr (stamp (tag_alloc,6) (3+c)))
-  | _ => None
+  | 5 => [CSLEmit (stamp (tag_retire,6) c)]
+  | 6 => [CSLEmit (stamp (tag_retry,8) (1+c))]
+  | 9 => [CSLEmit (stamp (tag_reclaim,6) (2+c))]
+  | 11 => [CSLEmit (stamp (tag_alloc,6) (3+c))]
+  | _ => []
   end.
 
+Let starve_prefix_snapshots := mutation_snapshots (aheap (initial_state 2 0))
+  [(1,0); (3,0); (2,8); (4,6); (2,0); (5,8); (5,0); (9,2);
+   (8,0); (4,0); (7,1); (6,0); (1,6); (1,0); (3,6);
+   (6,0); (2,6); (3,0); (2,0); (4,6)].
+Let starve_cycle_snapshots := mutation_snapshots starve_boundary_heap
+  [(8,0); (4,0); (7,1); (6,0); (1,6); (1,0); (3,6);
+   (6,0); (2,6); (3,0); (2,0); (4,6)].
+Let starve_prefix_event (c i : nat) : list (CSLObs (nat * nat)) :=
+  (match i with
+   | 1 => snapshot_slice starve_prefix_snapshots 0 2
+   | 3 => snapshot_slice starve_prefix_snapshots 2 2
+   | 4 => snapshot_slice starve_prefix_snapshots 4 2
+   | 5 => snapshot_slice starve_prefix_snapshots 6 2
+   | 7 => snapshot_slice starve_prefix_snapshots 8 1
+   | 8 => snapshot_slice starve_prefix_snapshots 9 2
+   | 10 => snapshot_slice starve_prefix_snapshots 11 1
+   | 11 => snapshot_slice starve_prefix_snapshots 12 1
+   | 14 => snapshot_slice starve_prefix_snapshots 13 2
+   | 15 => snapshot_slice starve_prefix_snapshots 15 3
+   | 17 => snapshot_slice starve_prefix_snapshots 18 2
+   | _ => []
+   end) ++ starve_prefix_user_event c i.
+Let starve_cycle_event (c i : nat) : list (CSLObs (nat * nat)) :=
+  (match i with
+   | 1 => snapshot_slice starve_cycle_snapshots 0 1
+   | 2 => snapshot_slice starve_cycle_snapshots 1 2
+   | 4 => snapshot_slice starve_cycle_snapshots 3 1
+   | 5 => snapshot_slice starve_cycle_snapshots 4 1
+   | 8 => snapshot_slice starve_cycle_snapshots 5 2
+   | 9 => snapshot_slice starve_cycle_snapshots 7 3
+   | 11 => snapshot_slice starve_cycle_snapshots 10 2
+   | _ => []
+   end) ++ starve_cycle_user_event c i.
+Let starve_prefix_logs c :=
+  List.concat (List.map (starve_prefix_event c) (List.seq 0 19)).
+Let starve_cycle_logs c :=
+  List.concat (List.map (starve_cycle_event c) (List.seq 0 13)).
+
+Local Lemma starve_prefix_user_table c :
+  csl_emissions (starve_prefix_logs c) = csl_emissions (starve_prefix_user_logs c).
+Proof. vm_compute; reflexivity. Qed.
+Local Lemma starve_cycle_user_table c :
+  csl_emissions (starve_cycle_logs c) = csl_emissions (starve_cycle_user_logs c).
+Proof. vm_compute; reflexivity. Qed.
+
 Local Lemma starve_prefix_run c : exists last,
-  run_turns (turn 1) event_obs starvation_prefix (initial_state 2 c) =
+  run_turns (turn 1) (fun xs => xs) starvation_prefix (initial_state 2 c) =
     Some (last,starve_prefix_logs c) /\
   state_equiv last (starve_boundary (6+c)).
 Proof.
@@ -91,11 +150,11 @@ Proof.
   - intro x.
     do 10 (destruct x as [|x]; [vm_compute; reflexivity|]).
     vm_compute; reflexivity.
-  - vm_compute; repeat split; reflexivity.
+  - split; [intro x; reflexivity|vm_compute; repeat split; reflexivity].
 Qed.
 
 Local Lemma starve_cycle_run c : exists last,
-  run_turns (turn 1) event_obs starvation_cycle (starve_boundary c) =
+  run_turns (turn 1) (fun xs => xs) starvation_cycle (starve_boundary c) =
     Some (last,starve_cycle_logs c) /\
   state_equiv last (starve_boundary (4+c)).
 Proof.
@@ -104,17 +163,17 @@ Proof.
   - intro x.
     do 10 (destruct x as [|x]; [vm_compute; reflexivity|]).
     vm_compute; reflexivity.
-  - vm_compute; repeat split; reflexivity.
+  - split; [intro x; reflexivity|vm_compute; repeat split; reflexivity].
 Qed.
 
 Local Lemma starve_cycle_run_actual c s :
   state_equiv s (starve_boundary c) ->
   exists last,
-    run_turns (turn 1) event_obs starvation_cycle s = Some (last,starve_cycle_logs c) /\
+    run_turns (turn 1) (fun xs => xs) starvation_cycle s = Some (last,starve_cycle_logs c) /\
     state_equiv last (starve_boundary (4+c)).
 Proof.
   intro Hs; destruct (starve_cycle_run c) as (last & Hrun & Hlast).
-  destruct (run_turns_some_compatible (turn 1) event_obs state_equiv (turn_proper 1)
+  destruct (run_turns_some_compatible (turn 1) (fun xs => xs) state_equiv (turn_proper 1)
     starvation_cycle (starve_boundary c) s last (starve_cycle_logs c)
     (state_equiv_sym _ _ Hs) Hrun) as (actual & Hactual & Heq).
   exists actual; split; [exact Hactual|].
@@ -123,7 +182,7 @@ Qed.
 
 Local Lemma starve_prefix_position c i : i < 19 ->
   exists middle logs next,
-    run_turns (turn 1) event_obs (List.firstn i starvation_prefix) (initial_state 2 c) =
+    run_turns (turn 1) (fun xs => xs) (List.firstn i starvation_prefix) (initial_state 2 c) =
       Some (middle,logs) /\
     turn 1 (List.nth i starvation_prefix Remote1) middle =
       Some (next,starve_prefix_event c i).
@@ -136,7 +195,7 @@ Qed.
 
 Local Lemma starve_cycle_position c i : i < 13 ->
   exists middle logs next,
-    run_turns (turn 1) event_obs (List.firstn i starvation_cycle) (starve_boundary c) =
+    run_turns (turn 1) (fun xs => xs) (List.firstn i starvation_cycle) (starve_boundary c) =
       Some (middle,logs) /\
     held (remote1_state middle) = [8] /\
     turn 1 (List.nth i starvation_cycle Remote1) middle =
@@ -155,7 +214,7 @@ Qed.
     whose existential witnesses must not range over its closure. *)
 Let starvation_choices : nat -> Actor :=
   periodic_choices starvation_prefix Remote1 (List.tl starvation_cycle).
-Let starvation_execution : Execution AState Actor (option (CSLObs (nat * nat))) :=
+Let starvation_execution : Execution AState Actor (list (CSLObs (nat * nat))) :=
   allocator_execution 2 0 starvation_choices.
 
 Local Lemma starvation_execution_valid : allocator_valid 2 0 starvation_execution.
@@ -202,25 +261,36 @@ Local Lemma starve_boundaries n :
   state_equiv (states starvation_execution (19+13*n))
     (starve_boundary (6+4*n)).
 Proof.
-  induction n as [|n IH].
-  - destruct (starve_prefix_run 0) as (last & Hrun & Hlast).
-    eapply state_equiv_trans; [|exact Hlast].
-    replace (19+13*0) with (0 + List.length starvation_prefix) by reflexivity.
-    exact (execution_script_state (turn 1) event_obs
-      (fun s => s = initial_state 2 0) state_equiv (turn_proper 1)
-      starvation_execution 0 starvation_prefix (initial_state 2 0) last
-      (starve_prefix_logs 0) starvation_execution_valid starve_initial_equiv
-      starve_prefix_script Hrun).
-  - destruct (starve_cycle_run (6+4*n)) as (last & Hrun & Hlast).
-    replace (6+4*S n) with (4+(6+4*n)) by lia.
-    eapply state_equiv_trans; [|exact Hlast].
-    replace (19+13*S n) with ((19+13*n)+List.length starvation_cycle)
-      by (cbn [starvation_cycle List.length]; lia).
-    exact (execution_script_state (turn 1) event_obs
-      (fun s => s = initial_state 2 0) state_equiv (turn_proper 1)
-      starvation_execution (19+13*n) starvation_cycle
-      (starve_boundary (6+4*n)) last (starve_cycle_logs (6+4*n))
-      starvation_execution_valid IH (starve_cycle_script n) Hrun).
+  pose proof (execution_script_cycles (turn 1) (fun xs => xs)
+    (fun s => s = initial_state 2 0) state_equiv (turn_proper 1)
+    starvation_execution starvation_prefix starvation_cycle starve_boundary 6
+    (Nat.add 4) (initial_state 2 0) state_equiv_equivalence
+    starvation_execution_valid starve_initial_equiv starve_prefix_script)
+    as Hcycles.
+  assert (Hpre : exists last ws,
+    run_turns (turn 1) (fun xs => xs) starvation_prefix (initial_state 2 0) =
+      Some (last,ws) /\ state_equiv last (starve_boundary 6)).
+  { destruct (starve_prefix_run 0) as (last & Hrun & Hlast).
+    exists last, (starve_prefix_logs 0); split; assumption. }
+  assert (Hwindows : forall k,
+    List.map (selected starvation_execution)
+      (List.seq (List.length starvation_prefix + k * List.length starvation_cycle)
+        (List.length starvation_cycle)) = starvation_cycle).
+  { intro k; replace (List.length starvation_prefix + k * List.length starvation_cycle)
+      with (19+13*k) by (cbn [starvation_prefix starvation_cycle List.length List.app]; lia).
+    apply starve_cycle_script. }
+  assert (Hcycle : forall c, exists last ws,
+    run_turns (turn 1) (fun xs => xs) starvation_cycle (starve_boundary c) =
+      Some (last,ws) /\ state_equiv last (starve_boundary (4+c))).
+  { intro c; destruct (starve_cycle_run c) as (last & Hrun & Hlast).
+    exists last, (starve_cycle_logs c); split; assumption. }
+  specialize (Hcycles Hpre Hwindows Hcycle n).
+  rewrite nat_iter_add_const in Hcycles.
+  replace (List.length starvation_prefix + n * List.length starvation_cycle)
+    with (19+13*n) in Hcycles
+    by (cbn [starvation_prefix starvation_cycle List.length List.app]; lia).
+  replace (n*4+6) with (6+4*n) in Hcycles by lia.
+  exact Hcycles.
 Qed.
 
 Local Lemma starve_cycle_emitted n i : i < 13 ->
@@ -229,7 +299,7 @@ Proof.
   intro Hi.
   destruct (starve_cycle_position (6+4*n) i Hi)
     as (middle & logs & next & Hrun & Hheld & Hturn).
-  exact (proj2 (execution_script_emitted (turn 1) event_obs
+  exact (proj2 (execution_script_emitted (turn 1) (fun xs => xs)
     (fun s => s = initial_state 2 0) state_equiv (turn_proper 1)
     starvation_execution (19+13*n) starvation_cycle i Remote1
     (starve_boundary (6+4*n)) middle logs next (starve_cycle_event (6+4*n) i)
@@ -242,7 +312,7 @@ Local Lemma starve_prefix_emitted i : i < 19 ->
 Proof.
   intro Hi.
   destruct (starve_prefix_position 0 i Hi) as (middle & logs & next & Hrun & Hturn).
-  exact (proj2 (execution_script_emitted (turn 1) event_obs
+  exact (proj2 (execution_script_emitted (turn 1) (fun xs => xs)
     (fun s => s = initial_state 2 0) state_equiv (turn_proper 1)
     starvation_execution 0 starvation_prefix i Remote1
     (initial_state 2 0) middle logs next (starve_prefix_event 0 i)
@@ -275,28 +345,28 @@ Proof.
   intro Hk; destruct (starve_index k Hk) as (n & i & Hi & ->).
   destruct (starve_cycle_position (6+4*n) i Hi)
     as (middle & logs & next & Hrun & Hheld & Hturn).
-  destruct (proj1 (execution_script_emitted (turn 1) event_obs
+  destruct (proj1 (execution_script_emitted (turn 1) (fun xs => xs)
     (fun s => s = initial_state 2 0) state_equiv (turn_proper 1)
     starvation_execution (19+13*n) starvation_cycle i Remote1
     (starve_boundary (6+4*n)) middle logs next (starve_cycle_event (6+4*n) i)
     starvation_execution_valid (starve_boundaries n) (starve_cycle_script n)
     ltac:(change (i < 13); lia) Hrun Hturn))
-    as (_ & _ & _ & _ & Hremote1).
+    as (_ & _ & _ & _ & _ & Hremote1).
   rewrite Hremote1; exact Hheld.
 Qed.
 
 Local Lemma starve_prefix_never_retire8 c i idx : i < 19 ->
-  starve_prefix_event c i <> Some (inr (stamp (tag_retire,8) idx)).
+  ~ In (stamp (tag_retire,8) idx) (csl_emissions (starve_prefix_event c i)).
 Proof.
   intro Hi.
-  do 19 (destruct i as [|i]; [vm_compute; discriminate|]).
+  do 19 (destruct i as [|i]; [vm_compute; intuition discriminate|]).
   lia.
 Qed.
 Local Lemma starve_cycle_never_retire8 c i idx : i < 13 ->
-  starve_cycle_event c i <> Some (inr (stamp (tag_retire,8) idx)).
+  ~ In (stamp (tag_retire,8) idx) (csl_emissions (starve_cycle_event c i)).
 Proof.
   intro Hi.
-  do 13 (destruct i as [|i]; [vm_compute; discriminate|]).
+  do 13 (destruct i as [|i]; [vm_compute; intuition discriminate|]).
   lia.
 Qed.
 
@@ -315,25 +385,25 @@ Local Lemma starve_infinitely_retry8 :
   infinitely (fun k => block_event tag_retry 8 (emitted starvation_execution k)).
 Proof.
   intro lo; exists (19+13*lo+6); split; [lia|].
-  exists (1+(6+4*lo)); exact (starve_cycle_emitted lo 6 ltac:(lia)).
+  exists (1+(6+4*lo)); rewrite (starve_cycle_emitted lo 6 ltac:(lia)); now left.
 Qed.
 Local Lemma starve_infinitely_retire6 :
   infinitely (fun k => block_event tag_retire 6 (emitted starvation_execution k)).
 Proof.
   intro lo; exists (19+13*lo+5); split; [lia|].
-  exists (6+4*lo); exact (starve_cycle_emitted lo 5 ltac:(lia)).
+  exists (6+4*lo); rewrite (starve_cycle_emitted lo 5 ltac:(lia)); now left.
 Qed.
 Local Lemma starve_infinitely_reclaim6 :
   infinitely (fun k => block_event tag_reclaim 6 (emitted starvation_execution k)).
 Proof.
   intro lo; exists (19+13*lo+9); split; [lia|].
-  exists (2+(6+4*lo)); exact (starve_cycle_emitted lo 9 ltac:(lia)).
+  exists (2+(6+4*lo)); rewrite (starve_cycle_emitted lo 9 ltac:(lia)); now left.
 Qed.
 Local Lemma starve_infinitely_alloc6 :
   infinitely (fun k => block_event tag_alloc 6 (emitted starvation_execution k)).
 Proof.
   intro lo; exists (19+13*lo+11); split; [lia|].
-  exists (3+(6+4*lo)); exact (starve_cycle_emitted lo 11 ltac:(lia)).
+  exists (3+(6+4*lo)); rewrite (starve_cycle_emitted lo 11 ltac:(lia)); now left.
 Qed.
 
 Theorem fair_starvation_exists : exists e,
@@ -344,7 +414,9 @@ Theorem fair_starvation_exists : exists e,
   infinitely (fun k => block_event tag_retire 6 (emitted e k)) /\
   infinitely (fun k => block_event tag_reclaim 6 (emitted e k)) /\
   infinitely (fun k => block_event tag_alloc 6 (emitted e k)) /\
-  realizes (fun j => turn_labels (emitted e j)) 0
+  realizes (prepend_chunk
+    (List.map (fun o => obs (Log o) tt) (new_page_logs 1 2 managed_empty))
+    (fun j => turn_labels (emitted e j))) 0
     (run_nd (allocator_program 2) (managed_empty,((List.nil : Ctx.Ctx),0))).
 Proof.
   exists starvation_execution.
@@ -362,9 +434,10 @@ Qed.
 (** The first cycle, chained from the ACTUAL prefix result, is a finite
     source trace with one genuine scheduler tau per turn. *)
 Theorem starvation_chained_cycle_actual_source : exists last labels residual,
-  run_turns (turn 1) event_obs (starvation_prefix ++ starvation_cycle) (initial_state 2 0) =
+  run_turns (turn 1) (fun xs => xs) (starvation_prefix ++ starvation_cycle) (initial_state 2 0) =
     Some (last,starve_prefix_logs 0 ++ starve_cycle_logs 6) /\
-  label_logs labels = starve_prefix_logs 0 ++ starve_cycle_logs 6 /\
+  label_logs labels = new_page_logs 1 2 managed_empty ++
+    (starve_prefix_logs 0 ++ starve_cycle_logs 6) /\
   label_taus labels = 32 /\
   finite_steps (run_nd (allocator_program 2) (managed_empty,((List.nil : Ctx.Ctx),0))) labels residual /\
   residual ~ (model_nd 2 actor_of_slot (turn 1) last
@@ -372,7 +445,7 @@ Theorem starvation_chained_cycle_actual_source : exists last labels residual,
 Proof.
   destruct (starve_prefix_run 0) as (first & Hprefix & Hfirst).
   destruct (starve_cycle_run_actual 6 first Hfirst) as (last & Hcycle & Hlast).
-  pose proof (run_turns_compose (turn 1) event_obs
+  pose proof (run_turns_compose (turn 1) (fun xs => xs)
     starvation_prefix starvation_cycle
     (initial_state 2 0) first last (starve_prefix_logs 0) (starve_cycle_logs 6)
     Hprefix Hcycle) as Hrun.
@@ -392,15 +465,50 @@ Let owner_stall_cycle : list Actor := [Remote0; Remote1].
 Let owner_stall_choices : nat -> Actor :=
   periodic_choices owner_stall_prefix Remote0 [Remote1].
 
-Let stalled_prefix_logs (c : nat) : list (CSLObs (nat * nat)) :=
-  [inr (stamp (tag_alloc,6) c); inr (stamp (tag_alloc,8) (1+c));
-   inr (stamp (tag_retire,6) (2+c)); inr (stamp (tag_retire,8) (3+c))].
+Let stalled_prefix_user_logs (c : nat) : list (CSLObs (nat * nat)) :=
+  [CSLEmit (stamp (tag_alloc,6) c); CSLEmit (stamp (tag_alloc,8) (1+c));
+   CSLEmit (stamp (tag_retire,6) (2+c)); CSLEmit (stamp (tag_retire,8) (3+c))].
 
-Let stalled_prefix_observations : list (option (CSLObs (nat * nat))) :=
-  [None; None; None; Some (inr (stamp (tag_alloc,6) 0));
-   Some (inr (stamp (tag_alloc,8) 1)); None; None; None;
-   Some (inr (stamp (tag_retire,6) 2)); None; None; None;
-   Some (inr (stamp (tag_retire,8) 3))].
+Let stalled_prefix_user_observations : list (list (CSLObs (nat * nat))) :=
+  [[]; []; []; [CSLEmit (stamp (tag_alloc,6) 0)];
+   [CSLEmit (stamp (tag_alloc,8) 1)]; []; []; [];
+   [CSLEmit (stamp (tag_retire,6) 2)]; []; []; [];
+   [CSLEmit (stamp (tag_retire,8) 3)]].
+
+Let stalled_prefix_snapshots := mutation_snapshots (aheap (initial_state 2 0))
+  [(1,0); (3,0); (2,8); (4,6); (2,0); (5,8); (4,0); (7,1);
+   (6,0); (1,6); (5,0); (9,2); (8,6); (1,8)].
+Let stalled_prefix_event (c i : nat) : list (CSLObs (nat * nat)) :=
+  (match i with
+   | 1 => snapshot_slice stalled_prefix_snapshots 0 2
+   | 3 => snapshot_slice stalled_prefix_snapshots 2 2
+   | 4 => snapshot_slice stalled_prefix_snapshots 4 2
+   | 5 => snapshot_slice stalled_prefix_snapshots 6 2
+   | 7 => snapshot_slice stalled_prefix_snapshots 8 1
+   | 8 => snapshot_slice stalled_prefix_snapshots 9 1
+   | 9 => snapshot_slice stalled_prefix_snapshots 10 2
+   | 11 => snapshot_slice stalled_prefix_snapshots 12 1
+   | 12 => snapshot_slice stalled_prefix_snapshots 13 1
+   | _ => []
+   end) ++
+  match i with
+  | 3 => [CSLEmit (stamp (tag_alloc,6) c)]
+  | 4 => [CSLEmit (stamp (tag_alloc,8) (1+c))]
+  | 8 => [CSLEmit (stamp (tag_retire,6) (2+c))]
+  | 12 => [CSLEmit (stamp (tag_retire,8) (3+c))]
+  | _ => []
+  end.
+Let stalled_prefix_observations := List.map (stalled_prefix_event 0) (List.seq 0 13).
+Let stalled_prefix_logs c :=
+  List.concat (List.map (stalled_prefix_event c) (List.seq 0 13)).
+
+Local Lemma stalled_prefix_user_table c :
+  csl_emissions (stalled_prefix_logs c) = csl_emissions (stalled_prefix_user_logs c).
+Proof. vm_compute; reflexivity. Qed.
+Local Lemma stalled_prefix_user_turn_table :
+  List.map csl_emissions stalled_prefix_observations =
+  List.map csl_emissions stalled_prefix_user_observations.
+Proof. vm_compute; reflexivity. Qed.
 
 (** This is only a pointwise representative of the returned heap.  The
     execution always runs the actual preceding turn. *)
@@ -411,12 +519,12 @@ Let stalled_boundary_heap : Heap := fun x =>
   | 9 => Some 2 | _ => None
   end.
 Let stalled_boundary (c : nat) : AState :=
-  {| aheap := stalled_boundary_heap; acount := c;
+  {| aheap := stalled_boundary_heap; aallocs := upd hemp 1 (page_size 2); acount := c;
      owner_state := ORead; remote0_state := RPoll;
      remote1_state := RPoll |}.
 
 Local Lemma stalled_prefix_run c : exists last,
-  run_turns (turn 1) event_obs owner_stall_prefix (initial_state 2 c) =
+  run_turns (turn 1) (fun xs => xs) owner_stall_prefix (initial_state 2 c) =
     Some (last,stalled_prefix_logs c) /\
   state_equiv last (stalled_boundary (c+4)).
 Proof.
@@ -426,22 +534,22 @@ Proof.
   - intro x.
     do 10 (destruct x as [ | x ]; [vm_compute; reflexivity|]).
     vm_compute; reflexivity.
-  - vm_compute; repeat split; reflexivity.
+  - split; [intro x; reflexivity|vm_compute; repeat split; reflexivity].
 Qed.
 
 Local Lemma stalled_polling_turn c who :
   who = Remote0 \/ who = Remote1 ->
-  turn 1 who (stalled_boundary c) = Some (stalled_boundary c,None).
+  turn 1 who (stalled_boundary c) = Some (stalled_boundary c,[]).
 Proof.
   intros [-> | ->]; vm_compute; reflexivity.
 Qed.
 
 Local Lemma stalled_prefix_position k : k < 13 ->
   exists before after logs,
-    run_turns (turn 1) event_obs (List.firstn k owner_stall_prefix) (initial_state 2 0) =
+    run_turns (turn 1) (fun xs => xs) (List.firstn k owner_stall_prefix) (initial_state 2 0) =
       Some (before,logs) /\
     turn 1 (List.nth k owner_stall_prefix Remote0) before =
-      Some (after,List.nth k stalled_prefix_observations None).
+      Some (after,List.nth k stalled_prefix_observations []).
 Proof.
   intro Hk.
   do 13 (destruct k as [ | k ];
@@ -451,7 +559,7 @@ Qed.
 
 (** The infinite execution follows the periodic script from the actual
     initial state; bound after the finite calculations above. *)
-Let owner_stall_execution : Execution AState Actor (option (CSLObs (nat * nat))) :=
+Let owner_stall_execution : Execution AState Actor (list (CSLObs (nat * nat))) :=
   allocator_execution 2 0 owner_stall_choices.
 
 Local Lemma owner_stall_execution_valid : allocator_valid 2 0 owner_stall_execution.
@@ -478,7 +586,7 @@ Proof.
   destruct (stalled_prefix_run 0) as (last & Hrun & Hlast).
   eapply state_equiv_trans; [|exact Hlast].
   replace 13 with (0 + List.length owner_stall_prefix) by reflexivity.
-  exact (execution_script_state (turn 1) event_obs
+  exact (execution_script_state (turn 1) (fun xs => xs)
     (fun s => s = initial_state 2 0) state_equiv (turn_proper 1)
     owner_stall_execution 0 owner_stall_prefix (initial_state 2 0) last
     (stalled_prefix_logs 0) owner_stall_execution_valid stalled_initial_equiv
@@ -487,21 +595,22 @@ Qed.
 
 Local Lemma stalled_prefix_observation k : k < 13 ->
   emitted owner_stall_execution k =
-    List.nth k stalled_prefix_observations None.
+    List.nth k stalled_prefix_observations [].
 Proof.
   intro Hk.
   destruct (stalled_prefix_position k Hk) as (before & after & logs & Hrun & Hturn).
-  exact (proj2 (execution_script_emitted (turn 1) event_obs
+  exact (proj2 (execution_script_emitted (turn 1) (fun xs => xs)
     (fun s => s = initial_state 2 0) state_equiv (turn_proper 1)
     owner_stall_execution 0 owner_stall_prefix k Remote0
     (initial_state 2 0) before logs after
-    (List.nth k stalled_prefix_observations None)
+    (List.nth k stalled_prefix_observations [])
     owner_stall_execution_valid stalled_initial_equiv stalled_prefix_script
     ltac:(change (k < 13); lia) Hrun Hturn)).
 Qed.
 
 Local Lemma stalled_retire6 :
-  emitted owner_stall_execution 8 = Some (inr (stamp (tag_retire,6) 2)).
+  emitted owner_stall_execution 8 = snapshot_slice stalled_prefix_snapshots 9 1 ++
+    [CSLEmit (stamp (tag_retire,6) 2)].
 Proof. exact (stalled_prefix_observation 8 ltac:(lia)). Qed.
 
 Local Lemma stalled_tail_choices n :
@@ -565,18 +674,14 @@ Qed.
 Local Lemma stalled_suffix_state n :
   state_equiv (states owner_stall_execution (13+n)) (stalled_boundary 4).
 Proof.
-  induction n as [ | n IH ].
-  - exact stalled_prefix_state.
-  - replace (13+S n) with (S (13+n)) by lia.
-    destruct (execution_turn_observation (turn 1) (fun s => s = initial_state 2 0)
-      state_equiv (turn_proper 1) owner_stall_execution (13+n) (stalled_boundary 4)
-      owner_stall_execution_valid IH) as (next & Hnext & Hstate).
-    rewrite (stalled_polling_turn 4 _ (stalled_tail_client n)) in Hnext.
-    assert (Enext : next = stalled_boundary 4) by congruence; subst next.
-    exact Hstate.
+  eapply (execution_stutters_from (turn 1)
+    (fun s => s = initial_state 2 0) state_equiv (turn_proper 1)
+    owner_stall_execution 13 (stalled_boundary 4));
+    [exact owner_stall_execution_valid | exact stalled_prefix_state |].
+  intro k; exists []; apply stalled_polling_turn, stalled_tail_client.
 Qed.
 
-Local Lemma stalled_suffix_silent n : emitted owner_stall_execution (13+n) = None.
+Local Lemma stalled_suffix_silent n : emitted owner_stall_execution (13+n) = [].
 Proof.
   destruct (execution_turn_observation (turn 1) (fun s => s = initial_state 2 0)
     state_equiv (turn_proper 1) owner_stall_execution (13+n) (stalled_boundary 4)
@@ -590,17 +695,17 @@ Local Lemma stalled_no_reclaim k block :
 Proof.
   intros [idx Hobs]; destruct (Nat.lt_ge_cases k 13) as [Hprefix|Htail].
   - rewrite (stalled_prefix_observation k Hprefix) in Hobs.
-    do 13 (destruct k as [ | k ]; [vm_compute in Hobs; discriminate|]).
+    do 13 (destruct k as [ | k ]; [vm_compute in Hobs; intuition discriminate|]).
     lia.
   - replace k with (13+(k-13)) in Hobs by lia.
-    rewrite stalled_suffix_silent in Hobs; discriminate.
+    rewrite stalled_suffix_silent in Hobs; contradiction.
 Qed.
 
 Theorem stalled_prefix_source : exists last labels residual,
-  run_turns (turn 1) event_obs owner_stall_prefix (initial_state 2 0) =
+  run_turns (turn 1) (fun xs => xs) owner_stall_prefix (initial_state 2 0) =
     Some (last,stalled_prefix_logs 0) /\
   state_equiv last (stalled_boundary 4) /\
-  label_logs labels = stalled_prefix_logs 0 /\
+  label_logs labels = new_page_logs 1 2 managed_empty ++ stalled_prefix_logs 0 /\
   label_taus labels = 13 /\
   finite_steps (run_nd (allocator_program 2) (managed_empty,((List.nil : Ctx.Ctx),0))) labels residual /\
   residual ~ (model_nd 2 actor_of_slot (turn 1) last
@@ -634,9 +739,12 @@ Theorem owner_stall_prevents_reclamation : exists e,
   (forall k, 5 <= k -> selected e k <> Owner) /\
   infinitely (fun k => selected e k = Remote0) /\
   infinitely (fun k => selected e k = Remote1) /\
-  emitted e 8 = Some (inr (stamp (tag_retire,6) 2)) /\
+  emitted e 8 = snapshot_slice stalled_prefix_snapshots 9 1 ++
+    [CSLEmit (stamp (tag_retire,6) 2)] /\ 
   (forall k, ~ block_event tag_reclaim 6 (emitted e k)) /\
-  realizes (fun j => turn_labels (emitted e j)) 0
+  realizes (prepend_chunk
+    (List.map (fun o => obs (Log o) tt) (new_page_logs 1 2 managed_empty))
+    (fun j => turn_labels (emitted e j))) 0
     (run_nd (allocator_program 2) (managed_empty,((List.nil : Ctx.Ctx),0))).
 Proof.
   exists owner_stall_execution; split; [exact owner_stall_execution_valid|].

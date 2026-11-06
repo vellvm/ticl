@@ -21,6 +21,7 @@ Inductive remote_pc := RPoll | RRead (block : nat)
   | RLink (block old : nat) | RCAS (block old : nat).
 Record AState := {
   aheap : Heap;
+  aallocs : AllocationTable;
   acount : nat;
   owner_state : owner_pc;
   remote0_state : remote_pc;
@@ -30,52 +31,54 @@ Record AState := {
 (** One selected source segment, ending at its first yield.  The helpers
     below only assemble this example's result; missing checked cells fault. *)
 Definition turn (base : nat) (who : Actor) (s : AState)
-  : option (AState * option (CSLObs (nat * nat))) :=
+  : option (AState * list (CSLObs (nat * nat))) :=
   let finish (h : Heap) (op : owner_pc) (r0 r1 : remote_pc)
-      (event : option (nat * nat)) :=
-    Some ({| aheap := h;
+      (heaps : list ManagedHeap) (event : option (nat * nat)) :=
+    Some ({| aheap := h; aallocs := aallocs s;
              acount := match event with None => acount s | Some _ => S (acount s) end;
              owner_state := op; remote0_state := r0; remote1_state := r1 |},
-          match event with None => None
-          | Some (tag,block) => Some (inr (stamp (tag,block) (acount s))) end) in
-  let own pc h event := finish h pc (remote0_state s) (remote1_state s) event in
+          List.map CSLHeap heaps ++ match event with None => []
+          | Some (tag,block) => [CSLEmit (stamp (tag,block) (acount s))] end) in
+  let own pc h heaps event := finish h pc (remote0_state s) (remote1_state s) heaps event in
   let remote (client : bool) :=
     let pc := if client then remote1_state s else remote0_state s in
-    let done pc h event :=
-      if client then finish h (owner_state s) (remote0_state s) pc event
-      else finish h (owner_state s) pc (remote1_state s) event in
+    let done pc h heaps event :=
+      if client then finish h (owner_state s) (remote0_state s) pc heaps event
+      else finish h (owner_state s) pc (remote1_state s) heaps event in
     match pc with
     | RPoll =>
         match aheap s (mailbox base client) with
         | None => None
         | Some block =>
-            if Nat.eqb block 0 then done RPoll (aheap s) None
+            if Nat.eqb block 0 then done RPoll (aheap s) [] None
             else
               let h := upd (aheap s) (mailbox base client) 0 in
               match h (S block) with
               | None => None
-              | Some _ => done (RRead block)
-                  (upd h (S block) (if client then 2 else 1)) None
+              | Some _ =>
+                  let h' := upd h (S block) (if client then 2 else 1) in
+                  done (RRead block) h' [(h,aallocs s); (h',aallocs s)] None
               end
         end
     | RRead block =>
         match aheap s (remote_head base) with
         | None => None
-        | Some old => done (RLink block old) (aheap s) None
+        | Some old => done (RLink block old) (aheap s) [] None
         end
     | RLink block old =>
         match aheap s block with
         | None => None
-        | Some _ => done (RCAS block old) (upd (aheap s) block old) None
+        | Some _ => let h := upd (aheap s) block old in
+            done (RCAS block old) h [(h,aallocs s)] None
         end
     | RCAS block old =>
         match aheap s (remote_head base) with
         | None => None
         | Some current =>
             if Nat.eqb current old
-            then done RPoll (upd (aheap s) (remote_head base) block)
-              (Some (tag_retire,block))
-            else done (RRead block) (aheap s) (Some (tag_retry,block))
+            then let h := upd (aheap s) (remote_head base) block in
+              done RPoll h [(h,aallocs s)] (Some (tag_retire,block))
+            else done (RRead block) (aheap s) [] (Some (tag_retry,block))
         end
     end in
   match who with
@@ -86,7 +89,7 @@ Definition turn (base : nat) (who : Actor) (s : AState)
       | ORead =>
           match aheap s (remote_head base) with
           | None => None
-          | Some old => own (OCAS old) (aheap s) None
+          | Some old => own (OCAS old) (aheap s) [] None
           end
       | OCAS old =>
           match aheap s (remote_head base) with
@@ -96,21 +99,24 @@ Definition turn (base : nat) (who : Actor) (s : AState)
                 let h := upd (aheap s) (remote_head base) 0 in
                 match h (drain_head base) with
                 | None => None
-                | Some _ => own ODrain (upd h (drain_head base) old) None
+                | Some _ => let h' := upd h (drain_head base) old in
+                    own ODrain h' [(h,aallocs s); (h',aallocs s)] None
                 end
-              else own ORead (aheap s) None
+              else own ORead (aheap s) [] None
           end
       | ODrain =>
           match aheap s (drain_head base) with
           | None => None
           | Some block =>
-              if Nat.eqb block 0 then own (OOffer false) (aheap s) None
+              if Nat.eqb block 0 then own (OOffer false) (aheap s) [] None
               else
                 match aheap s block, aheap s (local_head base) with
                 | Some next, Some local =>
-                    own ODrain
-                      (upd (upd (upd (aheap s) block local)
-                        (local_head base) block) (drain_head base) next)
+                    let h1 := upd (aheap s) block local in
+                    let h2 := upd h1 (local_head base) block in
+                    let h3 := upd h2 (drain_head base) next in
+                    own ODrain h3
+                      [(h1,aallocs s); (h2,aallocs s); (h3,aallocs s)]
                       (Some (tag_reclaim,block))
                 | _, _ => None
                 end
@@ -124,24 +130,25 @@ Definition turn (base : nat) (who : Actor) (s : AState)
                 match aheap s (local_head base) with
                 | None => None
                 | Some block =>
-                    if Nat.eqb block 0 then own next (aheap s) None
+                    if Nat.eqb block 0 then own next (aheap s) [] None
                     else
                       match aheap s block with
                       | None => None
                       | Some successor =>
-                          own next
-                            (upd (upd (aheap s) (local_head base) successor)
-                              (mailbox base client) block)
+                          let h1 := upd (aheap s) (local_head base) successor in
+                          let h2 := upd h1 (mailbox base client) block in
+                          own next h2 [(h1,aallocs s); (h2,aallocs s)]
                             (Some (tag_alloc,block))
                       end
                 end
-              else own next (aheap s) None
+              else own next (aheap s) [] None
           end
       end
   end.
 
 Definition initial_state (capacity c : nat) : AState :=
-  {| aheap := page_heap 1 capacity hemp; acount := c;
+  {| aheap := page_heap 1 capacity hemp;
+     aallocs := upd hemp 1 (page_size capacity); acount := c;
      owner_state := ORead; remote0_state := RPoll; remote1_state := RPoll |}.
 
 Definition held (pc : remote_pc) : list nat :=
@@ -190,7 +197,7 @@ Definition allocator_inv (base capacity : nat) (s : AState) : Prop :=
   exists L R D, allocator_view base capacity s L R D.
 
 Definition state_equiv (s t : AState) : Prop :=
-  heq (aheap s) (aheap t) /\ acount s = acount t /\
+  heq (aheap s) (aheap t) /\ heq (aallocs s) (aallocs t) /\ acount s = acount t /\
   owner_state s = owner_state t /\ remote0_state s = remote0_state t /\
   remote1_state s = remote1_state t.
 
@@ -217,21 +224,63 @@ Proof.
       * repeat split.
 Qed.
 
-Lemma turn_counter base who s t event :
-  turn base who s = Some (t,event) ->
-  match event with
-  | None => acount t = acount s
-  | Some o => acount t = S (acount s) /\ csl_index o = acount s
-  end.
+
+(** A turn contains only its successive post-mutation heaps, followed by at
+    most one indexed user emission.  Only that final emission advances the counter. *)
+Lemma turn_log_shape base who s t logs :
+  turn base who s = Some (t,logs) ->
+  exists heaps payload,
+    logs = List.map CSLHeap heaps ++
+      match payload with None => []
+      | Some p => [CSLEmit (stamp p (acount s))] end /\
+    acount t = match payload with None => acount s | Some _ => S (acount s) end.
 Proof.
-  destruct s as [h c op r0 r1]; destruct who;
-    cbn [turn aheap acount owner_state remote0_state remote1_state];
+  destruct s as [h al c op r0 r1]; destruct who;
+    cbn [turn aheap aallocs acount owner_state remote0_state remote1_state];
     [destruct op|destruct r0|destruct r1]; cbn; intro T;
     repeat match type of T with
     | context [match ?v with Some _ => _ | None => _ end] => destruct v eqn:?
     | context [if ?v then _ else _] => destruct v eqn:?
     end;
-    try discriminate; inversion T; subst; cbn; auto.
+    try discriminate; inversion T; subst; cbn;
+    first
+      [ exists [], None; split; reflexivity
+      | eexists [_], None; split; reflexivity
+      | eexists [_;_], None; split; reflexivity
+      | eexists [_;_;_], None; split; reflexivity
+      | eexists [], (Some _); split; reflexivity
+      | eexists [_], (Some _); split; reflexivity
+      | eexists [_;_], (Some _); split; reflexivity
+      | eexists [_;_;_], (Some _); split; reflexivity ].
+Qed.
+
+Lemma turn_emissions base who s t logs :
+  turn base who s = Some (t,logs) ->
+  (csl_emissions logs = [] /\ acount t = acount s) \/
+  exists payload, csl_emissions logs = [stamp payload (acount s)] /\
+    acount t = S (acount s).
+Proof.
+  intro Hturn.
+  destruct (turn_log_shape base who s t logs Hturn)
+    as (heaps & [payload|] & -> & Hcount);
+    rewrite csl_emissions_heap_prefix; cbn [csl_emissions].
+  - right; now exists payload.
+  - now left.
+Qed.
+
+Lemma turn_counter base who s t logs :
+  turn base who s = Some (t,logs) ->
+  length (csl_emissions logs) <= 1 /\
+  acount t = acount s + length (csl_emissions logs) /\
+  forall emission, In emission (csl_emissions logs) ->
+    indexed_index emission = acount s.
+Proof.
+  intro Hturn; destruct (turn_emissions base who s t logs Hturn)
+    as [[Hlogs Hcount]|[payload [Hlogs Hcount]]]; rewrite Hlogs.
+  - cbn [length List.In].
+    split; [lia|]; split; [lia|]; intros emission Hin; contradiction.
+  - cbn [length List.In].
+    split; [lia|]; split; [lia|]; intros emission [<-|[]]; reflexivity.
 Qed.
 
 From Stdlib Require Import List Lia Arith.PeanoNat Fin
@@ -251,21 +300,21 @@ Local Typeclasses Transparent equ.
 
 Lemma state_equiv_refl s : state_equiv s s.
 Proof.
-  unfold state_equiv; split; [apply heq_refl | repeat split; reflexivity].
+  unfold state_equiv; do 2 (split; [apply heq_refl|]); repeat split; reflexivity.
 Qed.
 
 Lemma state_equiv_sym s t : state_equiv s t -> state_equiv t s.
 Proof.
-  intros [Hh [Hc [Ho [H0 H1]]]].
-  unfold state_equiv; split; [now apply heq_sym |].
+  intros [Hh [Ha [Hc [Ho [H0 H1]]]]].
+  unfold state_equiv; do 2 (split; [now apply heq_sym|]).
   repeat split; symmetry; assumption.
 Qed.
 
 Lemma state_equiv_trans s t u :
   state_equiv s t -> state_equiv t u -> state_equiv s u.
 Proof.
-  intros [Hh [Hc [Ho [H0 H1]]]] [Kh [Kc [Ko [K0 K1]]]].
-  unfold state_equiv; split; [eapply heq_trans; eauto |].
+  intros [Hh [Ha [Hc [Ho [H0 H1]]]]] [Kh [Ka [Kc [Ko [K0 K1]]]]].
+  unfold state_equiv; do 2 (split; [eapply heq_trans; eauto|]).
   repeat split; congruence.
 Qed.
 
@@ -282,30 +331,18 @@ Qed.
 #[global] Instance turn_proper base :
   Proper (eq ==> state_equiv ==> Roption (RelProd state_equiv eq)) (turn base).
 Proof.
-  intros who who' <- s t Hst.
-  destruct s as [h c op r0 r1], t as [k d oq q0 q1].
-  destruct Hst as [Hh [Hc [Ho [H0 H1]]]].
-  cbn in Hh, Hc, Ho, H0, H1.
-  subst d oq q0 q1.
-  destruct who; [destruct op | destruct r0 | destruct r1];
-    cbn [turn].
-  all: repeat first
-    [ progress (rewrite upd_unfold)
-    | progress (rewrite <- Hh)
-    | progress (cbn [aheap acount owner_state remote0_state remote1_state])
-    | match goal with
-      | Hheap : heq ?left ?right |- context [?left ?x] =>
-          let Hr := fresh "Hread" in destruct (left x) eqn:Hr
-      | |- context [if ?b then _ else _] =>
-          let Hb := fresh "Htest" in destruct b eqn:Hb
-      end ].
-  all: constructor.
-  all: split; unfold RelCompFun; cbn [fst snd]; [|reflexivity].
-  all: unfold state_equiv;
-    cbn [aheap acount owner_state remote0_state remote1_state].
-  all: split;
-    [ repeat apply upd_heq; exact Hh
-    | repeat split; reflexivity ].
+  intros who who' <- s t [Hh [Ha [Hc [Ho [H0 H1]]]]].
+  assert (Hmemory : (aheap s,aallocs s) = (aheap t,aallocs t)).
+  { apply managed_heap_ext; split; assumption. }
+  destruct s as [h al c op r0 r1], t as [k allocs d oq q0 q1].
+  cbn in Hmemory, Hc, Ho, H0, H1.
+  injection Hmemory as -> ->; subst d oq q0 q1.
+  destruct (turn base who
+    {| aheap := k; aallocs := allocs; acount := c; owner_state := op;
+       remote0_state := r0; remote1_state := r1 |}) as [[next logs]|].
+  - constructor; split; unfold RelCompFun; cbn [fst snd];
+      [apply state_equiv_refl|reflexivity].
+  - constructor.
 Qed.
 
 (** Physical source-pool order is [client1; client0; owner]. *)
@@ -379,8 +416,10 @@ Proof.
   rewrite upd_dom; [apply Hback | now apply (proj2 (Hback a))].
 Qed.
 
-(* These small tactics only discharge finite ownership arithmetic.  In
-   particular, a cached head is never used as a freshness witness. *)
+(* These tactics discharge finite ownership arithmetic and normalize the
+   explicit heap updates.  Chains are transported once with [linked_mono],
+   and backing is discharged pointwise with [upd_dom]; a cached head is
+   never used as a freshness witness. *)
 Ltac ai_member :=
   match goal with
   | Hp : Permutation ?xs (page_blocks ?base ?capacity)
@@ -464,18 +503,6 @@ Ltac ai_heap :=
   repeat first [rewrite upd_eq | rewrite upd_neq by ai_distinct];
   first [assumption | reflexivity].
 
-Ltac ai_chain :=
-  first [assumption | exact I |
-    eapply linked_mono;
-    [ let a := fresh "a" in let b := fresh "b" in
-      let Hin := fresh "Hin" in let Hab := fresh "Hab" in
-      intros a b Hin Hab; rewrite upd_neq by ai_distinct; exact Hab
-    | ai_chain ]].
-
-Ltac ai_backing :=
-  first [assumption |
-    eapply ai_backing_upd; [ai_backing | ai_interval]].
-
 Ltac ai_permutation :=
   match goal with
   | Hp : Permutation ?old ?page |- Permutation ?new ?page =>
@@ -500,9 +527,17 @@ Ltac ai_cached h :=
 Ltac ai_obligation h :=
   first
     [ assumption | reflexivity | exact I
-    | solve [ai_backing]
+    | solve [match goal with
+      | Hback : backing ?base ?capacity h |- backing _ _ _ =>
+          intro x;
+          repeat rewrite upd_dom by
+            (repeat apply upd_mono;
+             apply (proj2 (Hback _)); ai_interval);
+          apply Hback
+      end]
     | solve [ai_heap]
-    | solve [ai_chain]
+    | solve [eapply linked_mono with (edge := fun a b => h a = Some b);
+        [intros; ai_heap | assumption]]
     | solve [ai_cached h]
     | solve [ai_permutation]
     | solve [ai_member]
@@ -528,34 +563,39 @@ Local Ltac ai_reduce_turn :=
 Definition owner_after_offer (client : bool) := if client then ORead else OOffer true.
 
 Inductive ownership_transition :
-  Actor -> owner_pc -> owner_pc -> option (CSLObs (nat * nat)) ->
+  Actor -> owner_pc -> owner_pc -> list (CSLObs (nat * nat)) ->
   list nat -> list nat -> list nat -> list nat -> list nat -> list nat -> Prop :=
 | ownership_read L R :
-    ownership_transition Owner ORead (OCAS (List.hd 0 R)) None L R [] L R []
+    ownership_transition Owner ORead (OCAS (List.hd 0 R)) [] L R [] L R []
 | ownership_cas_fail old L R :
     List.hd 0 R <> old ->
-    ownership_transition Owner (OCAS old) ORead None L R [] L R []
-| ownership_detach L R :
-    ownership_transition Owner (OCAS (List.hd 0 R)) ODrain None L R [] L [] R
+    ownership_transition Owner (OCAS old) ORead [] L R [] L R []
+| ownership_detach L R heaps :
+    ownership_transition Owner (OCAS (List.hd 0 R)) ODrain
+      (List.map CSLHeap heaps) L R [] L [] R
 | ownership_drain_empty L R :
-    ownership_transition Owner ODrain (OOffer false) None L R [] L R []
-| ownership_drain L R b D idx :
-    ownership_transition Owner ODrain ODrain (Some (inr (stamp (tag_reclaim,b) idx)))
+    ownership_transition Owner ODrain (OOffer false) [] L R [] L R []
+| ownership_drain L R b D idx heaps :
+    ownership_transition Owner ODrain ODrain
+      (List.map CSLHeap heaps ++ [CSLEmit (stamp (tag_reclaim,b) idx)])
       L R (b :: D) (b :: L) R D
 | ownership_offer_empty client L R :
-    ownership_transition Owner (OOffer client) (owner_after_offer client) None
+    ownership_transition Owner (OOffer client) (owner_after_offer client) []
       L R [] L R []
-| ownership_offer client L R b idx :
+| ownership_offer client L R b idx heaps :
     ownership_transition Owner (OOffer client) (owner_after_offer client)
-      (Some (inr (stamp (tag_alloc,b) idx))) (b :: L) R [] L R []
+      (List.map CSLHeap heaps ++ [CSLEmit (stamp (tag_alloc,b) idx)]) (b :: L) R [] L R []
 | ownership_remote who pc event L R D :
     who <> Owner ->
-    (event = None \/ exists b idx, event = Some (inr (stamp (tag_retry,b) idx))) ->
+    (csl_emissions event = [] \/
+      exists b idx, csl_emissions event = [stamp (tag_retry,b) idx]) ->
     ownership_transition who pc pc event L R D L R D
-| ownership_publish who pc L R D b idx :
+| ownership_publish who pc L R D b idx heaps :
     who <> Owner ->
-    ownership_transition who pc pc (Some (inr (stamp (tag_retire,b) idx)))
+    ownership_transition who pc pc
+      (List.map CSLHeap heaps ++ [CSLEmit (stamp (tag_retire,b) idx)])
       L R D L (b :: R) D.
+
 
 (** Finish one branch: the computed result, its ownership view at the new
     ghost lists, and the ownership constructor of the branch. *)
@@ -568,18 +608,24 @@ Ltac ai_finish h L R D m0 m1 :=
   do 2 eexists; exists L, R, D; split; [reflexivity |]; split;
   [ unfold allocator_view;
       cbn [aheap acount owner_state remote0_state remote1_state];
-    split; [assumption |]; split; [ai_backing |];
+    split; [assumption |]; split; [ai_obligation h |];
     exists m0, m1;
     cbn [hd held];
     repeat split; ai_obligation h
-  | cbn [owner_state];
-    first [apply ownership_read | apply ownership_detach |
-      apply ownership_drain_empty | apply ownership_drain |
-      apply ownership_offer_empty | apply ownership_offer |
-      apply ownership_cas_fail; now apply Nat.eqb_neq |
-      apply ownership_publish; discriminate |
-      apply ownership_remote; [discriminate|left; reflexivity] |
-      apply ownership_remote; [discriminate|right; do 2 eexists; reflexivity]] ].
+  | cbn [owner_state List.map List.app];
+    lazymatch goal with
+    | |- ownership_transition _ _ _ ?logs _ _ _ _ _ _ =>
+      let snapshots := eval cbv beta iota zeta delta [List.flat_map List.app] in
+        (List.flat_map (fun log : CSLObs (nat * nat) =>
+          match log with CSLHeap memory => [memory] | _ => [] end) logs) in
+      first [apply ownership_read | apply ownership_detach with (heaps:=snapshots) |
+        apply ownership_drain_empty | apply ownership_drain with (heaps:=snapshots) |
+        apply ownership_offer_empty | apply ownership_offer with (heaps:=snapshots) |
+        apply ownership_cas_fail; now apply Nat.eqb_neq |
+        apply ownership_publish with (heaps:=snapshots); discriminate |
+        apply ownership_remote; [discriminate|left; reflexivity] |
+        apply ownership_remote; [discriminate|right; do 2 eexists; reflexivity]]
+    end ].
 
 (** Transition completeness: on the ownership view every turn succeeds,
     re-establishes the view, and changes ownership by one constructor. *)
@@ -591,7 +637,7 @@ Lemma turn_view_complete base capacity who s L R D :
     ownership_transition who (owner_state s) (owner_state t)
       event L R D L' R' D'.
 Proof.
-  destruct s as [h count op p0 p1].
+  destruct s as [h al count op p0 p1].
   cbn [allocator_view aheap acount owner_state remote0_state remote1_state].
   intros (Hbase & Hback & m0 & m1 & Hr & Hl & Hd & CL & CR & CD &
     Hm0 & Hm1 & Hp & Hop & Ho & Hc0 & Hc1).
@@ -738,12 +784,12 @@ Proof. intros ->; apply initial_state_inv. Qed.
     Exactly two instantiations of [Utils.Execution]; no example-local
     execution record, constructor or replay proof remains. *)
 Definition allocator_valid (capacity c : nat)
-  (e : Execution AState Actor (option (CSLObs (nat * nat)))) : Prop :=
+  (e : Execution AState Actor (list (CSLObs (nat * nat)))) : Prop :=
   execution_valid (fun who s o s' => turn 1 who s = Some (s',o))
     (fun s => s = initial_state capacity c) e.
 
 Definition allocator_execution (capacity c : nat) (picks : nat -> Actor)
-  : Execution AState Actor (option (CSLObs (nat * nat))) :=
+  : Execution AState Actor (list (CSLObs (nat * nat))) :=
   execution_of_choices (turn 1) (allocator_inv 1 capacity)
     (fun who s Hs =>
        match turn_total 1 capacity who s Hs with

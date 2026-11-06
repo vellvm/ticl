@@ -11,14 +11,14 @@
       say [qrep = qrepX * True] with [qrepX] precise, so "the frame" is a
       function of the state rather than a re-chosen existential;
 
-    - transport corollaries reuse [Recurrence.v] without reopening its temporal
-      invariant, rank, induction, or coinduction;
+    - transport corollaries reuse [Recurrence.v]'s composition of structural
+      AG and AU rules without reopening its inline queue/rank invariants;
 
     - frame PRESERVATION: the run's heap after any number of rotations agrees
       with the initial heap outside the queue's footprint ([qstepN_agree]), so
       any assertion holding of the frame holds forever
-      ([frame_assertion_preserved]).  [Trace.run_stepN] is what makes "after
-      n rotations" the same thing as "n observations into the run".
+      ([frame_assertion_preserved]).  [Trace.run_stepN] exposes the five
+      observations per rotation, including all intermediate write snapshots.
 
     All frame heaps are parameters; concrete fixtures remain in examples. *)
 
@@ -200,8 +200,8 @@ Qed.
 
 (** ** The transport corollaries.
 
-    Apply [Recurrence.v] with framed representation premises. The shared
-    [aul_state_iter_ghost] rule and queue invariants are reused unchanged. *)
+    Apply [Recurrence.v] with framed representation premises. Its direct
+    [ag_state_iter_logs]/[u_state_iter_prefix_ghost] composition is unchanged. *)
 
 Theorem rotate_agaf_pop_framed: forall hdr nlv ns vs d h f allocs ctx c,
     qrepX hdr ns vs h ->
@@ -209,7 +209,7 @@ Theorem rotate_agaf_pop_framed: forall hdr nlv ns vs d h f allocs ctx c,
     f 0 = None ->
     find_index Nat.eqb nlv vs = Some d ->
     <( {run hdr ((hunion h f, allocs), (ctx, c))}, Pure
-       |= AG (AF visW {csl_indexed (fun o => indexed_value o = nlv)}) )>.
+       |=L AG (AF visW {csl_indexed (fun o => indexed_value o = nlv)}) )>.
 Proof.
   intros hdr nlv ns vs d h f allocs ctx c Hx Hd Hf Hfind.
   eapply rotate_agaf_pop_heap; [eapply qrepX_frame; eassumption | exact Hfind].
@@ -221,7 +221,7 @@ Theorem rotate_agaf_pop_fresh_framed: forall hdr nlv ns vs d h f allocs ctx c k,
     f 0 = None ->
     find_index Nat.eqb nlv vs = Some d ->
     <( {run hdr ((hunion h f, allocs), (ctx, c))}, Pure
-       |= AG (AF visW {csl_indexed (indexed_after (fun x => x = nlv) k)}) )>.
+       |=L AG (AF visW {csl_indexed (indexed_after (fun x => x = nlv) k)}) )>.
 Proof.
   intros hdr nlv ns vs d h f allocs ctx c k Hx Hd Hf Hfind.
   eapply rotate_agaf_pop_fresh; [eapply qrepX_frame; eassumption | exact Hfind].
@@ -236,7 +236,7 @@ Theorem absent_never_observed_framed: forall hdr ns vs nlv h f allocs ctx c,
     f 0 = None ->
     ns <> [] ->
     ~ In nlv vs ->
-    <( {run hdr ((hunion h f, allocs), (ctx, c))}, Pure |= AG (now {obs_sat (fun x => x <> nlv)}) )>.
+    <( {run hdr ((hunion h f, allocs), (ctx, c))}, Pure |=L AG (now {obs_sat (fun x => x <> nlv)}) )>.
 Proof.
   intros hdr ns vs nlv h f allocs ctx c Hx Hd Hf Hne Hnin.
   eapply absent_never_observed;
@@ -249,7 +249,7 @@ Theorem empty_queue_no_ag_framed: forall hdr vs h f allocs ctx c w phi,
     qrepX hdr [] vs h ->
     hdisj h f ->
     f 0 = None ->
-    ~ <( {run hdr ((hunion h f, allocs), (ctx, c))}, w |= AG phi )>.
+    ~ <( {run hdr ((hunion h f, allocs), (ctx, c))}, w |=L AG phi )>.
 Proof.
   intros hdr vs h f allocs ctx c w phi Hx Hd Hf.
   eapply empty_queue_no_ag; eapply qrepX_frame; eassumption.
@@ -294,13 +294,30 @@ Theorem qstepN_agree: forall n hdr ns vs h,
     qrep hdr ns vs h -> ns <> [] ->
     agree_out (qcells hdr ns) h (qstepN hdr n ns h).
 Proof.
-  induction n as [| n IH]; intros hdr ns vs h Hq Hne.
-  - intros x Hx; reflexivity.
-  - intros x Hx; cbn [qstepN].
-    rewrite (IH hdr (rotl ns) (rotl vs) (qstep hdr ns h)
-               (qstep_qrep _ _ _ _ Hq Hne) (rotl_nonnil _ Hne) x).
-    + now apply (qstep_agree hdr ns vs h Hq Hne).
-    + intro C; apply Hx, (qcells_rotl hdr ns x Hne), C.
+  intros n hdr ns vs h Hq Hne.
+  set (next := fun state : list nat * Heap =>
+    let '(nodes,heap) := state in (rotl nodes,qstep hdr nodes heap)).
+  set (Inv := fun state : list nat * Heap => exists values,
+    qrep hdr (fst state) values (snd state) /\ fst state <> [] /\
+    (forall x, In x (qcells hdr (fst state)) <-> In x (qcells hdr ns)) /\
+    agree_out (qcells hdr ns) h (snd state)).
+  assert (Hnext : forall state, Inv state -> Inv (next state)).
+  { intros [nodes heap] (values & Hrep & Hnodes & Hcells & Hagree).
+    cbn [Inv next] in *; exists (rotl values).
+    split; [now apply qstep_qrep |].
+    split; [now apply rotl_nonnil |].
+    split.
+    - intro x; exact (iff_trans (qcells_rotl hdr nodes x Hnodes) (Hcells x)).
+    - intros x Houtside; transitivity (heap x).
+      + apply (qstep_agree hdr nodes values heap Hrep Hnodes).
+        intro Hin; apply Houtside, (Hcells x), Hin.
+      + now apply Hagree. }
+  assert (Hinitial : Inv (ns,h)).
+  { exists vs; split; [exact Hq |]; split; [exact Hne |].
+    split; [intro x; reflexivity | intros x Houtside; reflexivity]. }
+  pose proof (@Nat.iter_invariant n _ next Inv Hnext (ns,h) Hinitial)
+    as (values & Hrep & Hnodes & Hcells & Hagree).
+  exact Hagree.
 Qed.
 
 (** The frame sub-heap is preserved POINTWISE, for every number of rotations. *)

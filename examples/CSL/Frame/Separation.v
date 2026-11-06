@@ -7,14 +7,18 @@
       reflection, and non-confined foreign reads;
     - [AlwaysRegression]: AG release certificates, one fair EG execution, and
       the non-yielding and guard-only boundaries;
-    - [FiniteRegression]: finite AU/EU splits, the erased raw trace through
-      [owned_fork_erasure], local versus global emission indices, read-only
+    - [FiniteRegression]: finite AU/EU splits, the canonical raw trace through
+      [owned_fork_runner], local versus global emission indices, read-only
       context, and rejected allocation/assignment. *)
 
 From Stdlib Require Import List Lia Fin Vector Relations Program.Equality.
 From CTree Require Import CTree Eq.
-From TICL Require Import Lang.CoCSL.Separation Logic.Tactics Logic.World.
+From TICL Require Import Lang.CoCSL.Asep Lang.CoCSL.Owned CTree.Interp.CSL.Owned CTree.Interp.CSL.Asep Logic.Tactics Logic.World Logic.Simulation.
 From TICL Require Import CTree.Interp.Yield.SBisim Utils.Vectors Utils.Pcm Events.HeapModel.
+From TICL Require Import CTree.Trace CTree.Interp.Yield.Nondeterministic.
+From TICL Require Import CTree.Logic.CanStep.
+From TICL Require Import Logic.Kripke Logic.Semantics Logic.Setoid Logic.Congruence
+  CTree.Logic.Trans Utils.Relations Utils.Execution.
 
 (** ** Next: the direct AN split, its clocks, and its boundaries *)
 Module NextRegression.
@@ -184,12 +188,12 @@ Proof. eapply owned_step_wf; [apply (wfA4 (Ret tt)); reflexivity|exact sA4]. Qed
 (** The global AN premise: every next state keeps the anchored split, the
     child's cell untouched and the parent's cell written. *)
 Lemma A_global_han :
-  hAN owned_next (hsep hTrue hTrue) (hsep (cell Child 1 0) (cell Parent 2 8)) A0.
+  hAN owned_next (state_sat (fun c => asep (state_obligation Child hTrue c) (state_obligation Parent hTrue c))) (state_sat (fun c => asep (state_obligation Child (cell Child 1 0) c) (state_obligation Parent (cell Parent 2 8) c))) A0.
 Proof.
-  apply hAN_iff; split; [split; [exact wfA0|split; exact I]|split].
+  apply hAN_iff; split; [apply (proj2 (state_split_iff _ _ _)); split; [exact wfA0|split; exact I]|split].
   - exists (A1 (Ret tt)), (act Parent OAWrite); exact sA0.
   - intros c' (a & Ha); apply stepA0 in Ha as (_ & t & Ht & ->).
-    split; [exact (wfA1 t Ht)|split; reflexivity].
+    apply (proj2 (state_split_iff _ _ _)); split; [exact (wfA1 t Ht)|split; reflexivity].
 Qed.
 
 (** The two-program AN frame theorem on the source fork: the child still owes
@@ -233,9 +237,11 @@ Lemma foreign_star_A0 mid :
   clos_refl_trans _ (foreign_next Child) A0 mid ->
   mid = A0 \/ (exists t, t ≅ Ret tt /\ mid = A1 t) \/ mid = A2.
 Proof.
-  intro H; apply clos_rt_rtn1 in H; induction H as [|y z Hyz _ IH];
-    [left; reflexivity|].
-  destruct Hyz as (a & Hs & Ho); destruct IH as [->|[(t & Ht & ->)| ->]].
+  intro H; refine (clos_refl_trans_preserves (foreign_next Child)
+    (fun d => d = A0 \/ (exists t, t ≅ Ret tt /\ d = A1 t) \/ d = A2)
+    _ A0 mid (or_introl eq_refl) H).
+  intros y z Hy (a & Hs & Ho).
+  destruct Hy as [->|[(t & Ht & ->)| ->]].
   - apply stepA0 in Hs as (_ & t & Ht & ->); right; left; eauto.
   - apply (stepA1 t a z Ht) in Hs as (_ & ->); right; right; reflexivity.
   - apply stepA2 in Hs as (-> & _); contradiction.
@@ -310,14 +316,14 @@ Qed.
 
 Lemma Fnone_defeats_split :
   hproper Fnone /\
-  hAN owned_next (hsep hTrue hTrue) (hsep Fnone (cell Parent 2 8)) A0 /\
+  hAN owned_next (state_sat (fun c => asep (state_obligation Child hTrue c) (state_obligation Parent hTrue c))) (state_sat (fun c => asep (state_obligation Child Fnone c) (state_obligation Parent (cell Parent 2 8) c))) A0 /\
   ~ hAN owned_next hTrue Fnone (init_local Child (CWrite 1 1) hC ctx0 0 false).
 Proof.
   split; [exact Fnone_proper|split].
-  - apply hAN_iff; split; [split; [exact wfA0|split; exact I]|split].
+  - apply hAN_iff; split; [apply (proj2 (state_split_iff _ _ _)); split; [exact wfA0|split; exact I]|split].
     + exists (A1 (Ret tt)), (act Parent OAWrite); exact sA0.
     + intros c' (a & Ha); apply stepA0 in Ha as (_ & t & Ht & ->).
-      split; [exact (wfA1 t Ht)|split; reflexivity].
+      apply (proj2 (state_split_iff _ _ _)); split; [exact (wfA1 t Ht)|split; reflexivity].
   - intros (_ & _ & H)%hAN_iff.
     assert (Hn : Fnone (init_local Child (CWrite 1 1) hC ctx0 0 true)).
     { apply H; exists (act Child OASelect); apply init_local_select; split; reflexivity. }
@@ -349,15 +355,16 @@ Qed.
 
 Lemma A_finished_parent :
   coupled A2 /\ tp_size (oc_pool (project Parent A2)) = 0 /\
-  hAN owned_next (hsep hTrue hTrue) (hsep hTrue hTrue) A2 /\
+  hAN owned_next (state_sat (fun c => asep (state_obligation Child hTrue c) (state_obligation Parent hTrue c))) (state_sat (fun c => asep (state_obligation Child hTrue c) (state_obligation Parent hTrue c))) A2 /\
   ~ hAN owned_next hTrue hTrue (project Parent A2).
 Proof.
   assert (Hz : tp_size (oc_pool (project Parent A2)) = 0) by reflexivity.
   split; [|split; [exact Hz|split]].
   - eapply coupled_step; [eapply coupled_step; [apply coupled_init, admA|exact sA0]|exact sA1].
-  - apply hAN_iff; split; [split; [exact wfA2|split; exact I]|split].
+  - apply hAN_iff; split; [apply (proj2 (state_split_iff _ _ _)); split; [exact wfA2|split; exact I]|split].
     + exists A3, (act Child OASelect); exact sA2.
-    + intros c' (a & Ha); apply stepA2 in Ha as (_ & ->); split; [exact wfA3|split; exact I].
+    + intros c' (a & Ha); apply stepA2 in Ha as (_ & ->).
+      apply (proj2 (state_split_iff _ _ _)); split; [exact wfA3|split; exact I].
   - intros (_ & (c' & a & Hs) & _)%hAN_iff; exact (owned_step_empty _ a c' Hz Hs).
 Qed.
 
@@ -384,10 +391,10 @@ Proof.
 Qed.
 
 Lemma B_global_han :
-  hAN owned_next (hsep hTrue hTrue) (hsep (cell Child 1 1) (cell Parent 2 7)) B2.
+  hAN owned_next (state_sat (fun c => asep (state_obligation Child hTrue c) (state_obligation Parent hTrue c))) (state_sat (fun c => asep (state_obligation Child (cell Child 1 1) c) (state_obligation Parent (cell Parent 2 7) c))) B2.
 Proof.
   pose proof (coupled_wf _ coupledB2) as Hwf.
-  apply hAN_iff; split; [split; [exact Hwf|split; exact I]|split].
+  apply hAN_iff; split; [apply (proj2 (state_split_iff _ _ _)); split; [exact Hwf|split; exact I]|split].
   - exists (set_pool (set_heap B2 Child hC') (mk_pool 2 [Ret tt; dp] [Child; Parent] (Some F1))),
       (act Child OAWrite).
     change (focus_step B2 1 [dc; dp] [Child; Parent] F1 (act Child OAWrite)
@@ -398,7 +405,7 @@ Proof.
     change (focus_step B2 1 [dc; dp] [Child; Parent] F1 a c') in Ha.
     apply (focus_step_head_prim B2 1 [dc; dp] [Child; Parent] F1 _ _ _ _ _ (denote_write 1 1)) in Ha.
     destruct Ha as (k & kind & y & c1 & _ & Hp & -> & ->); cbn in Hp.
-    injection Hp as <- <- <-; split; [exact Hwf'|split; reflexivity].
+    injection Hp as <- <- <-; apply (proj2 (state_split_iff _ _ _)); split; [exact Hwf'|split; reflexivity].
 Qed.
 
 Lemma B_han_split :
@@ -425,13 +432,13 @@ Qed.
 (** *** Return suffixes: only the last finisher returns *)
 
 Lemma A_global_hret :
-  hRet owned_next (hsep (cell Child 1 1) (cell Parent 2 8)) (A4 (Ret tt)).
+  hRet owned_next (state_sat (fun c => asep (state_obligation Child (cell Child 1 1) c) (state_obligation Parent (cell Parent 2 8) c))) (A4 (Ret tt)).
 Proof.
-  exists (result A5); split; [exists A5, (act Child OAReturn); exact sA4|].
+  exists A5; split; [exists (act Child OAReturn); exact sA4|].
   intros c' (a & Ha); apply stepA4 in Ha as (_ & ->); [|reflexivity].
   split; [reflexivity|split].
-  - repeat split; intros; try apply peq_refl; reflexivity.
-  - split; [exact wfA5|split; reflexivity].
+  - reflexivity.
+  - apply (proj2 (state_split_iff _ _ _)); split; [exact wfA5|split; reflexivity].
 Qed.
 
 Lemma A_hret_split :
@@ -445,15 +452,53 @@ Lemma A_not_both_hret :
   ~ (hRet owned_next (cell Child 1 1) (project Child (A4 (Ret tt))) /\
      hRet owned_next (cell Parent 2 8) (project Parent (A4 (Ret tt)))).
 Proof.
-  intros (_ & (_ & (c' & a & Hs) & _)).
+  intros (_ & (c' & (a & Hs) & _)).
   exact (owned_step_empty (project Parent (A4 (Ret tt))) a c' eq_refl Hs).
+Qed.
+
+(** Equal joined results cannot hide which lineage emitted. *)
+Lemma unequal_lineage_counts_not_uniform :
+  exists c0 c1 : OwnedCfg,
+    terminal c0 /\ terminal c1 /\
+    (forall i, oc_heap c0 i = managed_empty /\ oc_heap c1 i = managed_empty) /\
+    oc_ctx c0 = oc_ctx c1 /\ oc_base c0 = oc_base c1 /\
+    (forall i, oc_last c0 i = None /\ oc_last c1 i = None) /\
+    oc_count c0 Child = 0 /\ oc_count c0 Parent = 1 /\
+    oc_count c1 Child = 1 /\ oc_count c1 Parent = 0 /\
+    joined_state c0 = joined_state c1 /\
+    forall src,
+      ~ hRet (fun _ d => d = c0 \/ d = c1) hTrue src /\
+      ~ hRet_at Child (fun _ d => d = c0 \/ d = c1) hTrue src.
+Proof.
+  let c0 := constr:({| oc_pool := mk_pool 0 [] [] None;
+    oc_anchor := fun _ => managed_empty; oc_heap := fun _ => managed_empty;
+    oc_ctx := List.nil; oc_base := 0;
+    oc_count := fun i => match i with Child => 0 | Parent => 1 end;
+    oc_last := fun _ => None |}) in
+  let c1 := constr:({| oc_pool := mk_pool 0 [] [] None;
+    oc_anchor := fun _ => managed_empty; oc_heap := fun _ => managed_empty;
+    oc_ctx := List.nil; oc_base := 0;
+    oc_count := fun i => match i with Child => 1 | Parent => 0 end;
+    oc_last := fun _ => None |}) in
+  exists c0, c1.
+  repeat split; try reflexivity.
+  - intros (out & _ & Hall).
+    destruct (Hall _ (or_introl eq_refl)) as (_ & (_ & _ & _ & H0 & _) & _).
+    destruct (Hall _ (or_intror eq_refl)) as (_ & (_ & _ & _ & H1 & _) & _).
+    specialize (H0 Child); specialize (H1 Child); cbn in H0, H1; lia.
+  - intros (out & _ & Hall).
+    destruct (Hall _ (or_introl eq_refl)) as (_ & (_ & _ & _ & H0 & _) & _).
+    destruct (Hall _ (or_intror eq_refl)) as (_ & (_ & _ & _ & H1 & _) & _).
+    specialize (H0 Child); specialize (H1 Child).
+    change (0 = oc_count out Child) in H0.
+    change (1 = oc_count out Child) in H1; lia.
 Qed.
 
 End NextRegression.
 
 From Stdlib Require Import List Lia Arith.PeanoNat Fin Vector Relations Program.Equality.
 From Coinduction Require Import all.
-From TICL Require Import Lang.CoCSL.Separation.
+From TICL Require Import Lang.CoCSL.Asep Lang.CoCSL.Owned CTree.Interp.CSL.Owned CTree.Interp.CSL.Asep.
 From TICL Require Import CTree.Core Utils.Pcm Utils.Vectors
   CTree.Interp.Yield.SBisim CTree.Interp.Yield.Nondeterministic CTree.Logic.Sim.
 
@@ -517,8 +562,8 @@ Proof. intros H R; eapply rt_trans; [apply rt_step; exists a; exact H|exact R]. 
 
 Lemma reach_wf c d : owned_wf c -> reach c d -> owned_wf d.
 Proof.
-  intros Hc R; induction R as [x y [a H]|x|x y z _ IH1 _ IH2]; auto.
-  exact (owned_step_wf _ _ _ Hc H).
+  intros Hc R; eapply clos_refl_trans_preserves; [|exact Hc|exact R].
+  intros x y Hx [a Hs]; exact (owned_step_wf x a y Hx Hs).
 Qed.
 
 (** ** Source heads *)
@@ -782,13 +827,13 @@ Definition pcas_fail : CProg unit := CBind (CCAS (CLit 1) (CLit 3) (CLit 5)) (fu
 
 Lemma cas_success_response :
   prim_step Child (bfocus pcas_ok) (inl1 (HCAS 1 0 5)) =
-    Some (OACAS, true, set_heap (bfocus pcas_ok) Child (upd (hsingle 1 0) 1 5, hsingle 1 1)).
+    Some (OACAS true, true, set_heap (bfocus pcas_ok) Child (upd (hsingle 1 0) 1 5, hsingle 1 1)).
 Proof. reflexivity. Qed.
 
 (** A successful CAS answers [true] and changes only cell [1] of the child. *)
 Lemma cas_success_step a c' :
   owned_step (bfocus pcas_ok) a c' ->
-  a = act Child OACAS /\
+  a = act Child (OACAS true) /\
   (exists k : bool -> thread sE Bn, (forall b, k b ≅ denote (CRet tt)) /\
      c' = set_pool (set_heap (bfocus pcas_ok) Child (upd (hsingle 1 0) 1 5, hsingle 1 1))
             (mk_pool 2 [k true; Ret tt] [Child; Parent] (Some Fin.F1))) /\
@@ -809,13 +854,13 @@ Proof.
 Qed.
 
 Lemma cas_failure_response :
-  prim_step Child (bfocus pcas_fail) (inl1 (HCAS 1 3 5)) = Some (OACAS, false, bfocus pcas_fail).
+  prim_step Child (bfocus pcas_fail) (inl1 (HCAS 1 3 5)) = Some (OACAS false, false, bfocus pcas_fail).
 Proof. reflexivity. Qed.
 
 (** A failed CAS answers [false] and leaves both heaps unchanged. *)
 Lemma cas_failure_step a c' :
   owned_step (bfocus pcas_fail) a c' ->
-  a = act Child OACAS /\
+  a = act Child (OACAS false) /\
   (exists k : bool -> thread sE Bn, (forall b, k b ≅ denote (CRet tt)) /\
      c' = set_pool (bfocus pcas_fail) (mk_pool 2 [k false; Ret tt] [Child; Parent] (Some Fin.F1))) /\
   oc_heap c' Child = bC /\ oc_heap c' Parent = bP.
@@ -848,14 +893,14 @@ Proof.
 Qed.
 
 Lemma free_response p :
-  prim_step Child (bfocus p) (inl1 (HFree 1)) = Some (OAFree, tt, set_heap (bfocus p) Child freed).
+  prim_step Child (bfocus p) (inl1 (HFree 1)) = Some (OAFree 1, tt, set_heap (bfocus p) Child freed).
 Proof. reflexivity. Qed.
 
 (** [CFree 1] removes the child's data and extent, keeps the parent block,
     and continues with the rest of the child. *)
 Lemma free_step (next : unit -> CProg unit) a c' :
   owned_step (bfocus (CBind (CFree 1) next)) a c' ->
-  a = act Child OAFree /\
+  a = act Child (OAFree 1) /\
   (exists t, t ≅ denote (next tt) /\
      c' = set_pool (set_heap (bfocus (CBind (CFree 1) next)) Child freed)
             (mk_pool 2 [t; Ret tt] [Child; Parent] (Some Fin.F1))) /\
@@ -879,30 +924,16 @@ Proof. apply bfocus_coupled; cbn; [tauto|split; [right; discriminate|intros; spl
 Lemma bfocus_free_twice_coupled : coupled (bfocus pfree_twice).
 Proof. apply bfocus_coupled; cbn; [tauto|split; intros; right; discriminate]. Qed.
 
-(** Stuckness of the erased side, from [owned_erasure] and the runner. *)
-Lemma erased_stuck c :
-  coupled c ->
-  is_stuck (interp_schedule_nd sh (tp_size (oc_pool c)) (tp_threads (oc_pool c))
-              (tp_focus (oc_pool c)) (joined_state c)) ->
-  is_stuck (erase_owned (instrument_owned c)).
-Proof.
-  intros Hc Hs.
-  eapply is_stuck_sbisim; [exact (owned_erasure c (coupled_erasable c Hc))|exact Hs].
-Qed.
-
 (** After [CFree 1], reading cell [1] faults: no owned action, no action of
-    the child's projection, and the original runner on the joined heap (and
-    hence the erasure) is stuck rather than reading the parent's memory. *)
+    the child's projection, and the canonical runner on the joined heap is
+    stuck rather than reading the parent's memory. *)
 Lemma free_read_faults a c' :
   owned_step (bfocus pfree_read) a c' ->
   (forall a' c'', ~ owned_step c' a' c'') /\
   (forall a' c'', ~ owned_step (project Child c') a' c'') /\
-  is_stuck (interp_schedule_nd sh (tp_size (oc_pool c')) (tp_threads (oc_pool c'))
-              (tp_focus (oc_pool c')) (joined_state c')) /\
-  is_stuck (erase_owned (instrument_owned c')).
+  is_stuck (owned_interp c').
 Proof.
   intros H.
-  pose proof (coupled_step _ _ _ bfocus_free_read_coupled H) as Hc.
   destruct (free_step _ _ _ H) as (_ & (t & Ht & ->) & _).
   assert (Hh : t ≅ Vis (inr1 (inr1 (inl1 (HRead 1))) : CEff nat) (fun _ => denote (CRet tt)))
     by (rewrite Ht; apply denote_read_bind_head).
@@ -916,7 +947,7 @@ Proof.
       apply Stuck_is_stuck.
     - intros i; dependent destruction i; [|reflexivity].
       etransitivity; [exact Ht|apply source_raw_bind]. }
-  split; [|split; [|split; [exact Hrun|exact (erased_stuck _ Hc Hrun)]]].
+  split; [|split; [|exact Hrun]].
   - intros a' c'' H'.
     apply (owned_step_focus _ 1 [t; Ret tt] [Child; Parent] Fin.F1) in H'; [|reflexivity].
     apply (focus_step_head_prim _ 1 [t; Ret tt] [Child; Parent] Fin.F1 _ _ 0 _ _ Hh) in H'.
@@ -935,12 +966,9 @@ Lemma free_twice_faults a c' :
   owned_step (bfocus pfree_twice) a c' ->
   (forall a' c'', ~ owned_step c' a' c'') /\
   (forall a' c'', ~ owned_step (project Child c') a' c'') /\
-  is_stuck (interp_schedule_nd sh (tp_size (oc_pool c')) (tp_threads (oc_pool c'))
-              (tp_focus (oc_pool c')) (joined_state c')) /\
-  is_stuck (erase_owned (instrument_owned c')).
+  is_stuck (owned_interp c').
 Proof.
   intros H.
-  pose proof (coupled_step _ _ _ bfocus_free_twice_coupled H) as Hc.
   destruct (free_step _ _ _ H) as (_ & (t & Ht & ->) & _).
   assert (Hh : t ≅ Vis (inr1 (inr1 (inl1 (HFree 1))) : CEff unit) (fun _ => Ret tt))
     by (rewrite Ht; apply denote_free_head).
@@ -953,7 +981,7 @@ Proof.
                (hunion (fst freed) (fst bP), hunion (snd freed) (snd bP)) List.nil 0 eq_refl).
       apply Stuck_is_stuck.
     - intros i; dependent destruction i; [exact Ht|reflexivity]. }
-  split; [|split; [|split; [exact Hrun|exact (erased_stuck _ Hc Hrun)]]].
+  split; [|split; [|exact Hrun]].
   - intros a' c'' H'.
     apply (owned_step_focus _ 1 [t; Ret tt] [Child; Parent] Fin.F1) in H'; [|reflexivity].
     apply (focus_step_head_prim _ 1 [t; Ret tt] [Child; Parent] Fin.F1 _ _ 0 _ _ Hh) in H'.
@@ -970,7 +998,7 @@ Qed.
 Lemma free_zero_noop :
   hcan_step owned_next (bfocus pfree0) /\
   forall a c', owned_step (bfocus pfree0) a c' ->
-    a = act Child OAFree /\ forall i, oc_heap c' i = oc_heap (bfocus pfree0) i.
+    a = act Child (OAFree 0) /\ forall i, oc_heap c' i = oc_heap (bfocus pfree0) i.
 Proof.
   split.
   - eexists; eexists; eapply ostep_prim; [reflexivity|head|reflexivity|reflexivity].
@@ -979,7 +1007,7 @@ Proof.
     apply (focus_step_head_prim _ 1 [denote pfree0; Ret tt] [Child; Parent] Fin.F1
              _ _ 0 _ _ (denote_free_head 0)) in H.
     destruct H as (k & kind & y & c1 & _ & Hp & -> & ->).
-    change (Some (OAFree, tt, set_heap (bfocus pfree0) Child bC) = Some (kind, y, c1)) in Hp.
+    change (Some (OAFree 0, tt, set_heap (bfocus pfree0) Child bC) = Some (kind, y, c1)) in Hp.
     injection Hp as <- <- <-.
     split; [reflexivity|intros [|]; reflexivity].
 Qed.
@@ -1021,7 +1049,7 @@ Qed.
 
 End HeapRegression.
 
-From TICL Require Import Lang.CoCSL.Separation.
+From TICL Require Import Lang.CoCSL.Asep Lang.CoCSL.Owned CTree.Interp.CSL.Owned CTree.Interp.CSL.Asep.
 From Stdlib Require Import List Lia Arith.PeanoNat Fin Vector Relations
   Classes.Morphisms Classes.RelationClasses Program.Equality.
 From Coinduction Require Import all.
@@ -1370,10 +1398,13 @@ Qed.
 
 (** ** Global AG and its split *)
 
-Lemma Inv_hsep d : Inv d -> hsep cellC cellP d.
-Proof. intros (Hwf & Hc & Hp & _); split; [exact Hwf|split; [exact Hc|exact Hp]]. Qed.
+Lemma Inv_hsep d : Inv d -> state_sat (fun c => asep (state_obligation Child cellC c) (state_obligation Parent cellP c)) d.
+Proof.
+  intros (Hwf & Hc & Hp & _); apply (proj2 (state_split_iff _ _ _)).
+  exact (conj Hwf (conj Hc Hp)).
+Qed.
 
-Theorem loops_global_hag : hAG owned_next (hsep cellC cellP) c0.
+Theorem loops_global_hag : hAG owned_next (state_sat (fun c => asep (state_obligation Child cellC c) (state_obligation Parent cellP c))) c0.
 Proof.
   apply (hAG_coind _ _ Inv); [|exact Inv_c0].
   intros d HI; split; [apply Inv_hsep, HI|split; [apply Inv_can, HI|]].
@@ -1482,11 +1513,12 @@ Definition pos_cfg (p : pos) (c : OwnedCfg) : OwnedCfg :=
   | None => c
   end.
 
-Fixpoint run (n : nat) : pos * OwnedCfg :=
-  match n with
-  | 0 => (Q0, c0)
-  | S n => let '(p, c) := run n in (next_pos p, set_pool (pos_cfg p c) (pool_of (next_pos p)))
-  end.
+(** The concrete pool update is iterated without a second recursive runner. *)
+Definition run (n : nat) : pos * OwnedCfg :=
+  Nat.iter n
+    (fun '(p, c) =>
+      (next_pos p, set_pool (pos_cfg p c) (pool_of (next_pos p))))
+    (Q0, c0).
 
 Definition fair_exec : Execution OwnedCfg OwnedAction unit :=
   {| states := fun n => snd (run n);
@@ -1494,15 +1526,25 @@ Definition fair_exec : Execution OwnedCfg OwnedAction unit :=
      emitted := fun _ => tt |}.
 
 Lemma run_pool n : oc_pool (snd (run n)) = pool_of (fst (run n)).
-Proof. destruct n as [|n]; [reflexivity|cbn; destruct (run n); reflexivity]. Qed.
+Proof.
+  unfold run.
+  apply (@Nat.iter_invariant n (pos * OwnedCfg) _
+    (fun pc => oc_pool (snd pc) = pool_of (fst pc))).
+  - intros [p c] _; reflexivity.
+  - reflexivity.
+Qed.
 
 Lemma run_step n :
   cellC (snd (run n)) -> cellP (snd (run n)) ->
   owned_step (states fair_exec n) (selected fair_exec n) (states fair_exec (S n)).
 Proof.
-  cbn [states selected fair_exec]; cbn [run].
+  intros Hc Hp; cbn [states selected fair_exec].
+  change (owned_step (snd (run n))
+    (act (pos_owner (fst (run n))) (pos_kind (fst (run n)) (snd (run n))))
+    (snd (let '(p, c) := run n in
+      (next_pos p, set_pool (pos_cfg p c) (pool_of (next_pos p)))))).
   pose proof (run_pool n) as Hpool.
-  destruct (run n) as [p c]; cbn [fst snd] in *; intros Hc Hp.
+  destruct (run n) as [p c]; cbn [fst snd] in *.
   unfold owned_step; rewrite Hpool.
   assert (HWc : thC PW (denote pc)) by (exists 0; apply cloop_unfold).
   assert (HWp : thP PW (denote pp)) by (exists 0; apply cloop_unfold).
@@ -1524,24 +1566,25 @@ Proof.
   - exact (phase_step_intro c 1 [GLc; tY 2 8 0] [Child; Parent] (Fin.FS Fin.F1) 2 8 0 PY (tY_in _ _ _) Hp).
 Qed.
 
-Lemma fair_exec_inv n : Inv (states fair_exec n).
+Lemma fair_exec_spec :
+  (forall n, Inv (states fair_exec n)) /\ owned_run fair_exec.
 Proof.
-  induction n as [|n IH]; [exact Inv_c0|].
-  pose proof IH as (_ & Hc & Hp & _).
-  exact (Inv_closed _ _ _ IH (run_step n Hc Hp)).
+  apply (execution_invariant_steps
+    (fun a c (_ : unit) c' => owned_step c a c') Inv fair_exec).
+  - exact Inv_c0.
+  - intros n HI; pose proof HI as (_ & Hc & Hp & _).
+    pose proof (run_step n Hc Hp) as Hstep.
+    split; [exact Hstep|exact (Inv_closed _ _ _ HI Hstep)].
 Qed.
-
-Lemma fair_exec_run : owned_run fair_exec.
-Proof. intro n; pose proof (fair_exec_inv n) as (_ & Hc & Hp & _); exact (run_step n Hc Hp). Qed.
 
 Lemma run_pos_S n : fst (run (S n)) = next_pos (fst (run n)).
-Proof. cbn [run]; destruct (run n); reflexivity. Qed.
-
-Lemma run_pos_add k n : fst (run (k + n)) = Nat.iter k next_pos (fst (run n)).
 Proof.
-  induction k as [|k IH]; [reflexivity|].
-  change (S k + n) with (S (k + n)); rewrite run_pos_S, IH; reflexivity.
+  change (fst (let '(p, c) := run n in
+    (next_pos p, set_pool (pos_cfg p c) (pool_of (next_pos p)))) =
+    next_pos (fst (run n))).
+  destruct (run n); reflexivity.
 Qed.
+
 
 Lemma fair_exec_recurrent i : infinitely (fun n => owner (selected fair_exec n) = i).
 Proof.
@@ -1551,15 +1594,19 @@ Proof.
       solve [ exists 0; reflexivity | exists 1; reflexivity | exists 2; reflexivity
             | exists 3; reflexivity | exists 4; reflexivity | exists 5; reflexivity ]. }
   destruct H as [k Hk]; exists (k + n); split; [lia|].
-  rewrite run_pos_add; exact Hk.
+  assert (Epos : fst (run (k + n)) = Nat.iter k next_pos (fst (run n))).
+  { unfold run; rewrite Nat.iter_add.
+    apply Nat.iter_swap_gen; intros [p c]; reflexivity. }
+  rewrite Epos; exact Hk.
 Qed.
 
 Theorem loops_global_heg :
   hEG owned_next cellC (project Child c0) /\ hEG owned_next cellP (project Parent c0).
 Proof.
   apply (global_heg_fair_split cellC cellP c0 fair_exec
-    (coupled_init _ _ _ _ _ _ loops_admissible) cellC_proper cellP_proper eq_refl fair_exec_run).
-  - intro n; apply Inv_hsep, fair_exec_inv.
+    (coupled_init _ _ _ _ _ _ loops_admissible) cellC_proper cellP_proper eq_refl
+    (proj2 fair_exec_spec)).
+  - intro n; apply Inv_hsep; exact (proj1 fair_exec_spec n).
   - apply fair_exec_recurrent.
   - apply fair_exec_recurrent.
 Qed.
@@ -1569,8 +1616,8 @@ Theorem loops_fork_heg :
   hEG owned_next cellP (init_local Parent pp hP ctx0 0 true).
 Proof.
   apply (fork_heg_fair_split pc (fun _ => pp) hC hP ctx0 0 cellC cellP fair_exec
-    loops_admissible cellC_proper cellP_proper eq_refl fair_exec_run).
-  - intro n; apply Inv_hsep, fair_exec_inv.
+    loops_admissible cellC_proper cellP_proper eq_refl (proj2 fair_exec_spec)).
+  - intro n; apply Inv_hsep; exact (proj1 fair_exec_spec n).
   - apply fair_exec_recurrent.
   - apply fair_exec_recurrent.
 Qed.
@@ -1650,20 +1697,20 @@ Proof.
   destruct Hs as (d' & a & Hs); exists d'; split; [exists a; exact Hs|exact (BInv_step d a d' HI Hs)].
 Qed.
 
-Theorem boundary_global_hag : hAG owned_next (hsep cell0 hTrue) b0.
+Theorem boundary_global_hag : hAG owned_next (state_sat (fun c => asep (state_obligation Child cell0 c) (state_obligation Parent hTrue c))) b0.
 Proof.
   apply (hAG_coind _ _ BInv); [|exact BInv_b0].
   intros d HI; pose proof HI as (Hwf & Hc & _).
-  split; [split; [exact Hwf|split; [exact Hc|exact I]]|].
+  split; [apply (proj2 (state_split_iff _ _ _)); exact (conj Hwf (conj Hc I))|].
   split; [destruct (BInv_can d HI) as (d' & Hs & _); exists d'; exact Hs|].
   intros d' [a Hs]; exact (BInv_step d a d' HI Hs).
 Qed.
 
-Theorem boundary_global_heg : hEG owned_next (hsep cell0 hTrue) b0.
+Theorem boundary_global_heg : hEG owned_next (state_sat (fun c => asep (state_obligation Child cell0 c) (state_obligation Parent hTrue c))) b0.
 Proof.
   apply (hEG_coind _ _ BInv); [|exact BInv_b0].
   intros d HI; pose proof HI as (Hwf & Hc & _).
-  split; [split; [exact Hwf|split; [exact Hc|exact I]]|].
+  split; [apply (proj2 (state_split_iff _ _ _)); exact (conj Hwf (conj Hc I))|].
   exact (BInv_can d HI).
 Qed.
 
@@ -1743,29 +1790,14 @@ Proof.
   unfold denote at 1, spin; rewrite source_raw_until, source_raw_ret; reflexivity.
 Qed.
 
-Definition is_guard (t : thread sE Bn) : Prop :=
-  match observe t with GuardF _ => True | _ => False end.
-
-Lemma is_guard_equ t u : t ≅ u -> is_guard u -> is_guard t.
-Proof.
-  intro H; unfold is_guard; step in H; cbn in H.
-  remember (observe t) as ot; remember (observe u) as ou; destruct H; subst; tauto.
-Qed.
-
-Lemma spin_headed n u : denote spin ≅ guards n u -> is_guard u.
-Proof.
-  induction n as [|n IH]; cbn; intro H.
-  - apply (is_guard_equ u (Guard (denote spin))); [|exact I].
-    rewrite <- H; apply spin_unfold.
-  - apply IH, equ_guard_inv; rewrite <- spin_unfold; exact H.
-Qed.
 
 Lemma spin_no_action a d : ~ owned_step (init_local Child spin managed_empty ctx0 0 true) a d.
 Proof.
   unfold owned_step, focus_step; cbn -[guards]; intro Hs.
-  destruct Hs as [(t & [n Hn] & _)|[(k & [n Hn] & _)|[(k & [n Hn] & _)|[([n Hn] & _)
-    |(Y & e & k & kind & y & c1 & [n Hn] & _)]]]];
-    apply spin_headed in Hn; exact Hn.
+  destruct Hs as [(t & Hhead & _)|[(k & Hhead & _)|[(k & Hhead & _)|[(Hhead & _)
+    |(Y & e & k & kind & y & c1 & Hhead & _)]]]];
+    destruct (self_guard_headed_guard _ _ spin_unfold Hhead) as [v Hv];
+    discriminate Hv.
 Qed.
 
 Theorem spin_no_hag : ~ hAG owned_next hTrue (init_local Child spin managed_empty ctx0 0 true).
@@ -1775,7 +1807,7 @@ Qed.
 
 End AlwaysRegression.
 
-From TICL Require Import Lang.CoCSL.Separation.
+From TICL Require Import Lang.CoCSL.Asep Lang.CoCSL.Owned CTree.Interp.CSL.Owned CTree.Interp.CSL.Asep.
 From Stdlib Require Import List Lia Arith.PeanoNat Fin Vector Relations Strings.String
   Classes.Morphisms Classes.RelationClasses Program.Equality.
 From Coinduction Require Import all.
@@ -1997,12 +2029,12 @@ Lemma view_done_C : view_pred done_C. Proof. apply view_hDone, view_cell. Qed.
 Lemma view_done_P : view_pred done_P. Proof. apply view_hDone, view_cell. Qed.
 Lemma view_cell_C0 : view_pred (cell_is Child 1 0). Proof. apply view_cell. Qed.
 
-Lemma proper_sep_inv : hproper (hsep inv_C inv_P).
-Proof. apply hsep_proper; apply view_pred_proper; [apply view_inv_C|apply view_inv_P]. Qed.
-Lemma proper_sep_done : hproper (hsep done_C done_P).
-Proof. apply hsep_proper; apply view_pred_proper; [apply view_done_C|apply view_done_P]. Qed.
-Lemma proper_sep_zero : hproper (hsep (cell_is Child 1 0) done_P).
-Proof. apply hsep_proper; apply view_pred_proper; [apply view_cell|apply view_done_P]. Qed.
+Lemma proper_sep_inv : hproper (state_sat (fun c => asep (state_obligation Child inv_C c) (state_obligation Parent inv_P c))).
+Proof. apply state_split_proper; apply view_pred_proper; [apply view_inv_C|apply view_inv_P]. Qed.
+Lemma proper_sep_done : hproper (state_sat (fun c => asep (state_obligation Child done_C c) (state_obligation Parent done_P c))).
+Proof. apply state_split_proper; apply view_pred_proper; [apply view_done_C|apply view_done_P]. Qed.
+Lemma proper_sep_zero : hproper (state_sat (fun c => asep (state_obligation Child (cell_is Child 1 0) c) (state_obligation Parent done_P c))).
+Proof. apply state_split_proper; apply view_pred_proper; [apply view_cell|apply view_done_P]. Qed.
 
 (** ** Ownership along the run *)
 
@@ -2021,11 +2053,12 @@ Lemma wf8 : owned_wf s8. Proof. exact (det_wf _ _ _ det78 wf7). Qed.
 Lemma wf9 : owned_wf s9. Proof. exact (det_wf _ _ _ det89 wf8). Qed.
 
 Local Ltac sep_tac W :=
-  split; [exact W|split; cbn; first [left; reflexivity|right; reflexivity|split; reflexivity]].
+  apply (proj2 (state_split_iff _ _ _)); split; [exact W|split];
+  cbn; first [left; reflexivity|right; reflexivity|split; reflexivity].
 
 (** ** Global AU and EU, and their splits *)
 
-Lemma fglobal_hau : hAU owned_next (hsep inv_C inv_P) (hsep done_C done_P) s0.
+Lemma fglobal_hau : hAU owned_next (state_sat (fun c => asep (state_obligation Child inv_C c) (state_obligation Parent inv_P c))) (state_sat (fun c => asep (state_obligation Child done_C c) (state_obligation Parent done_P c))) s0.
 Proof.
   pose proof proper_sep_inv as HP; pose proof proper_sep_done as HQ.
   apply (det_hAU _ _ _ _ _ HP HQ det01); [sep_tac wf0|].
@@ -2057,7 +2090,7 @@ Proof.
     [exact fadmissible|apply view_inv_C|apply view_inv_P|apply view_done_C|apply view_done_P|exact fglobal_hau].
 Qed.
 
-Lemma fglobal_heu : hEU owned_next (hsep inv_C inv_P) (hsep done_C done_P) s0.
+Lemma fglobal_heu : hEU owned_next (state_sat (fun c => asep (state_obligation Child inv_C c) (state_obligation Parent inv_P c))) (state_sat (fun c => asep (state_obligation Child done_C c) (state_obligation Parent done_P c))) s0.
 Proof.
   pose proof proper_sep_inv as HP; pose proof proper_sep_done as HQ.
   apply (det_hEU _ _ _ _ _ HP HQ det01); [sep_tac wf0|].
@@ -2082,7 +2115,7 @@ Qed.
 
 (** Zero own steps: the global witness ends at [s4], before any child action,
     where the child's endpoint already holds at its unchanged projection. *)
-Lemma fglobal_heu_zero : hEU owned_next (hsep inv_C inv_P) (hsep (cell_is Child 1 0) done_P) s0.
+Lemma fglobal_heu_zero : hEU owned_next (state_sat (fun c => asep (state_obligation Child inv_C c) (state_obligation Parent inv_P c))) (state_sat (fun c => asep (state_obligation Child (cell_is Child 1 0) c) (state_obligation Parent done_P c))) s0.
 Proof.
   pose proof proper_sep_inv as HP; pose proof proper_sep_zero as HQ.
   apply (det_hEU _ _ _ _ _ HP HQ det01); [sep_tac wf0|].
@@ -2108,79 +2141,143 @@ Lemma zero_child_projection :
 Proof. split; [oequ|reflexivity]. Qed.
 
 
-(** ** Erasure to the original runner *)
+(** ** Canonical trace of the original runner *)
 
 Definition sfinal : SSig := ((hunion (hsingle 1 1) (hsingle 2 8), hemp), (ctx0, 2)).
 
-(** Parent stamp [(0,8)@0], one scheduler selection, child stamp [(1,1)@1],
-    then the joined state with counter 2. *)
+(** Parent write snapshot and stamp [(0,8)@0], one scheduler selection,
+    child write snapshot and stamp [(1,1)@1], then counter 2. *)
 Definition ftrace : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit) :=
-  Vis (Log (inr (stamp (0, 8) 0) : CSLObs (nat * nat))) (fun _ =>
+  Vis (Log (CSLHeap (hC ⊎ hP') : CSLObs (nat * nat))) (fun _ =>
+  Vis (Log (CSLEmit (stamp (0, 8) 0) : CSLObs (nat * nat))) (fun _ =>
   brS (branchn 1) (fun _ =>
-  Vis (Log (inr (stamp (1, 1) 1) : CSLObs (nat * nat))) (fun _ =>
-  Ret (sfinal, tt)))).
+  Vis (Log (CSLHeap (hC' ⊎ hP') : CSLObs (nat * nat))) (fun _ =>
+  Vis (Log (CSLEmit (stamp (1, 1) 1) : CSLObs (nat * nat))) (fun _ =>
+  Ret (sfinal, tt)))))).
 
 (** The interpreter's administrative guards are not scheduler steps. *)
-Local Lemma er_ret c : erase_owned (Ret c) ≅ Ret (joined_state c, tt).
-Proof. unfold erase_owned; rewrite interp_ret_node, bind_ret_l; reflexivity. Qed.
-
-Local Lemma er_guard t : erase_owned (Guard t) ≅ Guard (erase_owned t).
-Proof. unfold erase_owned; rewrite interp_guard_node, bind_guard; reflexivity. Qed.
-
-Local Lemma er_step t : erase_owned (Step t) ≅ Step (Guard (erase_owned t)).
-Proof. unfold erase_owned; rewrite interp_step_node, bind_step, bind_guard; reflexivity. Qed.
-
-Local Lemma er_br {X} (b : Bn X) k :
-  erase_owned (Br b k) ≅ Br b (fun x => Guard (erase_owned (k x))).
+Local Lemma finite_det_runner s a s' :
+  erasable s -> det_act s a s' ->
+  erasable s' /\
+  ((forall h, erase_action_label a h = None) -> owned_interp s ~ owned_interp s').
 Proof.
-  unfold erase_owned; rewrite interp_br_node, bind_br.
-  setoid_rewrite bind_guard; reflexivity.
+  intros H [(d & Hs & E) _]; split.
+  - exact (erasable_equ d s' E (erasable_step s a d H Hs)).
+  - intro Hl; rewrite (proj1 (owned_interp_action s a d H Hs) (Hl _)).
+    apply owned_interp_equ; exact E.
 Qed.
 
-Local Lemma er_log a k :
-  erase_owned (Vis (Log a) k) ≅
-    match action_kind a with
-    | OAEmit p n => Vis (Log (inr (stamp p n) : CSLObs (nat * nat)))
-                         (fun x => Guard (erase_owned (k x)))
-    | OAStep => Step (Guard (erase_owned (k tt)))
-    | _ => Guard (erase_owned (k tt))
-    end.
+Local Lemma finite_log_runner c n v g j {Y} (e : sE Y) k kind y d out o :
+  oc_pool c = mk_pool (S n) v g (Some j) ->
+  (v $ j) ≅ Vis (inr1 (inr1 e)) k ->
+  owned_wf c -> component_event_ok Y e ->
+  prim_addr_ok (oc_anchor c (g $ j)) e ->
+  prim_step (g $ j) c e = Some (kind, y, d) ->
+  owned_equ (set_pool d (mk_pool (S n) (v @ j := k y) g (Some j))) out ->
+  action_logs (act (g $ j) kind) (joined_heap d) = (o :: List.nil)%list ->
+  owned_interp c ~ Vis (Log o) (fun _ => owned_interp out).
 Proof.
-  unfold erase_owned; rewrite interp_vis_node, bind_bind.
-  destruct a as [i []]; cbn [handle_owned action_kind];
-    rewrite ?bind_trigger, ?bind_step, ?bind_ret_l, ?bind_guard; try reflexivity.
-  setoid_rewrite bind_guard; reflexivity.
+  intros Hpool Hnode Hwf Hok Haddr Hp Hout Hlog.
+  pose proof (prim_reflect_joined (g $ j) c e Hwf Hok Haddr) as Hr.
+  rewrite Hp in Hr.
+  unfold owned_interp at 1; rewrite Hpool; cbn.
+  rewrite (interp_schedule_nd_equ sh (S n) v
+    (v @ j := Vis (inr1 (inr1 e)) k) (Some j) (joined_state c)).
+  2: { intro i; destruct (Fin.eq_dec i j) as [->|Hne].
+       - rewrite Vector.nth_replace_eq; exact Hnode.
+       - rewrite Vector.nth_replace_neq by congruence; reflexivity. }
+  rewrite (interp_schedule_nd_user sh n _ j e k (joined_state c))
+    by (rewrite Vector.nth_replace_eq; reflexivity).
+  rewrite Hr, emit_list_ret_bind, Vector.replace_replace_eq.
+  rewrite Hlog, emit_list_cons; cbn [emit_list List.fold_right].
+  apply sbisim_vis_id; intros []; split; [exact (owned_interp_equ _ out Hout)|constructor; reflexivity].
 Qed.
 
-Local Ltac er :=
-  try lazymatch goal with
-  | |- context [instrument_owned ?c] =>
-      rewrite (ctree_eta (instrument_owned c));
-      let node := eval hnf in (observe (instrument_owned c)) in
-      change (observe (instrument_owned c)) with node
-  end;
-  cbn -[instrument_owned erase_owned];
-  rewrite ?er_ret, ?er_guard, ?er_step, ?er_br, ?er_log.
-
-Lemma ferase : sbisim (simL owned_result_rel) (erase_owned (instrument_owned s0)) ftrace.
+Local Lemma finite_trace_runner (t u v : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)) :
+  t ~ u -> sbisim (simL event_eq owned_result_rel) u v ->
+  sbisim (simL event_eq owned_result_rel) t v.
 Proof.
-  er; apply sbisim_guard_l.
-  er; apply sbisim_guard_l.
-  er; apply sbisim_vis_id; intros []; split; [|constructor].
-  apply sbisim_guard_l.
-  er; apply sbisim_guard_l.
-  er; apply sbisim_br_id; intro x.
+  intros Htu Huv; apply sbisim_clos_sb; econstructor; [exact Htu|exact Huv|reflexivity].
+Qed.
+
+Lemma ferase : sbisim (simL event_eq owned_result_rel) (owned_interp s0) ftrace.
+Proof.
+  pose proof (admissible_erasable _ _ _ _ _ _ fadmissible) as H0.
+  destruct (finite_det_runner _ _ _ H0 det01) as [H1 E01].
+  destruct (finite_det_runner _ _ _ H1 det12) as [H2 _].
+  destruct (finite_det_runner _ _ _ H2 det23) as [H3 _].
+  destruct (finite_det_runner _ _ _ H3 det34) as [H4 E34].
+  destruct (finite_det_runner _ _ _ H4 det45) as [H5 _].
+  destruct (finite_det_runner _ _ _ H5 det56) as [H6 E56].
+  destruct (finite_det_runner _ _ _ H6 det67) as [H7 _].
+  destruct (finite_det_runner _ _ _ H7 det78) as [H8 _].
+  destruct (finite_det_runner _ _ _ H8 det89) as [H9 E89].
+  assert (E12 : owned_interp s1 ~
+  Vis (Log (CSLHeap (hC ⊎ hP') : CSLObs (nat * nat))) (fun _ => owned_interp s2)).
+  {
+    eapply finite_log_runner with (e := inl1 (HWrite 2 8)) (k := fun _ => tP2).
+    - reflexivity.
+    - cbn -[denote]; apply denote_write_bind.
+    - exact wf1.
+    - exact I.
+    - cbn; discriminate.
+    - reflexivity.
+    - oequ.
+    - reflexivity.
+  }
+  assert (E23 : owned_interp s2 ~
+  Vis (Log (CSLEmit (stamp (0,8) 0) : CSLObs (nat * nat))) (fun _ => owned_interp s3)).
+  {
+    eapply finite_log_runner with (e := inr1 (inr1 (Log (0,8)))) (k := fun _ => Ret tt).
+    - reflexivity.
+    - cbn -[denote]; apply denote_emit.
+    - exact wf2.
+    - exact I.
+    - exact I.
+    - reflexivity.
+    - oequ.
+    - reflexivity.
+  }
+  assert (E67 : owned_interp s6 ~
+  Vis (Log (CSLHeap (hC' ⊎ hP') : CSLObs (nat * nat))) (fun _ => owned_interp s7)).
+  {
+    eapply finite_log_runner with (e := inl1 (HWrite 1 1)) (k := fun _ => tC2).
+    - reflexivity.
+    - cbn -[denote]; apply denote_write_bind.
+    - exact wf6.
+    - exact I.
+    - cbn; discriminate.
+    - reflexivity.
+    - oequ.
+    - reflexivity.
+  }
+  assert (E78 : owned_interp s7 ~
+  Vis (Log (CSLEmit (stamp (1,1) 1) : CSLObs (nat * nat))) (fun _ => owned_interp s8)).
+  {
+    eapply finite_log_runner with (e := inr1 (inr1 (Log (1,1)))) (k := fun _ => Ret tt).
+    - reflexivity.
+    - cbn -[denote]; apply denote_emit.
+    - exact wf7.
+    - exact I.
+    - exact I.
+    - reflexivity.
+    - oequ.
+    - reflexivity.
+  }
+  eapply finite_trace_runner; [rewrite (E01 ltac:(intro; reflexivity)); exact E12|].
+  unfold ftrace; apply sbisim_vis_id; intros []; split; [|constructor; reflexivity].
+  eapply finite_trace_runner; [exact E23|]; apply sbisim_vis_id; intros []; split; [|constructor; reflexivity].
+  eapply finite_trace_runner; [rewrite (E34 ltac:(intro; reflexivity));
+    exact (owned_interp_select s4 0 [denote fchild] [Child])|].
+  apply sbisim_br_id; intro x.
   destruct (fin_case 0 x) as [->|[x' ->]]; [|inversion x'].
-  rewrite ?vector_remove_tail, ?vector_remove_head.
-  apply sbisim_guard_l.
-  er; apply sbisim_step; [constructor|].
-  repeat apply sbisim_guard_l.
-  er; apply sbisim_guard_l.
-  er; apply sbisim_guard_l.
-  er; apply sbisim_vis_id; intros []; split; [|constructor].
-  apply sbisim_guard_l.
-  er; apply sbisim_guard_l.
-  er; apply sbisim_ret; constructor.
+  apply sbisim_step; [constructor|].
+  eapply finite_trace_runner; [rewrite (E56 ltac:(intro; reflexivity)); exact E67|].
+  apply sbisim_vis_id; intros []; split; [|constructor; reflexivity].
+  eapply finite_trace_runner; [exact E78|]; apply sbisim_vis_id; intros []; split; [|constructor; reflexivity].
+  eapply finite_trace_runner; [rewrite (E89 ltac:(intro; reflexivity));
+    exact (owned_interp_terminal s9 H9 eq_refl)|].
+  apply sbisim_ret; constructor.
   split; [reflexivity|split; [reflexivity|]].
   split; intros [|[|[|a]]]; reflexivity.
 Qed.
@@ -2198,22 +2295,22 @@ Proof.
 Qed.
 
 #[local] Instance simL_result_Symmetric :
-  Symmetric (simL (E := writerE (CSLObs (nat * nat))) owned_result_rel).
-Proof. intros l l' []; constructor; symmetry; assumption. Qed.
+  Symmetric (simL (E := writerE (CSLObs (nat * nat))) event_eq owned_result_rel).
+Proof. intros l l' []; constructor; cbn [event_eq] in *; symmetry; assumption. Qed.
 
 #[local] Instance simL_result_Transitive :
-  Transitive (simL (E := writerE (CSLObs (nat * nat))) owned_result_rel).
+  Transitive (simL (E := writerE (CSLObs (nat * nat))) event_eq owned_result_rel).
 Proof.
-  intros l1 l2 l3 H1 H2; destruct H1; dependent destruction H2; constructor.
-  etransitivity; eassumption.
+  intros l1 l2 l3 H1 H2; destruct H1; dependent destruction H2; constructor;
+    cbn [event_eq] in *; etransitivity; eassumption.
 Qed.
 
-(** The original runner, through [owned_fork_erasure], has the same trace. *)
+(** The original runner, through [owned_fork_runner], has the same trace. *)
 Theorem fork_run_nd_trace :
-  sbisim (simL owned_result_rel) (run_nd (CBind (CFork fchild) fk) (hC ⊎ hP, (ctx0, 0))) ftrace.
+  sbisim (simL event_eq owned_result_rel) (run_nd (CBind (CFork fchild) fk) (hC ⊎ hP, (ctx0, 0))) ftrace.
 Proof.
-  etransitivity; [symmetry; exact (owned_fork_erasure fchild fk hC hP ctx0 0 fadmissible)|].
-  exact ferase.
+  eapply finite_trace_runner;
+    [symmetry; exact (owned_fork_runner fchild fk hC hP ctx0 0)|exact ferase].
 Qed.
 
 
@@ -2383,7 +2480,7 @@ Qed.
 Lemma var_value_run_nd_trace :
   run_nd pe_value (managed_empty, (ctxx, 0)) ~
     (brS (branchn 1) (fun _ =>
-      Vis (Log (inr (stamp (9, 3) 0) : CSLObs (nat * nat)))
+      Vis (Log (CSLEmit (stamp (9, 3) 0) : CSLObs (nat * nat)))
         (fun _ => Ret ((managed_empty, (ctxx, 1)), tt)))
       : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
@@ -2451,23 +2548,11 @@ Lemma assign_rejected : ~ component_ok (CAssign "x"%string (CLit 1)).
 Proof. intro H; cbn in H; destruct H as (_ & _ & H); exact (H ctx0). Qed.
 
 (** Rejection does not change the original runner's context-write semantics. *)
-Local Lemma denote_assign_lit name n :
-  denote (CAssign name (CLit n)) ≅
-    (source_get >>= fun ctx => source_put (add name n ctx) >>= fun _ => Ret tt).
-Proof.
-  unfold denote; cbn [denote_flow denote_exp].
-  rewrite bind_bind, bind_ret_l, bind_bind.
-  apply equ_clo_bind_eq; intro ctx.
-  rewrite bind_bind.
-  apply equ_clo_bind_eq; intros [].
-  rewrite bind_ret_l; reflexivity.
-Qed.
-
 Definition assigned_ctx : Ctx.Ctx := add "x"%string 1 ctx0.
 
 Lemma assign_run_nd_trace memory base :
   run_nd (CAssign "x"%string (CLit 1)) (memory, (ctx0, base)) ~
-    (Vis (Log (inl assigned_ctx : CSLObs (nat * nat)))
+    (Vis (Log (CSLCtx assigned_ctx : CSLObs (nat * nat)))
       (fun _ => Ret ((memory, (assigned_ctx, base)), tt))
       : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
@@ -2493,14 +2578,14 @@ Lemma assign_result memory base :
 Proof. repeat split. Qed.
 
 Lemma assign_original_return :
-  <[ {run_nd (CAssign "x"%string (CLit 1)) (hC, (ctx0, 0))}, World.Pure |=
+  <( {run_nd (CAssign "x"%string (CLit 1)) (hC, (ctx0, 0))}, World.Pure |=R
     ⊤ AU ret {fun '(s, _) _ =>
       lookup "x"%string (csl_context s) = Some 1 /\
-      csl_memory s = hC /\ csl_counter s = 0} ]>.
+      csl_memory s = hC /\ csl_counter s = 0} )>.
 Proof.
-  apply aur_csl_nd_assign_lit.
-  - apply ticll_now; split; [exact I|constructor].
-  - exact (assign_result hC 0).
+  apply (au_csl_nd_assign_lit (b:=true)).
+  - apply ticl_now; split; [exact I|constructor].
+  - apply ret_ret; [constructor|exact (assign_result hC 0)].
 Qed.
 
 Lemma alloc_rejected : ~ component_ok (CAlloc 1).
@@ -2550,19 +2635,22 @@ Proof.
 Qed.
 
 Lemma separated_done_joined d :
-  hsep done_C done_P d ->
+  state_sat (fun c => asep (state_obligation Child done_C c) (state_obligation Parent done_P c)) d ->
   hDone (fun d => final_cells (joined_state d, tt)) d.
 Proof.
-  intros (W & [HCt HC] & [HPt HP]); split.
+  intro HI; destruct (proj1 (state_split_iff _ _ _) HI) as (W & [HCt HC] & [HPt HP]); split.
   - unfold terminal in HCt, HPt |- *.
     pose proof (project_size_partition d); lia.
   - change (fst (oc_heap d Child) 1 = Some 1) in HC.
     change (fst (oc_heap d Parent) 2 = Some 8) in HP.
-    change (hunion (fst (oc_heap d Child)) (fst (oc_heap d Parent)) 1 = Some 1 /\
-      hunion (fst (oc_heap d Child)) (fst (oc_heap d Parent)) 2 = Some 8).
-    split; [apply hunion_some, HC|].
-    destruct W as (_ & _ & _ & _ & _ & _ & _ & [HD _]).
-    destruct (HD 2) as [Hnone|Hnone]; [rewrite hunion_none by exact Hnone; exact HP|congruence].
+    change (fst (joined_heap d) 1 = Some 1 /\ fst (joined_heap d) 2 = Some 8).
+    assert (Hsupport : forall i, support_le (oc_heap d i) (oc_anchor d i))
+      by (intros []; unfold owned_wf in W; tauto).
+    split.
+    + rewrite (joined_lookup d Child 1 W); [exact HC|].
+      apply (proj1 (Hsupport Child)); congruence.
+    + rewrite (joined_lookup d Parent 2 W); [exact HP|].
+      apply (proj1 (Hsupport Parent)); congruence.
 Qed.
 
 Lemma finite_owned_haf :
@@ -2578,7 +2666,7 @@ Proof.
 Qed.
 
 Theorem finite_raw_af_done :
-  auc (entailsL (SSig * unit) (CNow (fun _ => True)))
+  auc (entails (SSig * unit) false (CNow (fun _ => True)))
     (fun _ wd => done_with (fun r _ => final_cells r) wd)
     (run_nd (CBind (CFork fchild) fk) (hC ⊎ hP, (ctx0, 0))) World.Pure.
 Proof.
@@ -2587,7 +2675,7 @@ Proof.
 Qed.
 
 Theorem finite_raw_ef_done :
-  euc (entailsL (SSig * unit) (CNow (fun _ => True)))
+  euc (entails (SSig * unit) false (CNow (fun _ => True)))
     (fun _ wd => done_with (fun r _ => final_cells r) wd)
     (run_nd (CBind (CFork fchild) fk) (hC ⊎ hP, (ctx0, 0))) World.Pure.
 Proof.
@@ -2616,11 +2704,11 @@ Proof. split; [reflexivity|intros (d & a & Hs); exact Hs]. Qed.
 
 Theorem terminal_raw_value_transition :
   exists T,
-    ktrans_ (erase_owned (instrument_owned s9)) World.Pure
+    ktrans_ (owned_interp s9) World.Pure
       T (World.Done (joined_state s9, tt)) /\
         T ~ (Stuck : ctreeW (CSLObs (nat * nat)) Bn (SSig * unit)).
 Proof.
-  destruct (erase_owned_terminal_trans s9 s9 finite_terminal_erasable
+  destruct (owned_interp_terminal_trans s9 s9 finite_terminal_erasable
     (rt_refl _ _ _) eq_refl) as (T & Ht & Hs).
   exists T; split; [apply KtransDone; exact Ht|exact Hs].
 Qed.
@@ -2631,9 +2719,9 @@ Theorem terminal_not_raw_done :
 Proof. intro H; inversion H. Qed.
 
 Theorem terminal_raw_af_done :
-  auc (entailsL (SSig * unit) (CNow (fun _ => True)))
+  auc (entails (SSig * unit) false (CNow (fun _ => True)))
     (fun _ wd => done_with (fun r _ => final_cells r) wd)
-    (erase_owned (instrument_owned s9)) World.Pure.
+    (owned_interp s9) World.Pure.
 Proof.
   apply (owned_haf_done_ticl final_cells s9 World.Pure);
     [exact finite_terminal_erasable|constructor|exact final_cells_proper|].
@@ -2672,7 +2760,7 @@ Qed.
 Definition raw_silence_rank (d : OwnedCfg) : nat := rank d.
 
 Lemma phase_silent_decreases d a d' :
-  Inv d -> owned_step d a d' -> erase_action_label a = None ->
+  Inv d -> owned_step d a d' -> erase_action_label a (joined_heap d') = None ->
   raw_silence_rank d' < raw_silence_rank d.
 Proof.
   intros HI Hs He; destruct (Inv_step d a d' HI Hs) as [_ [Hf|Hr]]; [|exact Hr].
@@ -2696,12 +2784,13 @@ Proof.
 Qed.
 
 Lemma raw_Inv_silent_decreases d a d' :
-  raw_Inv d -> owned_step d a d' -> erase_action_label a = None ->
+  raw_Inv d -> owned_step d a d' -> erase_action_label a (joined_heap d') = None ->
   raw_silence_rank d' < raw_silence_rank d.
 Proof.
   intros (q & HI & E) Hs He.
   destruct (owned_step_equ d q a d' (symmetry E) Hs) as (q' & Hq & E').
   unfold raw_silence_rank; rewrite (phase_rank_equ d' q' E'), <- (phase_rank_equ q d E).
+  rewrite (joined_heap_equ _ _ E') in He.
   exact (phase_silent_decreases q a q' HI Hq He).
 Qed.
 
@@ -2715,7 +2804,7 @@ Qed.
 
 Theorem loops_raw_ag :
   <( {run_nd (CBind (CFork pc) (fun _ => pp)) (hC ⊎ hP, (ctx0, 0))},
-    World.Pure |= AG ⊤ )>.
+    World.Pure |=L AG ⊤ )>.
 Proof.
   exact (fork_hag_ticl pc (fun _ => pp) hC hP ctx0 0 raw_Inv raw_silence_rank
     loops_admissible raw_Inv_proper raw_Inv_silent_decreases loops_raw_invariant_hag).
@@ -2724,25 +2813,28 @@ Qed.
 (** Visibility is proved from this execution's actual emit positions, not
     from the independent facts that both owners occur infinitely often. *)
 Lemma fair_exec_infinitely_visible :
-  infinitely (fun n => erase_action_label (selected fair_exec n) <> None).
+  infinitely (fun n => erase_action_label (selected fair_exec n) (joined_heap (states fair_exec (S n))) <> None).
 Proof.
   intro n.
-  assert (H : exists k, forall d,
+  assert (H : exists k, forall d post,
     erase_action_label (act (pos_owner (Nat.iter k next_pos (fst (run n))))
-      (pos_kind (Nat.iter k next_pos (fst (run n))) d)) <> None).
+      (pos_kind (Nat.iter k next_pos (fst (run n))) d)) post <> None).
   { destruct (fst (run n));
-      solve [exists 0; intro; discriminate | exists 1; intro; discriminate
-            | exists 2; intro; discriminate | exists 3; intro; discriminate]. }
+      solve [exists 0; intros; discriminate | exists 1; intros; discriminate
+            | exists 2; intros; discriminate | exists 3; intros; discriminate]. }
   destruct H as [k Hk]; exists (k + n); split; [lia|].
-  cbn [selected fair_exec]; rewrite run_pos_add; apply Hk.
+  assert (Epos : fst (run (k + n)) = Nat.iter k next_pos (fst (run n))).
+  { unfold run; rewrite Nat.iter_add.
+    apply Nat.iter_swap_gen; intros [p c]; reflexivity. }
+  cbn [selected fair_exec]; rewrite Epos; apply Hk.
 Qed.
 
 Theorem loops_raw_eg :
   <( {run_nd (CBind (CFork pc) (fun _ => pp)) (hC ⊎ hP, (ctx0, 0))},
-    World.Pure |= EG ⊤ )>.
+    World.Pure |=L EG ⊤ )>.
 Proof.
   exact (fork_heg_ticl pc (fun _ => pp) hC hP ctx0 0 fair_exec
-    loops_admissible eq_refl fair_exec_run fair_exec_infinitely_visible).
+    loops_admissible eq_refl (proj2 fair_exec_spec) fair_exec_infinitely_visible).
 Qed.
 
 End AlwaysTiclRegression.
@@ -2857,20 +2949,17 @@ Proof. apply project_init_parent. Qed.
 Lemma read_Inv_silent_reach c d :
   read_Inv c -> clos_refl_trans _ silent_next c d -> read_Inv d.
 Proof.
-  intros HI H; revert HI.
-  induction H as [c d [a [Hs _]]|c|c d e _ IH1 _ IH2]; intro HI.
-  - exact (proj2 (read_Inv_step c a d HI Hs)).
-  - exact HI.
-  - apply IH2, IH1, HI.
+  intros HI H; eapply clos_refl_trans_preserves; [|exact HI|exact H].
+  intros x y Hx [a [Hs _]]; exact (proj2 (read_Inv_step x a y Hx Hs)).
 Qed.
 
 Lemma read_Inv_nonterminal d : read_Inv d -> tp_size (oc_pool d) <> 0.
 Proof. intros (_ & n & v & g & j & Hp & _); rewrite Hp; cbn; lia. Qed.
 
-Theorem read_loop_erasure_stuck : is_stuck (erase_owned (instrument_owned read_initial)).
+Theorem read_loop_erasure_stuck : is_stuck (owned_interp read_initial).
 Proof.
   intros l T Ht.
-  destruct (erase_owned_trans_forward read_initial l T
+  destruct (owned_interp_trans_forward read_initial l T
     (admissible_erasable (CoCSLSyntax.CRet tt) read_loop
       managed_empty read_heap List.nil 0 read_admissible) Ht)
     as (d & Hd & [(a & d' & Hs & Hl & _)|(Hz & _)]).
@@ -2880,7 +2969,7 @@ Proof.
 Qed.
 
 Theorem read_loop_erasure_no_ag :
-  ~ <( {erase_owned (instrument_owned read_initial)}, World.Pure |= AG ⊤ )>.
+  ~ <( {owned_interp read_initial}, World.Pure |=L AG ⊤ )>.
 Proof.
   intro H; cdestruct H; destruct Hs as (T & w & Ht).
   apply ktrans_trans in Ht as (l & Ht & _); exact (read_loop_erasure_stuck l T Ht).
@@ -2890,8 +2979,8 @@ Theorem read_loop_original_stuck :
   is_stuck (run_nd (CBind (CFork (CoCSLSyntax.CRet tt)) (fun _ => read_loop))
     (managed_empty ⊎ read_heap, (List.nil, 0))).
 Proof.
-  pose proof (owned_fork_erasure (CoCSLSyntax.CRet tt) (fun _ => read_loop)
-    managed_empty read_heap List.nil 0 read_admissible) as Hsb.
+  pose proof (owned_fork_runner (CoCSLSyntax.CRet tt) (fun _ => read_loop)
+    managed_empty read_heap List.nil 0) as Hsb.
   step in Hsb; destruct Hsb as [_ Hb]; cbn in Hb.
   intros l T Ht; destruct (Hb l T Ht) as (l' & T' & Ht' & _ & _).
   exact (read_loop_erasure_stuck l' T' Ht').
@@ -2899,7 +2988,7 @@ Qed.
 
 Theorem read_loop_original_no_ag :
   ~ <( {run_nd (CBind (CFork (CoCSLSyntax.CRet tt)) (fun _ => read_loop))
-    (managed_empty ⊎ read_heap, (List.nil, 0))}, World.Pure |= AG ⊤ )>.
+    (managed_empty ⊎ read_heap, (List.nil, 0))}, World.Pure |=L AG ⊤ )>.
 Proof.
   intro H; cdestruct H; destruct Hs as (T & w & Ht).
   apply ktrans_trans in Ht as (l & Ht & _); exact (read_loop_original_stuck l T Ht).
@@ -2951,7 +3040,7 @@ Theorem read_forever_infinitely_reads :
 Proof. intro n; exists n; split; [lia|reflexivity]. Qed.
 
 Theorem read_forever_not_infinitely_visible :
-  ~ infinitely (fun n => erase_action_label (selected read_forever n) <> None).
+  ~ infinitely (fun n => erase_action_label (selected read_forever n) (joined_heap (states read_forever (S n))) <> None).
 Proof. intro H; destruct (H 0) as (n & _ & Hn); apply Hn; reflexivity. Qed.
 
 End SilentReadTiclRegression.

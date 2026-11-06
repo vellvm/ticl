@@ -1,3 +1,4 @@
+From TICL Require Import CTree.Interp.Yield.Policy.
 (** * Recurring per-queue progress for two active queues under any fair scheduler.
 
     Both workers of [parallel_queues] rotate their OWN queue in the shared
@@ -140,15 +141,17 @@ Section Composition.
       + (* the element is at the head: observe it, or get closer to the bound *)
         pose proof (find_index_head Nat.eqb Nat.eqb_eq _ _ _ Hff) as Hv; subst pv.
         destruct (find_index_last_ex Nat.eqb Nat.eqb_eq nlf vsf') as (d' & Hd').
-        exists (kb - S c, d'), s', (inr (stamp (tagf, nlf) c)).
+        exists (kb - S c, d'), s', (queue_turn_logs (CSLEmit (stamp (tagf,nlf) c))
+          fh a (List.hd 0 nsf') (List.last (a :: nsf') 0) (h,allocs)).
         split; [exact Hturn |]; split; [now apply Hinv |].
         destruct (Nat.le_gt_cases kb c) as [Hle | Hgt].
-        * left; cbn; apply HP; exact Hle.
+        * left; apply List.Exists_cons_hd; cbn; apply HP; exact Hle.
         * right; left; left; cbn; lia.
       + (* the element is deeper: rotate, its position falls *)
         pose proof (find_index_rotl Nat.eqb nlf pv vsf' d0 Hff) as Hd0.
         rewrite rotl_cons in Hd0.
-        exists (kb - S c, d0), s', (inr (stamp (tagf, pv) c)).
+        exists (kb - S c, d0), s', (queue_turn_logs (CSLEmit (stamp (tagf,pv) c))
+          fh a (List.hd 0 nsf') (List.last (a :: nsf') 0) (h,allocs)).
         split; [exact Hturn |]; split; [now apply Hinv |].
         right; left; destruct (Nat.le_gt_cases kb c) as [Hle | Hgt].
         * right; cbn; split; lia.
@@ -167,7 +170,8 @@ Section Composition.
       rewrite rotl_cons in Hdg'.
       exists (kb - S c, d),
         ((rot_heap gh b (List.hd 0 nsg') (zof gh nsg') h, allocs), (ctx, S c)),
-        (inr (stamp (tagg, pw) c)).
+        (queue_turn_logs (CSLEmit (stamp (tagg,pw) c))
+          gh b (List.hd 0 nsg') (List.last (b :: nsg') 0) (h,allocs)).
       split; [exact (exact_worker_turn tagg gh b nsg' pw vsg' h allocs ctx c Hqg) |].
       split.
       { exists nsf, vsf, (nsg' ++ [b]), (vsg' ++ [pw]), dg'; cbn.
@@ -178,27 +182,6 @@ Section Composition.
       + right; left; left; cbn; lia.
   Qed.
 
-  (** ** The recurrence theorem for the focused queue, for any fair policy. *)
-  Theorem fair_agaf_pool : forall (sch : Scheduler) `{FairScheduler sch} (tagf tagg : nat)
-      (fi : Fin.t 2) (ps : Vector.t (CProg unit) 2) nlf nlg kb (P : indexed (nat * nat) -> Prop),
-    (ps $ fi) = worker tagf fh -> (forall j, j <> fi -> (ps $ j) = worker tagg gh) ->
-    (forall j, Nat.le kb j -> P (stamp (tagf, nlf) j)) ->
-    forall focus st h allocs ctx c nsf vsf nsg vsg df dg,
-      qrep fh nsf vsf h -> qrep gh nsg vsg h -> Disj fh nsf gh nsg ->
-      find_index Nat.eqb nlf vsf = Some df -> find_index Nat.eqb nlg vsg = Some dg ->
-      <( {run_fair_pool sch ps focus st ((h,allocs),(ctx,c))}, Pure
-         |= AG (AF visW {fair_obs (csl_indexed P)}) )>.
-  Proof.
-    intros sch Hfair tagf tagg fi ps nlf nlg kb P Hfi Hother HP
-      focus st h allocs ctx c nsf vsf nsg vsg df dg Hqf Hqg Hdj Hff Hfg.
-    unfold run_fair_pool.
-    apply (agaf_fair_turns sh sch (csl_pool ps) fi (Ifair nlf nlg kb) (fun g => g) lexnat
-      (csl_indexed P) lexnat_wf (worker_fair_turns tagf tagg nlf nlg kb fi ps P Hfi Hother HP)
-      (kb - c, df)); [|constructor].
-    exists nsf, vsf, nsg, vsg, dg; cbn.
-    split; [exact Hqf |]; split; [exact Hqg |]; split; [exact Hdj |];
-      split; [exact Hff |]; split; [exact Hfg | reflexivity].
-  Qed.
 End Composition.
 
 (** ** The two per-queue theorems.
@@ -213,21 +196,28 @@ End Composition.
 Theorem fair_agaf_q1_gen (sch : Scheduler) `{FairScheduler sch} :
   forall u v nl1 nl2 kb (P: (indexed (nat * nat)) -> Prop),
     (forall j, Nat.le kb j -> P (stamp (1,nl1) j)) ->
-    forall focus st h allocs ctx c ns1 vs1 ns2 vs2 d1 d2,
+    forall focus st h allocs ctx c ns1 vs1 ns2 vs2 d1 d2 w,
       qrep u ns1 vs1 h -> qrep v ns2 vs2 h -> Disj u ns1 v ns2 ->
       find_index Nat.eqb nl1 vs1 = Some d1 -> find_index Nat.eqb nl2 vs2 = Some d2 ->
-      <( {run_fair_pool sch [worker 2 v; worker 1 u]%vector focus st ((h, allocs), (ctx, c))}, Pure
-         |= AG (AF visW {fair_obs (csl_indexed P)}) )>.
+      not_done w ->
+      <( {run_fair_pool sch [worker 2 v; worker 1 u]%vector focus st ((h, allocs), (ctx, c))}, w
+         |=L AG (AF visW {fair_obs (csl_indexed P)}) )>.
 Proof.
-  intros u v nl1 nl2 kb P HP focus st h allocs ctx c ns1 vs1 ns2 vs2 d1 d2 Hq1 Hq2 Hdj Hf1 Hf2.
+  intros u v nl1 nl2 kb P HP focus st h allocs ctx c ns1 vs1 ns2 vs2 d1 d2 w Hq1 Hq2 Hdj Hf1 Hf2 Hw.
   assert (Hother : forall j : Fin.t 2, j <> Fin.FS Fin.F1 ->
     ([worker 2 v; worker 1 u]%vector $ j) = worker 2 v).
   { intro j; pattern j; apply Fin.caseS'; [intros _; reflexivity|].
     intro k; pattern k; apply Fin.caseS'; [intro Hc; exfalso; apply Hc; reflexivity|].
     intro z; inversion z. }
-  apply (fair_agaf_pool u v sch 1 2 (Fin.FS Fin.F1) [worker 2 v; worker 1 u]%vector nl1 nl2 kb P eq_refl
-    Hother
-    HP focus st h allocs ctx c ns1 vs1 ns2 vs2 d1 d2 Hq1 Hq2 Hdj Hf1 Hf2).
+  unfold run_fair_pool.
+  apply (agaf_fair_turns sh sch _ (Fin.FS Fin.F1) (Ifair u v nl1 nl2 kb)
+    (fun g => g) lexnat (csl_indexed P) lexnat_wf
+    (worker_fair_turns u v 1 2 nl1 nl2 kb (Fin.FS Fin.F1)
+      [worker 2 v; worker 1 u]%vector P eq_refl Hother HP) (kb - c,d1));
+    [|exact Hw].
+  exists ns1, vs1, ns2, vs2, d2; cbn.
+  split; [exact Hq1|]; split; [exact Hq2|]; split; [exact Hdj|];
+    split; [exact Hf1|]; split; [exact Hf2|reflexivity].
 Qed.
 
 (** *** Queue 2 (slot [F1], tag 2) *)
@@ -235,19 +225,26 @@ Qed.
 Theorem fair_agaf_q2_gen (sch : Scheduler) `{FairScheduler sch} :
   forall u v nl1 nl2 kb (P: (indexed (nat * nat)) -> Prop),
     (forall j, Nat.le kb j -> P (stamp (2,nl2) j)) ->
-    forall focus st h allocs ctx c ns1 vs1 ns2 vs2 d1 d2,
+    forall focus st h allocs ctx c ns1 vs1 ns2 vs2 d1 d2 w,
       qrep u ns1 vs1 h -> qrep v ns2 vs2 h -> Disj u ns1 v ns2 ->
       find_index Nat.eqb nl1 vs1 = Some d1 -> find_index Nat.eqb nl2 vs2 = Some d2 ->
-      <( {run_fair_pool sch [worker 2 v; worker 1 u]%vector focus st ((h, allocs), (ctx, c))}, Pure
-         |= AG (AF visW {fair_obs (csl_indexed P)}) )>.
+      not_done w ->
+      <( {run_fair_pool sch [worker 2 v; worker 1 u]%vector focus st ((h, allocs), (ctx, c))}, w
+         |=L AG (AF visW {fair_obs (csl_indexed P)}) )>.
 Proof.
-  intros u v nl1 nl2 kb P HP focus st h allocs ctx c ns1 vs1 ns2 vs2 d1 d2 Hq1 Hq2 Hdj Hf1 Hf2.
+  intros u v nl1 nl2 kb P HP focus st h allocs ctx c ns1 vs1 ns2 vs2 d1 d2 w Hq1 Hq2 Hdj Hf1 Hf2 Hw.
   assert (Hother : forall j : Fin.t 2, j <> Fin.F1 ->
     ([worker 2 v; worker 1 u]%vector $ j) = worker 1 u).
   { intro j; pattern j; apply Fin.caseS'; [intro Hc; exfalso; apply Hc; reflexivity|].
     intro k; pattern k; apply Fin.caseS'; [intros _; reflexivity|].
     intro z; inversion z. }
-  apply (fair_agaf_pool v u sch 2 1 Fin.F1 [worker 2 v; worker 1 u]%vector nl2 nl1 kb P eq_refl
-    Hother
-    HP focus st h allocs ctx c ns2 vs2 ns1 vs1 d2 d1 Hq2 Hq1 (Disj_sym _ _ _ _ Hdj) Hf2 Hf1).
+  unfold run_fair_pool.
+  apply (agaf_fair_turns sh sch _ Fin.F1 (Ifair v u nl2 nl1 kb)
+    (fun g => g) lexnat (csl_indexed P) lexnat_wf
+    (worker_fair_turns v u 2 1 nl2 nl1 kb Fin.F1
+      [worker 2 v; worker 1 u]%vector P eq_refl Hother HP) (kb - c,d2));
+    [|exact Hw].
+  exists ns2, vs2, ns1, vs1, d1; cbn.
+  split; [exact Hq2|]; split; [exact Hq1|]; split; [exact (Disj_sym _ _ _ _ Hdj)|];
+    split; [exact Hf2|]; split; [exact Hf1|reflexivity].
 Qed.

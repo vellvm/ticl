@@ -1,9 +1,10 @@
+From TICL Require Import CTree.Interp.Yield.Policy.
 (** * Shared: one finite heap queue rotated forever by two spawned workers.
 
     Both workers of [shared_queue] rotate the SAME queue.  Each scheduled turn
-    of either worker is an exact first-yield source segment that logs one pop
-    and rotates the queue once ([exact_worker_turn]).  The invariant/variant
-    certificate [shared_worker_turn] is the queue's standard rank argument,
+    of either worker is an exact first-yield segment logging one pop and four
+    post-write snapshots, then rotating the queue once ([exact_worker_turn]).
+    The certificate [shared_worker_turn] is the queue's standard rank argument,
     stated per worker slot so that it is independent of which worker the
     scheduler selects. *)
 
@@ -18,12 +19,15 @@ From TICL Require Import
   Utils.Relations
   CTree.Logic.Yield
   CTree.Logic.AG
+  CTree.Logic.AF
+  CTree.Logic.Bind
   CTree.Interp.Refine
   CTree.Interp.Yield.Mod
   CTree.Interp.Yield.RoundRobin
   CTree.Interp.Yield.Fair
   CTree.Logic.State
-  Logic.Core.
+  Logic.Core
+  CTree.Logic.Trace.
 From examples Require Import CSL.Queue.Representation CSL.Queue.Operations CSL.Queue.Program
   CSL.Queue.Trace CSL.Queue.Layout CSL.Queue.Frame.
 
@@ -36,11 +40,13 @@ Local Open Scope list_scope.
 Lemma exact_worker_turn : forall tag hdr a ns v vs h allocs ctx c,
   qrep hdr (a :: ns) (v :: vs) h ->
   segment_to sh csl_equ (denote (worker tag hdr))
-    ((h,allocs),(ctx,c)) [inr (stamp (tag,v) c)]
+    ((h,allocs),(ctx,c)) (queue_turn_logs (CSLEmit (stamp (tag,v) c))
+      hdr a (List.hd 0 ns) (last (a :: ns) 0) (h,allocs))
     (denote (worker tag hdr))
     ((rot_heap hdr a (List.hd 0 ns) (zof hdr ns) h,allocs),(ctx,S c)).
 Proof.
   intros tag hdr a ns v vs h allocs ctx c Hq.
+  unfold queue_turn_logs; cbn [fst snd].
   pose proof Hq as (Hwf & Hhd & Htl & Hch & Hdom).
   cbn in Hhd, Htl.
   apply chain_cons in Hch as (Ha & Hsa & Hch).
@@ -90,11 +96,11 @@ Definition SharedInv (hdr nl k : nat) (g : nat * nat) (s : SSig) : Prop :=
     or strictly decreases the rank [(k - counter, position of nl)]. *)
 Lemma shared_worker_turn : forall tag hdr nl k g s,
   SharedInv hdr nl k g s ->
-  exists g' s' o,
-    segment_to sh csl_equ (denote (worker tag hdr)) s [o]
+  exists g' s' logs,
+    segment_to sh csl_equ (denote (worker tag hdr)) s logs
       (denote (worker tag hdr)) s' /\
     SharedInv hdr nl k g' s' /\
-    (shared_pop_after nl k o \/ lexnat g' g).
+    (List.Exists (shared_pop_after nl k) logs \/ lexnat g' g).
 Proof.
   intros tag hdr nl k g s (ns & vs & d & Hq & Hf & Hg).
   destruct s as ((h, allocs), (ctx, c)); cbn in Hq, Hg; subst g.
@@ -109,14 +115,16 @@ Proof.
   destruct d as [| d0].
   - pose proof (find_index_head Nat.eqb Nat.eqb_eq _ _ _ Hf) as Hv; subst v.
     destruct (find_index_last_ex Nat.eqb Nat.eqb_eq nl vs') as (d' & Hd').
-    exists (k - S c, d'), s', (inr (stamp (tag, nl) c)).
+    exists (k - S c, d'), s', (queue_turn_logs (CSLEmit (stamp (tag,nl) c))
+      hdr a (List.hd 0 ns') (last (a :: ns') 0) (h,allocs)).
     split; [exact Hturn |]; split; [now apply Hstep |].
     destruct (Nat.le_gt_cases k c) as [Hle | Hgt].
-    + left; cbn; split; [reflexivity | exact Hle].
+    + left; apply List.Exists_cons_hd; cbn; split; [reflexivity | exact Hle].
     + right; left; cbn; lia.
   - pose proof (find_index_rotl Nat.eqb nl v vs' d0 Hf) as Hd0.
     rewrite rotl_cons in Hd0.
-    exists (k - S c, d0), s', (inr (stamp (tag, v) c)).
+    exists (k - S c, d0), s', (queue_turn_logs (CSLEmit (stamp (tag,v) c))
+      hdr a (List.hd 0 ns') (last (a :: ns') 0) (h,allocs)).
     split; [exact Hturn |]; split; [now apply Hstep |].
     right; destruct (Nat.le_gt_cases k c);
       [right; cbn; split; lia | left; cbn; lia].
@@ -144,73 +152,76 @@ Proof.
     + intro z; inversion z.
 Qed.
 
-(** Plain recurrence uses the same certificate at occurrence bound [0]. *)
-Lemma shared_ranked_pop hdr nl :
-  RankedTurns sh (csl_pool [worker 2 hdr; worker 1 hdr]%vector)
-    (SharedInv hdr nl 0) (fun g => g) lexnat (shared_pop nl).
-Proof.
-  intros g s i Hinv.
-  destruct (shared_ranked hdr nl 0 g s i Hinv)
-    as (g' & s' & o & Hseg & Hinv' & [HP|Hlt]);
-    exists g', s', o; split; [exact Hseg| |exact Hseg|];
-    split; try exact Hinv'.
-  - left; destruct o as [ctx|o]; [destruct HP|exact (proj1 HP)].
-  - right; exact Hlt.
-Qed.
 
-Lemma shared_pool_agaf_nd hdr nl k g s (P : CSLObs (nat * nat) -> Prop) :
+Lemma shared_pool_agaf_nd hdr nl k g s w0 (P : CSLObs (nat * nat) -> Prop) :
   RankedTurns sh (csl_pool [worker 2 hdr; worker 1 hdr]%vector)
     (SharedInv hdr nl k) (fun g => g) lexnat P ->
   SharedInv hdr nl k g s ->
-  <( {run_nd_pool [worker 2 hdr; worker 1 hdr]%vector None s}, Pure
-     |= AG (AF visW {P}) )>.
+  not_done w0 ->
+  <( {run_nd_pool [worker 2 hdr; worker 1 hdr]%vector None s}, w0
+     |=L AG (AF visW {P}) )>.
 Proof.
-  intros Hranked Hinv.
+  intros Hranked Hinv Hw0.
   apply (ag_csl_nd_invariance _ (SharedInv hdr nl k) _
     (ranked_turns_closed sh _ _ _ _ _ Hranked)) with (g := g);
-    [|exact Hinv|constructor].
-  intros g0 s0 focus w Hinv0 Hw.
-  exact (aul_csl_nd_eventually _ _ (fun g => g) lexnat P lexnat_wf Hranked
-    g0 s0 focus w Hinv0 Hw).
+    [| |exact Hinv|exact Hw0].
+  - intros o t w Hw Hphi.
+    pose proof (af_log (b:=false) o t w _ Hw Hphi) as Hlog.
+    unfold log in Hlog; rewrite bind_vis in Hlog;
+      setoid_rewrite bind_ret_l in Hlog; exact Hlog.
+  - intros g0 s0 focus w Hinv0 Hw.
+    exact (aul_csl_nd_eventually _ _ (fun g => g) lexnat P lexnat_wf Hranked
+      g0 s0 focus w Hinv0 Hw).
 Qed.
 
-Lemma shared_pool_agaf_rr hdr nl k g s cursor (P : CSLObs (nat * nat) -> Prop) :
-  RankedTurns sh (csl_pool [worker 2 hdr; worker 1 hdr]%vector)
-    (SharedInv hdr nl k) (fun g => g) lexnat P ->
-  SharedInv hdr nl k g s ->
-  <( {run_rr_pool [worker 2 hdr; worker 1 hdr]%vector None cursor s}, Pure
-     |= AG (AF visW {fair_obs P}) )>.
-Proof.
-  intros Hranked Hinv.
-  apply (ag_csl_rr_invariance _ (SharedInv hdr nl k) _
-    (ranked_turns_closed sh _ _ _ _ _ Hranked)) with (g := g);
-    [|exact Hinv|constructor].
-  intros g0 s0 focus c0 w Hinv0 Hw.
-  exact (aul_csl_rr_eventually _ _ (fun g => g) lexnat P lexnat_wf Hranked
-    g0 s0 focus c0 w Hinv0 Hw).
-Qed.
 
 (** Under ANY fair policy: both slots close a turn that hits the target or
     drops the rank, so every slot is helpful; [Fin.F1] is picked arbitrarily. *)
-Lemma shared_pool_agaf_fair (sch : Scheduler) `{FairScheduler sch} hdr nl k g s focus st
+Lemma shared_pool_agaf_fair (sch : Scheduler) `{FairScheduler sch} hdr nl k g s focus st w0
   (P : CSLObs (nat * nat) -> Prop) :
   RankedTurns sh (csl_pool [worker 2 hdr; worker 1 hdr]%vector)
     (SharedInv hdr nl k) (fun g => g) lexnat P ->
   SharedInv hdr nl k g s ->
-  <( {run_fair_pool sch [worker 2 hdr; worker 1 hdr]%vector focus st s}, Pure
-     |= AG (AF visW {fair_obs P}) )>.
+  not_done w0 ->
+  <( {run_fair_pool sch [worker 2 hdr; worker 1 hdr]%vector focus st s}, w0
+     |=L AG (AF visW {fair_obs P}) )>.
 Proof.
-  intros Hranked Hinv.
+  intros Hranked Hinv Hw0.
   assert (Hturns : FairTurns sh (csl_pool [worker 2 hdr; worker 1 hdr]%vector) Fin.F1
     (SharedInv hdr nl k) (fun g => g) lexnat P).
   { intros g0 s0 j Hinv0.
-    destruct (Hranked g0 s0 j Hinv0) as (g' & s' & o & Hseg & Hinv' & [HP|Hlt]);
-      exists g', s', o; split; [exact Hseg| |exact Hseg|]; split; try exact Hinv'.
+    destruct (Hranked g0 s0 j Hinv0) as (g' & s' & logs & Hseg & Hinv' & [HP|Hlt]);
+      exists g', s', logs; split; [exact Hseg| |exact Hseg|]; split; try exact Hinv'.
     - left; exact HP.
     - right; left; exact Hlt. }
-  exact (agaf_fair_turns sh sch _ Fin.F1 (SharedInv hdr nl k) (fun g => g) lexnat P
-    lexnat_wf Hturns g s focus st Pure Hinv
-    ltac:(constructor)).
+  pose proof (fair_turns_certificate sh _ Fin.F1 (SharedInv hdr nl k)
+    (fun g => g) lexnat P lexnat_wf Hturns) as Hcert.
+  unfold run_fair_pool.
+  apply (ag_pool_fair_invariance sh sch
+    (fun g ts' sigma => SharedInv hdr nl k g sigma /\
+      pool_guard_equ ts' (csl_pool [worker 2 hdr; worker 1 hdr]%vector))
+    <( AF visW {fair_obs P} )>) with (g := g).
+  - exact (fair_certificate_closed sh _ _ _ _ _ Hcert).
+  - intros o t w Hw Ht; apply ((au_vis (b:=false)) _ _ tt); right; split;
+      [apply ticll_top; exact Hw|intros []; exact Ht].
+  - intros g0 ts0 sigma0 st0 w Hinv0 Hw.
+    exact (aul_pool_fair_eventually sh sch _ _ _ _ _ Hcert
+      g0 ts0 sigma0 None st0 w Hinv0 Hw).
+  - split; [exact Hinv|intro j; apply guard_equ_equ; reflexivity].
+  - exact Hw0.
+Qed.
+
+(** Round robin is the logged fair-policy specialization; source segment
+    certificates retain their program-only observations until interpretation. *)
+Lemma shared_pool_agaf_rr hdr nl k g s cursor w0 (P : CSLObs (nat * nat) -> Prop) :
+  RankedTurns sh (csl_pool [worker 2 hdr; worker 1 hdr]%vector)
+    (SharedInv hdr nl k) (fun g => g) lexnat P ->
+  SharedInv hdr nl k g s ->
+  not_done w0 ->
+  <( {run_rr_pool [worker 2 hdr; worker 1 hdr]%vector None cursor s}, w0
+     |=L AG (AF visW {fair_obs P}) )>.
+Proof.
+  apply (shared_pool_agaf_fair rr_scheduler hdr nl k g s None cursor w0 P).
 Qed.
 
 (** ** Recurrence of the actual shared program from a represented queue. *)
@@ -218,22 +229,22 @@ Qed.
 Theorem shared_rotate_agaf_pop_nd_fresh : forall hdr nl h allocs ctx c ns vs d k,
   qrep hdr ns vs h -> find_index Nat.eqb nl vs = Some d ->
   <( {run_nd (shared_queue hdr) ((h,allocs),(ctx,c))}, Pure
-     |= AG (AF visW {shared_pop_after nl k}) )>.
+     |=L AG (AF visW {shared_pop_after nl k}) )>.
 Proof.
   intros hdr nl h allocs ctx c ns vs d k Hq Hf.
   unfold shared_queue; rewrite run_nd_two_forks.
-  apply (shared_pool_agaf_nd hdr nl k (k - c, d)); [apply shared_ranked|].
+  apply (shared_pool_agaf_nd hdr nl k (k - c, d)); [apply shared_ranked| |constructor].
   exists ns, vs, d; split; [exact Hq|split; [exact Hf|reflexivity]].
 Qed.
 
 Theorem shared_rotate_agaf_pop_rr_fresh : forall hdr nl h allocs ctx c ns vs d k,
   qrep hdr ns vs h -> find_index Nat.eqb nl vs = Some d ->
   <( {run_rr (shared_queue hdr) ((h,allocs),(ctx,c))}, Pure
-     |= AG (AF visW {fair_obs (shared_pop_after nl k)}) )>.
+     |=L AG (AF visW {fair_obs (shared_pop_after nl k)}) )>.
 Proof.
   intros hdr nl h allocs ctx c ns vs d k Hq Hf.
   unfold shared_queue; rewrite run_rr_two_forks.
-  apply (shared_pool_agaf_rr hdr nl k (k - c, d)); [apply shared_ranked|].
+  apply (shared_pool_agaf_rr hdr nl k (k - c, d)); [apply shared_ranked| |constructor].
   exists ns, vs, d; split; [exact Hq|split; [exact Hf|reflexivity]].
 Qed.
 
@@ -241,33 +252,39 @@ Theorem shared_rotate_agaf_pop_fair_fresh (sch : Scheduler) `{FairScheduler sch}
   forall hdr nl h allocs ctx c ns vs d k,
   qrep hdr ns vs h -> find_index Nat.eqb nl vs = Some d ->
   <( {run_fair sch (shared_queue hdr) st ((h,allocs),(ctx,c))}, Pure
-     |= AG (AF visW {fair_obs (shared_pop_after nl k)}) )>.
+     |=L AG (AF visW {fair_obs (shared_pop_after nl k)}) )>.
 Proof.
   intros hdr nl h allocs ctx c ns vs d k Hq Hf.
   unfold shared_queue; rewrite run_fair_two_forks.
-  apply (shared_pool_agaf_fair sch hdr nl k (k - c, d)); [apply shared_ranked|].
+  apply (shared_pool_agaf_fair sch hdr nl k (k - c, d)); [apply shared_ranked| |constructor].
   exists ns, vs, d; split; [exact Hq|split; [exact Hf|reflexivity]].
 Qed.
 
 Theorem shared_rotate_agaf_pop_nd : forall hdr nl h allocs ctx c ns vs d,
   qrep hdr ns vs h -> find_index Nat.eqb nl vs = Some d ->
   <( {run_nd (shared_queue hdr) ((h,allocs),(ctx,c))}, Pure
-     |= AG (AF visW {shared_pop nl}) )>.
+     |=L AG (AF visW {shared_pop nl}) )>.
 Proof.
   intros hdr nl h allocs ctx c ns vs d Hq Hf.
   unfold shared_queue; rewrite run_nd_two_forks.
-  apply (shared_pool_agaf_nd hdr nl 0 (0 - c, d)); [apply shared_ranked_pop|].
+  apply (shared_pool_agaf_nd hdr nl 0 (0 - c, d));
+    [eapply ranked_turns_mono with (P := shared_pop_after nl 0);
+      [intros [memory|context|o] HP; [destruct HP|destruct HP|exact (proj1 HP)]
+      |apply shared_ranked]| |constructor].
   exists ns, vs, d; split; [exact Hq|split; [exact Hf|reflexivity]].
 Qed.
 
 Theorem shared_rotate_agaf_pop_rr : forall hdr nl h allocs ctx c ns vs d,
   qrep hdr ns vs h -> find_index Nat.eqb nl vs = Some d ->
   <( {run_rr (shared_queue hdr) ((h,allocs),(ctx,c))}, Pure
-     |= AG (AF visW {fair_obs (shared_pop nl)}) )>.
+     |=L AG (AF visW {fair_obs (shared_pop nl)}) )>.
 Proof.
   intros hdr nl h allocs ctx c ns vs d Hq Hf.
   unfold shared_queue; rewrite run_rr_two_forks.
-  apply (shared_pool_agaf_rr hdr nl 0 (0 - c, d)); [apply shared_ranked_pop|].
+  apply (shared_pool_agaf_rr hdr nl 0 (0 - c, d));
+    [eapply ranked_turns_mono with (P := shared_pop_after nl 0);
+      [intros [memory|context|o] HP; [destruct HP|destruct HP|exact (proj1 HP)]
+      |apply shared_ranked]| |constructor].
   exists ns, vs, d; split; [exact Hq|split; [exact Hf|reflexivity]].
 Qed.
 
@@ -275,11 +292,14 @@ Theorem shared_rotate_agaf_pop_fair (sch : Scheduler) `{FairScheduler sch} (st :
   forall hdr nl h allocs ctx c ns vs d,
   qrep hdr ns vs h -> find_index Nat.eqb nl vs = Some d ->
   <( {run_fair sch (shared_queue hdr) st ((h,allocs),(ctx,c))}, Pure
-     |= AG (AF visW {fair_obs (shared_pop nl)}) )>.
+     |=L AG (AF visW {fair_obs (shared_pop nl)}) )>.
 Proof.
   intros hdr nl h allocs ctx c ns vs d Hq Hf.
   unfold shared_queue; rewrite run_fair_two_forks.
-  apply (shared_pool_agaf_fair sch hdr nl 0 (0 - c, d)); [apply shared_ranked_pop|].
+  apply (shared_pool_agaf_fair sch hdr nl 0 (0 - c, d));
+    [eapply ranked_turns_mono with (P := shared_pop_after nl 0);
+      [intros [memory|context|o] HP; [destruct HP|destruct HP|exact (proj1 HP)]
+      |apply shared_ranked]| |constructor].
   exists ns, vs, d; split; [exact Hq|split; [exact Hf|reflexivity]].
 Qed.
 
@@ -300,59 +320,93 @@ Qed.
 Theorem shared_rotate_agaf_pop_alloc_nd : forall values nl ctx c d,
   find_index Nat.eqb nl values = Some d ->
   <( {run_nd (allocated_shared_queue values) (managed_empty,(ctx,c))}, Pure
-     |= AG (AF visW {shared_pop nl}) )>.
+     |=L AG (AF visW {shared_pop nl}) )>.
 Proof.
-  intros values nl ctx c d Hf; rewrite run_nd_allocated_shared_queue.
-  eapply shared_rotate_agaf_pop_nd; [apply allocated_shared_queue_rep|exact Hf].
+  intros values nl ctx c d Hf; ticl_normalize; rewrite run_nd_allocated_shared_queue.
+  apply agaf_emit_list; [constructor|].
+  unfold shared_queue; rewrite run_nd_two_forks.
+  apply (shared_pool_agaf_nd 1 nl 0 (0 - c,d));
+    [eapply ranked_turns_mono with (P := shared_pop_after nl 0);
+      [intros [memory|context|o] HP; [destruct HP|destruct HP|exact (proj1 HP)]
+      |apply shared_ranked]| |apply after_logs_not_done; constructor].
+  exists (queue_nodes 1 (length values)), values, d;
+    split; [apply allocated_shared_queue_rep|split; [exact Hf|reflexivity]].
 Qed.
 
 Theorem shared_rotate_agaf_pop_alloc_rr : forall values nl ctx c d,
   find_index Nat.eqb nl values = Some d ->
   <( {run_rr (allocated_shared_queue values) (managed_empty,(ctx,c))}, Pure
-     |= AG (AF visW {fair_obs (shared_pop nl)}) )>.
+     |=L AG (AF visW {fair_obs (shared_pop nl)}) )>.
 Proof.
-  intros values nl ctx c d Hf; rewrite run_rr_allocated_shared_queue.
-  eapply shared_rotate_agaf_pop_rr; [apply allocated_shared_queue_rep|exact Hf].
+  intros values nl ctx c d Hf; ticl_normalize; rewrite run_rr_allocated_shared_queue.
+  apply agaf_emit_list; [constructor|].
+  unfold shared_queue; rewrite run_rr_two_forks.
+  apply (shared_pool_agaf_rr 1 nl 0 (0 - c,d));
+    [eapply ranked_turns_mono with (P := shared_pop_after nl 0);
+      [intros [memory|context|o] HP; [destruct HP|destruct HP|exact (proj1 HP)]
+      |apply shared_ranked]| |apply after_logs_not_done; constructor].
+  exists (queue_nodes 1 (length values)), values, d;
+    split; [apply allocated_shared_queue_rep|split; [exact Hf|reflexivity]].
 Qed.
 
 Theorem shared_rotate_agaf_pop_alloc_fair (sch : Scheduler) `{FairScheduler sch} (st : sched_state sch) :
   forall values nl ctx c d,
   find_index Nat.eqb nl values = Some d ->
   <( {run_fair sch (allocated_shared_queue values) st (managed_empty,(ctx,c))}, Pure
-     |= AG (AF visW {fair_obs (shared_pop nl)}) )>.
+     |=L AG (AF visW {fair_obs (shared_pop nl)}) )>.
 Proof.
-  intros values nl ctx c d Hf; rewrite run_fair_allocated_shared_queue.
-  exact (shared_rotate_agaf_pop_fair sch st 1 nl _ _ ctx c _ values d
-    (allocated_shared_queue_rep values) Hf).
+  intros values nl ctx c d Hf; ticl_normalize; rewrite run_fair_allocated_shared_queue.
+  apply agaf_emit_list; [constructor|].
+  unfold shared_queue; rewrite run_fair_two_forks.
+  apply (shared_pool_agaf_fair sch 1 nl 0 (0 - c,d));
+    [eapply ranked_turns_mono with (P := shared_pop_after nl 0);
+      [intros [memory|context|o] HP; [destruct HP|destruct HP|exact (proj1 HP)]
+      |apply shared_ranked]| |apply after_logs_not_done; constructor].
+  exists (queue_nodes 1 (length values)), values, d;
+    split; [apply allocated_shared_queue_rep|split; [exact Hf|reflexivity]].
 Qed.
 
 Theorem shared_rotate_agaf_pop_alloc_fair_fresh (sch : Scheduler) `{FairScheduler sch} (st : sched_state sch) :
   forall values nl ctx c d k,
   find_index Nat.eqb nl values = Some d ->
   <( {run_fair sch (allocated_shared_queue values) st (managed_empty,(ctx,c))}, Pure
-     |= AG (AF visW {fair_obs (shared_pop_after nl k)}) )>.
+     |=L AG (AF visW {fair_obs (shared_pop_after nl k)}) )>.
 Proof.
-  intros values nl ctx c d k Hf; rewrite run_fair_allocated_shared_queue.
-  exact (shared_rotate_agaf_pop_fair_fresh sch st 1 nl _ _ ctx c _ values d k
-    (allocated_shared_queue_rep values) Hf).
+  intros values nl ctx c d k Hf; ticl_normalize; rewrite run_fair_allocated_shared_queue.
+  apply agaf_emit_list; [constructor|].
+  unfold shared_queue; rewrite run_fair_two_forks.
+  apply (shared_pool_agaf_fair sch 1 nl k (k - c,d));
+    [apply shared_ranked| |apply after_logs_not_done; constructor].
+  exists (queue_nodes 1 (length values)), values, d;
+    split; [apply allocated_shared_queue_rep|split; [exact Hf|reflexivity]].
 Qed.
 
 Theorem shared_rotate_agaf_pop_alloc_nd_fresh : forall values nl ctx c d k,
   find_index Nat.eqb nl values = Some d ->
   <( {run_nd (allocated_shared_queue values) (managed_empty,(ctx,c))}, Pure
-     |= AG (AF visW {shared_pop_after nl k}) )>.
+     |=L AG (AF visW {shared_pop_after nl k}) )>.
 Proof.
-  intros values nl ctx c d k Hf; rewrite run_nd_allocated_shared_queue.
-  eapply shared_rotate_agaf_pop_nd_fresh; [apply allocated_shared_queue_rep|exact Hf].
+  intros values nl ctx c d k Hf; ticl_normalize; rewrite run_nd_allocated_shared_queue.
+  apply agaf_emit_list; [constructor|].
+  unfold shared_queue; rewrite run_nd_two_forks.
+  apply (shared_pool_agaf_nd 1 nl k (k - c,d));
+    [apply shared_ranked| |apply after_logs_not_done; constructor].
+  exists (queue_nodes 1 (length values)), values, d;
+    split; [apply allocated_shared_queue_rep|split; [exact Hf|reflexivity]].
 Qed.
 
 Theorem shared_rotate_agaf_pop_alloc_rr_fresh : forall values nl ctx c d k,
   find_index Nat.eqb nl values = Some d ->
   <( {run_rr (allocated_shared_queue values) (managed_empty,(ctx,c))}, Pure
-     |= AG (AF visW {fair_obs (shared_pop_after nl k)}) )>.
+     |=L AG (AF visW {fair_obs (shared_pop_after nl k)}) )>.
 Proof.
-  intros values nl ctx c d k Hf; rewrite run_rr_allocated_shared_queue.
-  eapply shared_rotate_agaf_pop_rr_fresh; [apply allocated_shared_queue_rep|exact Hf].
+  intros values nl ctx c d k Hf; ticl_normalize; rewrite run_rr_allocated_shared_queue.
+  apply agaf_emit_list; [constructor|].
+  unfold shared_queue; rewrite run_rr_two_forks.
+  apply (shared_pool_agaf_rr 1 nl k (k - c,d));
+    [apply shared_ranked| |apply after_logs_not_done; constructor].
+  exists (queue_nodes 1 (length values)), values, d;
+    split; [apply allocated_shared_queue_rep|split; [exact Hf|reflexivity]].
 Qed.
 
 Local Open Scope ctree_scope.
@@ -363,19 +417,28 @@ Local Open Scope list_scope.
     The first three complete rotations of the allocated program under round
     robin: worker 2 runs first (the parent is gone and the cursor is still
     [0]), then worker 1, then worker 2 again, each rotating the same queue
-    once and logging one pop.  Every scheduling decision is one logged pick
-    ([run_rr_pool_select]): slot [0] is worker 2, slot [1] is worker 1. *)
+    once and logging one pop and four snapshots.  Every scheduling decision
+    logs its slot via [inr] ([run_rr_pool_select]). *)
 Theorem shared_queue_rr_prefix3 :
   let h0 := new_queue_heap 1 [10;20;30] hemp in
   let h3 := qstepN 1 3 [3;5;7] h0 in
   run_rr (allocated_shared_queue [10;20;30]) (managed_empty,(List.nil,0)) ~
-  emit_list [inr 0; inl (inr (stamp (2,10) 0)); inr 1; inl (inr (stamp (1,20) 1));
-             inr 0; inl (inr (stamp (2,30) 2))]%list
-    (run_rr_pool [worker 2 1; worker 1 1]%vector None 3
-       ((h3,upd hemp 1 8),(List.nil,3))).
+  emit_list (List.map inl (new_queue_logs 1 [10;20;30] managed_empty))
+   (Vis (Log (inr 0)) (fun _ =>
+    emit_list (List.map inl (queue_turn_logs (CSLEmit (stamp (2,10) 0))
+      1 3 5 7 (h0,upd hemp 1 8)))
+   (Vis (Log (inr 1)) (fun _ =>
+    emit_list (List.map inl (queue_turn_logs (CSLEmit (stamp (1,20) 1))
+      1 5 7 3 (qstep 1 [3;5;7] h0,upd hemp 1 8)))
+   (Vis (Log (inr 0)) (fun _ =>
+    emit_list (List.map inl (queue_turn_logs (CSLEmit (stamp (2,30) 2))
+      1 7 3 5 (qstep 1 [5;7;3] (qstep 1 [3;5;7] h0),upd hemp 1 8)))
+     (run_rr_pool [worker 2 1; worker 1 1]%vector None 3
+       ((h3,upd hemp 1 8),(List.nil,3))))))))).
 Proof.
   intros h0 h3.
-  rewrite run_rr_allocated_shared_queue; unfold shared_queue; rewrite run_rr_two_forks.
+  rewrite run_rr_allocated_shared_queue; apply emit_list_sbisim.
+  unfold shared_queue; rewrite run_rr_two_forks.
   set (allocs := upd hemp 1 (2 * S (length [10;20;30]))).
   pose proof (allocated_shared_queue_rep [10;20;30]) as Hq0.
   change (qrep 1 [3;5;7] [10;20;30] h0) in Hq0.
@@ -383,23 +446,20 @@ Proof.
   change (qrep 1 [5;7;3] [20;30;10] (qstep 1 [3;5;7] h0)) in Hq1.
   pose proof (qstep_qrep 1 [5;7;3] [20;30;10] _ Hq1 ltac:(discriminate)) as Hq2.
   change (qrep 1 [7;3;5] [30;10;20] (qstep 1 [5;7;3] (qstep 1 [3;5;7] h0))) in Hq2.
-  unfold emit_list at 1; cbn [List.fold_right]; repeat setoid_rewrite log_vis.
   (* worker 2 *)
   rewrite (run_rr_pool_select [worker 2 1; worker 1 1]%vector 0), (rr_pick_even 0 eq_refl).
   apply sb_vis; intros _.
   etransitivity;
     [exact (run_rr_pool_turn [worker 2 1; worker 1 1]%vector Fin.F1 1 _ _ _
       (exact_worker_turn 2 1 3 [5;7] 10 [20;30] h0 allocs List.nil 0 Hq0))|].
-  cbn [List.map emit_list List.fold_right].
-  repeat setoid_rewrite log_vis; apply sb_vis; intros _.
+  apply emit_list_sbisim.
   (* worker 1 *)
   rewrite (run_rr_pool_select [worker 2 1; worker 1 1]%vector 1), (rr_pick_odd 1 eq_refl).
   apply sb_vis; intros _.
   etransitivity;
     [exact (run_rr_pool_turn [worker 2 1; worker 1 1]%vector (Fin.FS Fin.F1) 2 _ _ _
       (exact_worker_turn 1 1 5 [7;3] 20 [30;10] (qstep 1 [3;5;7] h0) allocs List.nil 1 Hq1))|].
-  cbn [List.map emit_list List.fold_right].
-  repeat setoid_rewrite log_vis; apply sb_vis; intros _.
+  apply emit_list_sbisim.
   (* worker 2 again *)
   rewrite (run_rr_pool_select [worker 2 1; worker 1 1]%vector 2), (rr_pick_even 2 eq_refl).
   apply sb_vis; intros _.
@@ -407,8 +467,7 @@ Proof.
     [exact (run_rr_pool_turn [worker 2 1; worker 1 1]%vector Fin.F1 3 _ _ _
       (exact_worker_turn 2 1 7 [3;5] 30 [10;20] (qstep 1 [5;7;3] (qstep 1 [3;5;7] h0))
          allocs List.nil 2 Hq2))|].
-  cbn [List.map emit_list List.fold_right].
-  repeat setoid_rewrite log_vis; apply sb_vis; intros _.
+  apply emit_list_sbisim.
   reflexivity.
 Qed.
 
@@ -421,13 +480,15 @@ Local Open Scope fin_vector_scope.
     reads it and the whole run is stuck, so no [AG] formula holds. *)
 Lemma allocated_shared_queue_empty_stuck : forall ctx c,
   run_rr (allocated_shared_queue []) (managed_empty,(ctx,c)) ~
-    (log (inr 0 : CSLObs (nat * nat) + nat);; Stuck
-      : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
+    emit_list (List.map inl (new_queue_logs 1 [] managed_empty))
+      (Vis (Log (inr 0)) (fun _ =>
+        (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)))).
 Proof.
   intros ctx c.
-  rewrite run_rr_allocated_shared_queue; unfold shared_queue; rewrite run_rr_two_forks.
+  rewrite run_rr_allocated_shared_queue; apply emit_list_sbisim.
+  unfold shared_queue; rewrite run_rr_two_forks.
   rewrite run_rr_pool_select, (rr_pick_even 0 eq_refl).
-  rewrite log_vis; apply sb_vis; intros _.
+  apply sb_vis; intros _.
   unfold run_rr_pool, csl_pool; cbn [Vector.map].
   change (interp_schedule_rr sh 2
     ([Ret tt; denote (worker 1 1)]%vector @ Fin.F1 :=
@@ -444,8 +505,10 @@ Qed.
 Lemma allocated_shared_queue_empty_no_ag : forall ctx c w
     (phi : ticllW (CSLObs (nat * nat) + nat)),
   ~ <( {run_rr (allocated_shared_queue []) (managed_empty,(ctx,c))}, {w}
-       |= AG phi )>.
+       |=L AG phi )>.
 Proof.
-  intros ctx c w phi; rewrite allocated_shared_queue_empty_stuck, log_vis.
-  intro H; apply (ag_vis _ _ tt) in H as (_ & H); eapply ag_stuck; exact (H tt).
+  intros ctx c w phi; ticl_normalize; rewrite allocated_shared_queue_empty_stuck.
+  intro H; apply ag_emit_list_suffix in H.
+  apply (proj2 (ag_vis (Log (inr 0)) (fun _ => Stuck) tt _ _)) in H as [_ H].
+  eapply ag_stuck; exact (H tt).
 Qed.

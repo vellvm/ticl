@@ -27,7 +27,7 @@ Local Open Scope ctree_scope.
     Delayed branches [Br c k] and [Guard] are crawled through by [trans], so they are not steps.
 
     Intuitively, [ktrans] is the small-step semantics of ctrees, independent of the event type [E].
-    We then use [ktrans] in [Semantics.v] to define the semantic entailment relation [|=] for each Ticl formula.
+    We then use [ktrans] in [Semantics.v] to define the typed semantic entailment relations [|=L] and [|=R] for Ticl formulas.
 *)
 Section CTreeTrans.
   Context {E B: Type -> Type}.

@@ -1,3 +1,4 @@
+From TICL Require Import CTree.Interp.Yield.Policy.
 (** * An allocated queue client: passive framing and runner-safe source reuse.
 
     The source split changes neither effect order nor yield boundaries.  Its
@@ -7,9 +8,10 @@
     frame rule to the initialized owned resource. *)
 From Stdlib Require Import Arith.PeanoNat Fin Vector List Lia.
 From Coinduction Require Import all.
+From Equations Require Import Equations.
 From CTree Require Import Eq.IterFacts.
 From TICL Require Import CTree.Core CTree.Events.Writer Logic.Core Lang.CoCSL.Frame
-  CTree.Interp.Yield.RoundRobin CTree.Interp.Yield.SBisim.
+  CTree.Interp.Yield.RoundRobin CTree.Interp.Yield.SBisim CTree.Logic.Trace.
 From examples Require Import CSL.Queue.Program CSL.Queue.Shared
   CSL.Queue.Representation CSL.Queue.Frame CSL.Queue.Layout CSL.Queue.Trace
   CSL.Queue.Operations.
@@ -58,8 +60,13 @@ Local Lemma rotate_once_split_cps_equ {X} tag hdr
 Proof.
   unfold rotate_once_split, read_queue_head, rotate_captured, rotate_once.
   cbn [denote_flow].
-  repeat first [progress setoid_rewrite bind_bind | progress setoid_rewrite bind_ret_l].
-  cbn [fst snd]; reflexivity.
+  repeat rewrite bind_bind.
+  apply equ_clo_bind_eq; intro a.
+  rewrite !bind_ret_l; cbn [fst snd].
+  repeat rewrite bind_bind.
+  apply equ_clo_bind_eq; intro v.
+  rewrite !bind_ret_l; cbn [fst snd].
+  reflexivity.
 Qed.
 
 Lemma rotate_once_split_cps tag hdr
@@ -74,18 +81,6 @@ Proof.
   pose proof (rotate_once_split_cps_equ tag hdr
     (fun x : option unit => (Ret x : ctree CEff Bn (option unit)))) as H.
   now rewrite !bind_ret_r in H.
-Qed.
-
-Local Lemma source_bind_equ {A B} (p q : CProg A)
-  (next next' : A -> CProg B) :
-  denote_flow p ≅ denote_flow q ->
-  (forall a, denote_flow (next a) ≅ denote_flow (next' a)) ->
-  denote_flow (CBind p next) ≅ denote_flow (CBind q next').
-Proof.
-  intros Hp Hnext.
-  cbn [denote_flow].
-  apply equ_clo_bind with (S:=eq); [exact Hp|].
-  intros [a|] y <-; [apply Hnext|reflexivity].
 Qed.
 
 Lemma denote_flow_worker_split tag hdr :
@@ -108,22 +103,21 @@ Proof.
   apply (iter_equ (R:=eq)); [|reflexivity].
   intros [] [] _.
   apply equ_clo_bind with (S:=eq).
-  - apply source_bind_equ; [apply rotate_once_split_equ|intro; reflexivity].
+  - apply denote_flow_bind_equ; [apply rotate_once_split_equ|intro; reflexivity].
   - intros x y <-; reflexivity.
 Qed.
 
 Lemma denote_worker_split tag hdr :
   denote (worker_split tag hdr) ≅ denote (worker tag hdr).
 Proof.
-  unfold denote; apply equ_clo_bind with (S:=eq);
-    [apply denote_flow_worker_split|intros x y <-; reflexivity].
+  apply denote_equ, denote_flow_worker_split.
 Qed.
 
 Lemma worker_split_pool_rr hdr focus cursor s :
   run_rr_pool [worker_split 2 hdr; worker_split 1 hdr]%vector focus cursor s ~
   run_rr_pool [worker 2 hdr; worker 1 hdr]%vector focus cursor s.
 Proof.
-  unfold run_rr_pool; apply interp_schedule_fair_guard_equ.
+  unfold run_rr_pool; apply interp_schedule_rr_guard_equ.
   intros i; dependent destruction i; [|dependent destruction i; [|dependent destruction i]];
     cbn [csl_pool Vector.map]; apply guard_equ_equ, denote_worker_split.
 Qed.
@@ -135,33 +129,24 @@ Proof.
   apply worker_split_pool_rr.
 Qed.
 
-Local Lemma source_fork_equ (p q : CProg unit) :
-  denote_flow p ≅ denote_flow q ->
-  denote_flow (CFork p) ≅ denote_flow (CFork q).
-Proof.
-  intro H; cbn [denote_flow].
-  apply equ_clo_bind_eq; intros []; [|reflexivity].
-  apply equ_clo_bind with (S:=eq); [exact H|intros x y <-; reflexivity].
-Qed.
-
 Local Lemma shared_queue_split_equ hdr :
   denote_flow (shared_queue_split hdr) ≅ denote_flow (shared_queue hdr).
 Proof.
   unfold shared_queue_split, shared_queue.
-  apply source_bind_equ; [apply source_fork_equ, denote_flow_worker_split|intro].
-  apply source_bind_equ; [apply source_fork_equ, denote_flow_worker_split|intro; reflexivity].
+  apply denote_flow_bind_equ; [apply denote_flow_fork_equ, denote_flow_worker_split|intro].
+  apply denote_flow_bind_equ; [apply denote_flow_fork_equ, denote_flow_worker_split|intro; reflexivity].
 Qed.
 
 Lemma allocated_shared_queue_split_rr values s :
   run_rr (allocated_shared_queue_split values) s ~
   run_rr (allocated_shared_queue values) s.
 Proof.
-  unfold run_rr, run_rr_pool; apply interp_schedule_fair_guard_equ.
+  unfold run_rr, run_rr_pool; apply interp_schedule_rr_guard_equ.
   intros i; dependent destruction i; [|dependent destruction i].
   cbn [csl_pool Vector.map]; apply guard_equ_equ.
-  unfold denote; apply equ_clo_bind with (S:=eq); [|intros x y <-; reflexivity].
+  apply denote_equ.
   unfold allocated_shared_queue_split, allocated_shared_queue.
-  apply source_bind_equ; [reflexivity|apply shared_queue_split_equ].
+  apply denote_flow_bind_equ; [reflexivity|apply shared_queue_split_equ].
 Qed.
 
 Lemma qheap_managed_wf hdr values :
@@ -214,9 +199,10 @@ Lemma allocated_shared_queue_rr_contract values f ctx c :
       ((new_queue_heap hdr values f,
         upd hemp hdr (2 * S (length values))),(ctx,c)) /\
     run_rr (allocated_shared_queue values) ((f,hemp),(ctx,c)) ~
-      run_rr (shared_queue hdr)
-        ((new_queue_heap hdr values f,
-          upd hemp hdr (2 * S (length values))),(ctx,c)).
+      emit_list (List.map inl (new_queue_logs hdr values (f,hemp)))
+        (run_rr (shared_queue hdr)
+          ((new_queue_heap hdr values f,
+            upd hemp hdr (2 * S (length values))),(ctx,c))).
 Proof.
   intro Finite.
   destruct (interp_rr_new_queue 0 [Ret tt]%vector Fin.F1 values
@@ -230,11 +216,12 @@ Proof.
     ([Ret tt]%vector @ Fin.F1 :=
       (denote_flow (CBind (new_queue values) shared_queue) >>= fun _ => Ret tt))
     (Some Fin.F1) 0 ((f,hemp),(ctx,c)) ~
-    interp_schedule_rr sh 1
-      ([Ret tt]%vector @ Fin.F1 :=
-        (denote_flow (shared_queue hdr) >>= fun _ => Ret tt))
-      (Some Fin.F1) 0
-      ((new_queue_heap hdr values f, upd hemp hdr (2 * S (length values))),(ctx,c))).
+    emit_list (List.map inl (new_queue_logs hdr values (f,hemp)))
+      (interp_schedule_rr sh 1
+        ([Ret tt]%vector @ Fin.F1 :=
+          (denote_flow (shared_queue hdr) >>= fun _ => Ret tt))
+        (Some Fin.F1) 0
+        ((new_queue_heap hdr values f, upd hemp hdr (2 * S (length values))),(ctx,c)))).
   rewrite interp_rr_bind; exact Run.
 Qed.
 
@@ -244,53 +231,89 @@ Proof.
   cbn [prog_ok okE_thread no_alloc_sE]; repeat (split || intro); try exact I.
 Qed.
 
-Theorem allocated_shared_queue_passive_fresh_rr values nl d k f ctx c :
-  heap_finite f -> find_index Nat.eqb nl values = Some d ->
-  <( {run_rr (allocated_shared_queue values) ((f,hemp),(ctx,c))},
-     Pure |= AG (AF visW {fair_obs (shared_pop_after nl k)}) )>.
+(** Passive framing preserves indexed user emissions through [inl], while
+    heap snapshots gain the passive frame and [inr] selections stay equal. *)
+Local Lemma shared_pop_after_stable fr nl k :
+  prefix_stable (frameERW fr) (frameRV (X:=unit) fr)
+    <( AG (AF visW {fair_obs (shared_pop_after nl k)}) )>.
 Proof.
-  intros Finite Member.
+  simp prefix_stable; split; [intros; exact I|].
+  intros w w' _ HW HP.
+  destruct HP as [Y e v HP]; dependent destruction e; destruct v.
+  match goal with payload : CSLObs _ + nat |- _ => destruct payload as [program_obs|slot] end;
+    cbn [fair_obs] in HP; try contradiction.
+  destruct program_obs; cbn [shared_pop_after csl_indexed] in HP; try contradiction.
+  match type of HW with
+  | simW ?ER ?RV ?source ?target =>
+      assert (HS : simW ER RV source source) by (constructor; reflexivity);
+      pose proof (simW_not_done_right_unique ER RV (frameERW_right_unique fr)
+        source target source ltac:(constructor) HW HS) as HE;
+      rewrite HE
+  end.
+  constructor; exact HP.
+Qed.
+
+Theorem allocated_shared_queue_passive_fresh_rr values nl d f ctx :
+  heap_finite f -> find_index Nat.eqb nl values = Some d ->
+  run_rr_recurrently_emits (allocated_shared_queue values)
+    (f,hemp) ctx (fun output => snd output = nl).
+Proof.
+  intros Finite Member; unfold run_rr_recurrently_emits; intro c.
+  apply (csl_fresh_implies_recurrent_emissionW _
+    (fun output => Nat.eq_dec (snd output) nl) _ Pure).
+  intro k.
   destruct (allocated_shared_queue_rr_contract values f ctx c Finite)
     as (hdr & Positive & Free & Owned & Related & Run).
-  rewrite Run.
+  ticl_normalize.
+  rewrite Run; apply agaf_emit_list; [constructor|].
+  rewrite new_queue_logs_afterW.
+  set (owned_memory :=
+    (qheap hdr (queue_nodes hdr (length values)) values,
+      upd hemp hdr (2 * S (length values)))).
   unfold run_rr, run_rr_pool, interp_schedule_fair.
-  eapply (ticll_csl_frame (policy_handler sh) _ (policy_handler_frame sh _ sh_frame_handler)
-    (f,hemp)).
-  - apply run_rr_framable, shared_queue_alloc_free.
-  - exact Related.
+  eapply (ticl_csl_frameW_stable (f,hemp) _ _ _
+    (run_rr_framable _ (shared_queue_alloc_free hdr)) Related _
+    (Obs (Log (inl (CSLHeap owned_memory))) tt) _).
+  - apply shared_pop_after_stable.
+  - apply SimObs; exact (frameERW_heap (f,hemp) _ _ Related).
   - change <( {run_rr (shared_queue hdr)
-      ((qheap hdr (queue_nodes hdr (length values)) values,
-        upd hemp hdr (2 * S (length values))),(ctx,c))},
-      Pure |= AG (AF visW {fair_obs (shared_pop_after nl k)}) )>.
-    eapply shared_rotate_agaf_pop_rr_fresh;
-      [now apply qheap_queue_nodes_rep|exact Member].
+      (owned_memory,(ctx,c))},
+      {Obs (Log (inl (CSLHeap owned_memory))) tt}
+      |=L AG (AF visW {fair_obs (shared_pop_after nl k)}) )>.
+    unfold shared_queue; rewrite run_rr_two_forks.
+    apply (shared_pool_agaf_rr hdr nl k (k - c,d));
+      [apply shared_ranked| |constructor].
+    exists (queue_nodes hdr (length values)), values, d;
+      split; [now apply qheap_queue_nodes_rep|split; [exact Member|reflexivity]].
 Qed.
 
-Theorem allocated_shared_queue_split_passive_fresh_rr values nl d k f ctx c :
+Theorem allocated_shared_queue_split_passive_fresh_rr values nl d f ctx :
   heap_finite f -> find_index Nat.eqb nl values = Some d ->
-  <( {run_rr (allocated_shared_queue_split values) ((f,hemp),(ctx,c))},
-     Pure |= AG (AF visW {fair_obs (shared_pop_after nl k)}) )>.
+  run_rr_recurrently_emits (allocated_shared_queue_split values)
+    (f,hemp) ctx (fun output => snd output = nl).
 Proof.
-  intros Finite Member; rewrite allocated_shared_queue_split_rr.
-  eapply allocated_shared_queue_passive_fresh_rr; eassumption.
+  intros Finite Member; unfold run_rr_recurrently_emits; intro c.
+  eapply recurrent_label_sbisim.
+  - symmetry; apply allocated_shared_queue_split_rr.
+  - exact (allocated_shared_queue_passive_fresh_rr values nl d f ctx Finite Member c).
 Qed.
 
-Corollary client_passive_10 k :
-  <( {run_rr (allocated_shared_queue [10;20;30])
-       ((upd hemp 100 7,hemp),(List.nil,0))},
-     Pure |= AG (AF visW {fair_obs (shared_pop_after 10 k)}) )>.
+Corollary client_passive_10 :
+  run_rr_recurrently_emits (allocated_shared_queue [10;20;30])
+    (upd hemp 100 7,hemp) List.nil (fun output => snd output = 10).
 Proof.
   eapply allocated_shared_queue_passive_fresh_rr with (d:=0).
   - apply heap_finite_upd, heap_finite_hemp.
   - reflexivity.
 Qed.
 
-Corollary client_split_passive_10 k :
-  <( {run_rr (allocated_shared_queue_split [10;20;30])
-       ((upd hemp 100 7,hemp),(List.nil,0))},
-     Pure |= AG (AF visW {fair_obs (shared_pop_after 10 k)}) )>.
+Corollary client_split_passive_10 :
+  run_rr_recurrently_emits (allocated_shared_queue_split [10;20;30])
+    (upd hemp 100 7,hemp) List.nil (fun output => snd output = 10).
 Proof.
-  rewrite allocated_shared_queue_split_rr; apply client_passive_10.
+  eapply allocated_shared_queue_split_passive_fresh_rr with (d:=0).
+  - apply heap_finite_upd, heap_finite_hemp.
+  - reflexivity.
 Qed.
 
 Definition client_heap := new_queue_heap 1 [10;20;30] (upd hemp 100 7).
@@ -315,17 +338,19 @@ Qed.
 Local Lemma client_initialization :
   run_rr (allocated_shared_queue [10;20;30])
     ((upd hemp 100 7,hemp),(List.nil,0)) ~
-  run_rr (shared_queue 1) ((client_heap,upd hemp 1 8),(List.nil,0)).
+  emit_list (List.map inl (new_queue_logs 1 [10;20;30] (upd hemp 100 7,hemp)))
+    (run_rr (shared_queue 1) ((client_heap,upd hemp 1 8),(List.nil,0))).
 Proof.
   rewrite !run_rr_unfold; unfold allocated_shared_queue, denote.
   change (interp_schedule_rr sh 1
     ([Ret tt]%vector @ Fin.F1 :=
       (denote_flow (CBind (new_queue [10;20;30]) shared_queue) >>= fun _ => Ret tt))
     (Some Fin.F1) 0 ((upd hemp 100 7,hemp),(List.nil,0)) ~
-    interp_schedule_rr sh 1
-      ([Ret tt]%vector @ Fin.F1 :=
-        (denote_flow (shared_queue 1) >>= fun _ => Ret tt))
-      (Some Fin.F1) 0 ((client_heap,upd hemp 1 8),(List.nil,0))).
+    emit_list (List.map inl (new_queue_logs 1 [10;20;30] (upd hemp 100 7,hemp)))
+      (interp_schedule_rr sh 1
+        ([Ret tt]%vector @ Fin.F1 :=
+          (denote_flow (shared_queue 1) >>= fun _ => Ret tt))
+        (Some Fin.F1) 0 ((client_heap,upd hemp 1 8),(List.nil,0)))).
   rewrite interp_rr_bind; apply interp_rr_new_queue_first.
   - lia.
   - exact client_block_free.
@@ -333,17 +358,24 @@ Proof.
 Qed.
 
 (** Three logged scheduler picks, each followed by a complete
-    constructor-backed turn.  The suffix records the actual cursor, not a
-    claimed state cycle. *)
+    constructor-backed turn.  The suffix records the actual cursor. *)
 Theorem client_split_prefix3 :
   run_rr (allocated_shared_queue_split [10;20;30])
     ((upd hemp 100 7,hemp),(List.nil,0)) ~
-  emit_list [inr 0; inl (inr (stamp (2,10) 0)); inr 1; inl (inr (stamp (1,20) 1));
-             inr 0; inl (inr (stamp (2,30) 2))]%list
-    (run_rr_pool [worker 2 1; worker 1 1]%vector None 3
-       ((qstepN 1 3 [3;5;7] client_heap,upd hemp 1 8),(List.nil,3))).
+  emit_list (List.map inl (new_queue_logs 1 [10;20;30] (upd hemp 100 7,hemp)))
+   (Vis (Log (inr 0)) (fun _ =>
+    emit_list (List.map inl (queue_turn_logs (CSLEmit (stamp (2,10) 0))
+      1 3 5 7 (client_heap,upd hemp 1 8)))
+   (Vis (Log (inr 1)) (fun _ =>
+    emit_list (List.map inl (queue_turn_logs (CSLEmit (stamp (1,20) 1))
+      1 5 7 3 (qstep 1 [3;5;7] client_heap,upd hemp 1 8)))
+   (Vis (Log (inr 0)) (fun _ =>
+    emit_list (List.map inl (queue_turn_logs (CSLEmit (stamp (2,30) 2))
+      1 7 3 5 (qstep 1 [5;7;3] (qstep 1 [3;5;7] client_heap),upd hemp 1 8)))
+     (run_rr_pool [worker 2 1; worker 1 1]%vector None 3
+       ((qstepN 1 3 [3;5;7] client_heap,upd hemp 1 8),(List.nil,3))))))))).
 Proof.
-  rewrite allocated_shared_queue_split_rr, client_initialization.
+  rewrite allocated_shared_queue_split_rr, client_initialization; apply emit_list_sbisim.
   unfold shared_queue; rewrite run_rr_two_forks.
   pose proof client_heap_rep as Hq0.
   pose proof (qstep_qrep 1 [3;5;7] [10;20;30] client_heap Hq0 ltac:(discriminate)) as Hq1.
@@ -351,26 +383,25 @@ Proof.
   pose proof (qstep_qrep 1 [5;7;3] [20;30;10] _ Hq1 ltac:(discriminate)) as Hq2.
   change (qrep 1 [7;3;5] [30;10;20]
     (qstep 1 [5;7;3] (qstep 1 [3;5;7] client_heap))) in Hq2.
-  unfold emit_list at 1; cbn [List.fold_right]; repeat setoid_rewrite log_vis.
   rewrite (run_rr_pool_select [worker 2 1; worker 1 1]%vector 0), (rr_pick_even 0 eq_refl).
   apply sb_vis; intros _; etransitivity;
     [exact (run_rr_pool_turn [worker 2 1; worker 1 1]%vector Fin.F1 1 _ _ _
       (exact_worker_turn 2 1 3 [5;7] 10 [20;30] client_heap
         (upd hemp 1 8) List.nil 0 Hq0))|].
-  cbn [List.map emit_list List.fold_right]; repeat setoid_rewrite log_vis; apply sb_vis; intros _.
+  apply emit_list_sbisim.
   rewrite (run_rr_pool_select [worker 2 1; worker 1 1]%vector 1), (rr_pick_odd 1 eq_refl).
   apply sb_vis; intros _; etransitivity;
     [exact (run_rr_pool_turn [worker 2 1; worker 1 1]%vector (Fin.FS Fin.F1) 2 _ _ _
       (exact_worker_turn 1 1 5 [7;3] 20 [30;10] (qstep 1 [3;5;7] client_heap)
         (upd hemp 1 8) List.nil 1 Hq1))|].
-  cbn [List.map emit_list List.fold_right]; repeat setoid_rewrite log_vis; apply sb_vis; intros _.
+  apply emit_list_sbisim.
   rewrite (run_rr_pool_select [worker 2 1; worker 1 1]%vector 2), (rr_pick_even 2 eq_refl).
   apply sb_vis; intros _; etransitivity;
     [exact (run_rr_pool_turn [worker 2 1; worker 1 1]%vector Fin.F1 3 _ _ _
       (exact_worker_turn 2 1 7 [3;5] 30 [10;20]
         (qstep 1 [5;7;3] (qstep 1 [3;5;7] client_heap))
         (upd hemp 1 8) List.nil 2 Hq2))|].
-  cbn [List.map emit_list List.fold_right]; repeat setoid_rewrite log_vis; apply sb_vis; intros _.
+  apply emit_list_sbisim.
   reflexivity.
 Qed.
 

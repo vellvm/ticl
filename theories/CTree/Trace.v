@@ -16,9 +16,6 @@ Local Open Scope nat_scope.
 Definition emit_list {W : Type} {B : Type -> Type} {X : Type} (xs : list W) (t : ctreeW W B X) : ctreeW W B X :=
   List.fold_right (fun o k => log o;; k) t xs.
 
-(** The observations produced by one step, which emits at most one. *)
-Definition event_obs {W} (event : option W) : list W :=
-  match event with None => [] | Some o => [o] end.
 
 Definition label_logs {W} (labels : list (@label (writerE W))) : list W :=
   List.flat_map (fun l => match l with obs (Log o) _ => [o] | _ => [] end) labels.
@@ -39,11 +36,35 @@ Proof.
   - apply IH; constructor.
 Qed.
 
+Lemma after_logs_app {W : Type} (xs ys : list W) w :
+  after_logs (xs ++ ys) w = after_logs ys (after_logs xs w).
+Proof.
+  revert w; induction xs as [|o xs IH]; intro w; cbn [after_logs List.app];
+    [reflexivity | apply IH].
+Qed.
+
+(** Relabelling preserves the final observation of a finite log prefix. *)
+Lemma after_logs_map {W V : Type} (f : W -> V) xs initial final :
+  after_logs xs (Obs (Log initial) tt) = Obs (Log final) tt ->
+  after_logs (List.map f xs) (Obs (Log (f initial)) tt) = Obs (Log (f final)) tt.
+Proof.
+  revert initial; induction xs as [|o xs IH]; intros initial H;
+    cbn [after_logs List.map] in *.
+  - inversion H; subst; reflexivity.
+  - now apply IH.
+Qed.
+
+Lemma log_vis {W : Type} {B : Type -> Type} {X : Type} o (t : ctreeW W B X) :
+  (log o ;; t) ≅ Vis (Log o) (fun _ => t).
+Proof.
+  unfold log; rewrite bind_vis; setoid_rewrite bind_ret_l; reflexivity.
+Qed.
+
 Lemma emit_list_cons {W : Type} {B : Type -> Type} {X : Type} o xs (t : ctreeW W B X) :
   emit_list (o :: xs) t ≅ Vis (Log o) (fun _ => emit_list xs t).
 Proof.
   change ((log o ;; emit_list xs t) ≅ Vis (Log o) (fun _ => emit_list xs t)).
-  unfold log; rewrite bind_trigger; reflexivity.
+  unfold log; rewrite bind_vis; setoid_rewrite bind_ret_l; reflexivity.
 Qed.
 
 Lemma emit_list_app {W : Type} {B : Type -> Type} {X : Type} xs ys (t : ctreeW W B X) :
@@ -128,11 +149,23 @@ Inductive finite_steps {E B : Type -> Type} {X : Type} :
 | finite_steps_cons t u v l labels :
     trans l t u -> finite_steps u labels v -> finite_steps t (l :: labels) v.
 
-Definition turn_labels {W} (event : option W) : list (@label (writerE W)) :=
-  match event with None => [τ] | Some o => [τ; obs (Log o) tt] end.
+Definition turn_labels {W} (logs : list W) : list (@label (writerE W)) :=
+  τ :: List.map (fun o => obs (Log o) tt) logs.
 
-Lemma turn_labels_nonempty {W} (event : option W) : turn_labels event <> [].
-Proof. destruct event; discriminate. Qed.
+Lemma turn_labels_nonempty {W} (logs : list W) : turn_labels logs <> [].
+Proof. discriminate. Qed.
+
+Lemma label_logs_turn_labels {W} (logs : list W) : label_logs (turn_labels logs) = logs.
+Proof.
+  induction logs as [|o logs IH]; unfold turn_labels, label_logs in *; cbn in *;
+    [reflexivity|now rewrite IH].
+Qed.
+
+Lemma label_taus_turn_labels {W} (logs : list W) : label_taus (turn_labels logs) = 1.
+Proof.
+  induction logs as [|o logs IH]; unfold turn_labels, label_taus in *; cbn in *;
+    [reflexivity|exact IH].
+Qed.
 
 Lemma finite_steps_app {E B : Type -> Type} {X : Type}
   (t u v : ctree E B X) left right :
@@ -165,6 +198,24 @@ Proof.
   exact (trans_vis (Log o) tt (fun _ => emit_list logs t)).
 Qed.
 
+(** Observation-only prefixes use the existing LTS and identify the residual
+    up to strong bisimulation, which absorbs finite administrative guards. *)
+Definition steps {W : Type} {B : Type -> Type} {X : Type}
+  (t : ctreeW W B X) (logs : list W) (u : ctreeW W B X) : Prop :=
+  exists residual, finite_steps t (List.map (fun o => obs (Log o) tt) logs) residual /\ residual ~ u.
+
+Lemma steps_sbisim {W : Type} {B : Type -> Type} {X : Type}
+  (t t' u : ctreeW W B X) logs : t ~ t' -> steps t logs u -> steps t' logs u.
+Proof.
+  intros E (r & Hsteps & Er).
+  destruct (finite_steps_sbisim t r _ Hsteps t' E) as (r' & Hsteps' & Err').
+  exists r'; split; [exact Hsteps'|transitivity r; [symmetry; exact Err'|exact Er]].
+Qed.
+
+Lemma steps_emit_list {W : Type} {B : Type -> Type} {X : Type} logs (t : ctreeW W B X) :
+  steps (emit_list logs t) logs t.
+Proof. exists t; split; [apply finite_steps_emit_list|reflexivity]. Qed.
+
 (** * Realizing an infinite sequence of finite label chunks.
 
     Each chunk must be NONEMPTY: an empty chunk cannot witness progress of a
@@ -175,6 +226,41 @@ CoInductive realizes {E B : Type -> Type} {X : Type}
     chunks k <> [] ->
     finite_steps t (chunks k) next ->
     realizes chunks (S k) next -> realizes chunks k t.
+
+Lemma realizes_sbisim {E B X} chunks k (t u : ctree E B X) :
+  t ~ u -> realizes chunks k t -> realizes chunks k u.
+Proof.
+  revert k t u; cofix CIH; intros k t u Eeq [next Hne Hsteps Htail].
+  destruct (finite_steps_sbisim _ _ _ Hsteps _ Eeq)
+    as (next' & Hsteps' & Enext).
+  eapply realizes_next; [exact Hne|exact Hsteps'|].
+  eapply CIH; [exact Enext|exact Htail].
+Qed.
+
+(** Initialization extends chunk zero without changing later turn indices. *)
+Definition prepend_chunk {E} (prefix : list (@label E))
+  (chunks : nat -> list (@label E)) k :=
+  match k with 0 => prefix ++ chunks 0 | S j => chunks (S j) end.
+
+Lemma realizes_prepend_succ {E B : Type -> Type} {X : Type}
+  (prefix : list (@label E)) (chunks : nat -> list (@label E)) :
+  forall k (t : ctree E B X), realizes chunks (S k) t ->
+    realizes (prepend_chunk prefix chunks) (S k) t.
+Proof.
+  cofix CIH; intros k t H; destruct H as [next Hne Hsteps Htail].
+  eapply realizes_next; [exact Hne|exact Hsteps|apply CIH; exact Htail].
+Qed.
+
+Lemma realizes_emit_list_prefix {W : Type} {B : Type -> Type} {X : Type}
+  (init : list W) (chunks : nat -> list (@label (writerE W))) (t : ctreeW W B X) :
+  realizes chunks 0 t ->
+  realizes (prepend_chunk (List.map (fun o => obs (Log o) tt) init) chunks) 0 (emit_list init t).
+Proof.
+  intros [next Hne Hsteps Htail]; eapply realizes_next with (next := next).
+  - cbn [prepend_chunk]; intro E; apply List.app_eq_nil in E as [_ E]; exact (Hne E).
+  - cbn [prepend_chunk]; eapply finite_steps_app; [apply finite_steps_emit_list|exact Hsteps].
+  - apply realizes_prepend_succ; exact Htail.
+Qed.
 
 (** Any tree bisimilar to a root of a chunked sequence realizes its suffix. *)
 Lemma realizes_from_steps {E B : Type -> Type} {X : Type}
@@ -366,22 +452,13 @@ Proof.
   cbn [List.map rr_prefix]; rewrite emit_list_cons.
   step; constructor; intros []; exact IH.
 Qed.
-Lemma rr_prefix_no_events {W : Type} {B : Type -> Type} {X : Type} word (t : ctreeW W B X) :
-  rr_prefix_events word = [] -> rr_prefix word t = rr_guards (List.length word) t.
+
+Lemma rr_prefix_emit_sbisim {W : Type} {B : Type -> Type} {X : Type}
+  word (t : ctreeW W B X) : rr_prefix word t ~ emit_list (rr_prefix_events word) t.
 Proof.
-  induction word as [|[|o] rest IH]; cbn [rr_prefix_events rr_prefix List.length rr_guards];
-    intro E; [reflexivity|now rewrite IH|discriminate].
-Qed.
-Lemma rr_prefix_one_event {W : Type} {B : Type -> Type} {X : Type} word o (t : ctreeW W B X) :
-  rr_prefix_events word = [o] -> exists n m,
-  rr_prefix word t ≅ rr_guards n (Vis (Log o) (fun _ => rr_guards m t)).
-Proof.
-  induction word as [|[|p] rest IH]; cbn [rr_prefix_events]; intro E; [discriminate| |].
-  - destruct (IH E) as (n & m & H).
-    exists (S n), m; cbn [rr_prefix rr_guards]; step; constructor; assumption.
-  - injection E as Ep Er; subst p.
-    exists 0, (List.length rest); cbn [rr_prefix rr_guards].
-    step; constructor; intros []; rewrite (rr_prefix_no_events rest t Er); reflexivity.
+  induction word as [|[|o] rest IH]; cbn [rr_prefix rr_prefix_events]; [reflexivity| |].
+  - rewrite sb_guard; exact IH.
+  - rewrite emit_list_cons; apply sb_vis; intros []; exact IH.
 Qed.
 
 (** * Repeating finite observation batches.
@@ -437,4 +514,71 @@ Proof.
     [exact Hstep |].
   apply (gfp_bchain R); symmetry.
   exact (emit_batches_unfold_sbisim batch next i).
+Qed.
+
+Lemma emit_batches_prefix_sbisim {W : Type} {B : Type -> Type} {I X : Type}
+  (batch : I -> list W) (next : I -> I) n i :
+  (emit_batches batch next i : ctreeW W B X) ~
+  emit_list (List.flat_map (fun j => batch (Nat.iter j next i)) (List.seq 0 n))
+    (emit_batches batch next (Nat.iter n next i) : ctreeW W B X).
+Proof.
+  revert i; induction n as [|n IH]; intro i; [reflexivity|].
+  assert (Elogs : List.flat_map (fun j => batch (Nat.iter j next i)) (List.seq 0 (S n)) =
+    batch i ++ List.flat_map (fun j => batch (Nat.iter j next (next i))) (List.seq 0 n)).
+  { cbn [List.seq List.flat_map].
+    rewrite <- (List.seq_shift n 0), !List.flat_map_concat_map, List.map_map.
+    f_equal; f_equal; apply List.map_ext; intro j; now rewrite Nat.iter_succ_r. }
+  rewrite Elogs, emit_list_app, Nat.iter_succ_r.
+  etransitivity; [apply emit_batches_unfold_sbisim|apply emit_list_sbisim, IH].
+Qed.
+
+Lemma emit_batches_prefix {W : Type} {B : Type -> Type} {I X : Type}
+  (batch : I -> list W) (next : I -> I) n i :
+  steps (emit_batches batch next i : ctreeW W B X)
+    (List.flat_map (fun j => batch (Nat.iter j next i)) (List.seq 0 n))
+    (emit_batches batch next (Nat.iter n next i) : ctreeW W B X).
+Proof.
+  eapply steps_sbisim; [symmetry; apply emit_batches_prefix_sbisim|apply steps_emit_list].
+Qed.
+
+(** Identical actual bodies followed by scheduler steps yield bisimilar
+    families; the index retains every state component used by either run. *)
+Lemma sbisim_step_family {E B : Type -> Type} {I A X : Type}
+  (left right : I -> ctree E B X) (body : I -> ctree E B A)
+  (next : I -> A -> I) (Inv : I -> Prop)
+  (Hleft : forall i, Inv i ->
+    left i ~ (body i >>= fun a => Step (left (next i a))))
+  (Hright : forall i, Inv i ->
+    right i ~ (body i >>= fun a => Step (right (next i a))))
+  (Hnext : forall i a, Inv i -> Inv (next i a)) :
+  forall i, Inv i -> left i ~ right i.
+Proof.
+  coinduction R CIH; intros i Hi.
+  transitivity (body i >>= fun a => Step (left (next i a)));
+    [apply (gfp_bchain R), Hleft, Hi|].
+  transitivity (body i >>= fun a => Step (right (next i a)));
+    [|apply (gfp_bchain R); symmetry; apply Hright, Hi].
+  apply sb_chain_bind_eq; intro a.
+  apply step_sb_step; [reflexivity|apply CIH, Hnext, Hi].
+Qed.
+
+(** Identical bodies and logged scheduler picks yield bisimilar families. *)
+Lemma sbisim_log_family {W : Type} {B : Type -> Type} {I A X : Type}
+  (left right : I -> ctreeW W B X) (body : I -> ctreeW W B A)
+  (pick : I -> W) (next : I -> A -> I) (Inv : I -> Prop)
+  (Hleft : forall i, Inv i ->
+    left i ~ (body i >>= fun a => Vis (Log (pick i)) (fun _ => left (next i a))))
+  (Hright : forall i, Inv i ->
+    right i ~ (body i >>= fun a => Vis (Log (pick i)) (fun _ => right (next i a))))
+  (Hnext : forall i a, Inv i -> Inv (next i a)) :
+  forall i, Inv i -> left i ~ right i.
+Proof.
+  coinduction R CIH; intros i Hi.
+  transitivity (body i >>= fun a => Vis (Log (pick i)) (fun _ => left (next i a)));
+    [apply (gfp_bchain R), Hleft, Hi|].
+  transitivity (body i >>= fun a => Vis (Log (pick i)) (fun _ => right (next i a)));
+    [|apply (gfp_bchain R); symmetry; apply Hright, Hi].
+  apply sb_chain_bind_eq; intro a.
+  apply step_sb_vis; intros []; exists tt; split; try reflexivity;
+    apply CIH, Hnext, Hi.
 Qed.

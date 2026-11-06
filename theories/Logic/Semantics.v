@@ -21,6 +21,7 @@ From TICL Require Import
 
 From TICL Require Export Logic.Syntax.
 
+From Equations Require Import Equations.
 Generalizable All Variables.
 
 (** * TICL logic shallow embedding, based on kripke semantics *)
@@ -90,6 +91,13 @@ Section Shallow.
   | StepE: forall t w,
       enc p (euc p q) t w -> (* Matches [p] now; steps to [m'] *)
       euc p q t w.
+
+  (** Select the existing next and until semantics by their quantifier. *)
+  Definition qnext (q: ticlq) (p r: MP): MP :=
+    match q with Q_A => anc p r | Q_E => enc p r end.
+
+  Definition quntil (q: ticlq) (p r: MP): MP :=
+    match q with Q_A => auc p r | Q_E => euc p r end.
 
   (** ** Custom induction schemes for [auc, euc] *)
   (** [auc_ind] is the custom induction scheme for [auc].
@@ -166,6 +174,74 @@ Section Shallow.
     - intros t w Hstep IH; now apply StepA.
   Qed.
 
+  Lemma enc_mono_r (p q q': MP) :
+    (forall t w, q t w -> q' t w) ->
+    forall t w, enc p q t w -> enc p q' t w.
+  Proof.
+    intros Hqq' t w (Hp & t' & w' & TR & Hq).
+    split; [exact Hp | exists t', w'; split; [exact TR | now apply Hqq']].
+  Qed.
+
+  Lemma euc_mono_r (p q q': MP) :
+    (forall t w, q t w -> q' t w) ->
+    forall t w, euc p q t w -> euc p q' t w.
+  Proof.
+    intros Hqq'.
+    apply (euc_ind (fun t w => euc p q' t w)).
+    - intros t w Hq; apply MatchE; now apply Hqq'.
+    - intros t w (Hp & t' & w' & TR & Hsource & IH).
+      apply StepE; split; [exact Hp | exists t', w'; now split].
+  Qed.
+
+  Lemma euc_endpoint_exists (p q : MP) t w :
+    euc p q t w -> exists u z, q u z.
+  Proof.
+    intro H; refine (euc_ind (fun _ _ => exists u z, q u z) _ _ t w H).
+    - intros u z Hq; exists u,z; exact Hq.
+    - intros u z (_ & v & y & _ & _ & IH); exact IH.
+  Qed.
+
+  (** Weaken the guard while preserving the same finite endpoint. *)
+  Lemma auc_mono_l (p p' q: MP) :
+    (forall t w, p t w -> p' t w) ->
+    forall t w, auc p q t w -> auc p' q t w.
+  Proof.
+    intros Hpp'.
+    apply (auc_ind (fun t w => auc p' q t w)).
+    - intros t w Hq; now apply MatchA.
+    - intros t w Hstep (Hp & Hs & IH).
+      apply StepA; split; [now apply Hpp' | now split].
+  Qed.
+
+  Lemma euc_mono_l (p p' q: MP) :
+    (forall t w, p t w -> p' t w) ->
+    forall t w, euc p q t w -> euc p' q t w.
+  Proof.
+    intros Hpp'.
+    apply (euc_ind (fun t w => euc p' q t w)).
+    - intros t w Hq; now apply MatchE.
+    - intros t w (Hp & t' & w' & TR & Hsource & IH).
+      apply StepE; split; [now apply Hpp' | exists t', w'; now split].
+  Qed.
+
+  (** Flatten finite until segments with the same guard. *)
+  Lemma auc_join (p q: MP) :
+    forall t w, auc p (auc p q) t w -> auc p q t w.
+  Proof.
+    apply (auc_ind (fun t w => auc p q t w)).
+    - intros t w Hq; exact Hq.
+    - intros t w Hstep IH; now apply StepA.
+  Qed.
+
+  Lemma euc_join (p q: MP) :
+    forall t w, euc p (euc p q) t w -> euc p q t w.
+  Proof.
+    apply (euc_ind (fun t w => euc p q t w)).
+    - intros t w Hq; exact Hq.
+    - intros t w (Hp & t' & w' & TR & Hsource & IH).
+      apply StepE; split; [exact Hp | exists t', w'; now split].
+  Qed.
+
   Arguments impl /.  
 
   (** ** Forall Always modality (AG) *)
@@ -204,146 +280,196 @@ Section Entailment.
   Abbreviation MS X := (M E B X).
   Abbreviation MP X := (M E B X -> World E -> Prop).
 
-  (** ** Semantics of TICL prefix formulas *)
-  (** [entailsL] is the semantics of TICL prefix formulas, denoted to [MP X], a predicate over [M E B X * World E]
-      in the metalanguage of the Rocq proof assistant.
-  *)
-  Definition entailsL X : ticll E -> MP X := 
-    fix entailsL (φ: ticll E): MP X :=
-      match φ with
-      | (CNow φ) => fun _ w => φ w /\ not_done w
-      | (CuL Q_A p q) => auc (entailsL p) (entailsL q)
-      | (CuL Q_E p q) => euc (entailsL p) (entailsL q)
-      | (CxL Q_A p q) => anc (entailsL p) (entailsL q)
-      | (CxL Q_E p q) => enc (entailsL p) (entailsL q)
-      | (Cg Q_A φ) => agc (entailsL φ)
-      | (Cg Q_E φ) => egc (entailsL φ)
-      | (CAndL p q) => fun t w => entailsL p t w /\ entailsL q t w
-      | (COrL p q) => fun t w => entailsL p t w \/ entailsL q t w
-      end.
+  Equations entails (X : Type) (b : bool) (p : ticl_at E X b) : MP X :=
+  entails X false (CNow p) := fun _ w => p w /\ not_done w;
+  entails X true (CRet p) := fun t w =>
+    exists x, p x w /\
+      anc (fun _ w => not_done w) (fun _ => done_of x w) t w;
+  entails X b (Cu Q_A p r) := auc (entails X false p) (entails X b r);
+  entails X b (Cu Q_E p r) := euc (entails X false p) (entails X b r);
+  entails X b (Cx Q_A p r) := anc (entails X false p) (entails X b r);
+  entails X b (Cx Q_E p r) := enc (entails X false p) (entails X b r);
+  entails X false (Cg Q_A p) := agc (entails X false p);
+  entails X false (Cg Q_E p) := egc (entails X false p);
+  entails X b (CAnd p r) := fun t w => entails X b p t w /\ entails X b r t w;
+  entails X b (COr p r) := fun t w => entails X b p t w \/ entails X b r t w.
 
-  (** ** Semantics of TICL suffix formulas *)
-  (** [entailsR] is the semantics of TICL suffix formulas, denoted to [MP X], a predicate over [M E B X * World E]
-      in the metalanguage of the Rocq proof assistant.
-  *)
-  Definition entailsR {X}: ticlr E X -> MP X := 
-    fix entailsR (φ: ticlr E X): MP X :=
-      match φ with
-      | (CRet φ) => fun t w => exists x, φ x w /\ anc (fun _ w => not_done w) (fun _ => done_of x w) t w
-      | (CuR Q_A p q) => auc (entailsL X p) (entailsR q)
-      | (CuR Q_E p q) => euc (entailsL X p) (entailsR q)
-      | (CxR Q_A p q) => anc (entailsL X p) (entailsR q)
-      | (CxR Q_E p q) => enc (entailsL X p) (entailsR q)
-      | (CAndR p q) => fun t w => entailsR p t w /\ entailsR q t w
-      | (COrR p q) => fun t w => entailsR p t w \/ entailsR q t w
-      end.
+  (** One layer only: recursive children continue to use [entails]. *)
+  Equations entails_step (X : Type) (b : bool) (p : ticl_at E X b) : MP X :=
+  entails_step X false (CNow p) := fun _ w => p w /\ not_done w;
+  entails_step X true (CRet p) := fun t w =>
+    exists x, p x w /\
+      anc (fun _ w => not_done w) (fun _ => done_of x w) t w;
+  entails_step X b (Cu Q_A p r) := auc (entails X false p) (entails X b r);
+  entails_step X b (Cu Q_E p r) := euc (entails X false p) (entails X b r);
+  entails_step X b (Cx Q_A p r) := anc (entails X false p) (entails X b r);
+  entails_step X b (Cx Q_E p r) := enc (entails X false p) (entails X b r);
+  entails_step X false (Cg Q_A p) := agc (entails X false p);
+  entails_step X false (Cg Q_E p) := egc (entails X false p);
+  entails_step X b (CAnd p r) := fun t w => entails X b p t w /\ entails X b r t w;
+  entails_step X b (COr p r) := fun t w => entails X b p t w \/ entails X b r t w.
 
-  (** ** Unfolding of [entailsL]. 
-  This is defined in anger, because Rocq's evaluation [cbn] and [cbv] has a hard time figuring out when to stop. *)
-  Lemma unfold_entailsL {X}: forall (t: M E B X) (w: World E) (φ: ticll E),
-      entailsL X φ t w = match φ with
-                         | (CNow φ) => φ w /\ not_done w
-                         | (CuL Q_A p q) => auc (entailsL X p) (entailsL X q) t w
-                         | (CuL Q_E p q) => euc (entailsL X p) (entailsL X q) t w
-                         | (CxL Q_A p q) => anc (entailsL X p) (entailsL X q) t w
-                         | (CxL Q_E p q) => enc (entailsL X p) (entailsL X q) t w
-                         | (Cg Q_A φ) => agc (entailsL X φ) t w
-                         | (Cg Q_E φ) => egc (entailsL X φ) t w
-                         | (CAndL p q) => entailsL X p t w /\ entailsL X q t w
-                         | (COrL p q) => entailsL X p t w \/ entailsL X q t w
-                         end.
-  Proof. intros; unfold entailsL; destruct φ; auto; destruct q; auto. Qed.
+  Lemma unfold_entails : forall X b (p : ticl_at E X b) t w,
+      entails X b p t w = entails_step X b p t w.
+  Proof.
+    intro X; apply (@ticl_at_ind E X
+      (fun b p => forall t w, entails X b p t w = entails_step X b p t w));
+      intros; try destruct q; reflexivity.
+  Qed.
+  Global Opaque entails.
 
-  (** ** Unfolding of [entailsR]. *) 
-  Lemma unfold_entailsR {X}: forall (t: M E B X) (w: World E) (φ: ticlr E X),
-      entailsR φ t w = match φ with
-                       | (CRet φ) => exists x, φ x w /\ anc (fun _ w => not_done w) (fun _ => done_of x w) t w
-                       | (CuR Q_A p q) => auc (entailsL X p) (entailsR q) t w
-                       | (CuR Q_E p q) => euc (entailsL X p) (entailsR q) t w
-                       | (CxR Q_A p q) => anc (entailsL X p) (entailsR q) t w
-                       | (CxR Q_E p q) => enc (entailsL X p) (entailsR q) t w
-                       | (CAndR p q) => entailsR p t w /\ entailsR q t w
-                       | (COrR p q) => entailsR p t w \/ entailsR q t w
-                       end.
-  Proof. intros; unfold entailsR; destruct φ; auto; destruct q; auto. Qed.
-
-  Global Opaque entailsL.
-  Global Opaque entailsR.
+  Definition entailsL (X : Type) (p : ticll E) : MP X :=
+    entails X false p.
+  Definition entailsR {X : Type} (p : ticlr E X) : MP X :=
+    entails X true p.
 End Entailment.
 
 (* Entailment notation *)
 Import TiclNotations.
 Local Open Scope ticl_scope.
 
-Notation " t , w  |= φ " := (entailsL _ φ t w)
-                              (in custom ticll at level 80,
-                                  φ custom ticll,
-                                  right associativity): ticl_scope.
+Notation "t , w |=L p" := (@entails _ _ _ _ _ false p t w)
+  (in custom ticl at level 80, p custom ticl,
+   right associativity, only printing) : ticl_scope.
+Notation "t , w |=R p" := (@entails _ _ _ _ _ true p t w)
+  (in custom ticl at level 80, p custom ticl,
+   right associativity, only printing) : ticl_scope.
+Notation "t , w |=L p" := (entailsL _ p t w)
+  (in custom ticl at level 80, p custom ticl,
+   right associativity) : ticl_scope.
+Notation "t , w |=R p" := (entailsR p t w)
+  (in custom ticl at level 80, p custom ticl,
+   right associativity) : ticl_scope.
 
-Notation " t , w  |= φ " := (entailsR φ t w)
-                              (in custom ticlr at level 80,
-                                  φ custom ticlr,
-                                  right associativity): ticl_scope.
+Ltac ticl_normalize := cbv beta zeta delta [entailsL entailsR].
+Tactic Notation "ticl_normalize" "in" hyp(H) :=
+  cbv beta zeta delta [entailsL entailsR] in H.
 
-(** * Base constructors of logical formulas and some basic equivalences. *)
-Lemma ticll_now `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) (φ: World E -> Prop),
-    <( t, w |= now φ )> <-> φ w /\ not_done w.
+(** * Constructor laws, shared across modes. *)
+Lemma ticl_now `{KMS : Kripke M E B} X : forall (t : M E B X) w p,
+  entails X false (CNow p) t w <-> p w /\ not_done w.
 Proof. reflexivity. Qed.
-Create HintDb ticll.
-Global Hint Resolve ticll_now: ticll.
+Lemma ticl_pure `{KMS : Kripke M E B} X : forall (t : M E B X) w,
+  <( t,w |=L pure )> <-> w = Pure.
+Proof. intros; ticl_normalize; rewrite ticl_now; split; [intros []; assumption | intros ->; now split; constructor]. Qed.
+Lemma ticl_vis `{KMS : Kripke M E B} X : forall (t : M E B X) w p,
+  <( t,w |=L vis p )> <-> vis_with p w.
+Proof. intros; ticl_normalize; rewrite ticl_now; split; [intros []; assumption | intro H; split; [exact H | inv H; constructor]]. Qed.
+Lemma ticl_ret `{KMS : Kripke M E B} X : forall (t : M E B X) w (p : X -> World E -> Prop),
+  entails X true (CRet p) t w <-> exists x, p x w /\ anc (fun _ w => not_done w) (fun _ => done_of x w) t w.
+Proof. intros; rewrite unfold_entails; reflexivity. Qed.
+#[global] Hint Resolve ticl_now ticl_pure ticl_vis ticl_ret : ticl.
 
-Lemma ticll_pure `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E),
-    <( t, w |= pure )> <-> w = Pure.
+Lemma ticl_an `{KMS : Kripke M E B} X b : forall (t : M E B X) w (p : ticll E) (r : ticl_at E X b),
+  entails X b (Cx Q_A p r) t w <-> entails X false p t w /\ can_step t w /\ forall t' w', ktrans t w t' w' -> entails X b r t' w'.
+Proof. destruct b; reflexivity. Qed.
+
+Lemma ticl_en `{KMS : Kripke M E B} X b : forall (t : M E B X) w (p : ticll E) (r : ticl_at E X b),
+  entails X b (Cx Q_E p r) t w <-> entails X false p t w /\ exists t' w', ktrans t w t' w' /\ entails X b r t' w'.
+Proof. destruct b; reflexivity. Qed.
+
+Lemma ticl_au `{KMS : Kripke M E B} X b : forall (t : M E B X) w (p : ticll E) (r : ticl_at E X b),
+  entails X b (Cu Q_A p r) t w <-> auc (entails X false p) (entails X b r) t w.
+Proof. destruct b; reflexivity. Qed.
+
+Lemma ticl_eu `{KMS : Kripke M E B} X b : forall (t : M E B X) w (p : ticll E) (r : ticl_at E X b),
+  entails X b (Cu Q_E p r) t w <-> euc (entails X false p) (entails X b r) t w.
+Proof. destruct b; reflexivity. Qed.
+
+Lemma ticl_and `{KMS : Kripke M E B} X b : forall (t : M E B X) w (p r : ticl_at E X b),
+  entails X b (CAnd p r) t w <-> entails X b p t w /\ entails X b r t w.
+Proof. destruct b; reflexivity. Qed.
+
+Lemma ticl_or `{KMS : Kripke M E B} X b : forall (t : M E B X) w (p r : ticl_at E X b),
+  entails X b (COr p r) t w <-> entails X b p t w \/ entails X b r t w.
+Proof. destruct b; reflexivity. Qed.
+
+#[global] Hint Resolve ticl_an ticl_en : ticl.
+Lemma ticl_an_en `{KMS : Kripke M E B} X b : forall (t : M E B X) w (p : ticll E) (r : ticl_at E X b),
+  entails X b (Cx Q_A p r) t w -> entails X b (Cx Q_E p r) t w.
 Proof.
-  intros; split; intros. 
-  - now destruct H.
-  - subst; split; now constructor. 
+  intros * H; apply ticl_an in H as (Hp & (t' & w' & TR) & Hnext).
+  apply ticl_en; split; [exact Hp | exists t', w'; auto].
 Qed.
-Global Hint Resolve ticll_pure: ticll.
-
-Lemma ticll_vis `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) φ,
-    <( t, w |= vis φ )> <-> vis_with φ w.
+Lemma ticl_au_eu `{KMS : Kripke M E B} X b : forall (t : M E B X) w (p : ticll E) (r : ticl_at E X b),
+  entails X b (Cu Q_A p r) t w -> entails X b (Cu Q_E p r) t w.
 Proof.
-  intros; split; intros.
-  - now destruct H.
-  - split; inv H; now constructor. 
+  intros * H; apply ticl_au in H; apply ticl_eu; induction H.
+  - now apply MatchE.
+  - destruct H as (Hp & _ & ?); destruct H0 as (_ & (t' & w' & TR) & IH).
+    apply StepE; split; [exact Hp | exists t', w'; auto].
 Qed.
-Global Hint Resolve ticll_vis: ticll.
-
-Create HintDb ticlr.
-
-Lemma ticlr_ret `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) (φ: X -> World E -> Prop),
-    <[ t, w |= ret φ ]> <-> exists x, φ x w /\ anc (fun _ w => not_done w) (fun _ => done_of x w) t w.
-Proof. intros; rewrite unfold_entailsR; reflexivity. Qed.
-Global Hint Resolve ticlr_ret: ticlr.
+Lemma ticl_an_au `{KMS : Kripke M E B} X b : forall (t : M E B X) w (p : ticll E) (r : ticl_at E X b),
+  entails X b (Cx Q_A p r) t w -> entails X b (Cu Q_A p r) t w.
+Proof.
+  intros * H; apply ticl_an in H as (Hp & Hs & Hnext); apply ticl_au.
+  apply StepA; split; [exact Hp | split; [exact Hs |]]; intros; apply MatchA; eauto.
+Qed.
+Lemma ticl_en_eu `{KMS : Kripke M E B} X b : forall (t : M E B X) w (p : ticll E) (r : ticl_at E X b),
+  entails X b (Cx Q_E p r) t w -> entails X b (Cu Q_E p r) t w.
+Proof.
+  intros * H; apply ticl_en in H as (Hp & t' & w' & TR & Hr); apply ticl_eu.
+  apply StepE; split; [exact Hp | exists t', w'; split; [exact TR | now apply MatchE]].
+Qed.
+Lemma unfold_entails_ag `{KMS : Kripke M E B} X : forall (t : M E B X) w p,
+  entails X false (Cg Q_A p) t w = agc (entails X false p) t w.
+Proof. reflexivity. Qed.
+Lemma unfold_entails_eg `{KMS : Kripke M E B} X : forall (t : M E B X) w p,
+  entails X false (Cg Q_E p) t w = egc (entails X false p) t w.
+Proof. reflexivity. Qed.
+Lemma anc_not_done `{KMS : Kripke M E B} X : forall (t : M E B X) w p q,
+  anc p q t w -> not_done w.
+Proof. intros * (_ & Hs & _); now apply can_step_not_done with t. Qed.
+Lemma enc_not_done `{KMS : Kripke M E B} X : forall (t : M E B X) w p q,
+  enc p q t w -> not_done w.
+Proof. intros * (_ & t' & w' & TR & _); now apply ktrans_not_done with t t' w'. Qed.
+#[global] Hint Resolve enc_not_done anc_not_done : ticl.
+Lemma ticl_not_done `{KMS : Kripke M E B} X : forall b (t : M E B X) w (p : ticl_at E X b),
+  entails X b p t w -> not_done w.
+Proof.
+  assert (H : forall b (p : ticl_at E X b) (t : M E B X) w, entails X b p t w -> not_done w).
+  { apply (@ticl_at_ind E X (fun b p => forall t w, entails X b p t w -> not_done w)).
+    - intros p t w H; apply ticl_now in H; tauto.
+    - intros p t w H; apply ticl_ret in H as (x & _ & Hd & _); exact Hd.
+    - intros b q p IHp r IHr t w H; destruct q.
+      + apply ticl_au in H; destruct H as [t w Hr | t w (Hp & _)]; eauto.
+      + apply ticl_eu in H; destruct H as [t w Hr | t w (Hp & _)]; eauto.
+    - intros b q p IHp r IHr t w H; destruct q.
+      + apply ticl_an in H as (Hp & _); eauto.
+      + apply ticl_en in H as (Hp & _); eauto.
+    - intros q p IHp t w H; destruct q.
+      + rewrite unfold_entails_ag in H; change (agc (entails X false p) t w) in H.
+        step in H; destruct H as (Hp & _); eauto.
+      + rewrite unfold_entails_eg in H; change (egc (entails X false p) t w) in H.
+        step in H; destruct H as (Hp & _); eauto.
+    - intros b p IHp r IHr t w H; apply ticl_and in H; destruct H; eauto.
+    - intros b p IHp r IHr t w H; apply ticl_or in H; destruct H; eauto. }
+  intros; eauto.
+Qed.
 
 (** Native return implies a terminal postcondition after its final transition.
     The postcondition is evaluated at the unchanged predecessor world. *)
 Lemma ret_done_next `{KMS: Kripke M E B} {X}
     (R : X -> World E -> Prop) (t : M E B X) w :
-  entailsR (CRet R) t w ->
-  anc (entailsL X (CNow (fun _ => True)))
+  entails X true (CRet R) t w ->
+  anc (entails X false (CNow (fun _ => True)))
     (fun _ wd => done_with R wd) t w.
 Proof.
-  intros H; apply ticlr_ret in H as (x & HR & Hd & Hs & Htr).
-  split; [rewrite unfold_entailsL; now split | split; [exact Hs |]].
+  intros H; apply ticl_ret in H as (x & HR & Hd & Hs & Htr).
+  split; [rewrite unfold_entails; now split | split; [exact Hs |]].
   intros t' w' TR; destruct (Htr t' w' TR); constructor; exact HR.
 Qed.
 
 (** Universal eventual native return includes the final value transition. *)
 Lemma af_ret_done `{KMS: Kripke M E B} {X}
     (R : X -> World E -> Prop) (t : M E B X) w :
-  entailsR (CuR Q_A (CNow (fun _ => True)) (CRet R)) t w ->
-  auc (entailsL X (CNow (fun _ => True)))
+  entails X true (Cu Q_A (CNow (fun _ => True)) (CRet R)) t w ->
+  auc (entails X false (CNow (fun _ => True)))
     (fun _ wd => done_with R wd) t w.
 Proof.
-  rewrite unfold_entailsR; revert t w.
+  rewrite ticl_au; revert t w.
   apply (auc_ind (fun t w =>
-    auc (entailsL X (CNow (fun _ => True)))
+    auc (entails X false (CNow (fun _ => True)))
       (fun _ wd => done_with R wd) t w)).
   - intros t w HR; apply ret_done_next in HR as (Hp & Hs & Htr).
     apply StepA; split; [exact Hp | split; [exact Hs |]].
@@ -354,13 +480,13 @@ Qed.
 (** Existential eventual native return includes one final value transition. *)
 Lemma ef_ret_done `{KMS: Kripke M E B} {X}
     (R : X -> World E -> Prop) (t : M E B X) w :
-  entailsR (CuR Q_E (CNow (fun _ => True)) (CRet R)) t w ->
-  euc (entailsL X (CNow (fun _ => True)))
+  entails X true (Cu Q_E (CNow (fun _ => True)) (CRet R)) t w ->
+  euc (entails X false (CNow (fun _ => True)))
     (fun _ wd => done_with R wd) t w.
 Proof.
-  rewrite unfold_entailsR; revert t w.
+  rewrite ticl_eu; revert t w.
   apply (euc_ind (fun t w =>
-    euc (entailsL X (CNow (fun _ => True)))
+    euc (entails X false (CNow (fun _ => True)))
       (fun _ wd => done_with R wd) t w)).
   - intros t w HR; apply ret_done_next in HR as (Hp & (t' & w' & TR) & Htr).
     apply StepE; split; [exact Hp | exists t', w'; split; [exact TR |]].
@@ -369,143 +495,19 @@ Proof.
     apply StepE; split; [exact Hp | exists t', w'; now split].
 Qed.
 
-(*| AN, WX, EN unfold |*)
-Lemma ticll_an `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) (p q: ticll E),
-    <( t, w |= p AN q )> <-> <( t, w |= p)> /\ can_step t w /\ forall t' w', |t, w| ↦ |t',w'| -> <( t',w' |= q )>.
-Proof. intros; auto. Qed.
 
-Lemma ticll_en `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) (p q: ticll E),
-    <( t,w |= p EN q )> <-> <( t, w|= p)> /\ exists t' w', |t,w| ↦ |t',w'| /\ <( t',w' |= q )>.
-Proof. intros; auto. Qed.
-Global Hint Resolve ticll_an ticll_en: ticl.
-
-Lemma ticlr_an `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) (p: ticll E) (q: ticlr E X),
-    <[ t, w |= p AN q ]> <-> <( t, w |= p)> /\ can_step t w /\ forall t' w', |t, w| ↦ |t',w'| -> <[ t',w' |= q ]>.
-Proof. intros; auto. Qed.
-
-Lemma ticlr_en `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) (p: ticll E) (q: ticlr E X),
-    <[ t,w |= p EN q ]> <-> <( t, w |= p )> /\ exists t' w', |t,w| ↦ |t',w'| /\ <[ t',w' |= q ]>.
-Proof. intros; eauto. Qed.
-Global Hint Resolve ticlr_an ticlr_en: ticl.
-
-(*| Propositional statements |*)
-Lemma ticll_and  `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) (p q: ticll E),
-    <( t, w |= p /\ q )> <-> <( t, w |= p )> /\ <( t, w |= q )>.
-Proof. intros; rewrite unfold_entailsL; reflexivity. Qed.
-
-Lemma ticll_or  `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) (p q: ticll E),
-    <( t, w |= p \/ q )> <-> <( t, w |= p )> \/ <( t, w |= q )>.
-Proof. intros; rewrite unfold_entailsL; reflexivity. Qed.
-
-Lemma ticlr_and  `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) (p q: ticlr E X),
-    <[ t, w |= p /\ q ]> <-> <[ t, w |= p ]> /\ <[ t, w |= q ]>.
-Proof. intros; rewrite unfold_entailsR; reflexivity. Qed.
-
-Lemma ticlr_or  `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) (p q: ticlr E X),
-    <[ t, w |= p \/ q ]> <-> <[ t, w |= p ]> \/ <[ t, w |= q ]>.
-Proof. intros; rewrite unfold_entailsR; reflexivity. Qed.
-
-(** [AN φ] is stronger than [EN φ] *)
-Lemma ticll_an_en `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) (p q: ticll E),
-    <( t, w |= p AN q )> -> <( t, w |= p EN q )>.
-Proof.
-  intros.
-  rewrite ticll_an, ticll_en in *.
-  destruct H as (Hp & (m' & w' & TR) & ?).
-  split; [|exists m', w']; auto.
-Qed.
-
-(** [AF φ] is stronger than [EF φ] *)
-Lemma ticll_au_eu `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) (p q: ticll E),
-    <( t, w |= p AU q )> -> <( t, w |= p EU q )>.
-Proof.
-  intros.
-  rewrite unfold_entailsL in *.
-  induction H.
-  - now apply MatchE. 
-  - destruct H as (Hp & _ & ?).
-    destruct H0 as (_ & (? & ? & ?) &  ?).
-    apply StepE; split; auto.
-    exists x, x0; split; auto.
-Qed.
-
-Lemma ticlr_an_en `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) (p: ticll E) (q: ticlr E X),
-    <[ t, w |= p AN q ]> -> <[ t, w |= p EN q ]>.
-Proof.
-  intros.
-  rewrite ticlr_an, ticlr_en in *.
-  destruct H as (H & (m' & w' & TR) & ?).
-  intuition.
-  exists m', w'; auto.
-Qed.
-
-(** [AF φ] is stronger than [EF φ] *)
-Lemma ticlr_au_eu `{KMS: Kripke M E B} X:
-  forall (t: M E B X) (w: World E) (p: ticll E) (q: ticlr E X),
-    <[ t, w |= p AU q ]> -> <[ t, w |= p EU q ]>.
-Proof.
-  intros.
-  rewrite unfold_entailsR in *.
-  induction H.
-  - now apply MatchE. 
-  - destruct H as (Hp & _ & ?).
-    destruct H0 as (_ & (? & ? & ?) &  ?).
-    apply StepE; split; auto.
-    exists x, x0; split; auto.
-Qed.
-
-(** [AN φ] implies [AU φ] *)
-Lemma ticlr_an_au `{KMS: Kripke M E B} X: forall (t: M E B X) w φ ψ,
-    <[ t, w |= φ AN ψ ]> ->
-    <[ t, w |= φ AU ψ ]>.
-Proof.
-  intros.
-  rewrite ticlr_an in H.
-  destruct H as (H & (m' & w' & TR) & ?).
-  rewrite unfold_entailsR.
-  apply StepA; split; auto.
-  split.
-  - now (exists m', w').
-  - intros.
-    apply MatchA; auto.
-Qed.
-
-Lemma ticlr_en_eu `{KMS: Kripke M E B} X: forall (t: M E B X) w φ ψ,
-    <[ t, w |= φ EN ψ ]> ->
-    <[ t, w |= φ EU ψ ]>.
-Proof.
-  intros.
-  rewrite ticlr_en in H.
-  destruct H as (H & (m' & w' & TR & ?)).
-  rewrite unfold_entailsR.
-  apply StepE; split; auto.
-  exists m', w'; split; auto.
-  now apply MatchE.
-Qed.
-  
 (** * Soundness of TICL formulas *)
 (** Bot is false *)
 Lemma ticll_sound `{KMS: Kripke M E B} X: forall (t: M E B X) (w: World E),
-    ~ <( t, w |= ⊥ )>.
+    ~ <( t, w |=L ⊥ )>.
 Proof. now intros * []. Qed. 
 
 (** Prefix truth holds exactly at nonterminal worlds. *)
 Lemma ticll_top `{KMS: Kripke M E B} X: forall (t: M E B X) (w: World E),
-    not_done w -> <( t, w |= ⊤ )>.
+    not_done w -> <( t, w |=L ⊤ )>.
 Proof.
   intros.
-  now apply ticll_now.
+  now apply ticl_now.
 Qed.
 
 
@@ -513,42 +515,42 @@ Qed.
     This is a strong statement, it shows that [False] cannot eventually appear.
     This is contrary to partial correctness logics where [False] can appear after infinite loops. *)
 Lemma ticll_sound_ef `{KMS: Kripke M E B} X: forall (t: M E B X) (w: World E),
-    ~ <( t, w |= EF ⊥ )>.
+    ~ <( t, w |=L EF ⊥ )>.
 Proof.
   intros * Contra.
-  rewrite unfold_entailsL in Contra.
+  apply ticl_eu in Contra.
   induction Contra.
-  - rewrite ticll_now in H; intuition. 
+  - rewrite ticl_now in H; intuition. 
   - now destruct H as (? & ? & ? & ? & ?).
 Qed.
 
 (** Cannot have all paths such that eventually always Bot. *)
 Lemma ticll_sound_af `{KMS: Kripke M E B} X: forall (t: M E B X) (w: World E),
-    ~ <( t, w |= AF ⊥ )>.
+    ~ <( t, w |=L AF ⊥ )>.
 Proof.
   intros * Contra.
-  apply ticll_au_eu in Contra.
+  apply ticl_au_eu in Contra.
   apply ticll_sound_ef in Contra.
   contradiction.
 Qed.
 
 (** Cannot exist path such that eventually Bot. *)
 Lemma ticlr_sound_ef `{KMS: Kripke M E B} X: forall (t: M E B X) (w: World E),
-    ~ <[ t, w |= EF ret {fun _ _ => False} ]>.
+    ~ <( t, w |=R EF ret {fun _ _ => False} )>.
 Proof.
   intros * Contra.
-  rewrite unfold_entailsR in Contra.
+  apply ticl_eu in Contra.
   induction Contra.
-  - apply ticlr_ret in H as (x & HF & _); contradiction.
+  - apply ticl_ret in H as (x & HF & _); contradiction.
   - now destruct H as (? & ? & ? & ? & ?).
 Qed.
 
 (** Cannot have all paths such that eventually always Bot. *)
 Lemma ticlr_sound_af `{KMS: Kripke M E B} X: forall (t: M E B X) (w: World E),
-    ~ <[ t, w |= AF ret {fun _ _ => False} ]>.
+    ~ <( t, w |=R AF ret {fun _ _ => False} )>.
 Proof.
   intros * Contra.
-  apply ticlr_au_eu in Contra.
+  apply ticl_au_eu in Contra.
   apply ticlr_sound_ef in Contra.
   contradiction.
 Qed.
@@ -557,7 +559,7 @@ Qed.
     path from [t, w] is finite, whatever branch is taken. *)
 Theorem af_done_accessible `{Kripke M E B} {X}
     (R : X -> World E -> Prop) (t : M E B X) (w : World E) :
-  auc (entailsL X (CNow (fun _ => True)))
+  auc (entails X false (CNow (fun _ => True)))
     (fun _ wd => done_with R wd) t w -> Acc kripke_step (t, w).
 Proof.
   revert t w.
@@ -568,126 +570,53 @@ Proof.
     exact (IH u w' TR).
 Qed.
 
-Lemma anc_not_done `{KMS: Kripke M E B} X: forall (t: M E B X) (w: World E) p q,
-    anc p q t w ->
-    not_done w.
-Proof.
-  intros.
-  destruct H as (? & ? & ?).
-  now apply can_step_not_done with t.
-Qed.
 
-Lemma enc_not_done `{KMS: Kripke M E B} X: forall (t: M E B X) (w: World E) p q,
-    enc p q t w ->
-    not_done w.
-Proof.
-  intros.
-  destruct H as (? & ? & ? & ? & ?).
-  now apply ktrans_not_done with t x x0.
-Qed.
-Hint Resolve enc_not_done anc_not_done: ticl.
-
-(** * Prefix formulas hold for [not_done] worlds *)
-(** Prefix atoms carry nonterminal evidence, preserved by their temporal rules. *)
-Lemma ticll_not_done `{KMS: Kripke M E B} X: forall (t: M E B X) (w: World E) (p: ticll E),
-    <( t, w |= p )> ->
-    not_done w.
-Proof.
-  intros.
-  hinduction p before X; intros;
-    rewrite unfold_entailsL in H; eauto; try destruct q; try solve [ destruct H; eauto].
-  - destruct H; eauto.
-    now apply anc_not_done in H. 
-  - destruct H; eauto.
-    now apply enc_not_done in H.
-  - step in H; destruct H, H0.
-    now apply can_step_not_done with t.
-  - step in H; destruct H, H0 as (t' & w' & TR & ?).
-    now apply ktrans_not_done with t t' w'.
-Qed.
-
-(** * Basic tactics *)
-(** More automated ones defined in [Tactics.v] after [Congruence.v] *)
+(** * Quotation-aware basic tactics. *)
 #[global] Tactic Notation "step" "in" ident(H) :=
+  ticl_normalize in H;
   (lazymatch type of H with
-   | @entailsL ?M ?E ?B ?KMS ?X (Cg ?q ?φ) ?t ?w =>
-       rewrite unfold_entailsL in H; step_in H
+   | @entails ?M ?E ?B ?K ?X false (Cg ?q ?p) ?t ?w =>
+       first [rewrite unfold_entails_ag in H | rewrite unfold_entails_eg in H |
+         destruct q; [rewrite unfold_entails_ag in H | rewrite unfold_entails_eg in H]]; step_in H
    end || step_in H).
-
 #[global] Ltac step :=
-  first [
-      lazymatch goal with
-      | |- @entailsL ?M ?E ?B ?KMS ?X (Cg ?q ?φ) ?t ?w =>
-          rewrite unfold_entailsL; step_
-      end | step_ | red; step_ ].
-
+  ticl_normalize;
+  first [lazymatch goal with
+    | |- @entails ?M ?E ?B ?K ?X false (Cg ?q ?p) ?t ?w =>
+        first [rewrite unfold_entails_ag | rewrite unfold_entails_eg |
+          destruct q; [rewrite unfold_entails_ag | rewrite unfold_entails_eg]]; step_
+    end | step_ | red; step_].
 #[global] Ltac cinduction H0 :=
+  ticl_normalize in H0;
   match type of H0 with
-  | @entailsL ?M ?E ?B ?KMS ?X (CuL Q_A ?φ ?ψ) ?t ?w =>
-      let Hau := fresh "Hau" in
-      let HInd := fresh "HInd" in
-      let Hp := fresh "Hp" in
-      let Hs := fresh "Hs" in
-      rewrite unfold_entailsL in H0; induction H0 as [? ? Hp | ? ? Hau HInd]; 
+  | @entails ?M ?E ?B ?K ?X ?b (Cu Q_A ?p ?r) ?t ?w =>
+      let Hau := fresh "Hau" in let HInd := fresh "HInd" in
+      let Hp := fresh "Hp" in let Hs := fresh "Hs" in
+      apply ticl_au in H0; induction H0 as [? ? Hp | ? ? Hau HInd];
       [| destruct Hau as (Hp & Hs & Hau), HInd as (_ & _ & HInd)]
-  | @entailsL ?M ?E ?B ?KMS ?X (CuL Q_E ?φ ?ψ) ?t ?w =>
-      let Heu := fresh "Heu" in
-      let HInd := fresh "HInd" in
-      let Hp := fresh "Hp" in
-      let Hs := fresh "Hs" in
-      let t' := fresh "t" in
-      let w' := fresh "w" in
-      let TR' := fresh "TR" in
-      rewrite unfold_entailsL in H0; induction H0 as [? ? Hp | ? ? Heu];
+  | @entails ?M ?E ?B ?K ?X ?b (Cu Q_E ?p ?r) ?t ?w =>
+      let Heu := fresh "Heu" in let HInd := fresh "HInd" in
+      let Hp := fresh "Hp" in let Hs := fresh "Hs" in
+      let t' := fresh "t" in let w' := fresh "w" in let TR' := fresh "TR" in
+      apply ticl_eu in H0; induction H0 as [? ? Hp | ? ? Heu];
       [| destruct Heu as (Hp & t' & w' & TR' & Heu & HInd)]
-  | @entailsL ?M ?E ?B ?KMS ?X (CuL ?c ?φ ?ψ) ?t ?w =>
-      is_var c; destruct c; cinduction H0
-  | @entailsR ?M ?E ?B ?KMS ?X (CuR Q_A ?φ ?ψ) ?t ?w =>
-      let Hau := fresh "Hau" in
-      let HInd := fresh "HInd" in
-      let Hp := fresh "Hp" in
-      let Hs := fresh "Hs" in
-      rewrite unfold_entailsR in H0; induction H0 as [? ? Hp | ? ? Hau HInd]; 
-      [| destruct Hau as (Hp & Hs & Hau), HInd as (_ & _ & HInd)]
-  | @entailsR ?M ?E ?B ?KMS ?X (CuR Q_E ?φ ?ψ) ?t ?w =>
-      let Hau := fresh "Hau" in
-      let HInd := fresh "HInd" in
-      let Hp := fresh "Hp" in
-      let Hs := fresh "Hs" in
-      let t' := fresh "t" in
-      let w' := fresh "w" in
-      let TR' := fresh "TR" in
-      rewrite unfold_entailsR in H0; induction H0 as [? ? Hp | ? ? Heu];
-      [| destruct Heu as (Hp & t' & w' & TR' & Heu & HInd)]
-  | @entailsR ?M ?E ?B ?KMS ?X (CuR ?c ?φ ?ψ) ?t ?w =>
-      is_var c; destruct c; cinduction H0
+  | @entails ?M ?E ?B ?K ?X ?b (Cu ?q ?p ?r) ?t ?w =>
+      is_var q; destruct q; cinduction H0
   end.
-
-(** Unfold only the [AG]/[EG] heads, leaving the other connectives alone.
-    Used by [coinduction] to expose the [gfp] under binders. *)
-Lemma unfold_entailsL_ag `{KMS: Kripke M E B} X: forall (t: M E B X) w φ,
-    <( t, w |= AG φ )> = agc (entailsL X φ) t w.
-Proof. intros; now rewrite unfold_entailsL. Qed.
-
-Lemma unfold_entailsL_eg `{KMS: Kripke M E B} X: forall (t: M E B X) w φ,
-    <( t, w |= EG φ )> = egc (entailsL X φ) t w.
-Proof. intros; now rewrite unfold_entailsL. Qed.
-
-(** [coinduction R CIH] on a goal [forall ..., H -> <( t, w |= AG φ )>].
-    The [gfp] of the conclusion is found by backtracking over the [gfp]
-    occurrences of the goal: [gfp_prop] + [apply_ptower] only succeed when the
-    abstracted [gfp] is the one in head position of the conclusion. *)
 #[global] Ltac coinduction_g R CIH :=
+  ticl_normalize;
   let R' := fresh R in
-  first [rewrite unfold_entailsL | setoid_rewrite unfold_entailsL | idtac];
-  repeat setoid_rewrite unfold_entailsL_ag;
-  repeat setoid_rewrite unfold_entailsL_eg;
+  repeat setoid_rewrite unfold_entails_ag;
+  repeat setoid_rewrite unfold_entails_eg;
   match goal with
   | |- context [gfp ?b] =>
       pattern (gfp b); apply gfp_prop; intro R'; apply_ptower R' O; intros CIH
   end;
-  try change (agc (entailsL ?X ?p) ?t ?w) with <( t, w |= AG p )> in *;
-  try change (egc (entailsL ?X ?p) ?t ?w) with <( t, w |= EG p )> in *.
-
+  repeat match goal with H : _ |- _ =>
+    progress (first [setoid_rewrite <- unfold_entails_ag in H |
+      setoid_rewrite <- unfold_entails_eg in H])
+  end;
+  repeat setoid_rewrite <- unfold_entails_ag;
+  repeat setoid_rewrite <- unfold_entails_eg.
 #[global] Tactic Notation "coinduction" simple_intropattern(R) simple_intropattern(H) :=
   (coinduction_g R H || coinduction R H).

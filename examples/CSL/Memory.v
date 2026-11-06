@@ -4,7 +4,8 @@
     interpreter.  They pin the observable allocation discipline: first-fit
     zero-initialized malloc with recorded extents, whole-block free, reuse of a
     released block, the null-free no-op, and faults on interior-pointer,
-    double, and use-after-free accesses. *)
+    double, and use-after-free accesses. Every heap snapshot and indexed
+    program observation is logged under [inl]; selections use [inr slot]. *)
 
 From Stdlib Require Import List Lia Arith.PeanoNat Fin Vector.
 From TICL Require Import
@@ -87,7 +88,7 @@ Ltac first_fit :=
 
 (** Split a shared leading observation. *)
 Ltac rr_log :=
-  unfold log; rewrite !bind_trigger; apply sb_vis; intros [].
+  unfold log; rewrite !bind_vis; setoid_rewrite bind_ret_l; apply sb_vis; intros [].
 
 Ltac block_is_free := apply block_freeb_spec; vm_compute; reflexivity.
 
@@ -119,43 +120,53 @@ Ltac rr_alloc base :=
 
 Ltac rr_finish :=
   cbn beta iota zeta;
-  rewrite interp_schedule_fair_ret by reflexivity;
+  rewrite interp_schedule_rr_ret by reflexivity;
   lazymatch goal with
   | |- interp_schedule_rr _ _ (?v -- _) _ _ _ ~ _ =>
       let v' := eval cbn in v in change v with v'
   end;
   rewrite vector_remove_head;
-  apply interp_schedule_fair_empty.
+  apply interp_schedule_rr_empty.
 
 (** ** Behavior *)
 
 (** Both CAS outcomes, the adjacent allocation, release of the whole first
     extent, and the observation stamps. *)
 Theorem lifecycle_scope :
+  let m1 := managed_alloc managed_empty 1 3 in
+  let m2 := managed_alloc m1 4 2 in
+  let m3 := (upd (fst m2) 1 7, snd m2) in
+  let m4 := (upd (fst m3) 3 9, snd m3) in
+  let m5 := (upd (fst m4) 4 11, snd m4) in
+  let m6 := (upd (fst m5) 1 8, snd m5) in
+  let m7 := (hfree_block 1 3 (fst m6), hfree 1 (snd m6)) in
   exists memory : ManagedHeap,
     run_rr lifecycle (managed_empty,((List.nil : Ctx.Ctx),0)) ~
-      emit_list [inl (inr (stamp (80,1) 0)); inl (inr (stamp (81,0) 1)); inl (inr (stamp (82,11) 2))]%list
+      emit_list (List.map inl
+        [CSLHeap m1; CSLHeap m2; CSLHeap m3; CSLHeap m4; CSLHeap m5;
+         CSLHeap m6; CSLEmit (stamp (80,1) 0); CSLEmit (stamp (81,0) 1);
+         CSLHeap m7; CSLEmit (stamp (82,11) 2)]%list)
         (Ret ((memory,((List.nil : Ctx.Ctx),3)),tt)
           : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)) /\
     fst memory 1 = None /\ fst memory 2 = None /\ fst memory 3 = None /\
     fst memory 4 = Some 11 /\ fst memory 5 = Some 0 /\
     snd memory 1 = None /\ snd memory 4 = Some 2.
 Proof.
-  eexists; split.
-  - rewrite run_rr_focus; unfold lifecycle.
-    rr_step; rr_alloc 1.
-    rr_step; rr_alloc 4.
-    (* three checked writes, then both CAS outcomes *)
-    do 6 rr_step.
-    do 4 rr_step.
-    unfold emit_list; cbn [List.fold_right].
+  intros m1 m2 m3 m4 m5 m6 m7; eexists; split.
+  - rewrite run_rr_focus; unfold lifecycle, emit_list; cbn [List.fold_right List.map].
+    rr_step; rr_alloc 1; rr_log.
+    rr_step; rr_alloc 4; rr_log.
+    (* Three checked writes and the successful CAS each record their post-memory. *)
+    do 3 (rr_step; rr_step; rr_log).
+    rr_step; rr_step; rr_log.
+    (* The failed CAS is silent; each explicit emission advances the counter. *)
     rr_step; rr_step.
-    rr_log.
+    rr_step; rr_step; rr_log.
+    rr_step; rr_step; rr_log.
+    (* Release the first block, read the adjacent one, and emit the value. *)
+    rr_step; rr_step; rr_log.
     rr_step; rr_step.
-    rr_log.
-    (* free the first block, read the adjacent one, emit it *)
-    do 6 rr_step.
-    rr_log.
+    rr_step; rr_step; rr_log.
     rr_step.
     rr_finish.
   - repeat split; vm_compute; reflexivity.
@@ -164,21 +175,24 @@ Qed.
 (** A released block is reused by the next first-fit malloc, with its whole
     extent recorded and zero-initialized again. *)
 Theorem reuse_first_fit :
+  let allocated := managed_alloc managed_empty 1 3 in
+  let released := (hfree_block 1 3 (fst allocated), hfree 1 (snd allocated)) in
+  let allocated_again := managed_alloc released 1 3 in
   exists memory : ManagedHeap,
     run_rr reallocate (managed_empty,((List.nil : Ctx.Ctx),0)) ~
-      emit_list [inl (inr (stamp (83,1) 0))]%list (Ret ((memory,((List.nil : Ctx.Ctx),1)),tt)
+      emit_list (List.map inl
+        [CSLHeap allocated; CSLHeap released; CSLHeap allocated_again;
+         CSLEmit (stamp (83,1) 0)]%list) (Ret ((memory,((List.nil : Ctx.Ctx),1)),tt)
           : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)) /\
     snd memory 1 = Some 3 /\
     fst memory 1 = Some 0 /\ fst memory 2 = Some 0 /\ fst memory 3 = Some 0.
 Proof.
-  eexists; split.
-  - rewrite run_rr_focus; unfold reallocate.
-    rr_step; rr_alloc 1.
-    rr_step; rr_step.
-    rr_step; rr_alloc 1.
-    unfold emit_list; cbn [List.fold_right].
-    rr_step; rr_step.
-    rr_log.
+  intros allocated released allocated_again; eexists; split.
+  - rewrite run_rr_focus; unfold reallocate, emit_list; cbn [List.fold_right List.map].
+    rr_step; rr_alloc 1; rr_log.
+    rr_step; rr_step; rr_log.
+    rr_step; rr_alloc 1; rr_log.
+    rr_step; rr_step; rr_log.
     rr_step.
     rr_finish.
   - repeat split; vm_compute; reflexivity.
@@ -198,54 +212,67 @@ Qed.
 
 Theorem invalid_interior_stuck :
   run_rr invalid_interior (managed_empty,((List.nil : Ctx.Ctx),0)) ~
-    (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
+    (emit_list [inl (CSLHeap (managed_alloc managed_empty 1 3))]%list Stuck
+      : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
 Proof.
-  rewrite run_rr_focus; unfold invalid_interior.
-  rr_step; rr_alloc 1.
+  rewrite run_rr_focus; unfold invalid_interior, emit_list; cbn [List.fold_right].
+  rr_step; rr_alloc 1; rr_log.
   cbn beta iota zeta.
   apply interp_rr_free_invalid; vm_compute; reflexivity.
 Qed.
 
 Theorem invalid_double_stuck :
   run_rr invalid_double (managed_empty,((List.nil : Ctx.Ctx),0)) ~
-    (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
+    (emit_list (List.map inl [CSLHeap (managed_alloc managed_empty 1 3);
+               CSLHeap (hfree_block 1 3 (fst (managed_alloc managed_empty 1 3)),
+                        hfree 1 (snd (managed_alloc managed_empty 1 3)))]%list) Stuck
+      : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
 Proof.
-  rewrite run_rr_focus; unfold invalid_double.
-  rr_step; rr_alloc 1.
-  rr_step; rr_step.
+  rewrite run_rr_focus; unfold invalid_double, emit_list; cbn [List.fold_right List.map].
+  rr_step; rr_alloc 1; rr_log.
+  rr_step; rr_step; rr_log.
   cbn beta iota zeta.
   apply interp_rr_free_invalid; vm_compute; reflexivity.
 Qed.
 
 Theorem use_after_free_read_stuck :
   run_rr use_after_free_read (managed_empty,((List.nil : Ctx.Ctx),0)) ~
-    (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
+    (emit_list (List.map inl [CSLHeap (managed_alloc managed_empty 1 3);
+               CSLHeap (hfree_block 1 3 (fst (managed_alloc managed_empty 1 3)),
+                        hfree 1 (snd (managed_alloc managed_empty 1 3)))]%list) Stuck
+      : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
 Proof.
-  rewrite run_rr_focus; unfold use_after_free_read.
-  rr_step; rr_alloc 1.
-  rr_step; rr_step.
+  rewrite run_rr_focus; unfold use_after_free_read, emit_list; cbn [List.fold_right List.map].
+  rr_step; rr_alloc 1; rr_log.
+  rr_step; rr_step; rr_log.
   rr_step; cbn beta iota zeta.
   apply interp_rr_read_missing; vm_compute; reflexivity.
 Qed.
 
 Theorem use_after_free_write_stuck :
   run_rr use_after_free_write (managed_empty,((List.nil : Ctx.Ctx),0)) ~
-    (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
+    (emit_list (List.map inl [CSLHeap (managed_alloc managed_empty 1 3);
+               CSLHeap (hfree_block 1 3 (fst (managed_alloc managed_empty 1 3)),
+                        hfree 1 (snd (managed_alloc managed_empty 1 3)))]%list) Stuck
+      : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
 Proof.
-  rewrite run_rr_focus; unfold use_after_free_write.
-  rr_step; rr_alloc 1.
-  rr_step; rr_step.
+  rewrite run_rr_focus; unfold use_after_free_write, emit_list; cbn [List.fold_right List.map].
+  rr_step; rr_alloc 1; rr_log.
+  rr_step; rr_step; rr_log.
   cbn beta iota zeta.
   apply interp_rr_write_missing; vm_compute; reflexivity.
 Qed.
 
 Theorem use_after_free_cas_stuck :
   run_rr use_after_free_cas (managed_empty,((List.nil : Ctx.Ctx),0)) ~
-    (Stuck : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
+    (emit_list (List.map inl [CSLHeap (managed_alloc managed_empty 1 3);
+               CSLHeap (hfree_block 1 3 (fst (managed_alloc managed_empty 1 3)),
+                        hfree 1 (snd (managed_alloc managed_empty 1 3)))]%list) Stuck
+      : ctreeW (CSLObs (nat * nat) + nat) Bn (SSig * unit)).
 Proof.
-  rewrite run_rr_focus; unfold use_after_free_cas.
-  rr_step; rr_alloc 1.
-  rr_step; rr_step.
+  rewrite run_rr_focus; unfold use_after_free_cas, emit_list; cbn [List.fold_right List.map].
+  rr_step; rr_alloc 1; rr_log.
+  rr_step; rr_step; rr_log.
   rr_step; cbn beta iota zeta.
   apply interp_rr_cas_missing; vm_compute; reflexivity.
 Qed.

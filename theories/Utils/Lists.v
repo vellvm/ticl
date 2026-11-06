@@ -35,8 +35,8 @@ Proof.
   intro C; apply app_eq_nil in C as (_ & C); discriminate.
 Qed.
 
-Fixpoint rotlN {A} (n : nat) (l : list A) : list A :=
-  match n with 0 => l | S k => rotlN k (rotl l) end.
+Definition rotlN {A} (n : nat) (l : list A) : list A :=
+  Nat.iter n rotl l.
 
 (** Zero-based FIRST matching position. Duplicate payloads are allowed.
     The comparator is explicit: clients can use [Nat.eqb] or their existing
@@ -130,7 +130,96 @@ Section EqualitySearch.
     - apply find_index_head in H; subst v; cbn; apply find_index_last_ex.
     - exists d; now apply find_index_rotl.
   Qed.
+
+  Lemma find_index_rotation_progress target a rest d :
+    find_index eqb target (a :: rest) = Some d ->
+    forall kb c, exists d',
+      find_index eqb target (rotl (a :: rest)) = Some d' /\
+      ((a = target /\ kb <= c) \/
+        (kb - S c < kb - c) \/
+        (kb - S c = kb - c /\ d' < d)).
+  Proof.
+    intro Hfind; destruct d as [|d]; intros kb c.
+    - destruct (find_index_rotl_pres target a rest 0 Hfind) as [d' Hd'].
+      exists d'; split; [exact Hd'|].
+      pose proof (find_index_head target a rest Hfind) as Ha.
+      destruct (Nat.leb_spec0 kb c); [left; auto|right; left; lia].
+    - exists d; split; [now apply find_index_rotl|].
+      right; destruct (Nat.leb_spec0 kb c); [right; lia|left; lia].
+  Qed.
 End EqualitySearch.
+
+(** Membership-aware strengthening keeps pairwise witnesses in their lists. *)
+Lemma Forall2_impl' {A B} (R S : A -> B -> Prop) xs ys :
+  Forall2 R xs ys ->
+  (forall x y, In x xs -> In y ys -> R x y -> S x y) ->
+  Forall2 S xs ys.
+Proof.
+  intro H; induction H as [|x y xs ys Hxy Hrest IH]; intro HS.
+  - constructor.
+  - constructor.
+    + apply HS; [now left|now left|exact Hxy].
+    + apply IH; intros a b Ha Hb Hab; apply HS; [now right|now right|exact Hab].
+Qed.
+
+Lemma Forall2_in_combine {A B} (R : A -> B -> Prop) xs ys :
+  Forall2 R xs ys <->
+  length xs = length ys /\
+    forall x y, In (x,y) (combine xs ys) -> R x y.
+Proof.
+  split.
+  - intro H; split; [now apply Forall2_length in H|].
+    induction H as [|x y xs ys Hxy Hrest IH]; intros a b Hin; cbn in Hin.
+    + contradiction.
+    + destruct Hin as [E|Hin]; [inversion E; subst; exact Hxy|now apply IH].
+  - revert ys; induction xs as [|x xs IH]; intros [|y ys] [Hlen Hall];
+      cbn in Hlen; try discriminate.
+    + constructor.
+    + constructor.
+      * apply Hall; now left.
+      * apply IH; split; [lia|].
+        intros a b Hin; apply Hall; now right.
+Qed.
+
+Lemma Forall2_left_exists {A B} (R : A -> B -> Prop) xs ys :
+  Forall2 R xs ys -> forall x, In x xs -> exists y, In y ys /\ R x y.
+Proof.
+  intro H; induction H as [|a b xs ys Hab Hrest IH]; intros x Hin; cbn in Hin.
+  - contradiction.
+  - destruct Hin as [<-|Hin].
+    + exists b; split; [now left|exact Hab].
+    + destruct (IH x Hin) as (y & Hy & Hxy); exists y; split; [now right|exact Hxy].
+Qed.
+
+Lemma Forall2_map_right {A B C} (R : A -> C -> Prop) (f : B -> C) xs ys :
+  Forall2 (fun x y => R x (f y)) xs ys -> Forall2 R xs (map f ys).
+Proof. intro H; induction H; cbn; constructor; assumption. Qed.
+
+Lemma map_fst_combine {A B} (xs : list A) (ys : list B) :
+  length xs = length ys -> map fst (combine xs ys) = xs.
+Proof.
+  revert ys; induction xs as [|x xs IH]; intros [|y ys] Hlen; cbn in *;
+    try discriminate; [reflexivity|].
+  f_equal; apply IH; lia.
+Qed.
+
+Lemma map_snd_combine {A B} (xs : list A) (ys : list B) :
+  length xs = length ys -> map snd (combine xs ys) = ys.
+Proof.
+  revert ys; induction xs as [|x xs IH]; intros [|y ys] Hlen; cbn in *;
+    try discriminate; [reflexivity|].
+  f_equal; apply IH; lia.
+Qed.
+
+Lemma flat_map_fixed_length {A B} (f : A -> list B) xs k :
+  (forall x, In x xs -> length (f x) = k) ->
+  length (flat_map f xs) = k * length xs.
+Proof.
+  induction xs as [|x xs IH]; intro Hlen; cbn; [lia|].
+  rewrite length_app, Hlen by now left.
+  rewrite IH by (intros y Hy; apply Hlen; now right).
+  lia.
+Qed.
 
 (** Splitting a pointwise relation across an append needs the prefix lengths;
     [Forall2_app_inv_l] alone only produces an existential decomposition. *)
@@ -219,6 +308,19 @@ Proof.
   - apply (Links [] a rest); reflexivity.
   - apply IH; intros prefix b rest' E.
     apply (Links (a :: prefix) b rest'); cbn; now rewrite E.
+Qed.
+
+Lemma linked_of_Forall2 {A} (edge : A -> A -> Prop) (nodes : list A) last :
+  Forall2 edge nodes (tl nodes ++ [last]) -> linked edge nodes last.
+Proof.
+  revert last; induction nodes as [|a rest IH]; intros last H; cbn [linked].
+  - exact I.
+  - destruct rest as [|b rest]; cbn [tl app] in H;
+      rewrite Forall2_cons_iff in H; destruct H as [Ha Hrest]; split.
+    + exact Ha.
+    + exact I.
+    + exact Ha.
+    + apply IH; exact Hrest.
 Qed.
 
 (** ** Small [map]/[seq]/[firstn] facts used to read windows.

@@ -89,3 +89,58 @@ Definition h_sum {E1 E2: Type -> Type} {M: Type -> Type}
           | inl1 e => h1 _ e
           | inr1 e => h2 _ e
           end.
+Lemma guard_equ_node {E B X} (t u : ctree E B X) :
+  t ≅ u -> Guard t ≅ Guard u.
+Proof. apply guard_equ. Qed.
+
+Lemma vis_equ_node {E B X Y} (e : E Y) (k1 k2 : Y -> ctree E B X) :
+  (forall x, k1 x ≅ k2 x) -> Vis e k1 ≅ Vis e k2.
+Proof. intro Hk. step. constructor. exact Hk. Qed.
+Fixpoint guards {E B} {X} (n : nat) (t : ctree E B X) : ctree E B X :=
+  match n with 0 => t | S n => Guard (guards n t) end.
+Lemma bind_guards {E B : Type -> Type} {X Y : Type} n (t : ctree E B X) (k : X -> ctree E B Y) :
+  (guards n t >>= k) ≅ guards n (t >>= k).
+Proof.
+  induction n; cbn [guards]; [reflexivity | rewrite bind_guard; apply guard_equ_node; exact IHn].
+Qed.
+
+Lemma guards_sbisim {E B : Type -> Type} {X : Type} n (t : ctree E B X) :
+  guards n t ~ t.
+Proof. induction n; cbn [guards]; [reflexivity | rewrite sb_guard; exact IHn]. Qed.
+Lemma translate_guards {E F B : Type -> Type} {X : Type} (f : E ~> F) k (t : ctree E B X) :
+  translate f (guards k t) ≅ guards k (translate f t).
+Proof.
+  induction k as [|k IH]; cbn [guards]; [reflexivity|].
+  rewrite translate_guard; apply guard_equ_node; exact IH.
+Qed.
+
+(** Pure silent divergence is preserved by execution and event relabelling. *)
+Lemma bind_spin {E B : Type -> Type} {X Y : Type} (k : X -> ctree E B Y) :
+  ((CTree.spin : ctree E B X) >>= k) ≅ CTree.spin.
+Proof.
+  __coinduction_equ R IH.
+  change (equb eq (elem R) (GuardF ((CTree.spin : ctree E B X) >>= k)) (GuardF CTree.spin)).
+  constructor; exact IH.
+Qed.
+
+Lemma translate_spin {E F B : Type -> Type} {X : Type} (f : E ~> F) :
+  translate f (CTree.spin : ctree E B X) ≅ CTree.spin.
+Proof.
+  __coinduction_equ R IH.
+  change (equb eq (elem R) (GuardF (translate f (CTree.spin : ctree E B X))) (GuardF CTree.spin)).
+  constructor; exact IH.
+Qed.
+
+(** A tree raw-equivalent to its own guard is pure silent divergence. *)
+Lemma guard_fixed_spin {E B : Type -> Type} {X : Type} (t : ctree E B X) :
+  t ≅ Guard t -> t ≅ CTree.spin.
+Proof.
+  revert t; __coinduction_equ R CIH; intros t Ht.
+  pose proof Ht as Ht0.
+  step in Ht; cbn in Ht.
+  change (equb eq (equ eq) (observe t) (GuardF t)) in Ht.
+  change (equb eq (elem R) (observe t) (GuardF (CTree.spin : ctree E B X))).
+  remember (GuardF t) as g eqn:Hg; destruct Ht; try discriminate.
+  injection Hg as <-; constructor.
+  apply CIH; rewrite REL; exact Ht0.
+Qed.

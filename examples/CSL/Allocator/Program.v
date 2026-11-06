@@ -1,5 +1,5 @@
 From Stdlib Require Import Arith.PeanoNat.
-From TICL Require Import Lang.CoCSL.Mod.
+From TICL Require Import Lang.CoCSL.Mod Lang.CoCSL.Sequential.
 From examples Require Import CSL.Allocator.Layout.
 
 (* Link-first remote frees and owner collection, scoped from mimalloc v2.5.2:
@@ -7,14 +7,8 @@ From examples Require Import CSL.Allocator.Layout.
    https://raw.githubusercontent.com/microsoft/mimalloc/v2.5.2/src/page.c
    This model omits delayed-free flags and abandoned-page recovery. *)
 
-Fixpoint init_links (first count : nat) {struct count} : CProg unit :=
-  match count with
-  | 0 => CRet tt
-  | S rest =>
-      CBind (CWrite first
-        (match rest with 0 => 0 | S _ => first + 2 end)) (fun _ =>
-      init_links (first + 2) rest)
-  end.
+Definition init_links (first count : nat) : CProg unit :=
+  write_list (link_updates first count).
 
 Definition init_page (base capacity : nat) : CProg unit :=
   CBind (CWrite (remote_head base) 0) (fun _ =>

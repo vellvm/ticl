@@ -46,7 +46,7 @@ Module Queue.
 
   Theorem rotate_agaf_pop {B: Type -> Type}: forall q i (nl: T),
       find_index (@rel_dec T eq HDec) nl q = Some i ->
-      <( {instr_prog (B:=B) rotate q}, Pure |= AG AF visW {fun h => h = nl} )>.
+      <( {instr_prog (B:=B) rotate q}, Pure |=L AG AF visW {fun h => h = nl} )>.
   Proof.
     intros.
     unfold rotate; cbn. 
@@ -65,19 +65,19 @@ Module Queue.
       intros q w (h & ts & -> & [-> | (Hnl & Hi)]) Hd.
       + (* h = nl *)
         split.
-        * (* iter |= AF *)
+        * (* iter |=L AF *)
           apply aul_qprog_until_now.
-          eapply aul_qprog_bind.
+          eapply (au_qprog_bind_r (b:=false)).
           -- eapply aur_pop_cons; eauto with ticl.
              csplit; eauto with ticl.
           -- cleft.
-             apply ticll_vis; eauto with ticl.
+             apply ticl_vis; eauto with ticl.
         * (* body variant/invariant *)
           eapply anr_qprog_bind_l.
           -- apply anr_pop_cons; eauto with ticl.
              csplit; eauto with ticl.
-          -- eapply aur_qprog_bind_r.
-             ++ apply equivr_ifsome_some.
+          -- eapply (au_qprog_bind_r (b:=true)).
+             ++ apply (equiv_ifsome_some (b:=true)).
                 cleft.
                 apply axr_push; eauto with ticl.
              ++ cbn; cleft.
@@ -108,22 +108,22 @@ Module Queue.
           -- exists h, ts; split; eauto with ticl.
           -- intros q w' (h' & ts' & -> & [-> | (Hnl' & ?)]) Hd'.
              ++ right.
-                eapply aul_qprog_bind.
+                eapply (au_qprog_bind_r (b:=false)).
                 ** apply aur_pop_cons; eauto with ticl.
                    csplit; eauto with ticl.
-                ** eapply aul_qprog_bind.
-                   --- apply equivr_ifsome_some.
+                ** eapply (au_qprog_bind_r (b:=false)).
+                   --- apply (equiv_ifsome_some (b:=true)).
                        cleft.
                        apply axr_push; eauto with ticl.
                    --- cleft.
                        csplit; eauto with ticl.
              ++ left.
                 destruct H as (i' & Hi').
-                eapply aur_qprog_bind_r.
+                eapply (au_qprog_bind_r (b:=true)).
                 ** apply aur_pop_cons; eauto with ticl.
                    csplit; eauto with ticl.
-                ** eapply aur_qprog_bind_r.
-                   --- apply equivr_ifsome_some.
+                ** eapply (au_qprog_bind_r (b:=true)).
+                   --- apply (equiv_ifsome_some (b:=true)).
                        cleft.
                        apply axr_push; eauto with ticl.
                    --- cbn.
@@ -149,8 +149,8 @@ Module Queue.
         * eapply anr_qprog_bind_l.
           -- apply anr_pop_cons; eauto with ticl.
              csplit; eauto with ticl.
-          -- eapply aur_qprog_bind_r.
-             ++ eapply equivr_ifsome_some.
+          -- eapply (au_qprog_bind_r (b:=true)).
+             ++ eapply (equiv_ifsome_some (b:=true)).
                 cleft.
                 eapply axr_push; eauto with ticl.
              ++ cbn.
